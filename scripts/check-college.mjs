@@ -50,6 +50,7 @@ ok(Object.values(map).filter(Boolean).every((p) => COLLEGE_POSITIONS.includes(p)
 ok(isPreseasonWeek(102) && !isPreseasonWeek(203) && !isPreseasonWeek(5), 'preseason is 101..199 only');
 ok(isCollegeWeek(203) && !isCollegeWeek(103) && !isCollegeWeek(3), 'college is 201+');
 ok(weekLabel(203) === 'CFB 3' && weekTick(203) === 'C3' && weekTitle(203) === 'CFB WK 3', 'college weeks read as CFB');
+ok(weekLabel(217) === 'BOWL 2' && weekTick(217) === 'B2' && weekTitle(217) === 'BOWL WK 2', 'bowl weeks (0375) read as BOWL');
 ok(weekLabel(102) === 'PRE 2' && weekTitle(5) === 'WEEK 5', 'preseason and NFL labels unchanged');
 const cal = readFileSync(new URL('../supabase/migrations/0371_college_calendar.sql', import.meta.url), 'utf8')
   .split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');

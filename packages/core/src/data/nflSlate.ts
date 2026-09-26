@@ -365,9 +365,14 @@ export const COLLEGE_BASE = 200;
 export const isCollegeWeek = (week: number): boolean => week > COLLEGE_BASE;
 /** The college week number for a board week (203 → 3). */
 export const collegeWeekNum = (week: number): number => week - COLLEGE_BASE;
+// Bowl weeks (0375): Eastern Tuesday–Monday weeks of bowl season, from the
+// one holding the first bowl, at board weeks 216.. (BOWL 1, 2, …).
+export const BOWL_BASE = 215;
+export const isBowlWeek = (week: number): boolean => week > BOWL_BASE;
 /** A board week as a heading: "PRESEASON WK 2", "CFB WK 3", "WEEK 5". */
 export const weekTitle = (week: number): string =>
   (isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}`
+    : isBowlWeek(week) ? `BOWL WK ${week - BOWL_BASE}`
     : isCollegeWeek(week) ? `CFB WK ${collegeWeekNum(week)}`
     : `WEEK ${week}`);
 /** The 1-based preseason week number for an offset board week (101 → 1). */
@@ -385,6 +390,7 @@ export const isPostseasonWeek = (week: number): boolean => week >= 19 && week <=
  *  outside this file, and neither does "WK 22". */
 export const weekLabel = (week: number): string =>
   (isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}`
+    : isBowlWeek(week) ? `BOWL ${week - BOWL_BASE}`
     : isCollegeWeek(week) ? `CFB ${collegeWeekNum(week)}`
     : POSTSEASON_LABEL[week] ? POSTSEASON_LABEL[week]
     : `WK ${week}`);
@@ -392,6 +398,7 @@ export const weekLabel = (week: number): string =>
 /** The same, stripped for a narrow column: "P2" / "WC" / "5". */
 export const weekTick = (week: number): string =>
   (isPreseasonWeek(week) ? `P${preseasonWeekNum(week)}`
+    : isBowlWeek(week) ? `B${week - BOWL_BASE}`
     : isCollegeWeek(week) ? `C${collegeWeekNum(week)}`
     : POSTSEASON_LABEL[week] ?? String(week));
 

@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.550.0 — bowl games
+
+College-calendar leagues can now run their playoffs through bowl season.
+ESPN lists every bowl and CFP game in a single postseason week, so 0375 splits
+it into calendar weeks (Eastern Tuesday to Monday), counted from the week of
+the first bowl, at board weeks 216..223 (BOWL 1, BOWL 2, …).
+- **Slate:** the daily college sweep rewrites all bowl rows. Games whose teams
+  are TBD are written with a placeholder home code (`TBD-<eventId>`), so the
+  bowl weeks exist in September when a commissioner sets the playoffs. The
+  placeholder never matches a school, so no player is placed in those games.
+- **Worker:** from the Tuesday of the first bowl week, a bowl context
+  (seasonType 3, board week 216+) takes the place of the regular college
+  context. It polls the first bowl week that still has a game in progress or
+  unplayed, and closes the week before it.
+- **SQL:** `classic_kickoff_for` and `college_proj_lines` now search weeks
+  201..223. `set_playoff_rules` lets a college bracket start as late as the
+  last bowl week on the slate (Week 15 if the slate has no bowls), and its
+  messages name bowl weeks ("Bowl week 2") through `college_week_label`.
+- **Apps:** weeks read as BOWL WK n / BOWL n / Bn. The admin playoff stepper
+  goes up to 223, and the mobile start chips include BOWL 1 and BOWL 2.
+- Probes: college-calendar cc8. Tests: bowl bucketing, TBD placeholders,
+  `bowlWeekNow`, the bowl context.
+
 ### v0.549.0 — college playoffs
 
 College-calendar leagues play a bracket again (0371 had switched it off).

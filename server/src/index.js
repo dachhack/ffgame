@@ -24,7 +24,7 @@ import { sweepProjections, installLiveProjRate } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { sweepCollege } from './poll/college.js';
 import { sweepGraduation } from './poll/graduate.js';
-import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS } from './poll/collegeSlate.js';
+import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS, BOWL_BASE, bowlSchedule, etTuesdayStart } from './poll/collegeSlate.js';
 import { setCollegeProjections } from '../../packages/core/src/engine/projScoring.ts';
 import { sweepDynasty } from './poll/dynasty.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
@@ -181,13 +181,41 @@ async function activeContexts(season) {
     forced === REGULAR_SEASON ? Promise.resolve(null) : espnWeekFor(season, forced ?? PRESEASON),
     forced != null ? Promise.resolve(null) : collegeWeek(season),
   ]);
-  return withCollege(contextsFor(forced, regW, preW), cfbW);
+  const bowlW = forced == null && await collegeInUse() ? await currentBowlWeek(season).catch(() => null) : null;
+  return withCollege(contextsFor(forced, regW, preW), cfbW, bowlW);
+}
+
+// BOWLS (0375): ESPN's one postseason week, bucketed into board weeks 216+,
+// cached 30 min. The bowl context replaces the regular college one from the
+// Tuesday that starts bowl season until the last bowl is final.
+let bowlHit = null;
+async function bowlGames(season) {
+  if (!bowlHit || Date.now() - bowlHit.at > 30 * 60e3) {
+    const games = await getGames(season, 1, 3, 0, 'college').catch(() => null);
+    bowlHit = { sched: games ? bowlSchedule(games) : (bowlHit?.sched ?? []), at: Date.now() };
+  }
+  return bowlHit.sched;
+}
+async function currentBowlWeek(season) {
+  return bowlWeekNow(await bowlGames(season), Date.now());
+}
+/** PURE: the bowl board week being played now — from the Tuesday that opens
+ *  bowl season, the first bowl week with a game not yet final; null before
+ *  bowl season or once every bowl is over. */
+export function bowlWeekNow(sched, nowMs) {
+  if (!sched?.length) return null;
+  if (nowMs < etTuesdayStart(Math.min(...sched.map((g) => g.kickoffMs)))) return null;
+  const weeks = [...new Set(sched.map((g) => g.boardWeek))].sort((a, b) => a - b);
+  return weeks.find((w) => sched.some((g) => g.boardWeek === w && !g.completed)) ?? null;
 }
 
 /** PURE (0371): the college context joins at board week 200 + N while ESPN's
  *  college regular season is in weeks 1..15 and some league uses the college
  *  calendar (collegeWeek answers null otherwise). Last, so the NFL ticks first. */
-export function withCollege(ctxs, cfbWeek) {
+export function withCollege(ctxs, cfbWeek, bowlWeek = null) {
+  // Bowl season (0375) replaces the regular college context: its games come
+  // from the bowl schedule at board week 216+.
+  if (bowlWeek != null) return [...ctxs, { seasonType: 3, offset: 0, espnWeek: bowlWeek - BOWL_BASE, boardWeek: bowlWeek, sport: 'college' }];
   if (cfbWeek == null || cfbWeek < 1 || cfbWeek > COLLEGE_WEEKS) return ctxs;
   return [...ctxs, { seasonType: REGULAR_SEASON, offset: COLLEGE_BASE, espnWeek: cfbWeek, sport: 'college' }];
 }
@@ -195,12 +223,15 @@ export function withCollege(ctxs, cfbWeek) {
 // ESPN's current college week, cached 30 min — and null (no context at all)
 // unless a league is on the college calendar, checked every 10.
 let cfbWeekHit = null, cfbInUseHit = null;
-async function collegeWeek(season) {
+async function collegeInUse() {
   if (!cfbInUseHit || Date.now() - cfbInUseHit.at > 10 * 60e3) {
     const { data, error } = await db().rpc('college_calendar_in_use');
     cfbInUseHit = { on: error ? (cfbInUseHit?.on ?? false) : !!data, at: Date.now() };
   }
-  if (!cfbInUseHit.on) return null;
+  return cfbInUseHit.on;
+}
+async function collegeWeek(season) {
+  if (!(await collegeInUse())) return null;
   if (!cfbWeekHit || Date.now() - cfbWeekHit.at > 30 * 60e3) {
     const w = await espnCurrentWeek(season, REGULAR_SEASON, 'college').catch(() => null);
     cfbWeekHit = { week: w ?? cfbWeekHit?.week ?? null, at: Date.now() };
@@ -510,19 +541,25 @@ async function installCollegeProj(week) {
  *  early in the week, so last Saturday's matchups are closed from here. No
  *  reports (NFL only), same five-minute throttle. */
 let lastPriorCollegeClose = 0;
-async function closePriorCollegeWeek(cfbWeek, season) {
-  if (cfbWeek <= 1 || Date.now() - lastPriorCollegeClose < PRIOR_WEEK_MS) return;
+async function closePriorCollegeWeek(board, season) {
+  if (board <= COLLEGE_BASE + 1 || Date.now() - lastPriorCollegeClose < PRIOR_WEEK_MS) return;
   lastPriorCollegeClose = Date.now();
-  const prior = cfbWeek - 1;
-  const games = await getGames(season, prior, REGULAR_SEASON, 0, 'college');
+  const prior = board - 1;
+  // The week before a bowl week is a bowl week (0375), or regular Week 15.
+  const games = prior > BOWL_BASE
+    ? (await bowlGames(season)).filter((g) => g.boardWeek === prior)
+    : await getGames(season, prior - COLLEGE_BASE, REGULAR_SEASON, 0, 'college');
   if (!games.length || !games.every((g) => g.completed)) return;
-  await closeWeek(`cfb ${prior}`, COLLEGE_BASE + prior, games, season, false);
+  await closeWeek(prior > BOWL_BASE ? `bowl ${prior - BOWL_BASE}` : `cfb ${prior - COLLEGE_BASE}`, prior, games, season, false);
 }
 
 async function tickContext(ctx, season) {
-  const week = ctx.espnWeek + ctx.offset;
+  const week = ctx.boardWeek ?? (ctx.espnWeek + ctx.offset);
   const sport = ctx.sport ?? 'nfl';
-  const games = await getGames(season, ctx.espnWeek, ctx.seasonType, 0, sport);
+  // A bowl week (0375) is a slice of ESPN's single postseason week.
+  const games = ctx.boardWeek != null
+    ? (await bowlGames(season)).filter((g) => g.boardWeek === ctx.boardWeek)
+    : await getGames(season, ctx.espnWeek, ctx.seasonType, 0, sport);
 
   // FINAL STATES OUTLIVE THE POLL SET (v0.342.1). gamesToPollFrom drops a game
   // the moment the SCOREBOARD reports it post+completed — but game_feed.state
@@ -756,7 +793,7 @@ async function tickContext(ctx, season) {
 async function tick() {
   const season = config.season;
   const contexts = (await activeContexts(season)).map((c) => ({
-    ...c, tag: c.sport === 'college' ? `cfb ${c.espnWeek}` : c.seasonType === PRESEASON ? `pre ${c.espnWeek}` : `wk ${c.espnWeek}`,
+    ...c, tag: c.boardWeek != null ? `bowl ${c.espnWeek}` : c.sport === 'college' ? `cfb ${c.espnWeek}` : c.seasonType === PRESEASON ? `pre ${c.espnWeek}` : `wk ${c.espnWeek}`,
   }));
   // The NFL's own contexts: the per-week sweeps below (projections, weekly
   // budgets, the prior-week close) are NFL business and never see week 201+.
@@ -776,7 +813,7 @@ async function tick() {
   const reg = nflContexts.find((c) => c.seasonType === REGULAR_SEASON);
   const cfb = contexts.find((c) => c.sport === 'college');
   if (cfb) {
-    try { await closePriorCollegeWeek(cfb.espnWeek, season); }
+    try { await closePriorCollegeWeek(cfb.boardWeek ?? (COLLEGE_BASE + cfb.espnWeek), season); }
     catch (e) { log('prior college week close error', e.message); }
   }
   if (reg) {

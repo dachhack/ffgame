@@ -742,12 +742,15 @@ export function PlayoffControls({ leagueId, onChanged }: { leagueId: string; onC
             <>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                 <Mono size={9} tone="faint">STARTS WK</Mono>
-                {/* College-calendar leagues (0374) play their bracket in college
-                    Weeks 12–14 at the latest (board weeks 212–214). */}
-                {(st.playoff_start_week > 200 ? [212, 213, 214] : [15, 16, 17]).map((w) => (
-                  <Chip key={w} label={w > 200 ? `CFB ${w - 200}` : String(w)} on={st.playoff_start_week === w}
-                    onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, null, w), `playoffs start ${w > 200 ? `CFB week ${w - 200}` : `week ${w}`}`); }} />
-                ))}
+                {/* College-calendar leagues (0374) start their bracket late in the
+                    college season or in bowl season (0375, board weeks 216+). */}
+                {(st.playoff_start_week > 200 ? [212, 213, 216, 217] : [15, 16, 17]).map((w) => {
+                  const lbl = w > 215 ? `BOWL ${w - 215}` : w > 200 ? `CFB ${w - 200}` : String(w);
+                  return (
+                    <Chip key={w} label={lbl} on={st.playoff_start_week === w}
+                      onPress={() => { tap(); void run(() => setPlayoffRules(leagueId, null, w), `playoffs start ${w > 200 ? lbl : `week ${w}`}`); }} />
+                  );
+                })}
               </View>
               <View style={{ marginTop: 8 }}>
                 <PrimaryButton label={busy ? '…' : st.generated ? 'REGENERATE ROUND 1' : 'GENERATE THE BRACKET'}
