@@ -18,6 +18,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.557.0 — ADD NEW PLAYERS: top up a league's pool, before or after the draft
+
+The founder: "How do I refresh the available players in the app?" … "I can't
+find seed player pool in the app." A pool is seeded when a league is made.
+The seed button shows only for an EMPTY pool, and seed_league_pool refuses
+once the draft starts. So a player the seed missed could never be picked up:
+a college breakout, an NFL signing, or the college side of a league that
+turned COLLEGE on later.
+- 0386 `commish_top_up_pool(league, players)`: commissioner or admin, native
+  leagues, before or after the draft. It ADDS only what the pool lacks. It
+  skips slugs, Sleeper ids and ESPN ids already there, a graduated devy
+  alias on either side, college rows without COLLEGE, and unknown
+  positions. Newcomers rank after everyone in the order given, as free
+  agents. Nothing is removed or re-ranked. Capped at 2000 per call and 3000
+  per pool. It posts a chat line when it adds anyone. Probes: top-up-probes.sql.
+- core `topUpLeaguePool` (nativeLeague): buildDraftPool under the league's
+  positions and pool filter (college rules included), deeper into the
+  college ranks (PoolOpts.collegeLimit 1200; 2000 for a college-only pool).
+- App: "ADD NEW PLAYERS" card at the top of commissioner tools → PLAYERS.
+  Web: the same under the league's rosters tab.
+
 ### v0.556.10 — web links open in the in-app browser first
 
 The founder, on v0.556.7's What's-new footer: "they fade but nothing opens".

@@ -3556,6 +3556,16 @@ export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[]
     p_league_id: leagueId, p_filter: filter,
   });
 
+/** 0386: add the players a league's pool lacks — before or after the draft.
+ *  Nothing already there is removed, re-ranked or doubled; newcomers are free
+ *  agents ranked after everyone. Commissioner only. */
+export const commishTopUpPool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number; sleeperId?: string }[]) =>
+  tracked(rpc<{ ok: boolean; error?: string; added?: number; pool?: number; full?: boolean }>('commish_top_up_pool', {
+    p_league_id: leagueId,
+    p_players: players.map(({ espnId, exp, sleeperId, ...p }) =>
+      ({ ...p, espn_id: espnId ?? null, exp: exp ?? null, sleeper_id: sleeperId ?? null })),
+  }), Ev.commishAction, { tool: 'top_up_pool' });
+
 export const seedLeaguePool = (leagueId: string, players: { slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number; sleeperId?: string }[]) =>
   rpc<{ ok: boolean; error?: string; players?: number }>('seed_league_pool', {
     p_league_id: leagueId,

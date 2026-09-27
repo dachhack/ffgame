@@ -50,7 +50,7 @@ import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/cor
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
 import { seedStart, seedsCustom, moveSeed as moveSeedIn } from '@drip/core/data/seeds';
-import { CommissionersPanel, LocksPanel, WaiverOrderPanel, WaiverHoldsPanel, TxnLimitsPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, WriteApiPanel, ScoresPanel, WeeklyReportPanel, SchedulePanel, PlayedWeeksPanel, DuesPanel } from './CommishDesk';
+import { CommissionersPanel, LocksPanel, WaiverOrderPanel, WaiverHoldsPanel, TxnLimitsPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, WriteApiPanel, ScoresPanel, WeeklyReportPanel, SchedulePanel, PlayedWeeksPanel, DuesPanel, TopUpPoolPanel } from './CommishDesk';
 import { DraftRoom } from './NativeLeague';
 
 const winLabel = (id: string) => WINDOWS.find((w) => w.id === id)?.label ?? id.toUpperCase();
@@ -1631,7 +1631,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       )}
 
       {/* commissioner roster tools + trade rulings (native leagues only) */}
-      {tab === 'rosters' && l.provider === 'native' && <NativeRosterTools leagueId={l.league_id} />}
+      {tab === 'rosters' && l.provider === 'native' && <><NativeRosterTools leagueId={l.league_id} /><TopUpPoolPanel leagueId={l.league_id} /></>}
 
       {/* the endgame: standings, bracket, champion (native leagues only) */}
       {tab === 'playoffs' && l.provider === 'native' && <PlayoffPanel leagueId={l.league_id} />}
