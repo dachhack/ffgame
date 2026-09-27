@@ -137,7 +137,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
       onClose={onClose}
     >
       <View style={{ flexShrink: 1, minHeight: 0 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, padding: 12 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ gap: 6, padding: 12 }}>
           {[{ id: 'all', label: 'All' }, ...POWERUP_CATEGORIES].map((c) => {
             const on = tab === c.id;
             return (

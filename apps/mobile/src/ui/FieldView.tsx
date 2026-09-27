@@ -507,7 +507,10 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
           Red dot = on now · faint = final · plain = yet to kick. */}
       {games.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 10 }}>
+          // flexShrink 0 (v0.561.3): a ScrollView shrinks by default, so a long
+          // stat list below squeezed this strip and clipped the chips' text
+          // (founder's Android screenshot, CAR@CLE cut in half).
+          style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 10 }}>
           {games.map((g) => (
             <Pressable key={g.key} onPress={() => setSel(g.key)}
               style={{
@@ -522,7 +525,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
         </ScrollView>
       )}
       {/* The selected game's own line: teams, score, where its clock stands. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10, flexShrink: 0 }}>
         {!!teamLogo(cur.away, { week }) && <Image source={{ uri: teamLogo(cur.away, { week })! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
         <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.away}</Text>
         {last
@@ -537,7 +540,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
       {/* The tab bar stays put; only the list scrolls. Before kickoff there is
           one list per side, so a tab bar would promise a cut of nothing. */}
       {!notStarted && (
-        <View style={{ flexDirection: 'row', gap: 6, margin: 12, marginBottom: 8, padding: 3, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg }}>
+        <View style={{ flexShrink: 0, flexDirection: 'row', gap: 6, margin: 12, marginBottom: 8, padding: 3, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.bg }}>
           {tabBtn('off', 'OFFENSE')}
           {tabBtn('def', 'DEFENSE')}
         </View>

@@ -18,6 +18,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.3 — box score game chips no longer cut in half
+
+The founder's Android screenshot: in ▤ BOX SCORES the game strip (LAC@BUF,
+CAR@CLE…) showed its chips sliced through the middle once the selected game's
+stat list ran long. A React Native ScrollView shrinks by default, so the
+horizontal strip gave up height to the tall list below it. The strip, the score
+line and the OFFENSE/DEFENSE bar are now `flexShrink: 0` — only the list
+scrolls. The same guard went onto the other horizontal chip strips inside
+sheets (game view, shop, commish kit, team). App only; ships over the air.
+
 ### v0.561.2 — injuries every 10 minutes on a game day, Sleeper included
 
 The founder, Sunday at noon: "Looks like Puka is still doubtful? … a lot of

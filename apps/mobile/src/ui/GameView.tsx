@@ -90,7 +90,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
       )}
       {/* THE STRIP — every game this week; the selected one lit. */}
       {showStrip && games.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 10 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 10 }}>
           {games.map((g) => {
             const l = latestPlay(g.feed?.plays);
             const sc = feedScore(g.feed);
