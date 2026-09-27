@@ -33,6 +33,11 @@ the card invisible.
   start from rest. One view can't mix drivers.
 - animations.tsx useFlipIn → JS driver (it starts turned away at 180°).
 - PowerupHand's rise → JS driver (it starts hidden below the bar).
+- NukeBurst → JS driver (💥 starts at opacity 0, the burst at 25% scale).
+  A sweep of the app found no other native animation that starts hidden:
+  wobble, shake, live pulse, hot glow and score tick all start from a visible
+  rest, so losing one costs motion only. Overlay is the only Modal, and
+  v0.556.3 already fixed it.
 - Android, like v0.556.3 — the same dropped-animation fault. Diagnosed from
   the screenshot, not reproduced on a device here.
 
