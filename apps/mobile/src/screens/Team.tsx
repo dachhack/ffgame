@@ -1161,7 +1161,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         </View>
         {/* The team strip scrolls: 32 codes wrapped would fill a phone screen
             before a single player showed. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginTop: 6 }}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0, marginTop: 6 }}
           contentContainerStyle={{ gap: 6, paddingRight: 12 }}>
           <Chip label="ALL NFL" on={nflTeam === 'ALL'} onPress={() => { tap(); setNflTeam('ALL'); }} />
           {/* 0341: owned players in the list, with who holds them. */}

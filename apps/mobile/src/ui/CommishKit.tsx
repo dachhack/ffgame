@@ -96,7 +96,7 @@ function FilterChip({ label, on, tone, onPress }: { label: string; on: boolean; 
 function TeamStrip({ value, set }: { value: string; set: (v: string) => void }) {
   const t = useTheme();
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginTop: 6 }} nestedScrollEnabled>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0, marginTop: 6 }} nestedScrollEnabled>
       <View style={{ flexDirection: 'row', gap: 5 }}>
         <FilterChip label="ANY TEAM" on={value === 'ALL'} tone={t.you} onPress={() => set('ALL')} />
         {ALL_TEAMS.map((tm) => <FilterChip key={tm} label={tm} on={value === tm} tone={t.you} onPress={() => set(tm)} />)}
