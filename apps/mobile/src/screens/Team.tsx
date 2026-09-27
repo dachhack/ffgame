@@ -27,7 +27,7 @@ import {
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
-import { sharesUsed } from '@drip/core/data/devyShares';
+import { teamBook, fmtPts } from '@drip/core/data/devyShares';
 import { DevySharesSheet } from '../ui/DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
@@ -981,10 +981,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         {/* ── DEVY SHARES (0387) — a shares league's devy: stakes, not a shelf. */}
         {shares?.on && (
           <Pressable onPress={() => { tap(); setSharesOpen(true); }} style={{ marginTop: 14 }}>
-            <Mono size={9} tone="faint" track={0.12}>DEVY SHARES</Mono>
+            <Mono size={9} tone="faint" track={0.12}>DEVY MARKET</Mono>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
               <Text style={{ flex: 1, fontSize: 13, color: t.text }}>
-                {`${sharesUsed(shares, myRoster).used}/${sharesUsed(shares, myRoster).budget} shares placed · ${(shares.players ?? []).filter((p) => p.right?.roster_id === myRoster).length} rights held`}
+                {`cash ${fmtPts(teamBook(shares, myRoster).cash)} · stakes worth ${fmtPts(teamBook(shares, myRoster).value)} · ${(shares.players ?? []).filter((p) => p.right?.roster_id === myRoster).length} rights held`}
               </Text>
               <Mono size={10} tone="you" weight="700">OPEN ›</Mono>
             </View>

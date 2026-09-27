@@ -1,4 +1,4 @@
--- 0388 · A PLAYER WHO CAN'T BE MOVED CAN'T MAKE THE ROSTER ILLEGAL (v0.558.1)
+-- 0389 · A PLAYER WHO CAN'T BE MOVED CAN'T MAKE THE ROSTER ILLEGAL (v0.559.1)
 --
 -- Kickoff League, Friday night (#1028): "what is going on with Mooney's
 -- starting line up? Any reason he can't make moves?"
@@ -57,7 +57,7 @@ begin
       from native_roster nr join league_pool lp on lp.league_id = nr.league_id and lp.slug = nr.slug
       left join injury_status i on i.player_slug = nr.slug
      where nr.league_id = p_league_id and nr.roster_id = p_roster_id and nr.spot = 'ir'
-       and not classic_slug_started(p_league_id, nr.slug)   -- 0388: can't be moved this week
+       and not classic_slug_started(p_league_id, nr.slug)   -- 0389: can't be moved this week
        and not (coalesce(upper(i.status), '') = any(tags))
      order by lp.full_name limit 1;
     if found then
@@ -69,7 +69,7 @@ begin
       from native_roster nr join league_pool lp on lp.league_id = nr.league_id and lp.slug = nr.slug
       left join injury_status i on i.player_slug = nr.slug
      where nr.league_id = p_league_id and nr.roster_id = p_roster_id and nr.spot = 'out'
-       and not classic_slug_started(p_league_id, nr.slug)   -- 0388
+       and not classic_slug_started(p_league_id, nr.slug)   -- 0389
        and not (coalesce(upper(i.status), '') = any(tags))
      order by lp.full_name limit 1;
     if found then

@@ -18,13 +18,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.558.1 — two ways a manager's lineup froze mid-week (#1028)
+### v0.559.1 — two ways a manager's lineup froze mid-week (#1028)
 
 Kickoff League, Friday night, from chat: "what is going on with Mooney's
 starting line up? Any reason he can't make moves?" There was no DB access
 from this session, so the seat itself hasn't been confirmed. These are the two
 code paths that freeze a lineup after Thursday; both are fixed.
-- 0388. An IR or OUT player whose designation lapsed (Friday's report
+- 0389. An IR or OUT player whose designation lapsed (Friday's report
   upgraded him, or his injury_status row went away) made the roster illegal.
   That locked every lineup write (0128), and the fix it named ("move him off
   IR or drop him") was refused by the kickoff lock (0179) if he played
@@ -38,11 +38,38 @@ code paths that freeze a lineup after Thursday; both are fixed.
   stays open. A sealed row can't be written, so a Friday pickup had nowhere to
   go. Empty spots now seal at the week's LAST kickoff. Bye and unknown
   players keep the week-wide rule.
-- Probes: locked-stash-probes.sql (fails without 0388). Server:
+- Probes: locked-stash-probes.sql (fails without 0389). Server:
   test/classic-seal.mjs.
 - To confirm the seat: `roster_illegal_reason('5ae08e35-…', <Mooney's
   roster>)`, and `sealed_pick` rows with `locked` and a null `player_slug`
   on his week-3 matchup.
+
+### v0.559.0 — THE DEVY MARKET: shares with a price
+
+The founder: "if you put shares on a college player early, they appreciated
+in value if the player gets good. So identifying players early or before
+others do is rewarded." … "Let's try it and I'll play test and perfect."
+- 0388 college_price: the draft ranking (college_directory VOR) turned into
+  a base price. Rank 1–25 → 5, 26–75 → 4, 76–150 → 3, 151–300 → 2, else 1;
+  +1 for a FR/SO in the top 150. refresh_college_prices runs after each
+  stats sweep (worker, weekly in season) and once in the migration. A
+  player who left college keeps his last price. League demand adds +1 at
+  40+ shares held and +2 at 80+ (_devy_price).
+- devy_cash: 100 points a team, stored per lineage. devy_share.cost is the
+  stake's cost basis (0387 stakes backfilled at 1 a share). allot = buy at
+  today's price, or sell at today's price capped at 3× the sold shares'
+  cost; cash is capped at 200. Payout at the draft's end uses the same
+  rule at the final price. Rights are unchanged: shares decide them.
+- devy_market(league): ranked players with this league's price, for + BUY.
+  devy_shares_state adds cash, value, per-holder cost/value, price and rank.
+- A trigger refuses devy roster spots in a shares league (0387's loose end).
+  The chat line for turning shares on now describes the market.
+- App/web: "Devy market" sheet/panel showing cash, what stakes are worth,
+  per stake "paid · worth (+gain)", and buy chips that show their cost.
+- Probes: devy-shares ds2x (tiers, demand, a breakout sold at the 3× cap)
+  and ds4ba (payouts at final prices). check-college §11 covers teamBook
+  and stakeLine.
+- NEXT: shares as trade assets (phase 2).
 
 ### v0.558.0 — DEVY SHARES (phase 1): rights to college players, bought with shares
 

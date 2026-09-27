@@ -1,4 +1,4 @@
--- 0388 probes: A PLAYER WHO CAN'T BE MOVED CAN'T MAKE THE ROSTER ILLEGAL.
+-- 0389 probes: A PLAYER WHO CAN'T BE MOVED CAN'T MAKE THE ROSTER ILLEGAL.
 --
 -- #1028, Kickoff League, Friday night: a manager could not touch his lineup.
 -- The deadlock: an IR player whose game kicked off Thursday is upgraded on

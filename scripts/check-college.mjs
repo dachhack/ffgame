@@ -153,6 +153,11 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   ok(rightLine(mine, 1).startsWith('★ YOUR RIGHT') && rightLine(theirs, 1).startsWith('Them holds'), 'whose right it is, in words');
   ok(rightLine(alone, 1) === 'only you — 2 more to hold his right', 'a sole holder under the floor is told how far');
   ok(lockLine({ ...st, locked: true }).startsWith('Locked') && lockLine({ ...st, on: false }) === '', 'the lock line, and silence off');
+  // 0388: the market's book
+  const { teamBook, stakeLine } = await import('../packages/core/src/data/devyShares.ts');
+  const mk = { ...st, cash: { 1: 58 }, value: { 1: 120 }, used: { 1: 61 } };
+  ok(teamBook(mk, 1).cash === 58 && teamBook(mk, 1).value === 120 && teamBook(mk, 2).cash === 100, 'a team\'s cash and stakes; a new team has 100');
+  ok(stakeLine(19, 57) === 'paid 19 · worth 57 (+38)' && stakeLine(20, 12.5) === 'paid 20 · worth 12.5 (-7.5)', 'a stake against what it cost');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
