@@ -207,10 +207,25 @@ export function teamKickoffs(slate) {
  *  unresolvable slug be swapped all week.
  *
  *  Returns the number of picks sealed. */
+/** When a classic weekly pick seals (ms). `team` is the slug's resolved NFL
+ *  team, or null.
+ *   • An EMPTY spot has nobody to be late for: it stays open to the week's LAST
+ *     kickoff, so a manager can fill it with anyone not yet kicked off — the
+ *     database (classic_pick_lock, 0178) has always allowed that write. It used
+ *     to take the week-wide rule below, which sealed an emptied spot at
+ *     Thursday's kickoff and left a Friday pickup nowhere to go (#1028).
+ *   • No team resolved (unknown slug) or no game this week (BYE) → the old
+ *     week-wide rule, the week's FIRST kickoff.
+ *   • Otherwise his own team's kickoff. */
+export function classicSealAt(slug, team, teamKicks) {
+  const kicks = Object.values(teamKicks).filter(Number.isFinite);
+  if (!slug) return Math.max(...kicks);
+  return team != null && Number.isFinite(teamKicks[team]) ? teamKicks[team] : Math.min(...kicks);
+}
+
 export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
   if (!teamKicks || !Object.keys(teamKicks).length) return 0;
   const t = now.getTime();
-  const firstKick = Math.min(...Object.values(teamKicks));
   // Classic matchups of this week that are live or final and still hold
   // unsealed weekly picks.
   const { data: ms } = await db().from('matchup')
@@ -244,14 +259,8 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
     // 0372) — their blank team would otherwise seal them at the week's FIRST
     // kickoff, a Thursday-night lock on a Saturday game.
     if (p.player_slug && /^c-\d+$/.test(p.player_slug)) continue;
-    // An EMPTY spot has nobody to be late for; it seals with the week so a
-    // manager can still fill it right up to their next kickoff.
     const team = p.player_slug ? teamOf(leagueOf.get(p.matchup_id), p.player_slug) : null;
-    // No team resolved (unknown slug) or no game this week (BYE) → the old
-    // week-wide rule. A bye player can't be swapped in after the week starts
-    // any more than he could before.
-    const kick = team != null && Number.isFinite(teamKicks[team]) ? teamKicks[team] : firstKick;
-    if (kick <= t) dueIds.push(p.id);
+    if (classicSealAt(p.player_slug, team, teamKicks) <= t) dueIds.push(p.id);
   }
   if (!dueIds.length) return 0;
   const iso = now.toISOString();
