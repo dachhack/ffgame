@@ -22,7 +22,7 @@ import { NFL_CODES } from './kdst';
 import { ADP_2026, ADP_BY_SID, adpValue } from './adp2026';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
-import { collegeDirectory } from './liveApi';
+import { collegeDirectory, commishTopUpPool, leagueGameMode } from './liveApi';
 import { collegeSlug, collegeRuleAllows } from './college';
 
 export interface DraftPoolEntry {
@@ -95,6 +95,9 @@ export interface PoolOpts {
   /** Admin-enabled extras for this league: subset of IDP / FB / HC / P.
    *  (RET is a lineup-slot identity — it needs no pool entries.) */
   positions?: string[] | null;
+  /** How many college players to take (default 600, or 2000 for a college-only
+   *  pool). The pool top-up (0386) reaches deeper, for the ones a seed missed. */
+  collegeLimit?: number;
   /** Commissioner's allowable-player filter: team whitelist and/or a tenure
    *  window (years_exp — 0 = rookie). Pseudo-players (K/DST/HC/P) pass the
    *  tenure filter always; the team filter applies to them too. */
@@ -243,7 +246,7 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   // retired WR name-twin. After the slice, so a renamed row can't be one the
   // cap was about to discard anyway.
   const wantCollege = extras.includes('COLLEGE') && level !== 'nfl' && (level === 'college' || !tenureFiltered);
-  const college = wantCollege ? await collegePoolEntries(extras, level === 'college' ? 2000 : 600, onProgress, opts?.filter) : [];
+  const college = wantCollege ? await collegePoolEntries(extras, opts?.collegeLimit ?? (level === 'college' ? 2000 : 600), onProgress, opts?.filter) : [];
   const nfl = disambiguateSlugs(rows.slice(0, cap - college.length).map(({ score: _score, srank: _srank, ...r }) => r));
   // After the NFL players, best first: the pool's rank is its order, and the
   // devy spots fill from this tail (autopick takes college players only once a
@@ -334,4 +337,19 @@ export function ordinal(n: number): string {
   const v = Math.abs(Math.trunc(n));
   if (v % 100 >= 11 && v % 100 <= 13) return `${n}th`;
   return `${n}${(['th', 'st', 'nd', 'rd'][v % 10] ?? 'th')}`;
+}
+
+/** TOP UP A LEAGUE'S POOL (0386): the list the draft room would seed today —
+ *  the league's positions and pool filter, its college rules included, and
+ *  deeper into the college ranks — handed to commish_top_up_pool, which adds
+ *  only the players the pool lacks. */
+export async function topUpLeaguePool(leagueId: string, onProgress?: (note: string) => void) {
+  const gm = await leagueGameMode(leagueId).catch(() => null);
+  const college = (gm?.positions ?? []).includes('COLLEGE');
+  const list = await buildDraftPool(onProgress, {
+    positions: gm?.positions ?? null, filter: gm?.pool_filter ?? null,
+    collegeLimit: college ? (gm?.pool_filter?.level === 'college' ? 2000 : 1200) : undefined,
+  });
+  onProgress?.('Adding the new players…');
+  return commishTopUpPool(leagueId, list.slice(0, 2000));
 }

@@ -71,7 +71,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
-import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TxnLimitsCard, TradeFloorCard, AwardsCard, PublicApiCard, WriteApiCard, ScoresCard, WeeklyReportCard, ScheduleCard, PlayedWeeksCard, DuesCard } from '../ui/CommishDesk';
+import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TxnLimitsCard, TradeFloorCard, AwardsCard, PublicApiCard, WriteApiCard, ScoresCard, WeeklyReportCard, ScheduleCard, PlayedWeeksCard, DuesCard, TopUpPoolCard } from '../ui/CommishDesk';
 
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
@@ -449,7 +449,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
             {section === 'contracts' && native && <ContractRulesCard leagueId={leagueId} />}
             {section === 'format' && native && <FormatCard leagueId={leagueId} />}
-            {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
+            {section === 'players' && native && <><TopUpPoolCard leagueId={leagueId} /><CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} /></>}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
             {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
             {section === 'locks' && native && <LocksCard leagueId={leagueId} />}

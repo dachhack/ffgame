@@ -34,6 +34,7 @@ import { LabelInfo } from './InfoChip';
 import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
 import { fixSlots, fixChosen, fixOptions, fixPayload, fixChanged, type FixSlot } from '@drip/core/data/lineupFix';
 import { weekTitle, weekLabel, weekName } from '@drip/core/data/nflSlate';
+import { topUpLeaguePool } from '@drip/core/data/nativeLeague';
 
 function inputStyle(t: ReturnType<typeof useTheme>, width = 90) {
   return { width, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 6, fontFamily: MONO, fontSize: fs(13), color: t.text, backgroundColor: t.bg } as const;
@@ -1293,6 +1294,46 @@ export function DuesCard({ leagueId }: { leagueId: string }) {
         </View>
       ))}
       <Note msg={msg} />
+    </Card>
+  );
+}
+
+/** ADD NEW PLAYERS (0386). A league's pool is seeded once, when it's made,
+ *  and the seed refuses once the draft starts, so a player it missed (a
+ *  college breakout, an NFL signing, a league that turned COLLEGE on later)
+ *  could never be picked up. This adds the ones the pool lacks, under the
+ *  league's own positions and rules; nobody already there is touched. */
+export function TopUpPoolCard({ leagueId }: { leagueId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true); setMsg('Building the player list…');
+    try {
+      const r = await topUpLeaguePool(leagueId, (n) => setMsg(n));
+      if (!r?.ok) { warn(); setMsg(`✗ ${r?.error ?? 'failed'}`); return; }
+      commit();
+      const n = r.added ?? 0;
+      setMsg(n > 0
+        ? `✓ Added ${n} player${n === 1 ? '' : 's'}. They're free agents now, and the league chat says so.${r.full ? ' The pool is at its 3,000-player limit.' : ''}`
+        : `✓ Nothing to add: the pool already has everyone the league's rules allow.${r.full ? ' (It is at its 3,000-player limit.)' : ''}`);
+    } catch (e) {
+      warn(); setMsg(`✗ ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(false); }
+  };
+  return (
+    <Card>
+      <LabelInfo label="ADD NEW PLAYERS" info="Adds every player the league's pool is missing: college players the first load skipped, new NFL signings, rookies. It follows the league's positions and player rules (college-only, conferences, classes, teams). Nobody already in the pool is removed or moved, and no roster or lineup changes. New players are free agents, ranked after everyone else. Works before or after the draft." />
+      <Row>
+        <Chip label={busy ? 'ADDING…' : '↻ ADD MISSING PLAYERS'} on disabled={busy}
+          onPress={() => {
+            tap();
+            Alert.alert('Add missing players?', "Every player the league's pool lacks is added as a free agent. Nothing already there changes.", [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Add them', onPress: () => void run() },
+            ]);
+          }} />
+      </Row>
+      {!!msg && <Mono size={9.5} tone={msg.startsWith('✗') ? 'opp' : 'dim'} style={{ marginTop: 8, lineHeight: 14 }}>{msg}</Mono>}
     </Card>
   );
 }

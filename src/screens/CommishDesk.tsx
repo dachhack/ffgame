@@ -38,6 +38,7 @@ import {
   leagueDues, setLeagueDues, commishSetDuesPaid, type DuesRow,
 } from '@drip/core/data/liveApi';
 import { weekTitle, weekName } from '@drip/core/data/nflSlate';
+import { topUpLeaguePool } from '@drip/core/data/nativeLeague';
 
 const note = (msg: string | null) => msg && (
   <span className="mono" style={{ ...mono, fontSize: 11.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{msg}</span>
@@ -1348,6 +1349,39 @@ export function DuesPanel({ leagueId }: { leagueId: string }) {
         </div>
       ))}
       <div style={{ ...small, marginTop: 6 }}>Every member can see the tracker. Leave the amount blank to hide it.</div>
+    </div>
+  );
+}
+
+/** ADD NEW PLAYERS (0386) — the app twin's TopUpPoolCard. Adds every player
+ *  the league's pool lacks, under its own positions and rules; nobody already
+ *  there is touched. Before or after the draft. */
+export function TopUpPoolPanel({ leagueId }: { leagueId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const run = async () => {
+    if (busy) return;
+    if (!window.confirm("Add every player the league's pool is missing?\n\nThey join as free agents, ranked after everyone else. Nobody already in the pool changes, and no roster or lineup is touched.")) return;
+    setBusy(true); setMsg('Building the player list…');
+    try {
+      const r = await topUpLeaguePool(leagueId, (n) => setMsg(n));
+      const n = r?.added ?? 0;
+      setMsg(!r?.ok ? `✗ ${r?.error ?? 'failed'}`
+        : n > 0 ? `✓ Added ${n} player${n === 1 ? '' : 's'} — free agents now; the league chat says so.${r.full ? ' The pool is at its 3,000-player limit.' : ''}`
+        : '✓ Nothing to add: the pool already has everyone the league\'s rules allow.');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+      <div className="mono" style={subhead}>➕ ADD NEW PLAYERS</div>
+      <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 6 }}>
+        Adds every player the league&apos;s pool is missing: college players the first load skipped, new NFL signings,
+        rookies. Follows the league&apos;s positions and player rules. Nobody already in the pool is removed or moved, and
+        no roster or lineup changes. Works before or after the draft.
+      </div>
+      <button onClick={() => void run()} disabled={busy} className="mono" style={btn(true)}>{busy ? 'adding…' : '↻ add missing players'}</button>
+      {msg && <div className="mono" style={{ fontSize: 11.5, marginTop: 6, color: msg.startsWith('✗') ? 'var(--opp)' : 'var(--dim)' }}>{msg}</div>}
     </div>
   );
 }
