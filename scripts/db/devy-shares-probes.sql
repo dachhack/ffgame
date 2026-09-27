@@ -58,7 +58,7 @@ begin
   perform ds_as('01');
   perform ds_ok(allot_devy_shares(lid, 1, 'c-97003', 4), 'ds2g team 1 alone on Kid 3 with 4');
   for i in 4..7 loop perform ds_ok(allot_devy_shares(lid, 1, 'c-9700' || i, 19), 'ds2h fill'); end loop;
-  perform ds_err(allot_devy_shares(lid, 1, 'c-97008', 5), 'a team has 100', 'ds2i 100 is the budget (20+4+76 used)');
+  perform ds_err(allot_devy_shares(lid, 1, 'c-97008', 5), 'to spend', 'ds2i 100 points is the budget (20+4+76 spent at 1 a share)');
   perform ds_true((select roster_id from devy_share_rights(_lineage(lid)) where slug = 'c-97001') = 1, 'ds2j THE POINT: first to 20 holds the right');
   perform ds_true((select roster_id from devy_share_rights(_lineage(lid)) where slug = 'c-97002') = 2, 'ds2k the only holder with 5+ holds it');
   perform ds_true(not exists (select 1 from devy_share_rights(_lineage(lid)) where slug = 'c-97003'), 'ds2l a sole holder under 5 holds nothing');
@@ -69,6 +69,23 @@ begin
   perform ds_true((select roster_id from devy_share_rights(_lineage(lid)) where slug = 'c-97001') = 2, 'ds2p …but now behind team 2');
   r := devy_shares_state(lid);
   perform ds_true((r ->> 'on')::boolean and (r -> 'used' ->> '1')::int = 100 and jsonb_array_length(r -> 'players') = 7, 'ds2q the league''s view: ' || (r -> 'used')::text);
+
+  -- ══ ds2x. THE MARKET (0388) ═══════════════════════════════════════════════
+  perform ds_true(_college_base_price(10) = 5 and _college_base_price(60) = 4 and _college_base_price(100) = 3
+              and _college_base_price(200) = 2 and _college_base_price(900) = 1 and _college_base_price(null) = 1, 'ds2x the rank tiers');
+  -- Kid 1: 40 shares in the league → demand +1 on a 1-point player
+  perform ds_true(_devy_price(_lineage(lid), 'c-97001') = 2 and _devy_price(_lineage(lid), 'c-97003') = 1, 'ds2y demand moves the price');
+  perform ds_true(_devy_cash(_lineage(lid), 1) = 1 and _devy_cash(_lineage(lid), 2) = 75, 'ds2z cash: team 1 has 1 left (sold one at 2, bought back at 1), team 2 has 75');
+  -- Kid 6 breaks out: a top-10 sophomore → 5 + 1 youth = 6 a share. Team 1 paid 1.
+  insert into college_price (espn_id, rank, base, youth) values ('97006', 10, 5, 1)
+    on conflict (espn_id) do update set rank = 10, base = 5, youth = 1;
+  perform ds_true(_devy_price(_lineage(lid), 'c-97006') = 6, 'ds2xa THE POINT: the breakout''s price is 6');
+  r := devy_shares_state(lid);
+  perform ds_true((select (h ->> 'value')::numeric from jsonb_array_elements(r -> 'players') p, jsonb_array_elements(p -> 'holders') h
+                    where p ->> 'slug' = 'c-97006') = 57, 'ds2xb his 19 shares are worth 57 — 114 at price, capped at 3× the 19 paid');
+  perform ds_ok(allot_devy_shares(lid, 1, 'c-97006', 0), 'ds2xc team 1 cashes out');
+  perform ds_true(_devy_cash(_lineage(lid), 1) = 58, 'ds2xd THE POINT: found early, sold high: 1 + 57 = 58');
+  perform ds_err(allot_devy_shares(lid, 1, 'c-97006', 19), 'to spend', 'ds2xe buying him back now costs 6 a share: 114 > 58');
 
   -- ══ ds3. THE ROOKIE DRAFT ═════════════════════════════════════════════════
   -- Kid 1 → Grad One (right: team 2), Kid 2 → Grad Two (right: team 2).
@@ -96,7 +113,9 @@ begin
   perform ds_true((select status from draft where league_id = lid) = 'complete', 'ds4 complete');
   perform ds_true(not exists (select 1 from devy_share where lineage = _lineage(lid) and slug in ('c-97001', 'c-97002')),
     'ds4a THE POINT: the graduates'' shares went home');
-  perform ds_true((select sum(shares) from devy_share where lineage = _lineage(lid) and roster_id = 1) = 80, 'ds4b team 1 keeps its other stakes (80), 20 back');
+  perform ds_true((select sum(shares) from devy_share where lineage = _lineage(lid) and roster_id = 1) = 61, 'ds4b team 1 keeps its other stakes (4+19+19+19)');
+  perform ds_true(_devy_cash(_lineage(lid), 1) = 98 and _devy_cash(_lineage(lid), 2) = 120,
+    'ds4ba THE POINT: the graduates paid out at their final prices: team 1 58 + 40 (20 shares at 2), team 2 75 + 40 + 5 = 120');
   perform ds_true(exists (select 1 from league_message where league_id = lid and txn ->> 'kind' = 'devy_shares_cleared'), 'ds4c chat says so');
 
   -- ══ ds5. BACK TO SPOTS ════════════════════════════════════════════════════
@@ -105,6 +124,8 @@ begin
 
   delete from player_alias where old_slug in ('c-97001', 'c-97002');
   delete from devy_share where lineage = _lineage(lid);
+  delete from devy_cash where lineage = _lineage(lid);
+  delete from college_price where espn_id like '970%';
   delete from league where id = lid;
   delete from college_player where espn_id like '970%';
   raise notice 'devy shares probes done';

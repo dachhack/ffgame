@@ -3660,25 +3660,35 @@ export async function installCollegePoolProjections(leagueId: string): Promise<n
 // A shares league puts 100 shares a team on college players (20 at most on
 // one). The first team to 20 — or the only team in, with 5+ — holds his right:
 // he's theirs to draft, with any pick, once he turns pro.
-export interface DevyShareHolder { roster_id: number; team: string; shares: number; maxed_at: string | null }
+export interface DevyShareHolder { roster_id: number; team: string; shares: number; maxed_at: string | null;
+  /** 0388: what the stake cost, and what selling it all would pay today. */
+  cost?: number; value?: number }
 export interface DevySharePlayer {
   slug: string; name: string | null; pos: string | null; school: string | null; class_year: number | null;
   graduated_to: string | null; holders: DevyShareHolder[];
   right: { roster_id: number; via: 'max' | 'sole' } | null;
+  /** 0388: today's price a share in this league, and his college rank. */
+  price?: number; rank?: number | null;
 }
 export interface DevySharesState {
   ok: boolean; error?: string; on?: boolean; locked?: boolean; lock_at?: string;
-  rules?: { budget: number; max: number; floor: number };
+  rules?: { budget: number; max: number; floor: number; cash_cap?: number; payout_cap?: number };
   used?: Record<string, number>;
+  /** 0388: each team's cash, and what its stakes would pay today. */
+  cash?: Record<string, number>; value?: Record<string, number>; prices_as_of?: string | null;
   players?: DevySharePlayer[];
   reserved?: { slug: string; roster_id: number; college_slug: string }[];
 }
 export const devySharesState = (leagueId: string) =>
   rpc<DevySharesState>('devy_shares_state', { p_league_id: leagueId });
 export const allotDevyShares = (leagueId: string, rosterId: number, slug: string, shares: number) =>
-  tracked(rpc<{ ok: boolean; error?: string; shares?: number; used?: number; budget?: number;
+  tracked(rpc<{ ok: boolean; error?: string; shares?: number; price?: number; cash?: number; spent?: number | null; received?: number | null;
     right?: { slug: string; roster_id: number; via: 'max' | 'sole' } | null }>('allot_devy_shares',
     { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_shares: shares }), Ev.commishAction, { tool: 'allot_devy_shares' });
+/** 0388: the market — ranked college players and their price a share here. */
+export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number; youth: boolean; price: number }
+export const devyMarket = (leagueId: string, limit = 1000) =>
+  rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit });
 export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_devy_mode',
     { p_league_id: leagueId, p_mode: mode }), Ev.commishAction, { tool: 'devy_mode' });

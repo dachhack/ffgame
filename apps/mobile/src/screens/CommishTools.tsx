@@ -2952,7 +2952,7 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
   return (
     <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
       <LabelInfo label="DEVY"
-        info={'SPOTS: college players sit in devy roster spots until they turn pro.\n\nSHARES: nobody rosters college players. Every team gets 100 shares to put on them, up to 20 on one. The first team to 20 holds his right; if only one team is in, 5+ holds it. The right reserves him in the rookie draft, at any of the holder\u2019s picks. Shares lock from Jan 15 until the rookie draft and come back once he\u2019s drafted.\n\nShares need the DEVY spots at 0 and no college players on rosters.'} />
+        info={'SPOTS: college players sit in devy roster spots until they turn pro.\n\nSHARES: a market. Nobody rosters college players; every team gets 100 points to buy shares in them, priced weekly by how they play and how much of the league wants them. Up to 20 shares in one player; the first team to 20 holds his right (if only one team is in, 5+ holds it), which reserves him in the rookie draft at any of the holder\u2019s picks. Selling, or his turning pro, pays today\u2019s price (up to 3× what was paid). Shares lock from Jan 15 until the rookie draft.\n\nShares need the DEVY spots at 0 and no college players on rosters.'} />
       <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
         <Chip label="SPOTS" on={!on} disabled={busy || !on} onPress={() => { tap(); void pick('spots'); }} />
         <Chip label="SHARES" on={on} disabled={busy || on} onPress={() => { tap(); void pick('shares'); }} />

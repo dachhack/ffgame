@@ -244,6 +244,14 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
     try { stats += await runStatsSweep(yr, log, fetchJson, rpc); }
     catch (e) { log('college stats', yr, e.message); }
   }
+  // 0388: the devy market's prices follow the ranking these lines just moved.
+  if (stats > 0) {
+    try {
+      const { data, error } = await rpc('refresh_college_prices', {});
+      if (error) log('college prices', error.message);
+      else log(`college prices: ${data?.priced ?? 0} priced`);
+    } catch (e) { log('college prices', e.message); }
+  }
   return { schools: ids.length, rows: wrote, failed, retired, stats };
 }
 
