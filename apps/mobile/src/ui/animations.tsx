@@ -55,7 +55,10 @@ export function useFlipIn(play: boolean) {
   useEffect(() => {
     if (!play) return;
     v.setValue(0);
-    Animated.timing(v, { toValue: 1, duration: 550, easing: FLIP_EASE, useNativeDriver: true }).start();
+    // JS driver (v0.559.2): the flip starts turned away (180°), so a dropped
+    // native animation under the new architecture would leave the card facing
+    // backwards — the same loss that blanked the deal-in. See useDealIn.
+    Animated.timing(v, { toValue: 1, duration: 550, easing: FLIP_EASE, useNativeDriver: false }).start();
   }, [play, v]);
   return {
     // perspective MUST precede rotateY in the transform list — without it the
