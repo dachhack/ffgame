@@ -18,6 +18,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.1 — a commissioner's fix doesn't freeze the rest of the week
+
+Kickoff League, Sunday (#1035, and the founder's screenshot of Mooney's
+Rehab Facility with every starter still yet to play): "Mooney needs to move
+players." Classic spots lock player by player at kickoff (0178), with no lead,
+and that still holds everywhere (app, DB trigger, worker). But two things
+sealed spots EARLY, and a sealed row can't be written by its manager at all
+(sealed_pick RLS: locked = false):
+- 0390: commish_set_week_lineup (0356) sealed EVERY spot it wrote once the
+  week's first kickoff had passed. It was built for weeks already played, but
+  a mid-week fix (e.g. the one that unfroze a locked-out manager) froze his
+  Sunday and Monday players for the rest of the week. Each spot now locks as
+  its player does (classic_pick_lock: his kickoff; open when empty), and the
+  new player decides a row's lock instead of OR-ing the old one.
+- 0390 repair (_reopen_early_classic_spots, run once by the migration): on
+  live classic matchups, every sealed spot whose player hasn't kicked off,
+  and every sealed empty spot (the pre-v0.559.1 Thursday seal), opens again.
+  The worker re-seals each at its kickoff (empty spots at the week's last).
+  Started and unplaceable players stay sealed; final weeks are untouched.
+- Probes: lineup-fix f7 (a mid-week fix, then the manager moves his Sunday
+  player; fails without 0390) and f8 (the repair).
+- Unrelated and pre-existing: fa-off-probes fo1a fails on main too; it's
+  date-dependent (a Sunday).
+
 ### v0.561.0 — the iOS app chip goes live, one chip per phone
 
 web only, no APK.

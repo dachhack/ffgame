@@ -125,5 +125,43 @@ begin
   r := commish_set_week_lineup(lid, 91, b, '[{"slot": "RB1", "slug": "lf-sun"}, {"slot": "WR1", "slug": null}]', 'no change');
   perform lf_true((r ->> 'rescore')::boolean, 'f6 stamped needs a re-score');
   perform lf_true((select count(*) from league_message where league_id = lid) = n, 'f6 nothing changed, nothing said');
+
+  -- ── f7. a mid-week fix locks only the players who have played (0390) ──
+  -- #1035: a Friday fix sealed every spot, so the manager couldn't move his
+  -- Sunday players again.
+  insert into nfl_slate (season, week, win, home, away, kickoff) values
+    ('2026', 92, 'thu', 'NYJ', 'BUF', now() - interval '2 hours'),
+    ('2026', 92, 'sun_early', 'PHI', 'DAL', now() + interval '3 days');
+  insert into native_roster (league_id, roster_id, slug, acquired, spot) values (lid, b, 'lf-sun', 'draft', 'active')
+    on conflict do nothing;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values (lid, 92, a, b, 'live') returning id into mid;
+  r := commish_set_week_lineup(lid, 92, b, '[{"slot": "RB1", "slug": "lf-thu"}, {"slot": "WR1", "slug": "lf-sun2"}, {"slot": "RB2", "slug": null}]', 'friday fix');
+  perform lf_ok(r, 'f7 fix');
+  perform lf_true((select locked and revealed_at is not null from sealed_pick where matchup_id = mid and roster_slot = 'RB1'), 'f7 the Thursday player is sealed');
+  perform lf_true((select not locked and revealed_at is null from sealed_pick where matchup_id = mid and roster_slot = 'WR1'), 'f7 the Sunday player stays open');
+  perform lf_true((select not locked from sealed_pick where matchup_id = mid and roster_slot = 'RB2'), 'f7 an empty spot stays open');
+  -- The manager can move the Sunday player afterwards.
+  perform lf_as('02');
+  update sealed_pick set player_slug = 'lf-sun' where matchup_id = mid and roster_slot = 'WR1';
+  perform lf_true((select player_slug from sealed_pick where matchup_id = mid and roster_slot = 'WR1') = 'lf-sun', 'f7 the manager moves his Sunday player');
+  -- A spot sealed early (the old rule) opens when the commissioner re-fixes it.
+  perform lf_as('01');
+  update sealed_pick set locked = true, revealed_at = now() where matchup_id = mid and roster_slot = 'WR1';
+  perform lf_ok(commish_set_week_lineup(lid, 92, b, '[{"slot": "RB1", "slug": "lf-thu"}, {"slot": "WR1", "slug": "lf-sun"}]', 'again'), 'f7 re-fix');
+  perform lf_true((select not locked and revealed_at is null from sealed_pick where matchup_id = mid and roster_slot = 'WR1'), 'f7 the new player decides the lock');
+
+  -- ── f8. the repair reopens spots sealed before their time (0390) ──
+  insert into sealed_pick (matchup_id, app_user_id, game_window, roster_slot, player_slug, locked, revealed_at)
+    values (mid, bu, 'wk', 'RB2', null, true, now())
+    on conflict (matchup_id, app_user_id, game_window, roster_slot) do update set player_slug = null, locked = true, revealed_at = now();
+  update sealed_pick set locked = true, revealed_at = now() where matchup_id = mid and roster_slot = 'WR1';
+  perform _reopen_early_classic_spots();
+  perform lf_true((select not locked from sealed_pick where matchup_id = mid and roster_slot = 'WR1'), 'f8 a sealed Sunday player reopens');
+  perform lf_true((select not locked from sealed_pick where matchup_id = mid and roster_slot = 'RB2'), 'f8 a sealed empty spot reopens');
+  perform lf_true((select locked from sealed_pick where matchup_id = mid and roster_slot = 'RB1'), 'f8 the Thursday player stays sealed');
+  update matchup set status = 'final' where id = mid;
+  update sealed_pick set locked = true where matchup_id = mid and roster_slot = 'WR1';
+  perform _reopen_early_classic_spots();
+  perform lf_true((select locked from sealed_pick where matchup_id = mid and roster_slot = 'WR1'), 'f8 a final week is left alone');
 end $$;
 select 'ALL LINEUP-FIX PROBES PASS';
