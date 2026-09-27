@@ -18,6 +18,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.2 — injuries every 10 minutes on a game day, Sleeper included
+
+The founder, Sunday at noon: "Looks like Puka is still doubtful? … a lot of
+inactives (out) coming through right now." Puka was Doubtful on BOTH feeds at
+12:33 ET (the Rams play at night), so D was right. The sweep's real gap was
+Sleeper: its ~15 MB directory was re-read at most every 6h, and four Sunday
+Outs were on Sleeper only (Chamarri Conner, Montorie Foster, Joey Porter,
+Jared Wiley), so they could reach us after kickoff. Founder: "Let's poll every
+10 minutes. Sometimes there are last minute inactives."
+- config.injuryPollGamedayMs 1h → 10 min. The ramp still goes to 3 min in the
+  45 min before a kickoff. Off days keep 3h.
+- config.sleeperInjuryGamedayMs = 10 min. On a game day the worker passes it
+  to pollInjuries as the Sleeper directory's max age (sleeperInjuryTtl). Off
+  days keep SLEEPER_INJURY_MS (6h). This is more often than Sleeper's "once a
+  day" guidance, by the founder's call.
+- test/injury-cadence.mjs.
+
 ### v0.561.1 — a commissioner's fix doesn't freeze the rest of the week
 
 Kickoff League, Sunday (#1035, and the founder's screenshot of Mooney's

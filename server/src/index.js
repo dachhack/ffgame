@@ -290,6 +290,12 @@ export function injuryPollEvery(games, now = Date.now()) {
   return gameDay(games, now) ? config.injuryPollGamedayMs : config.injuryPollDailyMs;
 }
 
+/** How stale Sleeper's injury directory may be (v0.561.2): the game-day
+ *  clock on a game day, else undefined (the poller's own 6h). */
+export function sleeperInjuryTtl(games, now = Date.now()) {
+  return gameDay(games, now) ? config.sleeperInjuryGamedayMs : undefined;
+}
+
 function gameDay(games, now = Date.now()) {
   return games.some((g) => g.state === 'in' || (g.kickoffMs && g.kickoffMs - now < 24 * 3600e3 && g.kickoffMs - now > -6 * 3600e3));
 }
@@ -865,7 +871,7 @@ async function tick() {
   const injEvery = injuryPollEvery(seen, Date.now());
   if (Date.now() - lastInjuryPoll >= injEvery) {
     try {
-      const r = await pollInjuries(playerIndex);
+      const r = await pollInjuries(playerIndex, { sleeperTtlMs: sleeperInjuryTtl(seen, Date.now()) });
       lastInjuryPoll = Date.now();
       // v0.489.0: both sources, and what was CLEARED. A poll that pruned 40
       // designations and one that could not prune at all read identically as

@@ -71,8 +71,8 @@ export function sleeperRows(players, slugForSleeperId) {
   return rows;
 }
 
-async function sleeperInjuries(playerIndex, now = Date.now()) {
-  if (sleeperCache && now - sleeperCache.at < SLEEPER_TTL_MS) return sleeperCache.rows;
+async function sleeperInjuries(playerIndex, now = Date.now(), ttlMs = SLEEPER_TTL_MS) {
+  if (sleeperCache && now - sleeperCache.at < ttlMs) return sleeperCache.rows;
   let players;
   try { players = await getPlayers(); } catch { return sleeperCache?.rows ?? null; }
   const rows = sleeperRows(players, (sid) => playerIndex.sleeper(sid));
@@ -80,8 +80,11 @@ async function sleeperInjuries(playerIndex, now = Date.now()) {
   return rows;
 }
 
-/** Pull both reports, write what they agree the league looks like now. */
-export async function pollInjuries(playerIndex) {
+/** Pull both reports, write what they agree the league looks like now.
+ *  `sleeperTtlMs` (v0.561.2): how stale Sleeper's cached directory may be —
+ *  the worker passes its game-day clock (10 min) so a Sleeper-only Out lands
+ *  before kickoff; unset keeps SLEEPER_TTL_MS (6h). */
+export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
   const feed = await fetchInjuries();
   // ID-FIRST (0200) — same contract as the play poller: the report's athlete id
   // wins where Sleeper maps it, ranked name fallback otherwise.
@@ -90,7 +93,7 @@ export async function pollInjuries(playerIndex) {
   // dropped here. They are a statement that a man is available, dated — the
   // thing that stops a stale flag on another feed benching him.
   const espn = normalizeInjuries(feed, resolve, { keepActive: true });
-  const sleeper = await sleeperInjuries(playerIndex);
+  const sleeper = await sleeperInjuries(playerIndex, Date.now(), sleeperTtlMs ?? SLEEPER_TTL_MS);
 
   const slugs = new Set([...Object.keys(espn), ...(sleeper?.keys() ?? [])]);
   const now = new Date().toISOString();
