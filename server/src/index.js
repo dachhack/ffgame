@@ -23,6 +23,7 @@ import { sweepTrending } from './poll/trending.js';
 import { sweepProjections, installLiveProjRate } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { sweepCollege } from './poll/college.js';
+import { writeCollegeScores } from './poll/collegeScores.js';
 import { sweepGraduation } from './poll/graduate.js';
 import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS, BOWL_BASE, bowlSchedule, etTuesdayStart } from './poll/collegeSlate.js';
 import { setCollegeProjections } from '../../packages/core/src/engine/projScoring.ts';
@@ -550,6 +551,14 @@ async function closePriorCollegeWeek(board, season) {
   const games = prior > BOWL_BASE
     ? (await bowlGames(season)).filter((g) => g.boardWeek === prior)
     : await getGames(season, prior - COLLEGE_BASE, REGULAR_SEASON, 0, 'college');
+  // Last Saturday's scores for the games nobody polled (v0.560.1) — ESPN
+  // may have rolled its week before the tick saw them go final.
+  try {
+    const schools = await collegeLiveSchools();
+    const polled = new Set(games.filter((g) => (g.teamIds ?? []).some((id) => schools.has(id))).map((g) => g.eventId));
+    const n = await writeCollegeScores(prior, games, polled);
+    if (n) log(`[cfb ${prior - COLLEGE_BASE}] wrote`, n, 'college scores');
+  } catch (e) { log('college prior scores', e.message); }
   if (!games.length || !games.every((g) => g.completed)) return;
   await closeWeek(prior > BOWL_BASE ? `bowl ${prior - BOWL_BASE}` : `cfb ${prior - COLLEGE_BASE}`, prior, games, season, false);
 }
@@ -581,6 +590,20 @@ async function tickContext(ctx, season) {
       .update({ state: 'post' }).eq('week', week).in('game_id', ended)
       .or('state.neq.post,state.is.null');
     if (stErr) log(`[${ctx.tag}] feed final sweep`, stErr.message);
+  }
+
+  // COLLEGE: which games are worth a play-by-play poll (0371), and a
+  // scores-only feed for all the rest (v0.560.1) — BEFORE the completed-week
+  // return, so Saturday's finals land even when the tick first sees the week
+  // already over.
+  let collegeWant = null;
+  if (sport === 'college') {
+    const schools = await collegeLiveSchools();
+    collegeWant = new Set(games.filter((g) => (g.teamIds ?? []).some((id) => schools.has(id))).map((g) => g.eventId));
+    try {
+      const n = await writeCollegeScores(week, games, collegeWant);
+      if (n) log(`[${ctx.tag}] wrote`, n, 'college scores');
+    } catch (e) { log(`[${ctx.tag}] college scores`, e.message); }
   }
 
   // A context whose week is over contributes nothing and is skipped rather than
@@ -713,11 +736,7 @@ async function tickContext(ctx, season) {
   let toPoll = [...gamesToPollFrom(games), ...finalsDue];
   // COLLEGE (0371): ~60 FBS games a Saturday, and only the ones with a
   // rostered player in a college-calendar league are worth a request.
-  if (sport === 'college') {
-    const schools = await collegeLiveSchools();
-    const want = new Set(games.filter((g) => (g.teamIds ?? []).some((id) => schools.has(id))).map((g) => g.eventId));
-    toPoll = toPoll.filter((id) => want.has(id));
-  }
+  if (collegeWant) toPoll = toPoll.filter((id) => collegeWant.has(id));
   // SIMULATOR ROWS NEVER OUTLIVE THE REAL FEED (v0.387.2). live_play and
   // game_feed key on WEEK alone — no season — so a June dress rehearsal that
   // replayed baked 2025 Week 1 into week 1 (game_id 'SIM' / 'SIM:LV@NE') was

@@ -36,6 +36,21 @@ const gamesCache = new Map();   // key → { at, games }
 
 /** Normalized games for a season-week. state ∈ pre | in | post.
  *  `maxAgeMs` > 0 permits a cached answer that recent — fixtures only. */
+const scoreOf = (c) => { const n = Number(c?.score); return Number.isFinite(n) ? n : null; };
+/** A scoreboard status in game_feed.status's shape (the summary's gameStatus
+ *  fields, minus the situation and leaders only a summary carries). */
+export function boardStatus(st) {
+  if (!st) return null;
+  const period = Number(st?.period);
+  return {
+    name: st?.type?.name ?? null,
+    detail: st?.type?.detail ?? null,
+    short: st?.type?.shortDetail ?? null,
+    period: Number.isFinite(period) && period > 0 ? period : null,
+    clock: st?.displayClock ?? null,
+  };
+}
+
 export async function getGames(season, week, seasonType = 2, maxAgeMs = 0, sport = 'nfl') {
   const key = `${sport}:${season}:${week}:${seasonType}`;
   if (maxAgeMs > 0) {
@@ -62,6 +77,12 @@ export async function getGames(season, week, seasonType = 2, maxAgeMs = 0, sport
       teamIds: cs.map((c) => (c.team?.id != null ? String(c.team.id) : null)).filter(Boolean),
       home: cs.find((c) => c.homeAway === 'home')?.team?.abbreviation ?? teams[0],
       away: cs.find((c) => c.homeAway === 'away')?.team?.abbreviation ?? teams[1],
+      // The board's own score and status (v0.560.1): a college game the
+      // context doesn't poll play by play still gets a scores-only feed
+      // (collegeScores.js) from this one request.
+      homeScore: scoreOf(cs.find((c) => c.homeAway === 'home')),
+      awayScore: scoreOf(cs.find((c) => c.homeAway === 'away')),
+      status: boardStatus(e.status ?? comp.status),
     };
   });
   // Stored whatever the caller asked for, so a fresh fetch by the play tick

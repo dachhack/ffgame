@@ -14,7 +14,7 @@
 // (stacked Modals are flaky on Android), so they swap this in.
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay } from '@drip/core/data/gameFeed';
+import { gameFeedFor, weekBoxGames, latestPlay, feedScore, type GamePlay } from '@drip/core/data/gameFeed';
 import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
@@ -93,18 +93,19 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: 12, paddingTop: 10 }}>
           {games.map((g) => {
             const l = latestPlay(g.feed?.plays);
+            const sc = feedScore(g.feed);
             const on = g.key === game?.key;
             return (
               <Pressable key={g.key} onPress={() => setSelKey(g.key)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999,
                   borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? alpha(t.you, 0.12) : t.surface }}>
                 {!!teamLogo(g.away, { week }) && <Image source={{ uri: teamLogo(g.away, { week })! }} style={{ width: 16, height: 16 }} />}
-                <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{l ? l.as : ''}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{sc ? sc.as : ''}</Text>
                 {g.state === 'live' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
                 <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: g.state === 'live' ? t.opp : t.faint }}>
                   {g.state === 'final' ? 'FINAL' : g.state === 'live' ? shortClockLabel(g.feed, l) : g.kickoff ? kickoffLabel(g.kickoff) : 'SOON'}
                 </Text>
-                <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{l ? l.hs : ''}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{sc ? sc.hs : ''}</Text>
                 {!!teamLogo(g.home, { week }) && <Image source={{ uri: teamLogo(g.home, { week })! }} style={{ width: 16, height: 16 }} />}
               </Pressable>
             );
@@ -121,7 +122,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
               <Text pointerEvents="none" style={{ position: 'absolute', left: -8, top: -14, fontFamily: MONO, fontSize: 64, fontWeight: '900', color: alpha(ac?.c ?? t.dim, 0.14), letterSpacing: -2 }}>{away}</Text>
               <Text pointerEvents="none" style={{ position: 'absolute', right: -8, top: -14, fontFamily: MONO, fontSize: 64, fontWeight: '900', color: alpha(hc?.c ?? t.dim, 0.14), letterSpacing: -2 }}>{home}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 10 }}>
-                {teamCol(away, last ? last.as : null, false)}
+                {teamCol(away, feedScore(feed)?.as ?? null, false)}
                 <View style={{ alignItems: 'center', minWidth: 96 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     {live && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
@@ -132,7 +133,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
                   </View>
                   {!!sit && !over && <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.dim, marginTop: 2 }}>{sit}</Text>}
                 </View>
-                {teamCol(home, last ? last.hs : null, true)}
+                {teamCol(home, feedScore(feed)?.hs ?? null, true)}
               </View>
             </View>
 

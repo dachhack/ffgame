@@ -10,7 +10,7 @@
 // two games, collapsible), FieldBoard (full-screen grid of EVERY slotted game,
 // with plays tinted by whose roster made them — you vs opponent).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, type ScheduledGame, groupFieldGames, weekBoxGames, latestPlay } from '@drip/core/data/gameFeed';
+import { gameFeedFor, loadGameFeedWeek, type GamePlay, type TeamGameFeed, type ScheduledGame, groupFieldGames, weekBoxGames, latestPlay, feedScore } from '@drip/core/data/gameFeed';
 import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
 import { spokenDown } from '@drip/core/data/spokenPlay';
 import { webVoice, hasVoice } from './voice';
@@ -798,7 +798,7 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
         <span aria-hidden className="mono" style={{ position: 'absolute', left: -8, top: -14, fontSize: 64, fontWeight: 900, color: `color-mix(in srgb, ${ac?.c ?? 'var(--dim)'} 14%, transparent)`, letterSpacing: '-0.04em', pointerEvents: 'none' }}>{away}</span>
         <span aria-hidden className="mono" style={{ position: 'absolute', right: -8, top: -14, fontSize: 64, fontWeight: 900, color: `color-mix(in srgb, ${hc?.c ?? 'var(--dim)'} 14%, transparent)`, letterSpacing: '-0.04em', pointerEvents: 'none' }}>{home}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px' }}>
-          {teamCol(away, last ? last.as : null, false)}
+          {teamCol(away, feedScore(feed)?.as ?? null, false)}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 110 }}>
             <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800, color: 'var(--text)' }}>
               {live && <span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--opp)' }} />}
@@ -806,7 +806,7 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
             </span>
             {sit && !over && <span className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 2 }}>{sit}</span>}
           </div>
-          {teamCol(home, last ? last.hs : null, true)}
+          {teamCol(home, feedScore(feed)?.hs ?? null, true)}
         </div>
       </div>
       {last && !over && (
