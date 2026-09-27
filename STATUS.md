@@ -18,6 +18,43 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.558.0 — DEVY SHARES (phase 1): rights to college players, bought with shares
+
+The founder: "players allot shares to college players. If they have 20
+shares allotted to a player (the max) or are the only player that has shares
+allotted to that college player, then they reserve the right to draft that
+player during the rookie draft at any of their picks. Shares are tradable
+and clear back to you once the player graduates." Decisions: first to 20
+holds the right; 100 shares a team; a sole holder needs 5; locked in
+January; a league setting.
+- 0387. settings_json.devy_mode 'spots' | 'shares' (set_league_devy_mode).
+  Shares need COLLEGE, the NFL calendar, devy spots at 0 and no rostered
+  college players. A shares pool holds no college players (insert trigger).
+  A shares league is not "mixed".
+- devy_share(lineage, roster, slug, shares, maxed_at) is keyed by
+  league.sleeper_league_id, so stakes ride through rollover to the rookie
+  draft. allot_devy_shares enforces 0–20, ≤100 a team, active college
+  players only, none on a graduate, and the lock (Jan 15 ET until the
+  lineage's draft for that season is complete). maxed_at (clock_timestamp)
+  is the place in line.
+- devy_share_rights: first to 20, else the sole holder with 5+.
+  devy_reserved maps a right through player_alias to the NFL slug in the pool.
+- Draft (snake/linear; auction doesn't reserve): native_exec_pick refuses
+  another team's reservation, and refuses an open player once a seat's picks
+  left equal its untaken reservations. native_queue_pick skips them;
+  native_autopick_slug takes the forced ones and never another team's.
+- The draft completing in a shares league deletes every stake on a graduate
+  (the shares go back to the teams) and posts a chat line.
+- Probes: devy-shares-probes.sql (a full 2-team rookie draft). Graduation
+  probe classifies devy_share.slug.
+- Core: devySharesState / allotDevyShares / setLeagueDevyMode, and
+  data/devyShares.ts (pure wording, check-college §11).
+- App: DEVY SHARES on MY TEAM (sheet: MINE / LEAGUE / + ADD, with −5 −1 +1
+  +5 MAX), a DEVY SPOTS/SHARES switch in commissioner tools → roster, and
+  RESERVED / YOUR DEVY RIGHT badges in the draft room. Web: the same panel
+  on the team page, the switch by the roster spots, and the badges.
+- NEXT (phase 2): shares as trade assets.
+
 ### v0.557.0 — ADD NEW PLAYERS: top up a league's pool, before or after the draft
 
 The founder: "How do I refresh the available players in the app?" … "I can't

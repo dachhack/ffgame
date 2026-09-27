@@ -3656,6 +3656,33 @@ export async function installCollegePoolProjections(leagueId: string): Promise<n
   return list.length;
 }
 
+// ── DEVY SHARES (0387) ──────────────────────────────────────────────────────
+// A shares league puts 100 shares a team on college players (20 at most on
+// one). The first team to 20 — or the only team in, with 5+ — holds his right:
+// he's theirs to draft, with any pick, once he turns pro.
+export interface DevyShareHolder { roster_id: number; team: string; shares: number; maxed_at: string | null }
+export interface DevySharePlayer {
+  slug: string; name: string | null; pos: string | null; school: string | null; class_year: number | null;
+  graduated_to: string | null; holders: DevyShareHolder[];
+  right: { roster_id: number; via: 'max' | 'sole' } | null;
+}
+export interface DevySharesState {
+  ok: boolean; error?: string; on?: boolean; locked?: boolean; lock_at?: string;
+  rules?: { budget: number; max: number; floor: number };
+  used?: Record<string, number>;
+  players?: DevySharePlayer[];
+  reserved?: { slug: string; roster_id: number; college_slug: string }[];
+}
+export const devySharesState = (leagueId: string) =>
+  rpc<DevySharesState>('devy_shares_state', { p_league_id: leagueId });
+export const allotDevyShares = (leagueId: string, rosterId: number, slug: string, shares: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; shares?: number; used?: number; budget?: number;
+    right?: { slug: string; roster_id: number; via: 'max' | 'sole' } | null }>('allot_devy_shares',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_shares: shares }), Ev.commishAction, { tool: 'allot_devy_shares' });
+export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
+  tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_devy_mode',
+    { p_league_id: leagueId, p_mode: mode }), Ev.commishAction, { tool: 'devy_mode' });
+
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>

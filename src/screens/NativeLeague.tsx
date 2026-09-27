@@ -56,7 +56,9 @@ import {
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
+  devySharesState,
 } from '@drip/core/data/liveApi';
+import { DevySharesPanel } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
@@ -1174,6 +1176,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   const myRoster = team?.my_roster_id ?? null;
   const isCommish = !!team?.is_commish;
   const auction = st?.mode === 'auction';
+  // DEVY SHARES (0387): a graduate reserved for his right's holder.
+  const [reserved, setReserved] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    devySharesState(leagueId).then((r) => { if (r.ok && r.on) setReserved(new Map((r.reserved ?? []).map((x) => [x.slug, x.roster_id]))); }).catch(() => {});
+  }, [leagueId, st?.current_overall]);
   // THE WIN MOMENT reaches the web (v0.354.11, founder: "there's still no
   // visual when you win a player on web") — same watermark trick as the app:
   // baseline my picks' top `overall` on entry so rejoining never celebrates
@@ -2021,6 +2028,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                     <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={28} />
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{starMark(favs, p.slug)}{p.full_name}</div>
+                      {reserved.has(p.slug) && <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: reserved.get(p.slug) === myRoster ? 'var(--you)' : 'var(--opp)' }}>
+                        {reserved.get(p.slug) === myRoster ? '★ YOUR DEVY RIGHT — take him with any pick' : `🔒 RESERVED · ${teamName(reserved.get(p.slug)) ?? `Team ${reserved.get(p.slug)}`} holds his devy right`}
+                      </div>}
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', marginTop: 2 }}>
                         <PosPill pos={p.pos as Pos} />
                         <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>{teamLabel(p)} · #{p.rank}</span>
@@ -3414,6 +3424,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               emptyLabel="Open — claim a college player from the wire" />
           ))}
         </>)}
+
+        {/* DEVY SHARES (0387) — shows only in a shares league */}
+        {(gm?.positions ?? []).includes('COLLEGE') && <DevySharesPanel leagueId={leagueId} myRoster={myRoster} />}
 
       </div>
 

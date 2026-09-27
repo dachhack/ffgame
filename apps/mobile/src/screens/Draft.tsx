@@ -23,6 +23,7 @@ import {
   draftHere, seatIsHere, type DraftPresence,
   leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax, auctionMarketValue,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type PosCaps, type GameModeInfo,
+  devySharesState,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
@@ -282,6 +283,14 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
   const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug)), [st?.picks]);
   const myRoster = team?.my_roster_id ?? null;
+  // DEVY SHARES (0387): who holds a graduate's right. A reserved player is
+  // his holder's alone; the server refuses anyone else, this says so first.
+  const [reserved, setReserved] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    devySharesState(leagueId).then((r) => {
+      if (r.ok && r.on) setReserved(new Map((r.reserved ?? []).map((x) => [x.slug, x.roster_id])));
+    }).catch(() => {});
+  }, [leagueId, st?.current_overall]);
   const isCommish = !!team?.is_commish;
   const auction = st?.mode === 'auction';
   const myTurn = st?.status === 'live' && !st.paused && st.on_clock != null && st.on_clock === myRoster;
@@ -1075,6 +1084,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text, textDecorationLine: gone ? 'line-through' : 'none' }}>
                     {favs.has(p.slug) && <Text style={{ color: STAR_GOLD }}>★ </Text>}{p.full_name}
                   </Text>
+                  {reserved.has(p.slug) && (
+                    <Mono size={8.5} weight="700" tone={reserved.get(p.slug) === myRoster ? 'you' : 'opp'} style={{ marginTop: 1 }}>
+                      {reserved.get(p.slug) === myRoster ? '★ YOUR DEVY RIGHT — take him with any pick' : `🔒 RESERVED · ${teamName(reserved.get(p.slug)) ?? `Team ${reserved.get(p.slug)}`} holds his devy right`}
+                    </Mono>
+                  )}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                     <PosPill pos={p.pos} size={8} />
                     <Mono size={8.5} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>
