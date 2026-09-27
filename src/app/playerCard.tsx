@@ -239,7 +239,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             </div>
             <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
               <span style={{ fontWeight: 700 }}>{pos}</span>
-              <Img src={teamLogo(showTeam)} size={13} radius={2} fallback={<span />} />
+              <Img src={teamLogo(showTeam, { slug })} size={13} radius={2} fallback={<span />} />
               <span>{showTeam || 'FA'}</span>
               {bio?.num != null && <span>· #{bio.num}</span>}
             </div>

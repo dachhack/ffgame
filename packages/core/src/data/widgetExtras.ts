@@ -16,10 +16,10 @@
 // the fields read is the All fields sheet's (AllFieldsSheet.tsx) without the
 // plays table: a widget shows the drive, not the box score.
 import type { WidgetSnapshot, WidgetCard } from './widgetFeed';
-import { liveSlate, slateWeeks, weekGameFeeds } from './liveApi';
+import { liveSlate, slateWeeks, weekGameFeeds, loadCollegeLogos, loadCollegeWeekDates } from './liveApi';
 import { setRuntimeSlate } from './nflSlate';
 import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
-import { fieldsWeekFrom, slateWeekOrder } from './fieldsWeek';
+import { fieldsWeekFrom, slateWeekOrder, type FieldsLevel } from './fieldsWeek';
 import { LIVE_SEASON } from './realPbp';
 import { normTeam, stripSlugTag } from './slugMeta';
 import { projectedStarters } from '../engine/projectedBox';
@@ -304,11 +304,13 @@ export function minesByTeam(snaps: WidgetSnapshot[], opts: { week?: number | nul
  *  order by the widget's ‹ › (v0.506.0), clamped to the weeks the slate
  *  knows. Null when the slate knows no week. Throws on a failed read — the
  *  task keeps its last picture. */
-export async function loadFieldsWeek(offset = 0, nowMs: number = Date.now()): Promise<{ week: number; current: number; hasPrev: boolean; hasNext: boolean } | null> {
-  const rows = await slateWeeks(String(LIVE_SEASON));
-  const current = fieldsWeekFrom(rows, nowMs);
+export async function loadFieldsWeek(offset = 0, nowMs: number = Date.now(), level: FieldsLevel = 'nfl'): Promise<{ week: number; current: number; hasPrev: boolean; hasNext: boolean } | null> {
+  // College logos by school id (v0.560.0) — the widget runs headless, so it
+  // can't count on the app having loaded them.
+  const [rows] = await Promise.all([slateWeeks(String(LIVE_SEASON)), level === 'cfb' ? loadCollegeLogos() : null, level === 'cfb' ? loadCollegeWeekDates(String(LIVE_SEASON)) : null]);
+  const current = fieldsWeekFrom(rows, nowMs, level);
   if (current == null) return null;
-  const order = slateWeekOrder(rows);
+  const order = slateWeekOrder(rows, level);
   const at = Math.max(0, order.indexOf(current));
   const i = Math.max(0, Math.min(order.length - 1, at + offset));
   const week = order[i] ?? current;

@@ -67,7 +67,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
   const teamCol = (abbr: string, score: number | null, right: boolean) => (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start' }}>
       <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
-        {!!teamLogo(abbr) && <Image source={{ uri: teamLogo(abbr)! }} style={{ width: 22, height: 22 }} />}
+        {!!teamLogo(abbr, { week }) && <Image source={{ uri: teamLogo(abbr, { week })! }} style={{ width: 22, height: 22 }} />}
         <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '800', color: t.text }}>{clubNick(abbr)}</Text>
       </View>
       <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -98,14 +98,14 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
               <Pressable key={g.key} onPress={() => setSelKey(g.key)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999,
                   borderWidth: on ? 2 : StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? alpha(t.you, 0.12) : t.surface }}>
-                {!!teamLogo(g.away) && <Image source={{ uri: teamLogo(g.away)! }} style={{ width: 16, height: 16 }} />}
+                {!!teamLogo(g.away, { week }) && <Image source={{ uri: teamLogo(g.away, { week })! }} style={{ width: 16, height: 16 }} />}
                 <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{l ? l.as : ''}</Text>
                 {g.state === 'live' && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />}
                 <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: g.state === 'live' ? t.opp : t.faint }}>
                   {g.state === 'final' ? 'FINAL' : g.state === 'live' ? shortClockLabel(g.feed, l) : g.kickoff ? kickoffLabel(g.kickoff) : 'SOON'}
                 </Text>
                 <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: g.state === 'final' ? t.dim : t.text }}>{l ? l.hs : ''}</Text>
-                {!!teamLogo(g.home) && <Image source={{ uri: teamLogo(g.home)! }} style={{ width: 16, height: 16 }} />}
+                {!!teamLogo(g.home, { week }) && <Image source={{ uri: teamLogo(g.home, { week })! }} style={{ width: 16, height: 16 }} />}
               </Pressable>
             );
           })}
@@ -196,7 +196,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
                     <Pressable key={p.pid ?? `${p.c}-${i}`} onLongPress={() => { appVoice.stop(); appVoice.speak(p.txt, () => {}); }}
                       style={{ paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: alpha(t.bd, 0.6) }}>
                       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                        {!!teamLogo(p.tm) && <Image source={{ uri: teamLogo(p.tm)! }} style={{ width: 22, height: 22, marginTop: 2 }} />}
+                        {!!teamLogo(p.tm, { week }) && <Image source={{ uri: teamLogo(p.tm, { week })! }} style={{ width: 22, height: 22, marginTop: 2 }} />}
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
                             <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.dim }}>{s2 ?? p.ty.toUpperCase()}</Text>

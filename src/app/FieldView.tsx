@@ -374,7 +374,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   // arc's x1/x2 pass through mx(), so xOf here must too, or a ↔-flipped
   // field puts the catch on the wrong side of the snap.
   const { catchX, carrying, overlaps } = playPath(cur, arc?.x1 ?? 0, arc?.x2 ?? 0, (y, tm) => mx(xOf(y, tm)));
-  const offLogo = cur ? teamLogo(cur.tm) : null;
+  const offLogo = cur ? teamLogo(cur.tm, { week }) : null;
   const midY = (TOP + BOT) / 2;
   /** The carried phase rides its own lane just under the flight path — see the
    *  note at the arc. Small enough to read as the same play, big enough that a
@@ -414,7 +414,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const curDD = cur && cur.dn > 0 ? `${ORD[cur.dn]} & ${cur.dist >= cur.yl ? 'Goal' : cur.dist}` : null;
   const score = cur ? { a: cur.as, h: cur.hs } : { a: 0, h: 0 };
 
-  const logo = ballTm ? teamLogo(ballTm) : null;
+  const logo = ballTm ? teamLogo(ballTm, { week }) : null;
   const yardNums = [10, 20, 30, 40, 50, 40, 30, 20, 10];
   // Brand paint: end zones + possession accents. Mixed toward the surface so
   // both themes keep contrast; text uses each team's own secondary color.
@@ -422,7 +422,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const ballCol = ballTm ? teamColor(ballTm) : null;
   const ezFill = (tc: ReturnType<typeof teamColor>) => tc ? `color-mix(in srgb, ${tc.c} 72%, var(--surface))` : 'color-mix(in srgb, var(--dim) 16%, var(--surface))';
   const ezText = (tc: ReturnType<typeof teamColor>) => tc ? tc.t : 'var(--dim)';
-  const awayLogo = teamLogo(away), homeLogo = teamLogo(home);
+  const awayLogo = teamLogo(away, { week }), homeLogo = teamLogo(home, { week });
   const stripTeam = (abbr: string, lg: string | null, hasBall: boolean) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: hasBall ? 'var(--text)' : 'var(--dim)' }}>
       {lg && <img src={lg} alt="" width={13} height={13} style={{ display: 'block' }} />}
@@ -780,7 +780,7 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
   const teamCol = (abbr: string, score: number | null, right: boolean) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
       <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
-        {teamLogo(abbr) && <img src={teamLogo(abbr)!} alt="" width={22} height={22} />}
+        {teamLogo(abbr, { week }) && <img src={teamLogo(abbr, { week })!} alt="" width={22} height={22} />}
         <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{clubNick(abbr)}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -844,7 +844,7 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
             return (
               <div key={p.pid ?? `${p.c}-${i}`} title="Double-click to hear this play" onDoubleClick={() => { webVoice.stop(); webVoice.speak(p.txt, () => {}); }}
                 style={{ display: 'flex', gap: 8, padding: '10px 4px', borderBottom: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>
-                {teamLogo(p.tm) && <img src={teamLogo(p.tm)!} alt="" width={22} height={22} style={{ marginTop: 2, flex: 'none' }} />}
+                {teamLogo(p.tm, { week }) && <img src={teamLogo(p.tm, { week })!} alt="" width={22} height={22} style={{ marginTop: 2, flex: 'none' }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 9, fontWeight: 700, color: 'var(--dim)' }}>
                     <span>{s2 ?? p.ty.toUpperCase()}</span><span>{qClock(p.c)}</span>
@@ -957,7 +957,7 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
     return (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)', marginBottom: 5 }}>
-        {teamLogo(label) && <img src={teamLogo(label)!} alt="" width={16} height={16} style={{ display: 'block' }} />}{label}
+        {teamLogo(label, { week }) && <img src={teamLogo(label, { week })!} alt="" width={16} height={16} style={{ display: 'block' }} />}{label}
       </div>
       {shown.length === 0
         ? <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>— nothing yet —</div>
@@ -991,7 +991,7 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   const projCol = (label: string, rows: NonNullable<typeof proj>['home']) => (
     <div style={{ flex: 1, minWidth: 0 }}>
       <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text)', marginBottom: 5 }}>
-        {teamLogo(label) && <img src={teamLogo(label)!} alt="" width={16} height={16} style={{ display: 'block' }} />}{label}
+        {teamLogo(label, { week }) && <img src={teamLogo(label, { week })!} alt="" width={16} height={16} style={{ display: 'block' }} />}{label}
       </div>
       {rows.length === 0
         ? <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>— no projections —</div>
@@ -1053,13 +1053,13 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
         {/* The selected game's own line: teams, score, where its clock stands. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 10 }}>
           <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>
-            {teamLogo(cur.away) && <img src={teamLogo(cur.away)!} alt="" width={16} height={16} style={{ display: 'block' }} />}{cur.away}
+            {teamLogo(cur.away, { week }) && <img src={teamLogo(cur.away, { week })!} alt="" width={16} height={16} style={{ display: 'block' }} />}{cur.away}
           </span>
           {last
             ? <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>{last.as} — {last.hs}</span>
             : <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)' }}>@</span>}
           <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>
-            {cur.home}{teamLogo(cur.home) && <img src={teamLogo(cur.home)!} alt="" width={16} height={16} style={{ display: 'block' }} />}
+            {cur.home}{teamLogo(cur.home, { week }) && <img src={teamLogo(cur.home, { week })!} alt="" width={16} height={16} style={{ display: 'block' }} />}
           </span>
           <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: cur.state === 'live' ? '#FF4F62' : 'var(--faint)' }}>
             {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE') : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}

@@ -242,7 +242,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   footer?: (scale: number) => ReactNode;
 }) {
   const photo = headshot(slug);
-  const logo = teamLogo(team);
+  const logo = teamLogo(team, { slug });
   const src = photo ?? logo;
 
   // Deal and flip are two ways of ARRIVING and a card does exactly one of them:

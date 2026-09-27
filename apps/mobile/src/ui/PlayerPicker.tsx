@@ -182,7 +182,7 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
   const photo = headshot(player.id);
-  const logo = teamLogo(player.team);
+  const logo = teamLogo(player.team, { slug: player.id });
   const src = photo ?? logo;
   const tag = groupTag(group);
   const tagFg = group === 'ir' ? '#A3401F' : group === 'taxi' ? '#5B6B2E' : '#8A7C55';

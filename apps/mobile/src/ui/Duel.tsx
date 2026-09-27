@@ -348,7 +348,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
               const row = (
                 <>
                   {logos.slice(0, 10).map((tm) => {
-                    const url = teamLogo(tm);
+                    const url = teamLogo(tm, { week });
                     return url ? <Image key={tm} source={{ uri: url }} style={{ width: 14, height: 14 }} resizeMode="contain" />
                       : <Mono key={tm} size={8} tone="faint">{tm}</Mono>;
                   })}

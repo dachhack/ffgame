@@ -326,7 +326,7 @@ export function Img({ src, size, radius, alt, fallback }: { src?: string | null;
 export function PlayerImg({ playerId, espnId, team, pos, size = 30 }: { playerId: string; espnId?: string | null; team?: string | null; pos: Pos; size?: number }) {
   return (
     <Img src={headshot(playerId) ?? espnHeadshot(espnId)} size={size} radius={Math.round(size * 0.3)} alt={playerId}
-      fallback={<Img src={teamLogo(team)} size={size} radius={Math.round(size * 0.3)} fallback={<PosPill pos={pos} />} />} />
+      fallback={<Img src={teamLogo(team, { slug: playerId })} size={size} radius={Math.round(size * 0.3)} fallback={<PosPill pos={pos} />} />} />
   );
 }
 

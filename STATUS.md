@@ -18,6 +18,36 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.560.0 — NFL ⇄ CFB on the fields; college teams wear their own logos
+
+The founder's widget read "WK 9/21 · NOW" and listed college games, with the
+Houston Cougars (v Georgia Southern) wearing the Houston TEXANS logo: "We need
+a way to switch between CFB and NFL games in the fields widget and in the all
+fields view. Also looks like some leakage with Houston?"
+- The mix: the college calendar (weeks 201+) shares nfl_slate and the season
+  with the NFL. fieldsWeekFrom / slateWeekOrder compared every week by
+  kickoff, so a college Saturday could be "now" and the NFL week vanished.
+  Both now take a level ('nfl' | 'cfb', default 'nfl'); the other level's
+  weeks aren't considered. That also fixes the web onboarding fields, which
+  use the same picker.
+- Fields widget: an NFL/CFB chip in the header, also shown in its empty,
+  loading and error states so you can always switch back. The choice is
+  remembered per widget. A switch goes back to NOW and closes any open game.
+  The remembered frame is kept per level.
+- All fields sheet (app): NFL / CFB chips on top. Switching forgets the week
+  and asks the slate again, and a read for the other level can't land after
+  a switch.
+- The leak: teamLogo built an NFL URL from any code, so a college code that is
+  also an NFL code (HOU, MIA, CIN) drew that NFL team, and the rest asked for
+  NFL logos that don't exist. teamLogo(abbr, ctx) now takes the context the
+  caller has, either the week (201+) or the player's slug (c-<id>). A college
+  team gets ESPN's ncaa logo by school id (college_school, 0382, loaded by
+  loadCollegeLogos at sign-in and by the widget), or none. It never gets an
+  NFL one. This is wired through the fields, game views, slate crests and
+  player cards on web and app, so a college player in a mixed league no
+  longer wears an NFL logo either.
+- check-field-board: level picking and college logos.
+
 ### v0.559.2 — cards are visible again on the setup board (app)
 
 The founder's screenshot (Android, Turf Warriors, SUN 1PM): the window read

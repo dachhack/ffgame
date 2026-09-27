@@ -29,6 +29,8 @@ import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 
 import type { AlertsSummary, FieldGame, ProjCell } from '@drip/core/data/widgetExtras';
 import { spotLabel } from '@drip/core/data/widgetExtras';
 import { weekLabel } from '@drip/core/data/nflSlate';
+import { teamLogo } from '@drip/core/data/media';
+import type { FieldsLevel } from '@drip/core/data/fieldsWeek';
 import { C, fmt, shortClock, matchupDeepLink, WIDGET_CLICK } from './MatchupWidget';
 import type { LeagueAlert, FieldMine } from '@drip/core/data/widgetExtras';
 
@@ -37,7 +39,7 @@ export const FIELDS_WIDGET_NAME = 'Fields';
 /** The deep link a fields tap opens: App.tsx shows ▦ All fields. */
 export const FIELDS_DEEP_LINK = 'dripfantasy://fields';
 /** The fields widget's own chips (v0.506.0): step the week, back to now, whose players. */
-export const FIELDS_CLICK = { prev: 'FIELDS_PREV', next: 'FIELDS_NEXT', now: 'FIELDS_NOW', league: 'FIELDS_LEAGUE', toggle: 'FIELDS_TOGGLE' } as const;
+export const FIELDS_CLICK = { prev: 'FIELDS_PREV', next: 'FIELDS_NEXT', now: 'FIELDS_NOW', league: 'FIELDS_LEAGUE', toggle: 'FIELDS_TOGGLE', level: 'FIELDS_LEVEL' } as const;
 
 // ── ALERTS ──────────────────────────────────────────────────────────────────
 
@@ -182,19 +184,30 @@ export interface FieldsNav {
   /** Whose players are starred: a league's name, or "All leagues". */
   leagueLabel: string;
 }
+/** NFL or college games (v0.560.0) — every state carries it, so the chip
+ *  that switches is there even when the week is empty or failed to load. */
+type Leveled = { level?: FieldsLevel };
 export type FieldsState =
-  | { kind: 'loading' }
-  | { kind: 'empty' }
-  | { kind: 'error'; message: string }
+  | ({ kind: 'loading' } & Leveled)
+  | ({ kind: 'empty' } & Leveled)
+  | ({ kind: 'error'; message: string } & Leveled)
   | ({ kind: 'ok'; week: number; games: FieldGame[]; offline?: boolean; stale?: boolean;
       /** A tap is being answered (v0.507.0): the header says so, the frame is inert. */ busy?: boolean;
-      /** The game opened in place (v0.508.0), by key. */ openKey?: string | null } & Partial<FieldsNav>);
+      /** The game opened in place (v0.508.0), by key. */ openKey?: string | null } & Partial<FieldsNav> & Leveled);
 
-/** A small team logo — ESPN's resizer, so the widget fetches 36px, not 500. */
-const logo = (team: string) => `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500/${team.toLowerCase()}.png&h=36&w=36`;
+/** A small team logo — ESPN's resizer, so the widget fetches 36px, not 500.
+ *  College teams get their own logo by school id, or none (v0.560.0: HOU was
+ *  wearing the Texans' logo for the Houston Cougars). */
+const logo = (team: string, college: boolean): string | null => {
+  const url = teamLogo(team, { college });
+  const path = url?.replace(/^https:\/\/a\.espncdn\.com/, '');
+  return path ? `https://a.espncdn.com/combiner/i?img=${path}&h=36&w=36` : null;
+};
 
-function TeamSide({ team, score, lead, align, showScore }: { team: string; score: number; lead: boolean; align: 'left' | 'right'; showScore: boolean }) {
-  const face = <ImageWidget key="f" image={logo(team) as `https:${string}`} imageWidth={16} imageHeight={16} />;
+function TeamSide({ team, score, lead, align, showScore, college }: { team: string; score: number; lead: boolean; align: 'left' | 'right'; showScore: boolean; college: boolean }) {
+  const src = logo(team, college);
+  // Never null here (see the header): no logo is a 16dp blank.
+  const face = src ? <ImageWidget key="f" image={src as `https:${string}`} imageWidth={16} imageHeight={16} /> : <FlexWidget key="f" style={{ width: 16, height: 16 }} />;
   const name = <TextWidget key="n" text={team} maxLines={1} style={{ fontSize: 11, color: lead ? C.text : C.dim, fontWeight: 'bold', marginLeft: align === 'left' ? 4 : 0, marginRight: align === 'right' ? 4 : 0 }} />;
   const pts = showScore ? <TextWidget key="p" text={String(score)} maxLines={1} style={{ fontSize: 14, color: lead ? C.text : C.dim, fontWeight: 'bold', marginLeft: align === 'left' ? 6 : 0, marginRight: align === 'right' ? 6 : 0 }} /> : null;
   return (
@@ -329,7 +342,7 @@ function OpenedGame({ g }: { g: FieldGame }) {
   );
 }
 
-function GameRow({ g, last, open }: { g: FieldGame; last: boolean; open: boolean }) {
+function GameRow({ g, last, open, college }: { g: FieldGame; last: boolean; open: boolean; college: boolean }) {
   const live = g.state === 'live';
   const lead = (a: number, b: number) => g.state !== 'pre' && a > b;
   const clockText = g.state === 'pre' ? (g.kickoff != null ? lockWhen(g.kickoff) : 'TBD') : g.clock ?? '';
@@ -343,9 +356,9 @@ function GameRow({ g, last, open }: { g: FieldGame; last: boolean; open: boolean
       style={{ width: 'match_parent', flexDirection: 'column', backgroundColor: C.bg, borderRadius: 10, padding: 7, marginBottom: last ? 0 : 5,
         borderWidth: 1, borderColor: open ? C.you : live ? C.live : C.line }}>
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <TeamSide team={g.away} score={g.as} lead={lead(g.as, g.hs)} align="left" showScore={g.state !== 'pre'} />
+        <TeamSide team={g.away} score={g.as} lead={lead(g.as, g.hs)} align="left" showScore={g.state !== 'pre'} college={college} />
         <TextWidget text={`${clockText} ${open ? '▴' : '▾'}`} maxLines={1} style={{ fontSize: 9, color: clockColor, fontWeight: 'bold' }} />
-        <TeamSide team={g.home} score={g.hs} lead={lead(g.hs, g.as)} align="right" showScore={g.state !== 'pre'} />
+        <TeamSide team={g.home} score={g.hs} lead={lead(g.hs, g.as)} align="right" showScore={g.state !== 'pre'} college={college} />
       </FlexWidget>
       {live && g.poss != null && g.toGo != null ? <FieldStrip g={g as FieldGame & { poss: string; toGo: number }} /> : null}
       {!open && g.last && g.state !== 'final' ? (
@@ -383,12 +396,16 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
   );
   const glyph = (text: string, color: ColorProp, size = 16) => <TextWidget text={text} maxLines={1} style={{ fontSize: size, color, fontWeight: 'bold' }} />;
   const refresh = (offline?: boolean) => block(glyph(busy ? '…' : offline ? '⟳ !' : '⟳', busy ? C.dim : offline ? C.warn : C.you), WIDGET_CLICK.refresh, 36, !!busy);
+  // NFL ⇄ CFB (v0.560.0): the chip names what's on show; a tap switches.
+  const cfb = state.level === 'cfb';
+  const levelChip = block(glyph(cfb ? 'CFB' : 'NFL', busy ? C.dim : C.you, 10), FIELDS_CLICK.level, 36, !!busy);
   if (state.kind !== 'ok') {
-    const msg = state.kind === 'loading' ? 'Reading the week…' : state.kind === 'empty' ? 'No games on the slate yet.' : state.message;
+    const msg = state.kind === 'loading' ? 'Reading the week…' : state.kind === 'empty' ? (cfb ? 'No college games on the slate.' : 'No games on the slate yet.') : state.message;
     return frame(
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginBottom: 6 }}>
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
           <FlexWidget style={{ flex: 1 }}><TextWidget text="▦ ALL FIELDS" maxLines={1} style={{ fontSize: 12, color: C.text, fontWeight: 'bold' }} /></FlexWidget>
+          {levelChip}
           {refresh(state.kind === 'error')}
         </FlexWidget>
         <TextWidget text={msg} truncate="END" maxLines={1} style={{ fontSize: 10, color: state.kind === 'error' ? C.warn : C.dim, fontWeight: 'bold', marginTop: 3 }} />
@@ -412,13 +429,14 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
       {block([
         <TextWidget key="s" text="★" maxLines={1} style={{ fontSize: 11, color: busy ? C.dim : C.you, fontWeight: 'bold' }} />,
         <TextWidget key="l" text={state.leagueLabel ?? 'All leagues'} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: busy ? C.dim : C.you, fontWeight: 'bold' }} />,
-      ], FIELDS_CLICK.league, 64, !!busy)}
+      ], FIELDS_CLICK.league, 56, !!busy)}
+      {levelChip}
       {refresh(offline)}
     </FlexWidget>
   );
   return frame(head,
     <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>
-      {games.map((g, i) => <GameRow key={g.key} g={g} last={i === games.length - 1} open={state.openKey === g.key} />)}
+      {games.map((g, i) => <GameRow key={g.key} g={g} last={i === games.length - 1} open={state.openKey === g.key} college={cfb} />)}
     </ListWidget>,
   );
 }
