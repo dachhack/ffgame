@@ -18,6 +18,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.559.2 — cards are visible again on the setup board (app)
+
+The founder's screenshot (Android, Turf Warriors, SUN 1PM): the window read
+3/3 SET, but every card spot was blank and only the ⚡📈 chips showed. The
+chips sit outside the card shell; everything inside it had opacity 0. The deal-in
+started the card at opacity 0 on the NATIVE driver. Since the RN 0.86.3 /
+new-architecture upgrade (v0.539.0), a native animation started on mount can
+be dropped, which is the fault v0.556.3 fixed in Overlay. A dropped deal left
+the card invisible.
+- cards.tsx: CardShell is now two layers. The outer box carries the entrance
+  (deal fade/rise and the reveal flip) on the JS driver. The inner layer
+  carries the idle wobble and the nuke shake on the native driver, since they
+  start from rest. One view can't mix drivers.
+- animations.tsx useFlipIn → JS driver (it starts turned away at 180°).
+- PowerupHand's rise → JS driver (it starts hidden below the bar).
+- NukeBurst → JS driver (💥 starts at opacity 0, the burst at 25% scale).
+  A sweep of the app found no other native animation that starts hidden:
+  wobble, shake, live pulse, hot glow and score tick all start from a visible
+  rest, so losing one costs motion only. Overlay is the only Modal, and
+  v0.556.3 already fixed it.
+- Android, like v0.556.3 — the same dropped-animation fault. Diagnosed from
+  the screenshot, not reproduced on a device here.
+
 ### v0.559.1 — two ways a manager's lineup froze mid-week (#1028)
 
 Kickoff League, Friday night, from chat: "what is going on with Mooney's

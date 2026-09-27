@@ -128,8 +128,16 @@ export function cardBackArt() {
 }
 
 /** A dealt player card: headshot, name, position/team, sealed metric. */
-/** Deal-in: rise + fade, staggered by index. Native driver, so it runs on the
- *  UI thread and a slow JS tick cannot stutter it. */
+/** Deal-in: rise + fade, staggered by index.
+ *
+ *  JS DRIVER, and it has to be (v0.559.2, founder's screenshot: every card on
+ *  the SUN 1PM board blank, only the ⚡ chips showing). The deal STARTS at
+ *  opacity 0, so it is the one animation whose loss hides the card. Since the
+ *  RN 0.86.3 / new-architecture upgrade (v0.539.0) a native-driven animation
+ *  started on mount can be dropped — the same fault v0.556.3 fixed in Overlay —
+ *  and a dropped deal left every card on the board invisible. A 260 ms fade on
+ *  the JS thread cannot be lost. The idle wobble and the shake stay native:
+ *  they start from rest, so losing one costs motion, never the card. */
 function useDealIn(idx: number, play = true) {
   const v = useRef(new Animated.Value(play ? 0 : 1)).current;
   useEffect(() => {
@@ -139,7 +147,7 @@ function useDealIn(idx: number, play = true) {
       duration: 260,
       delay: Math.min(idx, 8) * 70,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [idx, play, v]);
   return {
@@ -168,29 +176,39 @@ type CardTx = ReturnType<typeof useFlipIn>['transform'][number]
  *
  *  One component owns the box, the entrance and the idle motion. A variant may
  *  add a transform (the reveal flip, the nuke shake) but cannot own the shape. */
-function CardShell({ idx = 0, deal: playDeal = true, size, extra = [], style, children }: {
+function CardShell({ idx = 0, deal: playDeal = true, size, enter = [], extra = [], style, children }: {
   idx?: number;
   /** False when another entrance is playing instead (the reveal flip). */
   deal?: boolean;
   /** Setup-board sizing. Absent = uncapped, the live-duel size. */
   size?: CardSize;
-  /** Variant transforms. Prepended, because `perspective` has to lead the list. */
+  /** ENTRANCE transforms (the reveal flip) — JS-driven, like the deal, because
+   *  they start with the card hidden. Prepended: `perspective` leads the list. */
+  enter?: CardTx[];
+  /** Native-driven variant transforms (the nuke shake). They start at rest. */
   extra?: CardTx[];
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
 }) {
   const deal = useDealIn(idx, playDeal);
   const wob = useWobble(idx);
+  // TWO LAYERS (v0.559.2): the outer box carries the entrance on the JS driver,
+  // the inner one the idle motion on the native driver. One view can't hold
+  // both — attaching a native animation makes the whole style native, and the
+  // JS-driven deal on it would then throw. The box (flex, aspectRatio,
+  // maxWidth) stays outermost; the variant's look rides the inner layer, so a
+  // back's clipped corners still wobble with the card.
   return (
     <Animated.View
       style={[
         { flex: 1, aspectRatio: CARD_ASPECT },
         size ? { maxWidth: sizeSpec(size).w ?? undefined } : null,
-        style,
-        { opacity: deal.opacity, transform: [...extra, ...deal.transform, ...wob.transform] },
+        { opacity: deal.opacity, transform: [...enter, ...deal.transform] },
       ]}
     >
-      {children}
+      <Animated.View style={[{ flex: 1 }, style, { transform: [...extra, ...wob.transform] }]}>
+        {children}
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -254,7 +272,7 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
   // so a filled slot and the sealed card beside it were laid out two different
   // ways and only agreed by luck. Same rule, same box.
   return (
-    <CardShell idx={idx} deal={!doFlip} size={size} extra={[...flipIn.transform, ...shake.transform]}>
+    <CardShell idx={idx} deal={!doFlip} size={size} enter={flipIn.transform} extra={shake.transform}>
     <Pressable onPress={onPress} style={{ flex: 1 }}>
     <ImageBackground
       source={STOCK_TILE}

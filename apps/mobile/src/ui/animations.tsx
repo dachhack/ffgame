@@ -55,7 +55,10 @@ export function useFlipIn(play: boolean) {
   useEffect(() => {
     if (!play) return;
     v.setValue(0);
-    Animated.timing(v, { toValue: 1, duration: 550, easing: FLIP_EASE, useNativeDriver: true }).start();
+    // JS driver (v0.559.2): the flip starts turned away (180°), so a dropped
+    // native animation under the new architecture would leave the card facing
+    // backwards — the same loss that blanked the deal-in. See useDealIn.
+    Animated.timing(v, { toValue: 1, duration: 550, easing: FLIP_EASE, useNativeDriver: false }).start();
   }, [play, v]);
   return {
     // perspective MUST precede rotateY in the transform list — without it the
@@ -122,10 +125,14 @@ export function NukeBurst({ play }: { play: boolean }) {
   useEffect(() => {
     if (!play) return;
     v.setValue(0); fade.setValue(1);
+    // JS driver (v0.559.2): the burst starts with 💥 at opacity 0 and the
+    // whole thing at 25% scale, so a native animation dropped under the new
+    // architecture (see cards.tsx useDealIn) would leave no 💥 and a
+    // quarter-size NUKED tag on the card.
     Animated.sequence([
-      Animated.timing(v, { toValue: 1, duration: 900, easing: BURST_EASE, useNativeDriver: true }),
+      Animated.timing(v, { toValue: 1, duration: 900, easing: BURST_EASE, useNativeDriver: false }),
       Animated.delay(1400),
-      Animated.timing(fade, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 0, duration: 400, useNativeDriver: false }),
     ]).start();
   }, [play, v, fade]);
   if (!play) return null;

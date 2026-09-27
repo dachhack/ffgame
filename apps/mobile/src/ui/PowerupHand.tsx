@@ -99,7 +99,9 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0 }: {
   // Always dealt (v0.375.0): the fan rises once when cards exist and stays.
   const dealt = cards.length > 0;
   useEffect(() => {
-    Animated.timing(rise, { toValue: dealt ? 1 : 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    // JS driver (v0.559.2): the hand starts hidden below the bar, so a native
+    // animation dropped under the new architecture would leave it there.
+    Animated.timing(rise, { toValue: dealt ? 1 : 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   }, [dealt, rise]);
 
   // A card that leaves the hand (armed away, consumed) must not stay raised —
