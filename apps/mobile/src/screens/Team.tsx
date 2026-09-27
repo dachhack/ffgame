@@ -25,7 +25,10 @@ import {
   type LeaguePoolPlayer, type NativeTeamState,
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
+  devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
+import { sharesUsed } from '@drip/core/data/devyShares';
+import { DevySharesSheet } from '../ui/DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
@@ -400,6 +403,13 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // The league's LINEUP SHAPE (v0.281.0) — what the roster tab lays itself out
   // against: the starting spots, and how many bench/IR/taxi places exist.
   const [gm, setGm] = useState<GameModeInfo | null>(null);
+  // DEVY SHARES (0387): read once COLLEGE is on; `on` says whether this league plays them.
+  const [shares, setShares] = useState<DevySharesState | null>(null);
+  const [sharesOpen, setSharesOpen] = useState(false);
+  useEffect(() => {
+    if (!(gm?.positions ?? []).includes('COLLEGE')) { setShares(null); return; }
+    devySharesState(leagueId).then(setShares).catch(() => {});
+  }, [gm, leagueId, sharesOpen]);
   const skew = useRef(0);
 
   // ── CONTRACTS ON THE ROSTER (v0.352.0, founder: "Rosters also don't show
@@ -968,6 +978,19 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           ))}
         </>)}
 
+        {/* ── DEVY SHARES (0387) — a shares league's devy: stakes, not a shelf. */}
+        {shares?.on && (
+          <Pressable onPress={() => { tap(); setSharesOpen(true); }} style={{ marginTop: 14 }}>
+            <Mono size={9} tone="faint" track={0.12}>DEVY SHARES</Mono>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <Text style={{ flex: 1, fontSize: 13, color: t.text }}>
+                {`${sharesUsed(shares, myRoster).used}/${sharesUsed(shares, myRoster).budget} shares placed · ${(shares.players ?? []).filter((p) => p.right?.roster_id === myRoster).length} rights held`}
+              </Text>
+              <Mono size={10} tone="you" weight="700">OPEN ›</Mono>
+            </View>
+          </Pressable>
+        )}
+
       </Card>
 
       </>)}
@@ -1271,6 +1294,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       )}
 
       {/* FAAB claim → collect the blind bid */}
+      <DevySharesSheet visible={sharesOpen} leagueId={leagueId} myRoster={myRoster} onClose={() => setSharesOpen(false)} />
       <Overlay visible={!!claimFor} title={claimFor ? `Claim ${claimFor.p.full_name}` : ''} onClose={() => setClaimFor(null)}>
         {claimFor?.drop && (
           <Mono size={9.5} style={{ marginBottom: 8 }}>dropping {poolBySlug.get(claimFor.drop)?.full_name ?? claimFor.drop}</Mono>

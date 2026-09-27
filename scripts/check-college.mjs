@@ -140,5 +140,20 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
     'tier and class together; an empty rule passes everyone');
 }
 
+// ── 11. devy shares (0387): the words for where a team stands ──
+{
+  const { sharesUsed, myStake, rightLine, lockLine } = await import('../packages/core/src/data/devyShares.ts');
+  const st = { ok: true, on: true, locked: false, rules: { budget: 100, max: 20, floor: 5 }, used: { 1: 64 } };
+  ok(sharesUsed(st, 1).free === 36 && sharesUsed(st, 2).used === 0, 'the budget: 64 placed, 36 free; an empty team has 100');
+  const h = (roster_id, shares, team) => ({ roster_id, shares, team, maxed_at: null });
+  const mine = { slug: 'c-1', name: 'A', pos: 'WR', school: 'X', class_year: 2, graduated_to: null, holders: [h(1, 20, 'Me'), h(2, 20, 'Them')], right: { roster_id: 1, via: 'max' } };
+  const theirs = { ...mine, right: { roster_id: 2, via: 'max' } };
+  const alone = { ...mine, holders: [h(1, 3, 'Me')], right: null };
+  ok(myStake(mine, 1) === 20 && myStake(mine, 3) === 0, 'a team\'s own stake');
+  ok(rightLine(mine, 1).startsWith('★ YOUR RIGHT') && rightLine(theirs, 1).startsWith('Them holds'), 'whose right it is, in words');
+  ok(rightLine(alone, 1) === 'only you — 2 more to hold his right', 'a sole holder under the floor is told how far');
+  ok(lockLine({ ...st, locked: true }).startsWith('Locked') && lockLine({ ...st, on: false }) === '', 'the lock line, and silence off');
+}
+
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL COLLEGE CHECKS PASS');

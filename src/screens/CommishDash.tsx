@@ -4,6 +4,7 @@ import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/cor
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
 import { teamLogo } from '@drip/core/data/media';
+import { DevyModeRow } from './DevyShares';
 import { leagueScoringGet, commishDeleteLeague, friendlyError, setLeagueName, setLeagueAvatar, leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict } from '@drip/core/data/liveApi';
 import { Avatar } from '../app/ui';
 import { AvatarPicker } from '../app/AvatarPicker';
@@ -917,6 +918,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   you stash into them in November, you don't draft into them. */}
               ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir - shape.out} ROUNDS{shape.ir + shape.out > 0 ? ` (${[shape.ir > 0 ? 'IR' : '', shape.out > 0 ? 'OUT' : ''].filter(Boolean).join('/')} isn't drafted)` : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} IS THE MAX` : ''}
 
+            {extraPos.includes('COLLEGE') && !collegeCal && <DevyModeRow leagueId={leagueId} />}
             {/* SPOTS CANNOT OUTRUN THE DRAFT (v0.233.0). Adding starting spots
                 does not lengthen a draft that already has its rounds, so a
                 league can end up with more spots than players — 13 spots and a

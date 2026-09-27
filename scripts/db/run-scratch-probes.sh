@@ -244,3 +244,4 @@ $RUN -f scripts/db/lineup-after-draft-probes.sql | grep -E "PROBE FAIL|ALL LINEU
 $RUN -f scripts/db/score-as-is-probes.sql | grep -E "PROBE FAIL|ALL SCORE-AS-IS PROBES" || { echo "SCORE-AS-IS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/college-rules-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-RULES PROBES" || { echo "COLLEGE-RULES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/top-up-probes.sql | grep -E "PROBE FAIL|ALL TOP-UP PROBES" || { echo "TOP-UP PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/devy-shares-probes.sql | grep -E "PROBE FAIL|ALL DEVY-SHARES PROBES" || { echo "DEVY-SHARES PROBES FAILED"; exit 1; }

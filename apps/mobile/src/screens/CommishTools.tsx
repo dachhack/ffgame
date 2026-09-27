@@ -16,7 +16,7 @@ import { ActivityIndicator, Alert, Animated, Image, PanResponder, Pressable, Scr
 import {
   adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
-  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek,
+  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode,
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
@@ -2561,6 +2561,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 draft is what it FILLS — IR spots are the difference. */}
             <Mono size={8.5} weight="700" tone="you">ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir - shape.out}{shape.ir + shape.out > 0 ? ' (no IR/OUT)' : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
           </View>
+          {extraPos.includes('COLLEGE') && !collegeCal && <DevyModeCard leagueId={leagueId} />}
           {extraPos.includes('COLLEGE') && <GraduationConflictsCard leagueId={leagueId} />}
           {/* ── THE TAXI SQUAD'S RULES (0196) ────────────────────────────
               Who may ride it and when it shuts — and unlike the shape, these
@@ -2925,6 +2926,38 @@ function DeleteLeagueCard({ leagueId, onDeleted }: { leagueId: string; onDeleted
         style={{ borderWidth: 1, borderColor: t.opp, borderRadius: 6, paddingVertical: 11, alignItems: 'center', opacity: busy || !typed.trim() ? 0.4 : 1 }}>
         <Mono size={10} weight="700" tone="opp">{busy ? 'DELETING…' : '✕ DELETE THIS LEAGUE FOREVER'}</Mono>
       </Pressable>
+    </View>
+  );
+}
+
+/** DEVY: SPOTS OR SHARES (0387). Spots put college players on a shelf on the
+ *  roster; shares give every team 100 to put on college players, and the
+ *  first to 20 (or the only team in, with 5+) holds his rookie-draft right. */
+function DevyModeCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => { devySharesState(leagueId).then((r) => setOn(!!r.on)).catch(() => setOn(null)); }, [leagueId]);
+  const pick = async (mode: 'spots' | 'shares') => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyMode(leagueId, mode);
+      if (r.ok) { commit(); setOn(mode === 'shares'); setNote(mode === 'shares' ? '✓ devy shares on — the league chat says so' : '✓ back to devy spots'); }
+      else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  if (on == null) return null;
+  return (
+    <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
+      <LabelInfo label="DEVY"
+        info={'SPOTS: college players sit in devy roster spots until they turn pro.\n\nSHARES: nobody rosters college players. Every team gets 100 shares to put on them, up to 20 on one. The first team to 20 holds his right; if only one team is in, 5+ holds it. The right reserves him in the rookie draft, at any of the holder\u2019s picks. Shares lock from Jan 15 until the rookie draft and come back once he\u2019s drafted.\n\nShares need the DEVY spots at 0 and no college players on rosters.'} />
+      <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+        <Chip label="SPOTS" on={!on} disabled={busy || !on} onPress={() => { tap(); void pick('spots'); }} />
+        <Chip label="SHARES" on={on} disabled={busy || on} onPress={() => { tap(); void pick('shares'); }} />
+      </View>
+      {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
     </View>
   );
 }
