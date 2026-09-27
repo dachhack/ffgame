@@ -204,7 +204,7 @@ function RosterRow({ player, group, week, userId }: { player: Player; group: Poo
   const t = useTheme();
   const pc = t.pos[player.pos as keyof typeof t.pos] ?? { bg: t.sh, fg: t.dim, bd: t.bd };
   const photo = headshot(player.id);
-  const logo = teamLogo(player.team);
+  const logo = teamLogo(player.team, { slug: player.id });
   return (
     <Pressable
       onPress={() => openPlayerCard({ slug: player.id, name: player.full ?? player.name, pos: player.pos, team: player.team, week: week || undefined, userId })}

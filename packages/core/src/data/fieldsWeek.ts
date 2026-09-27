@@ -10,6 +10,16 @@
 // compare by when they actually played.
 export interface SlateWeekRow { week: number; kickoff?: string | number | null }
 
+// NFL OR COLLEGE (v0.560.0). Founder, on the fields widget reading "WK 9/21 ·
+// NOW" with college games: "We need a way to switch between CFB and NFL
+// games." The college calendar (weeks 201+) shares nfl_slate and the season
+// with the NFL, so the week picker compared them all by kickoff and a college
+// Saturday could be "now" — the NFL week vanished. Every reader now picks a
+// LEVEL; the weeks of the other one are not in the running. Preseason board
+// weeks (101+) are NFL.
+export type FieldsLevel = 'nfl' | 'cfb';
+export const weekLevel = (week: number): FieldsLevel => (week > 200 ? 'cfb' : 'nfl');
+
 // THE WEEK TURNS OVER ON WEDNESDAY (v0.506.0). Founder, on the fields widget
 // still showing week 2 on a Thursday morning: "It should move to the next
 // week on Wednesday early AM." A week used to begin at its FIRST KICKOFF, so
@@ -30,9 +40,10 @@ export function weekTurnBefore(ms: number): number {
   return ms - (daysBack * 86400 + secsIntoDay - TURN_HOUR_ET * 3600) * 1000;
 }
 
-export function fieldsWeekFrom(rows: SlateWeekRow[], nowMs: number): number | null {
+export function fieldsWeekFrom(rows: SlateWeekRow[], nowMs: number, level: FieldsLevel = 'nfl'): number | null {
   const first = new Map<number, number>();
   for (const r of rows) {
+    if (weekLevel(r.week) !== level) continue;
     const ms = r.kickoff == null ? NaN : typeof r.kickoff === 'number' ? r.kickoff : Date.parse(r.kickoff);
     if (!Number.isFinite(ms)) continue;
     const cur = first.get(r.week);
@@ -51,9 +62,10 @@ export function fieldsWeekFrom(rows: SlateWeekRow[], nowMs: number): number | nu
 
 /** The slate's weeks in the order they are played (by first kickoff) — what
  *  the fields widget's ‹ › step through (v0.506.0). */
-export function slateWeekOrder(rows: SlateWeekRow[]): number[] {
+export function slateWeekOrder(rows: SlateWeekRow[], level: FieldsLevel = 'nfl'): number[] {
   const first = new Map<number, number>();
   for (const r of rows) {
+    if (weekLevel(r.week) !== level) continue;
     const ms = r.kickoff == null ? NaN : typeof r.kickoff === 'number' ? r.kickoff : Date.parse(r.kickoff);
     if (!Number.isFinite(ms)) continue;
     const cur = first.get(r.week);

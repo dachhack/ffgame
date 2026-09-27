@@ -3102,7 +3102,7 @@ function WindowSectionInner(props: {
           <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{windowTimeLabel(week, w.id)}</span>
           {slate.length > 0 && (
             <button onClick={() => setSlateOpen((o) => !o)} title="NFL game slate for this window" className="mono" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: slateOpen ? 'var(--text)' : 'var(--dim)', background: 'var(--surface)', border: `1px solid ${slateOpen ? 'var(--bdh)' : 'var(--bd)'}`, borderRadius: 11, padding: '3px 8px' }}>
-              <span style={{ display: 'flex', gap: 1 }}>{slateTeams.slice(0, 8).map((t) => <Img key={t} src={teamLogo(t)} size={13} radius={2} fallback={<span />} />)}</span>
+              <span style={{ display: 'flex', gap: 1 }}>{slateTeams.slice(0, 8).map((t) => <Img key={t} src={teamLogo(t, { week })} size={13} radius={2} fallback={<span />} />)}</span>
               SLATE · {slate.length} {slate.length === 1 ? 'GAME' : 'GAMES'} {slateOpen ? '▴' : '▾'}
             </button>
           )}
@@ -3168,7 +3168,7 @@ function WindowSectionInner(props: {
               {slate.map((g) => {
                 const teamLine = (abbr: string) => (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
-                    <Img src={teamLogo(abbr)} size={22} radius={4} fallback={<span className="mono" style={{ fontSize: 9 }}>{abbr}</span>} />
+                    <Img src={teamLogo(abbr, { week })} size={22} radius={4} fallback={<span className="mono" style={{ fontSize: 9 }}>{abbr}</span>} />
                     <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{abbr}</span>
                   </div>
                 );
@@ -4230,11 +4230,11 @@ function TwoColLog({ events, gameLabel, youCoin = 0, theirCoin = 0, realOf, real
     // call). The score (or @ pregame) sits between the crests either way.
     return (
       <span className="mono" title="real NFL game · live score · real game clock" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: fs(8.5), fontWeight: 700, color: 'var(--dimstrong)', whiteSpace: 'nowrap' }}>
-        <Img src={teamLogo(g.away)} size={isMobile ? 14 : 12} radius={2} fallback={<span>{g.away}</span>} />
+        <Img src={teamLogo(g.away, { week })} size={isMobile ? 14 : 12} radius={2} fallback={<span>{g.away}</span>} />
         <span>{isMobile
           ? (last ? `${last.as}–${last.hs}` : '@')
           : `${g.away}${last ? ` ${last.as}–${last.hs} ` : '@'}${g.home}`}</span>
-        <Img src={teamLogo(g.home)} size={isMobile ? 14 : 12} radius={2} fallback={<span>{g.home}</span>} />
+        <Img src={teamLogo(g.home, { week })} size={isMobile ? 14 : 12} radius={2} fallback={<span>{g.home}</span>} />
         {(over || qc) && <span style={{ color: 'var(--faint)' }}>· {over ? 'FINAL' : qc}</span>}
       </span>
     );

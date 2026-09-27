@@ -72,7 +72,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
   const t = useTheme();
   const suit = t.pos[(pos as Pos)] ?? t.pos.DEF;
   const photo = headshot(slug);
-  const logo = teamLogo(team);
+  const logo = teamLogo(team, { slug });
   // The web animates `.ct-lcard` with ct-wob just like the full card — a mini
   // card sitting still next to a breathing one reads as a different kind of
   // object. Nuked cards stop moving, as on the web (`.ct-nuked` kills it).

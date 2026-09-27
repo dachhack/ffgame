@@ -6,8 +6,42 @@ import { isMarkFree } from './markFree';
 // ESPN team logo by NFL abbreviation. ESPN accepts the standard abbr lowercased
 // for every team in this league (la/lar/was/wsh all resolve), so no remap.
 // Mark-free mode suppresses the logo (NFL trademark) → the UI falls back to the abbr badge.
-export function teamLogo(abbr?: string | null): string | null {
+//
+// COLLEGE TEAMS ARE NOT NFL TEAMS (v0.560.0, founder's widget: Houston
+// Cougars v Georgia Southern wore the Houston TEXANS logo). A college code
+// that happens to be an NFL code (HOU, MIA, CIN) drew that NFL team, and every
+// other college code asked ESPN for an NFL logo that doesn't exist. Pass the
+// context the caller already has — the week (college weeks are 201+) or the
+// player's slug (college players are c-<espn id>) — and a college team gets
+// its own logo by ESPN school id (setCollegeLogoIds), or none. Never an NFL one.
+export interface LogoCtx {
+  /** Say it outright when the caller knows. */
+  college?: boolean;
+  /** A board / slate week: 201+ is the college calendar. */
+  week?: number | null;
+  /** A player's slug: c-<espn id> is a college player. */
+  slug?: string | null;
+}
+export const isCollegeLogoCtx = (ctx?: LogoCtx): boolean =>
+  !!ctx && (ctx.college ?? ((ctx.week ?? 0) > 200 || /^c-\d+$/.test(ctx.slug ?? '')));
+
+let collegeLogoIds: Record<string, string> = {};
+/** Install college school ids by abbreviation (liveApi loadCollegeLogos). */
+export function setCollegeLogoIds(rows: { abbr: string | null; id: string | number | null }[]): void {
+  const next: Record<string, string> = {};
+  for (const r of rows) if (r.abbr && r.id != null) next[r.abbr.toUpperCase()] = String(r.id);
+  collegeLogoIds = next;
+}
+/** ESPN's logo for a college school, by id; null when we don't know him. */
+export function collegeLogo(abbr?: string | null): string | null {
   if (!abbr || isMarkFree()) return null;
+  const id = collegeLogoIds[abbr.toUpperCase()];
+  return id ? `https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png` : null;
+}
+
+export function teamLogo(abbr?: string | null, ctx?: LogoCtx): string | null {
+  if (!abbr || isMarkFree()) return null;
+  if (isCollegeLogoCtx(ctx)) return collegeLogo(abbr);
   return `https://a.espncdn.com/i/teamlogos/nfl/500/${abbr.toLowerCase()}.png`;
 }
 

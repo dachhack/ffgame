@@ -192,7 +192,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   };
 
   const photo = headshot(slug);
-  const logo = teamLogo(showTeam);
+  const logo = teamLogo(showTeam, { slug });
   const row = (label: string, value: string) => (
     <View key={label} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
       <Text style={{ fontFamily: MONO, width: 58, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: t.faint, paddingTop: 1 }}>{label}</Text>

@@ -1646,7 +1646,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}
               >
                 {slateOf(week, w.id).slice(0, 10).flatMap((g) => [g.away, g.home]).map((abbr, i) => {
-                  const uri = teamLogo(abbr);
+                  const uri = teamLogo(abbr, { week });
                   return uri
                     ? <Image key={`${abbr}-${i}`} source={{ uri }} style={{ width: 16, height: 16 }} resizeMode="contain" />
                     : <Mono key={`${abbr}-${i}`} size={8} tone="faint">{abbr}</Mono>;
@@ -1849,7 +1849,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               <View key={`${g.away}@${g.home}`} style={{ backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   {([g.away, g.home] as const).map((abbr, i) => {
-                    const logo = teamLogo(abbr);
+                    const logo = teamLogo(abbr, { week });
                     return (
                       <View key={abbr} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
                         {i === 1 && <Mono size={10} weight="700" tone="faint">@</Mono>}

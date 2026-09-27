@@ -17,6 +17,7 @@ import { requestWidgetUpdate, type WidgetTaskHandlerProps } from 'react-native-a
 import { getSession, friendlyError } from '@drip/core/data/liveApi';
 import { widgetSnapshot, recallSnapshot, recallLeagues, allWidgetLeagues, shownWidgetLeagues, cacheGet, cacheSet, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { alertsSummary, fieldGames, minesByTeam, loadFieldsWeek } from '@drip/core/data/widgetExtras';
+import type { FieldsLevel } from '@drip/core/data/fieldsWeek';
 import { AlertsWidget, FieldsWidget, ALERTS_WIDGET_NAME, FIELDS_WIDGET_NAME, FIELDS_CLICK, type AlertsState, type FieldsState } from './ExtraWidgets';
 import { platform } from '@drip/core/platform';
 import { inert, takeTapLock, releaseTapLock } from './inert';
@@ -81,6 +82,8 @@ const PREF_OFFSET = (id: number) => `widget:fields:offset:${id}`;
 const PREF_STAR = (id: number) => `widget:fields:league:${id}`;
 /** The game opened in place (v0.508.0), by key. */
 const PREF_OPEN = (id: number) => `widget:fields:open:${id}`;
+/** NFL or college games (v0.560.0); unset is NFL. */
+const PREF_LEVEL = (id: number) => `widget:fields:level:${id}`;
 const readNum = (k: string) => { try { const v = Number(platform().storage.get(k)); return Number.isFinite(v) ? v : 0; } catch { return 0; } };
 const readStr = (k: string) => { try { return platform().storage.get(k) || null; } catch { return null; } };
 const write = (k: string, v: string | null) => { try { if (v == null) platform().storage.remove(k); else platform().storage.set(k, v); } catch { /* best-effort */ } };
@@ -93,26 +96,31 @@ function starOf(widgetId: number): { id: string | null; label: string } {
   return l ? { id: l.id, label: l.name } : { id: null, label: 'All leagues' };
 }
 
-const FIELDS_KEY = (id: number) => `fields:${id}`;
+const levelOf = (widgetId: number): FieldsLevel => (readStr(PREF_LEVEL(widgetId)) === 'cfb' ? 'cfb' : 'nfl');
+
+// Keyed by level too (v0.560.0), so the instant frame after a switch is never
+// the other level's games.
+const FIELDS_KEY = (id: number) => `fields:${id}:${levelOf(id)}`;
 type FieldsOk = Extract<FieldsState, { kind: 'ok' }>;
 function rememberedFields(widgetId: number): FieldsOk | null {
   const r = cacheGet<Omit<FieldsOk, 'kind'>>(FIELDS_KEY(widgetId), 12 * HOUR);
-  return r ? { ...r, kind: 'ok', stale: true, leagueLabel: starOf(widgetId).label, openKey: readStr(PREF_OPEN(widgetId)) } : null;
+  return r ? { ...r, kind: 'ok', stale: true, leagueLabel: starOf(widgetId).label, openKey: readStr(PREF_OPEN(widgetId)), level: levelOf(widgetId) } : null;
 }
 
 async function fieldsState(widgetId: number): Promise<FieldsState> {
+  const level = levelOf(widgetId);
   try {
-    const at = await loadFieldsWeek(readNum(PREF_OFFSET(widgetId)));
-    if (!at) return { kind: 'empty' };
+    const at = await loadFieldsWeek(readNum(PREF_OFFSET(widgetId)), Date.now(), level);
+    if (!at) return { kind: 'empty', level };
     const star = starOf(widgetId);
     const mine = minesByTeam(rememberedSnaps()?.snaps ?? [], { week: at.week, leagueId: star.id });
     const games = fieldGames(at.week, mine);
-    const ok: FieldsOk = { kind: 'ok', week: at.week, games, current: at.current, hasPrev: at.hasPrev, hasNext: at.hasNext, leagueLabel: star.label, openKey: readStr(PREF_OPEN(widgetId)) };
+    const ok: FieldsOk = { kind: 'ok', week: at.week, games, current: at.current, hasPrev: at.hasPrev, hasNext: at.hasNext, leagueLabel: star.label, openKey: readStr(PREF_OPEN(widgetId)), level };
     const { kind: _k, openKey: _o, ...keep } = ok;
     cacheSet(FIELDS_KEY(widgetId), keep);
     return ok;
   } catch (e) {
-    return { kind: 'error', message: friendlyError(e) };
+    return { kind: 'error', message: friendlyError(e), level };
   }
 }
 
@@ -135,7 +143,7 @@ async function paint(name: string, widgetId: number, render: (el: React.JSX.Elem
   }
   const now = rememberedFields(widgetId);
   if (now) render(opts.tapped ? inert(<FieldsWidget state={{ ...now, busy: true }} />) : <FieldsWidget state={now} />);
-  else if (opts.tapped) render(inert(<FieldsWidget state={{ kind: 'loading' }} />));
+  else if (opts.tapped) render(inert(<FieldsWidget state={{ kind: 'loading', level: levelOf(widgetId) }} />));
   const fresh = await fieldsState(widgetId);
   if (fresh.kind === 'error' && now) { render(<FieldsWidget state={{ ...now, offline: true }} />); return; }
   render(<FieldsWidget state={fresh} />);
@@ -146,7 +154,7 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
   const { widgetInfo, widgetAction, clickAction, clickActionData } = props;
   const render = (el: React.JSX.Element) => props.renderWidget(el);
   const id = widgetInfo.widgetId;
-  if (widgetAction === 'WIDGET_DELETED') { write(PREF_OFFSET(id), null); write(PREF_STAR(id), null); write(PREF_OPEN(id), null); return; }
+  if (widgetAction === 'WIDGET_DELETED') { write(PREF_OFFSET(id), null); write(PREF_STAR(id), null); write(PREF_OPEN(id), null); write(PREF_LEVEL(id), null); return; }
   if (widgetAction === 'WIDGET_CLICK') {
     // OPEN_URI / OPEN_APP are native; ⟳ (and the ✓ card) and the fields chips
     // are ours — one at a time (v0.507.0): a tap while another is answered is
@@ -181,6 +189,15 @@ export async function extraHandler(props: WidgetTaskHandlerProps): Promise<void>
       const off = clickAction === FIELDS_CLICK.now ? 0 : readNum(PREF_OFFSET(id)) + (clickAction === FIELDS_CLICK.prev ? -1 : 1);
       write(PREF_OFFSET(id), off ? String(off) : null);
       // `tapped`: the remembered frame goes up busy and inert, never live.
+      await paint(widgetInfo.widgetName, id, render, { tapped: true, widthDp: widgetInfo.width });
+      return;
+    }
+    if (clickAction === FIELDS_CLICK.level) {
+      // NFL ⇄ CFB (v0.560.0). The other level's calendar is its own, so the
+      // ‹ › offset and the opened game start over at NOW.
+      write(PREF_LEVEL(id), levelOf(id) === 'cfb' ? null : 'cfb');
+      write(PREF_OFFSET(id), null);
+      write(PREF_OPEN(id), null);
       await paint(widgetInfo.widgetName, id, render, { tapped: true, widthDp: widgetInfo.width });
       return;
     }

@@ -26,7 +26,7 @@ import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
-import { isAdmin, loadCollegeWeekDates } from '@drip/core/data/liveApi';
+import { isAdmin, loadCollegeWeekDates, loadCollegeLogos } from '@drip/core/data/liveApi';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { LivePicks } from './src/screens/LivePicks';
 import { CommishTools } from './src/screens/CommishTools';
@@ -127,6 +127,8 @@ export function App() {
   useEffect(() => {
     if (!session) return;
     void loadCollegeWeekDates(String(LIVE_SEASON)).then((got) => { if (got) setWeekDatesVer((v) => v + 1); });
+    // College logos by school id (v0.560.0), for media.teamLogo's college branch.
+    void loadCollegeLogos().then((got) => { if (got) setWeekDatesVer((v) => v + 1); });
   }, [session?.user.id]);
 
   // ── THE HOME-SCREEN WIDGET (v0.421.0) ──────────────────────────────────

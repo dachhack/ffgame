@@ -185,6 +185,32 @@ const ENTRIES = [
   ok(weekTurnBefore(D('2026-09-16T06:00:00Z')) === D('2026-09-09T07:00:00Z'), 'a Wednesday 2 AM ET moment belongs to the Wednesday before');
   ok(weekTurnBefore(D('2026-11-04T08:30:00Z')) === D('2026-11-04T08:00:00Z'), 'after the clocks fall back, 3 AM ET is 08:00 UTC');
   ok(slateWeekOrder(rows).join() === '101,102,1,2', 'the weeks in the order they are played, kickoff-less weeks left out');
+
+  // v0.560.0 — NFL or college. The founder's widget read "WK 9/21 · NOW" with
+  // college games: the college calendar (201+) shares the slate, so a college
+  // Saturday could win "now" and the NFL week vanished.
+  const both = [...rows,
+    { week: 203, kickoff: '2026-09-12T16:00:00Z' }, { week: 204, kickoff: '2026-09-19T16:00:00Z' },
+    { week: 205, kickoff: '2026-09-26T16:00:00Z' }];
+  ok(fieldsWeekFrom(both, D('2026-09-18T01:00:00Z')) === 2, 'NFL by default: a college week is never the NFL fields\' now');
+  ok(fieldsWeekFrom(both, D('2026-09-18T01:00:00Z'), 'nfl') === 2, 'NFL, asked for: week 2');
+  ok(fieldsWeekFrom(both, D('2026-09-18T01:00:00Z'), 'cfb') === 204, 'CFB: the college week under way');
+  ok(slateWeekOrder(both).join() === '101,102,1,2', 'the NFL ‹ › never step into a college week');
+  ok(slateWeekOrder(both, 'cfb').join() === '203,204,205', 'the CFB ‹ › step the college weeks only');
+  ok(fieldsWeekFrom(rows, D('2026-09-18T01:00:00Z'), 'cfb') === null, 'CFB with no college weeks on the slate: nothing to show');
+}
+
+// ── COLLEGE LOGOS ARE NOT NFL LOGOS (v0.560.0) ───────────────────────────────
+{
+  const { teamLogo, setCollegeLogoIds } = await import('../packages/core/src/data/media.ts');
+  setCollegeLogoIds([{ abbr: 'HOU', id: 248 }, { abbr: 'GASO', id: 290 }]);
+  ok(teamLogo('HOU') === 'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png', 'no context: the Texans, as before');
+  ok(teamLogo('HOU', { week: 3 })?.includes('/nfl/'), 'an NFL week: the Texans');
+  ok(teamLogo('HOU', { week: 205 }) === 'https://a.espncdn.com/i/teamlogos/ncaa/500/248.png', 'a college week: the Houston Cougars, by school id');
+  ok(teamLogo('HOU', { slug: 'c-4432577' })?.includes('/ncaa/500/248'), 'a college player: his school, not the Texans');
+  ok(teamLogo('HOU', { slug: 'nico-collins' })?.includes('/nfl/'), 'an NFL player: his NFL team');
+  ok(teamLogo('OU', { week: 205 }) === null, 'a school we have no id for: no logo, never an NFL guess');
+  ok(teamLogo('GASO', { college: true })?.endsWith('/290.png'), 'college, said outright');
 }
 
 clearLiveGameFeeds();

@@ -13,6 +13,7 @@ import { supabaseUrl } from './liveConfig';
 import { isChatImageUrl } from './chatImage';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE, setCollegeWeekDates, weekName } from './nflSlate';
 import { setCollegeMeta, setCollegeNames, collegeNameFor, isCollegeSlug } from './college';
+import { setCollegeLogoIds } from './media';
 import { setCollegeProjections } from '../engine/projScoring';
 import type { ProjStatLine } from './projStats2026';
 import { assignSealedRows } from '../engine/seatPicks';
@@ -1219,6 +1220,22 @@ export async function collegeGamesInNflWeek(week: number): Promise<{ week: numbe
 export async function slateWeeks(season: string): Promise<{ week: number; kickoff: string | null }[]> {
   const { data } = await (await client()).from('nfl_slate').select('week, kickoff').eq('season', season);
   return (data ?? []) as { week: number; kickoff: string | null }[];
+}
+
+/** College logos (v0.560.0): ESPN school ids by abbreviation, from
+ *  college_school (0382), for media.teamLogo's college branch. Once per
+ *  session, best-effort; resolves true when it installed any. */
+let collegeLogosLoaded = false;
+export async function loadCollegeLogos(): Promise<boolean> {
+  if (collegeLogosLoaded) return false;
+  collegeLogosLoaded = true;
+  try {
+    const { data, error } = await (await client()).from('college_school').select('school_id, school_abbr');
+    if (error) throw error;
+    const rows = (data ?? []) as { school_id: string; school_abbr: string | null }[];
+    setCollegeLogoIds(rows.map((r) => ({ abbr: r.school_abbr, id: r.school_id })));
+    return rows.length > 0;
+  } catch { collegeLogosLoaded = false; return false; }
 }
 
 /** Install the college weeks' "week of" dates (v0.556.9) for every label

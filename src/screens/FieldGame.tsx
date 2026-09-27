@@ -51,7 +51,7 @@ export function FieldGame({ week, team, onClose }: { week: number; team: string;
   const wkLabel = weekTitle(week);
 
   const logo = (abbr: string) => {
-    const u = teamLogo(abbr);
+    const u = teamLogo(abbr, { week });
     return u ? <img src={u} alt="" width={20} height={20} style={{ display: 'inline-block', verticalAlign: -4 }} /> : null;
   };
 

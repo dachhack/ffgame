@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { loadCollegeWeekDates } from '@drip/core/data/liveApi';
+import { loadCollegeWeekDates, loadCollegeLogos } from '@drip/core/data/liveApi';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { useStore, PHOTO_SKINS } from './app/store';
 import { THEMES, themeVars } from '@drip/core/theme';
@@ -47,6 +47,8 @@ export function App() {
   useEffect(() => {
     if (!loggedIn) return;
     void loadCollegeWeekDates(String(LIVE_SEASON)).then((got) => { if (got) setWeekDatesVer((v) => v + 1); });
+    // College logos by school id (v0.560.0), for media.teamLogo's college branch.
+    void loadCollegeLogos().then((got) => { if (got) setWeekDatesVer((v) => v + 1); });
   }, [loggedIn, liveCtx?.leagueId]);
 
   useEffect(() => {

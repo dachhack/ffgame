@@ -557,7 +557,7 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boo
 // initials. Mark-free mode nulls both URLs and lands on initials as before.
 function useCardArt(slug: string, team?: string | null) {
   const url = useMemo(() => headshot(slug), [slug]);
-  const logo = useMemo(() => teamLogo(team || slugMeta(slug).team || null), [team, slug]);
+  const logo = useMemo(() => teamLogo(team || slugMeta(slug).team || null, { slug }), [team, slug]);
   const [stage, setStage] = useState<'head' | 'logo' | 'init'>(url ? 'head' : logo ? 'logo' : 'init');
   useEffect(() => { setStage(url ? 'head' : logo ? 'logo' : 'init'); }, [url, logo]);
   const fail = () => setStage((s) => (s === 'head' && logo ? 'logo' : 'init'));

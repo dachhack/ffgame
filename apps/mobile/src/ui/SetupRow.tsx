@@ -206,7 +206,7 @@ export function MetricModal({ visible, player, currentId, filter, title, subtitl
   if (!player) return null;
   const all = METRICS[player.pos] ?? [];
   const list = filter ? all.filter(filter) : all;
-  const logo = teamLogo(player.team);
+  const logo = teamLogo(player.team, { slug: player.id });
 
   return (
     <Overlay

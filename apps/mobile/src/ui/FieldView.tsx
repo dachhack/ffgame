@@ -316,8 +316,8 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
                 strokeDashoffset={run.interpolate({ inputRange: [0, 1], outputRange: [runLen, 0] }) as unknown as number}
               />
             )}
-            {cur && teamLogo(cur.tm)
-              ? <SvgImage href={{ uri: teamLogo(cur.tm)! }} x={arc.x1 - 5.5} y={MID - 5.5} width={11} height={11} />
+            {cur && teamLogo(cur.tm, { week })
+              ? <SvgImage href={{ uri: teamLogo(cur.tm, { week })! }} x={arc.x1 - 5.5} y={MID - 5.5} width={11} height={11} />
               : <Circle cx={arc.x1} cy={MID} r={3} fill={arc.color} />}
             {incomplete
               ? <SvgText x={arc.x2} y={endY + 3} fill={t.fx.nuke} fontSize={9} fontWeight="800" textAnchor="middle">✕</SvgText>
@@ -331,7 +331,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
             <Line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
             <Circle cx={0} cy={MID} r={10.5} fill={ballCol ? mix(ballCol.c, 30, t.surface) : t.surface} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
             <SvgText x={0} y={MID + 2.5} fill={t.text} fontSize={6} fontWeight="700" textAnchor="middle">{ballTm}</SvgText>
-            {ballTm && teamLogo(ballTm) && <SvgImage href={{ uri: teamLogo(ballTm)! }} x={-10} y={MID - 10} width={20} height={20} />}
+            {ballTm && teamLogo(ballTm, { week }) && <SvgImage href={{ uri: teamLogo(ballTm, { week })! }} x={-10} y={MID - 10} width={20} height={20} />}
             <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 2.5} fill={ballCol?.c ?? t.faint} fontSize={8} fontWeight="700" textAnchor="middle">
               {(flip ? !attacksRight : attacksRight) ? '▶' : '◀'}
             </SvgText>
@@ -448,7 +448,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
     return (
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
-          {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+          {!!teamLogo(label, { week }) && <Image source={{ uri: teamLogo(label, { week })! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
           <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', letterSpacing: 1, color: t.text }}>{label}</Text>
         </View>
         {shown.length === 0
@@ -480,7 +480,7 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   const projCol = (label: string, rows: NonNullable<typeof proj>['home']) => (
     <View style={{ flex: 1, minWidth: 0 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 5 }}>
-        {!!teamLogo(label) && <Image source={{ uri: teamLogo(label)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+        {!!teamLogo(label, { week }) && <Image source={{ uri: teamLogo(label, { week })! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
         <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', color: t.text }}>{label}</Text>
       </View>
       {rows.length === 0
@@ -523,13 +523,13 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
       )}
       {/* The selected game's own line: teams, score, where its clock stands. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10 }}>
-        {!!teamLogo(cur.away) && <Image source={{ uri: teamLogo(cur.away)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+        {!!teamLogo(cur.away, { week }) && <Image source={{ uri: teamLogo(cur.away, { week })! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
         <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.away}</Text>
         {last
           ? <Text style={{ fontFamily: MONO, fontSize: fs(14), fontWeight: '800', color: t.text }}>{last.as} — {last.hs}</Text>
           : <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.faint }}>@</Text>}
         <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.home}</Text>
-        {!!teamLogo(cur.home) && <Image source={{ uri: teamLogo(cur.home)! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
+        {!!teamLogo(cur.home, { week }) && <Image source={{ uri: teamLogo(cur.home, { week })! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
         <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: cur.state === 'live' ? t.opp : t.faint }}>
           {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (stoppageLabel(cur.feed) ?? liveClockLabel(cur.feed) ?? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE')) : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
         </Text>
