@@ -18,6 +18,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.559.1 — two ways a manager's lineup froze mid-week (#1028)
+
+Kickoff League, Friday night, from chat: "what is going on with Mooney's
+starting line up? Any reason he can't make moves?" There was no DB access
+from this session, so the seat itself hasn't been confirmed. These are the two
+code paths that freeze a lineup after Thursday; both are fixed.
+- 0389. An IR or OUT player whose designation lapsed (Friday's report
+  upgraded him, or his injury_status row went away) made the roster illegal.
+  That locked every lineup write (0128), and the fix it named ("move him off
+  IR or drop him") was refused by the kickoff lock (0179) if he played
+  Thursday. So the manager was stuck until the week went final.
+  roster_illegal_reason now skips a stashed player whose game in the live week
+  has started. He stays put, scores nothing, and is flagged again once the
+  next week is live. The lock itself is unchanged: letting a player who
+  already played come off IR could hand his points to a best-ball spot.
+- Worker (lock.js classicSealAt). An EMPTY lineup spot sealed at the week's
+  FIRST kickoff, although the code's own comment and the DB trigger say it
+  stays open. A sealed row can't be written, so a Friday pickup had nowhere to
+  go. Empty spots now seal at the week's LAST kickoff. Bye and unknown
+  players keep the week-wide rule.
+- Probes: locked-stash-probes.sql (fails without 0389). Server:
+  test/classic-seal.mjs.
+- To confirm the seat: `roster_illegal_reason('5ae08e35-…', <Mooney's
+  roster>)`, and `sealed_pick` rows with `locked` and a null `player_slug`
+  on his week-3 matchup.
+
 ### v0.559.0 — THE DEVY MARKET: shares with a price
 
 The founder: "if you put shares on a college player early, they appreciated
