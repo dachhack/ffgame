@@ -18,6 +18,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.0 — the iOS app chip goes live
+
+web only, no APK.
+
+- **🍎 GET THE iOS APP** now shows beside the Android chip on the leagues
+  page: `IOS_TESTFLIGHT_URL` holds the TestFlight public link
+  (https://testflight.apple.com/join/BdK3ADCA). It opens TestFlight on the
+  iPhone; build 4 carries expo-updates, so every later merge reaches testers
+  over the air.
+
 ### v0.560.1 — every college game gets its score
 
 The founder, on the fields widget in CFB mode: "Looks good but missing a lot
