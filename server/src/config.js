@@ -46,7 +46,16 @@ export const config = {
   // 24h, which meant a Wednesday practice report could be a day old when a
   // manager set his lineup on Thursday. 3h off-days, still 1h near games.
   injuryPollDailyMs: Number(process.env.INJURY_POLL_MS_DAILY || 10800000),
-  injuryPollGamedayMs: Number(process.env.INJURY_POLL_MS_GAMEDAY || 3600000),
+  // EVERY TEN MINUTES ON A GAME DAY (v0.561.2, founder: "Let's poll every 10
+  // minutes. Sometimes there are last minute inactives."). Was hourly outside
+  // the kickoff ramp — a scratch between windows could sit an hour.
+  injuryPollGamedayMs: Number(process.env.INJURY_POLL_MS_GAMEDAY || 600000),
+  // SLEEPER'S SIDE on a game day (v0.561.2). Its directory is ~15 MB and was
+  // re-read at most every 6h (SLEEPER_INJURY_MS), so an Out that only Sleeper
+  // carried — four of them in the Sunday-noon inactives, Jared Wiley's among
+  // them — could reach us after his kickoff. On a game day it is re-read with
+  // every poll, at most this often; off days keep the 6h clock.
+  sleeperInjuryGamedayMs: Number(process.env.SLEEPER_INJURY_MS_GAMEDAY || 600000),
   // THE RAMP INTO KICKOFF (v0.432.1): inside injuryRampMs of the next kickoff
   // the poll runs every injuryPollRampMs; inside injuryRampNearMs, every
   // injuryPollNearMs. Inactives drop ~90 minutes out; ten minutes catches
