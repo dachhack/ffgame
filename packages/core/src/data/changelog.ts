@@ -52,7 +52,7 @@ export const APK_RELEASE_PAGE_URL = 'https://github.com/dachhack/ffgame/releases
  *  can't work yet is never offered. Paste the link here to switch them on.
  *  Testers open it on the iPhone, install TestFlight, and get every later
  *  build automatically (each expires after 90 days). */
-export const IOS_TESTFLIGHT_URL = '';
+export const IOS_TESTFLIGHT_URL = 'https://testflight.apple.com/join/BdK3ADCA';
 
 /** "v0.392.1" / "0.392.1" → [0, 392, 1]. Non-numeric tails read as 0. */
 export function parseVersion(v: string | null | undefined): number[] {

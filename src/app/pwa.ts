@@ -38,10 +38,20 @@ export function isStandalone(): boolean {
  *  Chrome/Firefox/Edge on iOS are excluded: they're WebKit too, but their share
  *  sheets don't offer it. */
 export function isIosSafari(): boolean {
-  const ua = navigator.userAgent;
-  const ios = /iphone|ipad|ipod/i.test(ua)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);  // iPadOS 13+ lies about being a Mac
-  return ios && !/crios|fxios|edgios/i.test(ua);
+  return mobileOs() === 'ios' && !/crios|fxios|edgios/i.test(navigator.userAgent);
+}
+
+/** Which phone OS this browser is on — 'ios' (iPhone, iPad, iPod, any
+ *  browser), 'android', or null for a desktop or anything unrecognised. Used to
+ *  offer only the matching native app (v0.561.0); null shows every option. */
+export function mobileOs(): 'ios' | 'android' | null {
+  try {
+    const ua = navigator.userAgent;
+    if (/iphone|ipad|ipod/i.test(ua)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';  // iPadOS 13+ lies about being a Mac
+    if (/android/i.test(ua)) return 'android';
+  } catch { /* no navigator (SSR, tests) */ }
+  return null;
 }
 
 // Chromium hands us the install event once, early, and only if the site
