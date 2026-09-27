@@ -18,7 +18,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.561.0 — the iOS app chip goes live
+### v0.561.0 — the iOS app chip goes live, one chip per phone
 
 web only, no APK.
 
@@ -27,6 +27,10 @@ web only, no APK.
   (https://testflight.apple.com/join/BdK3ADCA). It opens TestFlight on the
   iPhone; build 4 carries expo-updates, so every later merge reaches testers
   over the air.
+- **Only the app the device can run:** founder, "conditionally display the
+  app … if the device is ios or android". An iPhone/iPad sees only the iOS
+  chip, an Android phone only the Android one, a desktop both
+  (`mobileOs()` in `src/app/pwa.ts`, which `isIosSafari` now shares).
 
 ### v0.560.1 — every college game gets its score
 

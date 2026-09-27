@@ -36,6 +36,7 @@ import { GuillotinePanel } from './GuillotinePanel';
 import { InvitePreviewCard } from './InvitePreviewCard';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
+import { mobileOs } from '../app/pwa';
 import { PodBuilder } from './PodBuilder';
 import type { Session } from '@supabase/supabase-js';
 
@@ -1096,6 +1097,8 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
   glance: Record<string, WidgetSnapshot>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
+  // Which phone this is, for the app chips below — read once per mount.
+  const [phoneOs] = useState(mobileOs);
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
   // Leagues you commission but have no player roster in (no enrollment card).
   const commishOnly = commishLeagues.filter((l) => !enrolledIds.has(l.league_id));
@@ -1168,16 +1171,23 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
             app' button on the leagues page"). The one link, always the newest
             build (release-apk.yml); solid where the other two are dashed,
             because this one leaves the page. */}
-        <a href={APK_ZIP_URL} className="mono" title="Downloads as a zip — unzip it and tap the APK inside. Installs over any earlier build." style={{
-          marginLeft: 'auto', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textDecoration: 'none',
+        {/* ONLY THE APP THIS DEVICE CAN RUN (v0.561.0, founder: "conditionally
+            display the app … if the device is ios or android"). An iPhone gets
+            the TestFlight chip and not the APK; an Android phone the reverse;
+            a desktop — no telling which phone is in the pocket — gets both.
+            The spacer does the right-alignment the Android chip used to carry,
+            so the row stays put whichever chips are showing. */}
+        <span style={{ marginLeft: 'auto' }} />
+        {phoneOs !== 'ios' && <a href={APK_ZIP_URL} className="mono" title="Downloads as a zip — unzip it and tap the APK inside. Installs over any earlier build." style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textDecoration: 'none',
           color: 'var(--on-accent)', background: 'var(--you)',
           border: '1px solid var(--you)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
-        }}>📱 GET THE ANDROID APP</a>
+        }}>📱 GET THE ANDROID APP</a>}
         {/* 🍎 GET THE iOS APP (v0.541.0, founder: "add to the web version a
             download the ios app chip"). Same solid style as its Android twin;
             it opens the TestFlight public link, which does the rest on the
             phone. Hidden until IOS_TESTFLIGHT_URL is set — see changelog.ts. */}
-        {IOS_TESTFLIGHT_URL && (
+        {IOS_TESTFLIGHT_URL && phoneOs !== 'android' && (
           <a href={IOS_TESTFLIGHT_URL} target="_blank" rel="noopener noreferrer" className="mono" title="Opens TestFlight on your iPhone — install TestFlight if asked, then Drip Fantasy. Updates arrive automatically." style={{
             fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textDecoration: 'none',
             color: 'var(--on-accent)', background: 'var(--you)',
