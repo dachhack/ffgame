@@ -18,6 +18,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.560.1 — every college game gets its score
+
+The founder, on the fields widget in CFB mode: "Looks good but missing a lot
+of CFB scores." Saturday's games still read "Sat 6:00p" on Sunday. The
+college context polls play by play only games with a rostered school (0371),
+so every other game had no game_feed row.
+- Worker: getGames keeps the scoreboard's score and status. poll/collegeScores
+  writes a SCORES-ONLY row (no plays, status.score + status.lite) for every
+  started college game the context doesn't poll. It runs before the
+  completed-week return and in closePriorCollegeWeek, so last Saturday fills
+  in even after ESPN rolls its week. It never touches a polled game or a full
+  row, and skips unchanged rows. No extra ESPN requests: it reuses the
+  scoreboard the tick already fetched.
+- Core feedScore(feed): the last play's score, else the scoreboard's. It's
+  used by the widget's rows, and by the app and web game views' score and
+  strip.
+- test/college-scores.mjs.
+- Unrelated and pre-existing: h2h-verify's "coin totals are positive"
+  fails on main too.
+
 ### v0.560.0 — NFL ⇄ CFB on the fields; college teams wear their own logos
 
 The founder's widget read "WK 9/21 · NOW" and listed college games, with the

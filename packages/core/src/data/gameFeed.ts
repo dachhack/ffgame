@@ -48,6 +48,11 @@ export interface GameStatus {
   sit?: { dd: string; spot: string | null; poss: string | null; /** yards to the end zone, the offense's way */ ytg?: number | null } | null;
   /** Each team's passing / rushing / receiving leader, ESPN's line (v0.508.0). */
   leaders?: { team: string; cat: 'pass' | 'rush' | 'rec'; name: string; line: string }[] | null;
+  /** The scoreboard's score (v0.560.1) — on a SCORES-ONLY row, the worker's
+   *  feed for a college game it doesn't poll play by play (`lite`). */
+  score?: { away: number; home: number } | null;
+  /** A scores-only row: no plays, no situation, just the scoreboard. */
+  lite?: boolean | null;
 }
 /** A CLOCK STOPPAGE on the play-by-play (v0.434.3): a timeout, the two-minute
  *  warning, the end of a period, of the half, of the game, the coin toss —
@@ -376,6 +381,15 @@ export function weekBoxGames(week: number): WeekBoxGame[] {
 /** The latest released play of a feed — the score and clock a game strip
  *  shows. Latest by `c`, ties to the later entry (the revised copy), the same
  *  rule as slateScores. */
+/** The score of a game: its latest play's, else the scoreboard's (v0.560.1,
+ *  a scores-only college feed has no plays). Null when neither knows. */
+export function feedScore(feed: { plays?: GamePlay[] | null; status?: GameStatus | null } | null | undefined): { as: number; hs: number } | null {
+  const last = latestPlay(feed?.plays);
+  if (last) return { as: Number(last.as) || 0, hs: Number(last.hs) || 0 };
+  const sc = feed?.status?.score;
+  return sc ? { as: Number(sc.away) || 0, hs: Number(sc.home) || 0 } : null;
+}
+
 export function latestPlay(plays: GamePlay[] | null | undefined): GamePlay | null {
   let best: GamePlay | null = null;
   for (const p of plays ?? []) {

@@ -18,7 +18,7 @@
 import type { WidgetSnapshot, WidgetCard } from './widgetFeed';
 import { liveSlate, slateWeeks, weekGameFeeds, loadCollegeLogos, loadCollegeWeekDates } from './liveApi';
 import { setRuntimeSlate } from './nflSlate';
-import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, feedScore, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
 import { fieldsWeekFrom, slateWeekOrder, type FieldsLevel } from './fieldsWeek';
 import { LIVE_SEASON } from './realPbp';
 import { normTeam, stripSlugTag } from './slugMeta';
@@ -254,7 +254,9 @@ export function fieldGames(week: number, mine: Map<string, FieldMine[]> = new Ma
         leaders: g.feed?.status?.leaders ?? [],
         projSheet: g.state === 'pre' ? projectedSheet(g.away, g.home, week) : [],
         key: g.key, away: g.away, home: g.home, state: g.state,
-        as: last ? Number(last.as) || 0 : 0, hs: last ? Number(last.hs) || 0 : 0,
+        // The scoreboard's score when there are no plays (v0.560.1): a
+        // college game the worker follows by score only.
+        as: feedScore(g.feed)?.as ?? 0, hs: feedScore(g.feed)?.hs ?? 0,
         clock: clockOf(g, last), kickoff: g.kickoff,
         poss: live ? (sit?.poss ? normTeam(sit.poss) : turnedOver && last && !last.tm2 ? (normTeam(last.tm) === g.home ? g.away : g.home) : poss) : null,
         toGo: live ? (sit?.ytg != null ? sit.ytg : turnedOver && last && !last.tm2 && toGo != null ? 100 - toGo : toGo) : null,
