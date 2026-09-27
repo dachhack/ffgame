@@ -7,7 +7,27 @@
 // database decides all of it (devy_share_rights); this only words it.
 import type { DevySharePlayer, DevySharesState } from './liveApi';
 
-export const DEVY_SHARE_RULES = { budget: 100, max: 20, floor: 5 } as const;
+export const DEVY_SHARE_RULES = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3 } as const;
+
+/** 0388: a team's cash and what its stakes would pay today. */
+export function teamBook(st: DevySharesState | null | undefined, rosterId: number | null | undefined): { cash: number; value: number; shares: number } {
+  const k = rosterId == null ? '' : String(rosterId);
+  return {
+    cash: rosterId == null ? 0 : Number(st?.cash?.[k] ?? st?.rules?.budget ?? DEVY_SHARE_RULES.budget),
+    value: rosterId == null ? 0 : Number(st?.value?.[k] ?? 0),
+    shares: rosterId == null ? 0 : Number(st?.used?.[k] ?? 0),
+  };
+}
+
+/** "paid 20 · worth 40 (+20)" — a stake's cost basis against today. */
+export function stakeLine(cost: number | undefined, value: number | undefined): string {
+  const c = Number(cost ?? 0), v = Number(value ?? 0);
+  const d = Math.round((v - c) * 100) / 100;
+  return `paid ${fmtPts(c)} · worth ${fmtPts(v)} (${d >= 0 ? '+' : ''}${fmtPts(d)})`;
+}
+
+/** Points, without trailing zeros: 20, 12.5. */
+export const fmtPts = (n: number): string => String(Math.round(n * 100) / 100);
 
 /** Shares a team has placed, and what's left of its budget. */
 export function sharesUsed(st: DevySharesState | null | undefined, rosterId: number | null | undefined): { used: number; free: number; budget: number } {
