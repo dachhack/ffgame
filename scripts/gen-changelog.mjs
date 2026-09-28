@@ -4,6 +4,13 @@
 // heading — and writes the JSON both hosts read through core's changelog.ts.
 // Runs in `npm run build` (the site serves it) and `check:changelog` asserts
 // the version being built has an entry, which is what keeps the log kept.
+//
+// THE SUMMARY (v0.561.5). Founder, on the app's What's new sheet: "dense and
+// super detailed. Let's make just crisp high level note bullets." The notes are
+// written for whoever works on the code next; players need a line or three. So
+// an entry may open with `> ` lines — short, plain, player-facing — and they
+// become `summary` (one string per line, a leading "- " dropped). The app shows
+// the summary alone; the site's full log shows it above the notes.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,11 +23,14 @@ export function parseChangelog(md) {
   let cur = null;
   const flush = () => {
     if (!cur) return;
-    const notes = cur.body.join('\n').trim()
+    const summary = cur.body.filter((l) => /^>\s?/.test(l))
+      .map((l) => l.replace(/^>\s?/, '').replace(/^[-•]\s+/, '').trim()).filter(Boolean)
+      .map((l) => l.replace(/`([^`]*)`/g, '$1').replace(/\*\*([^*]*)\*\*/g, '$1'));
+    const notes = cur.body.filter((l) => !/^>\s?/.test(l)).join('\n').trim()
       .replace(/\n{3,}/g, '\n\n')
       // Inline markdown that reads badly as plain text.
       .replace(/`([^`]*)`/g, '$1').replace(/\*\*([^*]*)\*\*/g, '$1');
-    entries.push({ version: cur.version, title: cur.title, notes, ...(/\bweb only\b/i.test(notes) ? { webOnly: true } : {}) });
+    entries.push({ version: cur.version, title: cur.title, notes, ...(summary.length ? { summary } : {}), ...(/\bweb only\b/i.test(notes) ? { webOnly: true } : {}) });
     cur = null;
   };
   for (const line of lines) {

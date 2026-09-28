@@ -2,6 +2,10 @@
 
 > Orchestrator-facing status. Keep this short and current — `meta`'s
 > `/standup` reads it. In-repo WIP details belong in HANDOFF.md.
+>
+> Each `### vX.Y.Z — title` entry opens with one to three `> - ` lines: the
+> plain, player-facing summary the app's What's new shows (v0.561.5). The
+> notes under it are for developers; check:changelog wants the summary.
 > Goal / Phase / Cadence are mirrored into `meta/projects.md`.
 
 ## Goal
@@ -18,7 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.5 — What's new reads in a glance
+
+> - What's new now shows a few short bullets per update; the full details stay on the site.
+
+The founder, on the app's What's new sheet: "dense and super detailed.
+Let's make just crisp high level note bullets." It printed each STATUS.md
+entry's whole developer notes, hard-wrapped, in monospace.
+- An entry may now open with `> ` lines: a short, plain, player-facing
+  summary. gen-changelog puts them in `summary` and leaves them out of
+  `notes`.
+- App What's new: the title and the summary bullets only (title alone for
+  older entries without one). The site's full log shows the summary on top
+  and the notes behind a "details" toggle.
+- check:changelog fails a release whose entry has no summary, so every new
+  entry needs its `> ` bullets. Summaries were written for v0.557.0 onward.
+
 ### v0.561.4 — CPU teams don't cut stars for defenses
+
+> - CPU teams no longer drop star players to pick up a defense.
+> - An injured starter can sit for a week, but CPU teams won't cut him for it.
 
 The founder, Sunday: "One team just dropped Puka Freaking Nacua for a
 defense." Reproduced with the planner: a Doubtful star (2.6 this week after
@@ -42,6 +65,8 @@ passed, and the DEF "hole" was filled with him.
 
 ### v0.561.3 — box score game chips no longer cut in half
 
+> - Box score game chips no longer get cut in half.
+
 The founder's Android screenshot: in ▤ BOX SCORES the game strip (LAC@BUF,
 CAR@CLE…) showed its chips sliced through the middle once the selected game's
 stat list ran long. A React Native ScrollView shrinks by default, so the
@@ -51,6 +76,8 @@ scrolls. The same guard went onto the other horizontal chip strips inside
 sheets (game view, shop, commish kit, team). App only; ships over the air.
 
 ### v0.561.2 — injuries every 10 minutes on a game day, Sleeper included
+
+> - Injury statuses refresh every 10 minutes on game days, so late inactives show up before kickoff.
 
 The founder, Sunday at noon: "Looks like Puka is still doubtful? … a lot of
 inactives (out) coming through right now." Puka was Doubtful on BOTH feeds at
@@ -68,6 +95,9 @@ Jared Wiley), so they could reach us after kickoff. Founder: "Let's poll every
 - test/injury-cadence.mjs.
 
 ### v0.561.1 — a commissioner's fix doesn't freeze the rest of the week
+
+> - A commissioner's lineup fix no longer locks the rest of that team's lineup.
+> - Lineup spots locked too early this week are open again.
 
 Kickoff League, Sunday (#1035, and the founder's screenshot of Mooney's
 Rehab Facility with every starter still yet to play): "Mooney needs to move
@@ -93,6 +123,8 @@ sealed spots EARLY, and a sealed row can't be written by its manager at all
 
 ### v0.561.0 — the iOS app chip goes live, one chip per phone
 
+> - The iOS app link is live, and each phone only sees its own app.
+
 web only, no APK.
 
 - **🍎 GET THE iOS APP** now shows beside the Android chip on the leagues
@@ -106,6 +138,8 @@ web only, no APK.
   (`mobileOs()` in `src/app/pwa.ts`, which `isIosSafari` now shares).
 
 ### v0.560.1 — every college game gets its score
+
+> - Every college game now shows its score, not just the ones with rostered players.
 
 The founder, on the fields widget in CFB mode: "Looks good but missing a lot
 of CFB scores." Saturday's games still read "Sat 6:00p" on Sunday. The
@@ -126,6 +160,9 @@ so every other game had no game_feed row.
   fails on main too.
 
 ### v0.560.0 — NFL ⇄ CFB on the fields; college teams wear their own logos
+
+> - New NFL / CFB switch on the fields widget and the All fields sheet.
+> - College teams show their own logos (no more Texans logo on Houston).
 
 The founder's widget read "WK 9/21 · NOW" and listed college games, with the
 Houston Cougars (v Georgia Southern) wearing the Houston TEXANS logo: "We need
@@ -157,6 +194,8 @@ fields view. Also looks like some leakage with Houston?"
 
 ### v0.559.2 — cards are visible again on the setup board (app)
 
+> - Player cards on the setup board are visible again on Android.
+
 The founder's screenshot (Android, Turf Warriors, SUN 1PM): the window read
 3/3 SET, but every card spot was blank and only the ⚡📈 chips showed. The
 chips sit outside the card shell; everything inside it had opacity 0. The deal-in
@@ -179,6 +218,8 @@ the card invisible.
   the screenshot, not reproduced on a device here.
 
 ### v0.559.1 — two ways a manager's lineup froze mid-week (#1028)
+
+> - Fixed two ways a manager's lineup could get stuck mid-week.
 
 Kickoff League, Friday night, from chat: "what is going on with Mooney's
 starting line up? Any reason he can't make moves?" There was no DB access
@@ -206,6 +247,8 @@ code paths that freeze a lineup after Thursday; both are fixed.
 
 ### v0.559.0 — THE DEVY MARKET: shares with a price
 
+> - Devy shares now have a price that rises as a college player improves.
+
 The founder: "if you put shares on a college player early, they appreciated
 in value if the player gets good. So identifying players early or before
 others do is rewarded." … "Let's try it and I'll play test and perfect."
@@ -232,6 +275,8 @@ others do is rewarded." … "Let's try it and I'll play test and perfect."
 - NEXT: shares as trade assets (phase 2).
 
 ### v0.558.0 — DEVY SHARES (phase 1): rights to college players, bought with shares
+
+> - Devy shares: stake college players to reserve their rookie-draft rights.
 
 The founder: "players allot shares to college players. If they have 20
 shares allotted to a player (the max) or are the only player that has shares
@@ -269,6 +314,8 @@ January; a league setting.
 - NEXT (phase 2): shares as trade assets.
 
 ### v0.557.0 — ADD NEW PLAYERS: top up a league's pool, before or after the draft
+
+> - Commissioners can add new players to a league's pool, before or after the draft.
 
 The founder: "How do I refresh the available players in the app?" … "I can't
 find seed player pool in the app." A pool is seeded when a league is made.

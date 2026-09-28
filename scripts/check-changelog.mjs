@@ -22,6 +22,13 @@ ok(sample.length === 2 && sample[0].version === '0.2.0' && sample[0].webOnly ===
 ok(versionsBehind(sample, '0.1.0', '0.2.0') === 2 && versionsBehind(sample, '0.1.0', '0.2.0', { appOnly: true }) === 1, 'versionsBehind counts, and appOnly skips web-only entries');
 ok(entriesBehind(sample, '0.1.5', null).length === 1 && entriesBehind(sample, '0.2.0', null).length === 0, 'entriesBehind: strictly newer than mine');
 ok(compareVersions('v0.10.0', '0.9.9') > 0, 'numeric compare, not lexical');
+// v0.561.5 — the `> ` lines are the player-facing summary, and leave the notes.
+const withSum = parseChangelog(`### v0.3.0 — three\n\n> - Crisp one.\n> Crisp **two**.\n\nThe long developer notes.\n`);
+ok(JSON.stringify(withSum[0].summary) === '["Crisp one.","Crisp two."]', 'parser: > lines become the summary, bullets and bold stripped');
+ok(withSum[0].notes === 'The long developer notes.', 'parser: the summary lines are not repeated in the notes');
+ok(sample[1].summary === undefined, 'parser: an entry without > lines has no summary');
+const top = log.entries.find((e) => e.version === v);
+ok(!!top?.summary?.length, `APP_VERSION v${v} has a player-facing summary — open its STATUS.md entry with "> " bullets`);
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log('\nALL CHANGELOG ASSERTIONS PASSED');

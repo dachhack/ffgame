@@ -108,7 +108,21 @@ export function Changelog() {
                 <span className="grotesk" style={{ fontSize: 14, fontWeight: 700 }}>{e.title}</span>
                 {e.webOnly && <span className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 5px' }}>WEB ONLY</span>}
               </div>
-              <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--dimstrong)', whiteSpace: 'pre-wrap', margin: '8px 0 0' }}>{e.notes}</p>
+              {/* The summary first (v0.561.5); the full notes behind a toggle
+                  when there is one, open as before when there is not. */}
+              {!!e.summary?.length && (
+                <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 13, lineHeight: 1.6, color: 'var(--text)' }}>
+                  {e.summary.map((line, i) => <li key={i}>{line}</li>)}
+                </ul>
+              )}
+              {e.summary?.length
+                ? (!!e.notes && (
+                  <details style={{ marginTop: 6 }}>
+                    <summary className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', cursor: 'pointer' }}>details</summary>
+                    <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--dimstrong)', whiteSpace: 'pre-wrap', margin: '8px 0 0' }}>{e.notes}</p>
+                  </details>
+                ))
+                : <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--dimstrong)', whiteSpace: 'pre-wrap', margin: '8px 0 0' }}>{e.notes}</p>}
             </article>
           );
         })}
