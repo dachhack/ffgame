@@ -398,6 +398,9 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           .filter((p) => { const t = p.team ? String(p.team).toUpperCase() : null; return t && Number.isFinite(teamKicks[t]) && teamKicks[t] <= nowMs; })
           .map((p) => p.id));
         const valueOfWire = (p, d) => (kickedIds.has(p.id) ? 0 : valueOf(p, d));
+        // The same week with NO injury discount (v0.561.4): whoever would
+        // start healthy is not a drop candidate. Byes still count (the slate).
+        const healthyValueOf = slateAwareProj(week, slate, () => false);
         // Rest-of-season value: the season projection under the league's
         // catalog, untouched by this week's bye or a one-game Out, zero for a
         // season-ending IR. This is what a drop is judged by (v0.426.0).
@@ -447,8 +450,15 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           openSeats,
           maxClaims: Math.max(0, room) + fills,
           rosValueOf,
+          healthyValueOf,
           market,
         });
+        // What each claim weighed (v0.561.4): season values on both sides, so
+        // a move nobody would make is explainable from the log.
+        const rosById = (id) => {
+          const p = roster.find((x) => x.id === id) ?? candidates.find((x) => x.id === id);
+          return p ? Math.round(rosValueOf(p) * 10) / 10 : null;
+        };
 
         let filed = 0;   // waiver claims this sweep, against `room`
         for (const c of plan) {
@@ -482,8 +492,9 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
               owned.add(c.add);
               const i = available.findIndex((p) => p.id === c.add);
               if (i >= 0) available.splice(i, 1);
-              log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, c.kind, c.add,
-                c.drop ? `for ${c.drop}` : '(open seat)', faab ? `$${c.bid}` : '');
+              log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, c.kind, c.add, `(ros ${rosById(c.add)})`,
+                c.drop ? `for ${c.drop} (ros ${rosById(c.drop)})` : '(open seat)', faab ? `$${c.bid}` : '',
+                `gain ${Math.round(c.gain * 10) / 10} / ros ${Math.round(c.rosGain * 10) / 10}`);
             } else if (r?.data?.error) {
               // Not an error condition: the RPCs are the authority and refuse
               // for reasons this sweep cannot see (a race with a human, an FA

@@ -18,6 +18,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.4 — CPU teams don't cut stars for defenses
+
+The founder, Sunday: "One team just dropped Puka Freaking Nacua for a
+defense." Reproduced with the planner: a Doubtful star (2.6 this week after
+the odds) was the only bench body, the team had no defense, a 10.5 WR sat
+free and no other defense did. The rail refuses a drop only when the drop is
+worth more on BOTH raw season points and value over his free double. Puka was
+7 over the wire, and the defense was 7 over an empty wire, so the rail
+passed, and the DEF "hole" was filled with him.
+- DROP_FLOOR_GAP (3/wk): no claim of any kind drops a player worth that much
+  more than BOTH the newcomer AND the best body free at his own position.
+  The backup QB whose double is free (section 19) still goes.
+- healthyValueOf: the worker passes this week's value with NO injury
+  discount. Whoever would start healthy is never a drop candidate, so a
+  Q/D/O decides who plays, never who goes.
+- The seat-wire log line carries both players' season values, the rule
+  (hole/upgrade/bench/depth) and the gains.
+- Undoing the move: the commissioner's Undo in the league register (0354).
+  It refuses until the added defense's week is over (drop_lock), then puts
+  Puka back and returns the defense to waivers.
+- check-seat-waivers: the Puka case three ways.
+
 ### v0.561.3 — box score game chips no longer cut in half
 
 The founder's Android screenshot: in ▤ BOX SCORES the game strip (LAC@BUF,

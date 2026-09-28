@@ -115,6 +115,11 @@ export interface WireOpts {
    *  which is the pre-0.426 behaviour and wrong in exactly one way: a star
    *  on his bye projects 0 THIS week and was the first man overboard. */
   rosValueOf?: (p: SpotPlayer) => number;
+  /** THIS WEEK WITHOUT THE INJURY DISCOUNT (v0.561.4): the caller's weekly
+   *  value with no Q/D/O risk priced in. A player who would START on it is not
+   *  a drop candidate — a Doubtful star sits this week, he is not surplus.
+   *  Founder: a CPU team "dropped Puka Freaking Nacua for a defense". */
+  healthyValueOf?: (p: SpotPlayer, d?: ClassicSlotDef) => number;
   /** THE ROOM (v0.428.0) — what a FAAB bid has to beat, and what this league
    *  has paid. When given (and `faab`), each claim is priced by faabMarket
    *  instead of the flat $3-a-point of this week's gain: the expected top
@@ -160,6 +165,16 @@ export const BENCH_MAX_PER_SWEEP = 1;
  *  each other out. Not none of it either: a backup QB with his double on the
  *  wire is worth far less than his raw points. */
 export const REPLACEMENT_WEIGHT = 0.5;
+
+/** THE FLOOR UNDER EVERY DROP (v0.561.4). No claim, of any kind, drops a
+ *  player who is worth this many season points a week more than BOTH the one
+ *  it adds AND the best body free at his own position — a real loss, not a
+ *  spare whose double is on the wire (the backup QB of section 19 still goes).
+ *  The rail it backs (raw points OR value over the wire) compares surpluses
+ *  across positions, and that is how a 17.5-a-week receiver went for a
+ *  7-point defense: a 10.5 WR free made him look 7 over the wire, and no
+ *  other defense free made the defense look 7 over it too. */
+export const DROP_FLOOR_GAP = 3;
 
 /** Share of a bench stash's positional gain that counts toward what the seat
  *  will pay for him — he is insurance, not points on Sunday. */
@@ -344,6 +359,10 @@ export function seatWirePlan(
   // him (benchUse) — the backup QB of a one-QB league at half.
   const holdValue = (p: SpotPlayer, except?: string): number =>
     (rosOf(p) - replacement(p.pos, except)) * benchUse(slots, p.pos);
+  // THE FLOOR (v0.561.4, DROP_FLOOR_GAP): letting `drop` go for `cand` is a
+  // real loss when he beats both the newcomer and his own free double.
+  const realLoss = (drop: SpotPlayer, cand: SpotPlayer): boolean =>
+    rosOf(drop) - rosOf(cand) >= DROP_FLOOR_GAP && overWire(drop, cand.id) >= DROP_FLOOR_GAP;
 
   for (let n = 0; n < maxClaims; n++) {
     const base = lineupValue(slots, have, valueOf);
@@ -357,6 +376,11 @@ export function seatWirePlan(
     // so a star on his bye or a one-week Out is not the first man overboard.
     const starting = new Set(optimalLineup(slots, have, valueOf).spots
       .flatMap((r) => (r.player ? [r.player.id] : [])));
+    // …and nobody who would start HEALTHY (v0.561.4): this week's injury
+    // discount decides who plays, never who goes.
+    if (opts.healthyValueOf) {
+      for (const r of optimalLineup(slots, have, opts.healthyValueOf).spots) if (r.player) starting.add(r.player.id);
+    }
     // Cheapest TO HOLD first (v0.518.0): positional value when the season
     // is known, so a backup QB with his double on the wire goes before a
     // running back nobody could replace.
@@ -390,6 +414,9 @@ export function seatWirePlan(
         // QB go for a real back. It only ever loosens the raw rail.
         if (drop && opts.rosValueOf && rosOf(drop) > rosOf(cand)
           && overWire(drop, cand.id) > overWire(cand, cand.id)) continue;
+        // …and whatever the wire looks like, never a clearly better player
+        // for a clearly worse one (v0.561.4, DROP_FLOOR_GAP).
+        if (drop && opts.rosValueOf && realLoss(drop, cand)) continue;
         const next = have.filter((p) => !drop || p.id !== drop.id).concat(cand);
         const gain = lineupValue(slots, next, valueOf) - base;
         // THE SEASON COUNTS TOO (v0.428.0). A chopped star on his bye adds
@@ -465,6 +492,7 @@ export function seatWirePlan(
         if ((cand.held ?? cand.onWaivers) && !opts.faab) continue;
         // One backup at a one-spot position is cover; a second is a hoard.
         if (benchUse(slots, cand.pos) < 1 && droppable.some((p) => p.pos === cand.pos && p.id !== drop.id)) continue;
+        if (realLoss(drop, cand)) continue;   // the floor (v0.561.4)
         const benchGain = holdValue(cand, cand.id) - holdValue(drop, cand.id);
         if (benchGain < BENCH_MIN_GAIN) continue;
         if (best && !(benchGain > best.rosGain + 1e-9)) continue;
