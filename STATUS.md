@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.6 — a Ghost counts as a filled spot in the lineup alert
+
+> - The "Lineup locks" alert no longer counts a spot holding a Ghost or Bye Steal as empty.
+
+The founder, on "⚠ Lineup locks 7:15 PM ET — 1 empty slot in Turf Warriors":
+"I think I put a ghost in." The drip lock alert (push.js detectLineup)
+counted sealed_pick rows with a player. A Ghost and a Bye Steal hold a spot
+from applied_state.payload_json.targeted (`${win}|${slot}`, as LivePicks
+phantomOf keys them), with no player row, so the spot read as empty.
+- emptySpots(cap, win, pickedSlots, payload): a spot is set by a player, a
+  Ghost or a Bye Steal in that window; an Extra Slot played on the window
+  (payload.extraSlots) adds a spot to fill.
+- test/push-lineup.mjs.
+
 ### v0.561.5 — What's new reads in a glance
 
 > - What's new now shows a few short bullets per update; the full details stay on the site.
