@@ -125,7 +125,14 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
               <Text style={{ flexShrink: 1, fontSize: 13, fontWeight: '700', color: t.text }}>{e.title}</Text>
               {e.webOnly && <Mono size={7.5} tone="faint" track={0.1}>WEB ONLY</Mono>}
             </View>
-            <Mono size={9.5} tone="dim">{e.notes}</Mono>
+            {/* The summary only (v0.561.5, founder: "crisp high level note
+                bullets"). The full notes live on the site's log. */}
+            {(e.summary ?? []).map((line, i) => (
+              <View key={i} style={{ flexDirection: 'row', gap: 7, paddingRight: 4 }}>
+                <Text style={{ fontSize: 12.5, lineHeight: 18, color: t.dim }}>•</Text>
+                <Text style={{ flex: 1, fontSize: 12.5, lineHeight: 18, color: t.mid }}>{line}</Text>
+              </View>
+            ))}
           </View>
         ))}
       </ScrollView>

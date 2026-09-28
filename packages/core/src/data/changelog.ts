@@ -15,6 +15,9 @@ export interface ChangelogEntry {
   version: string;      // "0.392.1" (no v)
   title: string;        // the heading after the dash
   notes: string;        // the section's paragraphs, plain text
+  /** Crisp player-facing bullets (v0.561.5): the entry's `> ` lines. The app's
+   *  What's new shows these alone; entries without them show the title. */
+  summary?: string[];
   webOnly?: boolean;    // the entry says "web only" — nothing for the app in it
 }
 export interface Changelog { generated: string; latest: string; entries: ChangelogEntry[] }
