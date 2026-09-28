@@ -12,7 +12,7 @@
 // Run: npx tsx scripts/check-seat-waivers.mjs
 import {
   seatWirePlan, wireBid, shortlistWire, positionNeed, wireInstrument, HUMANS_FIRST_MS,
-  UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE, BENCH_MIN_GAIN, benchUse,
+  UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE, BENCH_MIN_GAIN, benchUse, DROP_FLOOR_GAP,
 } from '../packages/core/src/engine/seatWaivers.ts';
 import { slateAwareProj } from '../packages/core/src/engine/classic.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
@@ -432,6 +432,39 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(plain > 0 && Math.abs(odds - plain * 0.25) < 1e-9, `the AI values a Doubtful player at a quarter (${plain.toFixed(1)} → ${odds.toFixed(1)}; bake ${pts})`);
   ok(slateAwareProj(1, [], () => 0, { discountRisk: true })(p) === plain, 'a healthy player is untouched');
   ok(slateAwareProj(1, [], () => true, { discountRisk: true })(p) === 0, 'ruled out is still zero');
+}
+
+// ── PUKA FOR A DEFENSE (v0.561.4) ─────────────────────────────────────────
+// Founder: a CPU team "dropped Puka Freaking Nacua for a defense". A Doubtful
+// star sits this week (2.6 after the odds), the team has no defense, a decent
+// WR is free and no other defense is: the old rail read him as replaceable
+// and the defense as scarce, and filled the DEF "hole" with him.
+{
+  const SL = [
+    { slot: 'S1', type: 'WR', pos: ['WR'] }, { slot: 'S2', type: 'WR', pos: ['WR'] },
+    { slot: 'S3', type: 'WR', pos: ['WR'] }, { slot: 'S4', type: 'DEF', pos: ['DEF'] },
+  ];
+  const roster = [wr('w1'), wr('w2'), wr('w3'), wr('puka')];
+  const wk = projOf({ w1: 12, w2: 11, w3: 10, puka: 2.6, freewr: 10.5, dst: 7 });
+  const ros = projOf({ w1: 12, w2: 11, w3: 10, puka: 17.5, freewr: 10.5, dst: 7 });
+  const healthy = projOf({ w1: 12, w2: 11, w3: 10, puka: 17.5, freewr: 10.5, dst: 7 });
+  const pool = [{ id: 'dst', pos: 'DEF', onWaivers: false }, { id: 'freewr', pos: 'WR', onWaivers: false }];
+  ok(seatWirePlan(SL, roster, pool, wk, { ...OPTS, rosValueOf: ros }).length === 0,
+    `the floor: never a 17.5 WR for a 7 DEF (gap ≥ ${DROP_FLOOR_GAP})`);
+  // The healthy-lineup rail on its own (floor out of reach: the defense is close in value).
+  const ros2 = projOf({ w1: 12, w2: 11, w3: 10, puka: 9, freewr: 8, dst: 7 });
+  const hv2 = projOf({ w1: 12, w2: 11, w3: 10, puka: 9, freewr: 8, dst: 7 });
+  const planNoHealthy = seatWirePlan(SL, [wr('w1'), wr('w2'), wr('w3'), wr('puka')], pool, projOf({ w1: 12, w2: 11, w3: 10, puka: 1, dst: 7 }), { ...OPTS, rosValueOf: ros2 });
+  ok(planNoHealthy.some((c) => c.drop === 'puka'), '(without the healthy view the Doubtful starter is the drop)');
+  const hv3 = projOf({ w1: 8, w2: 8, w3: 8, puka: 9, dst: 7 });
+  ok(!seatWirePlan(SL, [wr('w1'), wr('w2'), wr('w3'), wr('puka')], pool, projOf({ w1: 8, w2: 8, w3: 8, puka: 1, dst: 7 }), { ...OPTS, rosValueOf: ros2, healthyValueOf: hv3 })
+    .some((c) => c.drop === 'puka'), 'who would start healthy is never dropped for a week\'s injury');
+  // A real bench body still goes for the defense: the rails protect value, not everyone.
+  const roster4 = [wr('w1'), wr('w2'), wr('w3'), wr('scrub')];
+  const p4 = seatWirePlan(SL, roster4, pool, projOf({ w1: 12, w2: 11, w3: 10, scrub: 3, dst: 7 }),
+    { ...OPTS, rosValueOf: projOf({ w1: 12, w2: 11, w3: 10, scrub: 3, freewr: 10.5, dst: 7 }), healthyValueOf: projOf({ w1: 12, w2: 11, w3: 10, scrub: 3, dst: 7 }) });
+  ok(p4.length === 1 && p4[0].add === 'dst' && p4[0].drop === 'scrub', 'a 3-point bench WR still goes for the defense');
+  void healthy; void hv2;
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
