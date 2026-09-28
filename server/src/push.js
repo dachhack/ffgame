@@ -414,6 +414,26 @@ async function detectWaivers() {
   }));
 }
 
+/** EMPTY SPOTS IN A WINDOW (v0.561.6). Founder: "I get this alert but I
+ *  think I put a ghost in" — "1 empty slot in Turf Warriors". A Ghost (and a
+ *  Bye Steal) holds a spot without a sealed_pick row: it lives in
+ *  applied_state.payload_json.targeted, keyed `${win}|${slot}` as the boards
+ *  key it (LivePicks phantomOf). So a spot is set when it has a player OR a
+ *  phantom, and an Extra Slot played on the window (payload_json.extraSlots)
+ *  adds a spot to fill. Pure; exported for the test. */
+export function emptySpots(cap, win, pickedSlots, payload) {
+  const filled = new Set((pickedSlots ?? []).map(String));
+  const tg = payload?.targeted ?? {};
+  for (const g of Array.isArray(tg.ghost) ? tg.ghost : []) {
+    const [w, slot] = String(g).split('|');
+    if (w === win && slot != null) filled.add(slot);
+  }
+  const bs = tg.byeSteal;
+  if (bs && bs.win === win && bs.slot != null) filled.add(String(bs.slot));
+  const extra = Number(payload?.extraSlots?.[win]) || 0;
+  return Math.max(0, cap + extra - filled.size);
+}
+
 async function detectLineup() {
   // Windows whose LOCK sits inside the alarm band, from the synced slate.
   const { data: slate } = await db().from('nfl_slate').select('season, week, win, kickoff').not('kickoff', 'is', null);
@@ -455,10 +475,13 @@ async function detectLineup() {
       for (const rid of [m.home_roster_id, m.away_roster_id]) {
         const uid = owners.get(`${m.league_id}:${rid}`);
         if (!uid) continue;
-        const { count } = await db().from('sealed_pick')
-          .select('roster_slot', { count: 'exact', head: true })
-          .eq('matchup_id', m.id).eq('app_user_id', uid).eq('game_window', win).not('player_slug', 'is', null);
-        const empty = cap - (count ?? 0);
+        const [{ data: picked }, { data: ap }] = await Promise.all([
+          db().from('sealed_pick').select('roster_slot')
+            .eq('matchup_id', m.id).eq('app_user_id', uid).eq('game_window', win).not('player_slug', 'is', null),
+          db().from('applied_state').select('payload_json')
+            .eq('matchup_id', m.id).eq('app_user_id', uid).maybeSingle(),
+        ]);
+        const empty = emptySpots(cap, win, (picked ?? []).map((r) => r.roster_slot), ap?.payload_json);
         if (empty <= 0) continue;
         rows.push({
           app_user_id: uid, kind: 'lineup',
