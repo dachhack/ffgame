@@ -62,7 +62,7 @@ export async function statheadFeed(season) {
  *  simply absent; a player the feed has zeroed (IR, practice squad, cut)
  *  comes through at 0 WITH a status, because "he is out" is the answer and
  *  not missing data. */
-export function statheadRows(feed, week) {
+export function statheadRows(feed, week, playerIndex = null) {
   const sched = feed?.teamWeeks ?? {};
   const rows = [];
   for (const p of feed?.players ?? []) {
@@ -80,7 +80,7 @@ export function statheadRows(feed, week) {
       mult: Number.isFinite(ppg) && ppg > 0 ? Math.round((Number(pts) / ppg) * 10000) / 10000 : null,
       opp: game?.opp ?? null,
       home: game?.home ?? null,
-      status: p.active === false ? String(p.status || 'OUT') : p.backup ? 'backup' : null,
+      status: p.active === false ? String(p.status || 'OUT') : p.backup && !promotedStarter(p, playerIndex) ? 'backup' : null,
     });
   }
   return rows;
@@ -122,10 +122,26 @@ export function statheadRows(feed, week) {
 export const BLEND_K = { QB: 5.5, RB: 3.5, WR: 4.5, TE: 5.0 };
 const BLEND_K_DEFAULT = 4.5;
 
+// ── THE BACKUP WHO IS STARTING (v0.562.1) ────────────────────────────────
+// Founder, before week 4's waivers: "Important to get these nailed down."
+// Jayden Daniels, Caleb Williams and Baker Mayfield are Out; the feed's
+// `backup` flag is its build-time depth chart, so Mariota (20.4 last week)
+// priced at 7.1 and Bagent at 2 — the backup haircut, on the man taking the
+// snaps. Sleeper's depth_chart_order is re-ordered for availability (0293,
+// playerIndex `depth`), so a feed backup Sleeper ranks FIRST at his position
+// is priced as the starter: `starting`. It reverts on its own the day the
+// starter is back at 1.
+export function promotedStarter(p, playerIndex) {
+  if (!p?.backup || p.active === false || !playerIndex?.sleeper) return false;
+  const slug = playerIndex.sleeper(String(p.sleeper))?.slug;
+  const meta = slug ? playerIndex.metaForSlug?.(slug) : null;
+  return meta?.depth === 1;
+}
+
 /** One feed row's per-game rate, blended toward his 2026 games, and the
  *  share of a week he is expected to be worth it. Pure; exported for the
- *  assertion suite. */
-export function inSeasonRate(p) {
+ *  assertion suite. `opts.starting`: promotedStarter above. */
+export function inSeasonRate(p, opts = {}) {
   const ppg = Number(p?.ppg);
   if (!Number.isFinite(ppg) || ppg <= 0) return null;
   const played = (Array.isArray(p.act) ? p.act : []).filter((x) => x != null && Number.isFinite(Number(x))).map(Number);
@@ -134,7 +150,7 @@ export function inSeasonRate(p) {
     ? (k * ppg + played.reduce((a, b) => a + b, 0)) / (k + played.length)
     : ppg;
   const gp = Number.isFinite(Number(p.gp)) ? Number(p.gp) : 17;
-  const playing = p.active !== false && !p.backup && played.length > 0;
+  const playing = p.active !== false && (opts.starting || (!p.backup && played.length > 0));
   const avail = playing ? 1 : Math.min(1, gp / 17);
   return { rate: blended, avail, perWeek: blended * avail, games: played.length };
 }
@@ -146,7 +162,7 @@ export function seasonRows(feed, playerIndex = null) {
     const ppg = Number(p?.ppg);
     if (!sid || !Number.isFinite(ppg) || ppg <= 0) continue;
     const gp = Number.isFinite(Number(p.gp)) ? Number(p.gp) : 17;
-    const r = inSeasonRate(p);
+    const r = inSeasonRate(p, { starting: promotedStarter(p, playerIndex) });
     rows.push({
       sleeper_id: String(sid),
       // OUR SLUG (v0.456.0). `league_market` keys the map by it; without it
@@ -275,12 +291,12 @@ async function writeWeek(season, week, rows, log) {
  *  apart (0330) and the reader picks per player, so ESPN keeps covering the
  *  men StatHead has no line for instead of being switched off wholesale. A
  *  failure on either side is logged and the other still lands. */
-export async function pollWeekProjections(season, week, log = () => {}) {
+export async function pollWeekProjections(season, week, log = () => {}, playerIndex = null) {
   if (!season || !week || week >= 100) return { rows: 0, skipped: 'no week' };
   let stathead = 0;
   try {
     const feed = await statheadFeed(season);
-    const rows = statheadRows(feed, week);
+    const rows = statheadRows(feed, week, playerIndex);
     stathead = Number((await writeWeek(season, week, rows, log)).rows ?? 0);
   } catch (e) { log('projections stathead', e.message); }
 
@@ -344,7 +360,7 @@ export async function sweepProjections(season, weeks = [], log = () => {}, playe
   last = Date.now();
   let projections = 0;
   for (const w of new Set(weeks.filter((w) => Number.isInteger(w) && w > 0 && w < 100))) {
-    const r = await pollWeekProjections(season, w, log);
+    const r = await pollWeekProjections(season, w, log, playerIndex);
     projections += Number(r.rows ?? 0);
   }
   // THE SEASON BOARD (0335), out of the file the weeks just came from — so

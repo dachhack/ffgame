@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.562.1 — a backup who is starting is projected as the starter
+
+> - When a starter is out, the player replacing him is now projected like a starter, not like a backup.
+
+The founder, before week 4's waivers: "Important to get these nailed down."
+Daniels, Caleb Williams and Mayfield are Out. The StatHead feed's `backup`
+flag comes from its build-time depth chart, so the men taking their snaps kept
+the backup haircut (gp ÷ 17). Mariota, who scored 20.4 in week 3, was priced
+at 7.1, and Bagent at about 2. That is the number the boards show and the CPU
+wire ranks on.
+
+`promotedStarter` (server/src/poll/projections.js): a feed backup whom
+Sleeper's availability-ordered depth chart (0293, playerIndex `depth`) ranks
+1 at his position is priced as playing. `inSeasonRate(p, { starting })` sets
+avail 1, and statheadRows drops the week row's 'backup' (conditional) flag for
+him. The change reverts itself when the starter is back at 1. On the week-4
+feed this promotes Mariota (6.7 → 16.5 a week), Bagent (2.4 → 12.8) and Jalon
+Daniels (1.6 → 8.6), and nobody else. scripts/check-boards.mjs covers it.
+
 ### v0.562.0 — computer's fixes are posted back in the league chat
 
 > - When a question asked of computer in chat is fixed, the fix is posted back in that league's chat.

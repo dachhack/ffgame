@@ -15,7 +15,7 @@
 // the bug v0.308.0 existed to kill.
 import { readFileSync } from 'node:fs';
 import { rescaledValue, dynRows } from '../server/src/poll/dynasty.js';
-import { seasonRows, inSeasonRate, BLEND_K } from '../server/src/poll/projections.js';
+import { seasonRows, inSeasonRate, BLEND_K, promotedStarter, statheadRows } from '../server/src/poll/projections.js';
 import { setLiveProjRate, clearLiveProjRate, projectedPoints, setLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
 import { slugMeta } from '../packages/core/src/data/slugMeta.ts';
@@ -97,6 +97,30 @@ ok(srows[0].ros_ppg === 16.4 && srows[0].games_left === 15, 'rest-of-season ride
   ok(inSeasonRate({ pos: 'RB', ppg: 12, gp: 12, active: false, act: [15] }).avail === 12 / 17, 'an inactive player keeps it too');
   ok(inSeasonRate({ pos: 'RB', ppg: 12, gp: 12 }).perWeek === 12 * 12 / 17, 'no games yet: the preseason shape, unchanged');
   ok(inSeasonRate({ pos: 'WR', ppg: 10, gp: 17, act: [30], inSeasonGames: 1 }).rate === 10, 'a feed that blends for itself is not blended twice');
+}
+
+// ── THE BACKUP WHO IS STARTING (v0.562.1) ─────────────────────────────────
+// Week 4: Daniels Out, Sleeper moves Mariota to 1 — he is priced as the
+// starter, not at the backup haircut. The man Sleeper still ranks 2 is not.
+{
+  const depth = { '10': 1, '11': 2, '12': 1 };
+  const idx = {
+    sleeper: (sid) => ({ slug: `s${sid}` }),
+    metaForSlug: (slug) => ({ depth: depth[slug.slice(1)] ?? null }),
+  };
+  const mariota = { sleeper: '10', pos: 'QB', ppg: 17.25, gp: 6.9, backup: true, active: true, act: [null, 8.74, 20.42], wk: [1, 1, 1, 18.22] };
+  const lock = { sleeper: '11', pos: 'QB', ppg: 18.62, gp: 5.8, backup: true, active: true, act: [12.78, 21.4, null], wk: [1, 1, 1, 18.5] };
+  const cut = { sleeper: '12', pos: 'QB', ppg: 15, gp: 3, backup: true, active: false, act: [], wk: [1, 1, 1, 0] };
+  ok(promotedStarter(mariota, idx) && !promotedStarter(lock, idx), 'Sleeper\'s 1 is the starter; its 2 is still the backup');
+  ok(!promotedStarter(cut, idx), 'an inactive row is never promoted');
+  ok(!promotedStarter(mariota, null), 'no index, no promotion — the feed\'s flag stands');
+  const [m, l] = seasonRows({ players: [mariota, lock] }, idx);
+  ok(m.per_week > 16 && m.per_week < 17.5, `Mariota starting is ${m.per_week} a week, not 7`);
+  ok(l.per_week < 8, `Lock, still QB2, keeps the haircut (${l.per_week})`);
+  const wk = statheadRows({ players: [mariota, lock] }, 4, idx);
+  ok(wk[0].status === null && wk[1].status === 'backup', 'the week row drops the conditional flag for the promoted man only');
+  ok(inSeasonRate({ pos: 'QB', ppg: 15, gp: 3, backup: true, act: [] }, { starting: true }).avail === 1,
+    'a promoted man with no games yet is priced as the starter too');
 }
 
 // ── THE LEVEL IS LIVE; THE RULES STAY THE LEAGUE'S ────────────────────────
