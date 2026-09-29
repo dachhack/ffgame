@@ -455,7 +455,7 @@ export function RegisterView({ leagueId }: { leagueId: string }) {
     );
   }
   return (
-    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+    <ScrollView style={{ flexShrink: 1 }} nestedScrollEnabled contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
       {msg && <Mono size={10} tone={msg.startsWith('✓') ? 'you' : 'opp'} style={{ marginBottom: 6 }}>{msg}</Mono>}
       {rows.map((r) => {
         const k = KIND[r.kind] ?? KIND.add;
