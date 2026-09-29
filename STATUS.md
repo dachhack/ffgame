@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.8 — the commissioner's Activity carries the register and its Undo
+
+> - Commissioners can undo pickups and waiver claims right from the commissioner console's Activity tab.
+
+The founder, in the commissioner console's ACTIVITY sheet: "Activity doesn't
+have the undo." That sheet showed only who last opened the league
+(CommishSeen). The league register with ↩ UNDO (0354) lived on the league
+page's own Activity section, a different screen with the same name. The
+commissioner's Activity now shows the register under Last opened, at a
+capped height, and the register's list scrolls when nested in a sheet
+(nestedScrollEnabled).
+
 ### v0.561.7 — Kickoff League's waivers run once a week, Wednesday morning
 
 > - Kickoff League: waivers now run once a week, Wednesday at 3:00 AM ET; free agents every other day.

@@ -71,6 +71,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
+import { RegisterView } from '../ui/LeagueInfo';
 import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TxnLimitsCard, TradeFloorCard, AwardsCard, PublicApiCard, WriteApiCard, ScoresCard, WeeklyReportCard, ScheduleCard, PlayedWeeksCard, DuesCard, TopUpPoolCard } from '../ui/CommishDesk';
 
 // The app's commissioner map — the same grouping as the web side rail, so a
@@ -433,6 +434,16 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
                 onChanged={() => void refresh()} onSelfUnassigned={onSelfUnassigned} />
             )}
             {section === 'activity' && <CommishSeen leagueId={leagueId} />}
+            {/* THE REGISTER, WITH ↩ UNDO (v0.561.8). Founder, in this sheet:
+                "Activity doesn't have the undo" — the register lived only on
+                the league page's own Activity, a different screen with the
+                same name. The commissioner's Activity now carries it too. */}
+            {section === 'activity' && (
+              <View style={{ marginTop: 12 }}>
+                <Mono size={9} weight="700" tone="dim" track={0.12} style={{ marginBottom: 4 }}>📜 LEAGUE REGISTER · ↩ UNDO A MOVE</Mono>
+                <View style={{ maxHeight: 520 }}><RegisterView leagueId={leagueId} /></View>
+              </View>
+            )}
             {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
             {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" onDragActive={(a) => setSheetScroll(!a)} />}
             {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}
