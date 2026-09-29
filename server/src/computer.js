@@ -93,6 +93,90 @@ async function openIssue(title, body) {
   return json.number;
 }
 
+/** GitHub, read-only, as the worker. */
+async function gh(path) {
+  const res = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
+    headers: {
+      authorization: `Bearer ${process.env.GH_ISSUES_TOKEN}`,
+      accept: 'application/vnd.github+json',
+      'user-agent': 'ffgame-worker',
+    },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`${res.status} ${json.message ?? ''}`.trim());
+  return json;
+}
+
+// ── THE FIX, BACK IN THE CHAT (v0.562.0, 0393) ─────────────────────────────
+// Founder: "yes, post fixes to the league chat too." When an ask's issue is
+// closed as COMPLETED, its last comment — the fix note — goes back to where
+// it was asked: a house line in the league's chat, or, for a DM (no house line
+// can go there), a push to the asker. Once per ask (computer_ask.relayed_at).
+// An issue closed as not planned, or closed more than RELAY_MAX_AGE_MS ago
+// (history from before this shipped), is marked and left quiet.
+const RELAY_EVERY_MS = 5 * 60_000;
+const RELAY_MAX_AGE_MS = 48 * 3600_000;
+let lastRelay = 0;
+
+/** The chat line for a fixed issue: its note in plain words, one line. Pure. */
+export function fixLine(n, note) {
+  const text = String(note ?? '')
+    .split(/\n-{3,}\n/)[0]                                // the attribution footer
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')                 // images
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')              // links → their words
+    .replace(/[*_`]+/g, '')                               // emphasis, code
+    .split('\n').map((l) => l.replace(/^\s*(?:[-•]|\d+\.)\s+/, '').trim()).filter(Boolean)
+    .join(' ')
+    .replace(/@computer\b/gi, 'computer')                  // never re-trigger anything
+    .replace(/\s+/g, ' ').trim()
+    // The line already says so: drop the note's own "✅ Fixed…" opener.
+    .replace(/^✅\s*/, '').replace(/^(?:Fixed|Done)\b.*?[.:](?=\s|$)\s*/i, '');
+  const head = `✅ Fixed (#${n})`;
+  if (!text) return `${head}.`;
+  const room = 480 - head.length - 2;
+  return `${head}: ${text.length > room ? `${text.slice(0, room - 1).trimEnd()}…` : text}`;
+}
+
+/** One relay pass. Returns push rows (DM asks) for the caller to enqueue. */
+export async function relayFixes(now = Date.now()) {
+  if (!process.env.GH_ISSUES_TOKEN || now - lastRelay < RELAY_EVERY_MS) return [];
+  lastRelay = now;
+  const { data: asks, error } = await db().from('computer_ask')
+    .select('source, message_id, issue').not('issue', 'is', null).is('relayed_at', null);
+  if (error || !asks?.length) return [];
+  const mark = (a) => db().from('computer_ask').update({ relayed_at: new Date().toISOString() })
+    .eq('source', a.source).eq('message_id', a.message_id);
+  const receipts = [];
+  for (const a of asks) {
+    try {
+      const iss = await gh(`/issues/${a.issue}`);
+      if (iss.state !== 'closed') continue;
+      if (iss.state_reason !== 'completed' || now - Date.parse(iss.closed_at) > RELAY_MAX_AGE_MS) { await mark(a); continue; }
+      const comments = await gh(`/issues/${a.issue}/comments?per_page=100`);
+      const note = [...(Array.isArray(comments) ? comments : [])].reverse().find((c) => c?.body && !/@computer\b/i.test(c.body))?.body;
+      const line = fixLine(a.issue, note);
+      if (a.source === 'league') {
+        const { data: m } = await db().from('league_message').select('league_id').eq('id', a.message_id).maybeSingle();
+        if (m?.league_id) {
+          const { error: e } = await db().from('league_message').insert({ league_id: m.league_id, author_id: null, kind: 'computer', body: line, mentions: [] });
+          if (e) { log('relay failed', a.issue, e.message); continue; }
+        }
+      } else {
+        const { data: m } = await db().from('dm_message').select('author_id').eq('id', a.message_id).maybeSingle();
+        if (m?.author_id) receipts.push({
+          app_user_id: m.author_id, kind: 'chat', title: `Fixed · #${a.issue}`, body: line.replace(/^✅ Fixed \(#\d+\):?\s*/, ''),
+          data: { url: `https://github.com/${REPO}/issues/${a.issue}` }, dedupe_key: `computer-fixed:dm${a.message_id}`,
+        });
+      }
+      await mark(a);
+      log('relayed', `#${a.issue}`, 'to', a.source, a.message_id);
+    } catch (e) {
+      log('relay error', `#${a.issue}`, e.message);   // tried again next pass
+    }
+  }
+  return receipts;
+}
+
 let warned = false;
 
 /** One sweep. Returns push rows (a receipt to the asker) for the caller to enqueue. */

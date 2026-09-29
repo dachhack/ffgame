@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.562.0 — computer's fixes are posted back in the league chat
+
+> - When a question asked of computer in chat is fixed, the fix is posted back in that league's chat.
+
+The founder: "yes, post fixes to the league chat too." An @computer ask
+(0363) was answered only on its GitHub issue, and the league never heard.
+- computer.js relayFixes, every 5 minutes from the push loop: an ask whose
+  issue is closed as COMPLETED gets its last comment (the fix note) posted
+  as a house line in the league chat it came from. A DM ask gets a push to
+  the asker instead. It posts once per ask (0393 computer_ask.relayed_at).
+  Not planned, or closed more than 48 hours ago (history from before this
+  shipped): marked and left quiet.
+- fixLine: the note in plain words on one line. It drops the footer,
+  markdown, a repeated "✅ Fixed…" opener and any @computer tag, and caps at
+  480 characters.
+- Expect Kickoff League to get lines for #1035, #1043 and #1047, and Vamp T
+  for #1044, within five minutes of the worker deploying.
+
 ### v0.561.9 — Kickoff League's waivers run daily at 4 AM ET
 
 > - Kickoff League: waivers run every day at 4:00 AM ET; free agents open Sunday and Monday after the run.
