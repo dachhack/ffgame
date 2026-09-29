@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.7 — Kickoff League's waivers run once a week, Wednesday morning
+
+> - Kickoff League: waivers now run once a week, Wednesday at 3:00 AM ET; free agents every other day.
+
+The founder, from chat (#1043): "I think I have the waivers set to run
+unintentionally. They should run on Weds AM after games." Kickoff League
+never set 0337's per-day schedule, so the legacy rule applied: with no
+waiver_clear_dow the run visits every day. And 0311 made every day free
+agency, so the wire was open all week and the run cleared every night.
+- 0391 (data): waiver_days = Sun–Tue fa, Wed waivers_to_fa, Thu–Sat fa, and a
+  3:00 AM ET clear time if none was set. It posts a house line in the
+  league's chat. Not a `waivers` Tuesday, because a waivers day runs too (two
+  runs a week). Drops are held to the next clearing day (waiver_hold_until),
+  so Monday night's drops are claims for Wednesday. A Thursday drop waits six
+  days, which is how a weekly run works.
+- Scratch check: the day-by-day modes, Wednesday clears only, FA shut at 2 AM
+  and open at 3:30 AM on Wednesday, and one chat line even when run twice.
+
 ### v0.561.6 — a Ghost counts as a filled spot in the lineup alert
 
 > - The "Lineup locks" alert no longer counts a spot holding a Ghost or Bye Steal as empty.
