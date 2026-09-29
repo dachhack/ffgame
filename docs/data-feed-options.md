@@ -122,8 +122,8 @@ someone else's CDN and carry no licence at all, same as ESPN's.
 
 **Fixed:** `AvatarPicker.avatarOptions()` used to build ESPN NFL logo URLs
 directly, so team crests were still offered as avatars in mark-free mode. It
-now goes through `teamLogo()` and drops them. Avatars already saved as an NFL
-crest still render; clearing those is a separate data change.
+now goes through `teamLogo()` and drops them. Migration 0394 clears avatars
+already saved as an NFL crest (backed up in `nfl_logo_avatar_backup`).
 
 ## Recommendation
 
