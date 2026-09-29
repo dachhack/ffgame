@@ -86,6 +86,44 @@ the licensed feed the 2027 plan needs.
 4. Typical latency from snap to API?
 5. Is preseason covered?
 
+## Team logos and player images
+
+Images aren't a data-feed problem; they're a rights problem. Today every image
+is hotlinked from ESPN's CDN (`packages/core/src/data/media.ts`: `teamLogo`,
+`collegeLogo`, `espnHeadshot`; the baked `headshots.ts` map of 607 ESPN URLs;
+the NFL crests in `src/app/AvatarPicker.tsx`). Switching data vendors doesn't
+change what we're allowed to show. Three separate rights are involved:
+
+| Right | Covers | Who grants it | Rough cost (`unit-economics.md`) |
+|---|---|---|---|
+| **NFL marks** | Team logos, wordmarks | NFL Properties | Fixed minimums or rev-share; may not license a product our size at all |
+| **NFLPA group licence** | Player likeness in photos (names + stats for fantasy are fine without it) | OneTeam Partners | Rev-share ~5–15%, or $10k–50k+/yr minimums |
+| **Photo copyright** | The actual headshot files | The photographer / agency (Getty, AP, Imagn/USA Today), often resold by data vendors | Bundled with a vendor, or per-image licence |
+| **College marks** | School logos | Each school, mostly through Learfield/CLC | Per-school; impractical at our scale |
+
+A licensed headshot pack from a data vendor (SportsDataIO, Sportradar) only
+covers the photo copyright. It doesn't grant NFLPA likeness or NFL marks.
+Headshot URLs from Tank01, Sleeper (`sleepercdn.com`) or nflverse point at
+someone else's CDN and carry no licence at all, same as ESPN's.
+
+**Options**
+
+1. **Launch mark-free (recommended, already built).** `VITE_MARK_FREE=true`
+   nulls every resolver in `media.ts`; the UI falls back to team-abbreviation
+   badges, team colours, position pills and initials. Zero licence cost.
+2. **Own art.** Drip-branded team badges (abbreviation + colours, not
+   lookalike logos) and non-likeness player art (position/number cards,
+   Drip avatars). Cheap, on-brand, and removes the "looks broken" feel of
+   plain initials. Avoid anything recognisable as a real player or logo.
+3. **License at scale, as rev-share.** Once revenue justifies it: NFLPA via
+   OneTeam + a licensed headshot pack from the data vendor, then host the
+   images on our own CDN per the licence (no hotlinking). NFL marks last,
+   if at all.
+
+**Gap:** `AvatarPicker.avatarOptions()` builds ESPN NFL logo URLs directly
+and doesn't check `isMarkFree()`, so team crests are still offered as
+avatars in mark-free mode.
+
 ## Recommendation
 
 1. **Licensed primary: SportsDataIO.** Cheapest licensed option covering live
@@ -99,8 +137,8 @@ the licensed feed the 2027 plan needs.
    once revenue justifies it.
 4. **Free where enough:** nflverse for historical, ids and reference tables;
    CollegeFootballData for college if the primary's CFB add-on is priced badly.
-5. **Images:** headshots from any vendor are a separate licence. Stay on
-   mark-free mode (team colours, position pills) until one is paid for.
+5. **Images:** see [Team logos and player images](#team-logos-and-player-images).
+   Launch mark-free, add own art, license likeness only at scale.
 
 ## Sources
 
