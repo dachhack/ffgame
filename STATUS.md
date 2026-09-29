@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.561.9 — Kickoff League's waivers run daily at 4 AM ET
+
+> - Kickoff League: waivers run every day at 4:00 AM ET; free agents open Sunday and Monday after the run.
+> - A player dropped after his game stays on waivers until Wednesday's run.
+
+The founder, from chat (#1047), refining 0391 the same afternoon: "waivers
+should run daily at 4 am est every day with players held after their games
+until the waiver run on Weds AM. Free Agency on Sunday and Monday after the
+waivers run."
+- 0392 (data): waiver_days = Sun/Mon waivers_to_fa and Tue–Sat waivers;
+  waiver_clear_min 240; waiver_game_hold_dow 3 (0337's default, now written
+  down). One house line in the league's chat. Replaces 0391.
+- Scratch check: every day clears. Free agency is shut at 3:30 AM and open
+  at 4:30 AM and noon on Sun/Mon, and shut all day Tue–Sat. A re-run posts
+  nothing.
+
 ### v0.561.8 — the commissioner's Activity carries the register and its Undo
 
 > - Commissioners can undo pickups and waiver claims right from the commissioner console's Activity tab.
