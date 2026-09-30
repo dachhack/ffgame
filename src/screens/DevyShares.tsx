@@ -4,7 +4,7 @@
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
 import { useEffect, useMemo, useState } from 'react';
-import { allotDevyShares, devyMarket, devySharesState, friendlyError, setLeagueDevyMode, setLeagueDevyStartCash, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
+import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, setLeagueDevyMode, setLeagueDevyStartCash, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy } from '@drip/core/data/devyShares';
 
@@ -17,7 +17,7 @@ const small: React.CSSProperties = { fontSize: 11.5, color: 'var(--dim)' };
 
 export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
   const [st, setSt] = useState<DevySharesState | null>(null);
-  const [view, setView] = useState<'mine' | 'league' | 'add'>('mine');
+  const [view, setView] = useState<'mine' | 'league' | 'add' | 'trade'>('mine');
   const [market, setMarket] = useState<DevyMarketRow[] | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
@@ -99,7 +99,7 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
       <div style={{ ...small, margin: '4px 0 8px' }}>
         Buy shares in college players. Prices follow how they're playing, updated weekly in season and frozen from Jan 15 until the next season's first stats.
         A stake maxes at {rules.max} shares or {rules.max_spend} points spent; the first team to max holds his right, or if only one team has {rules.floor}+ shares and {rules.min_spend}+ points in, that team does.
-        The right reserves him for you in the rookie draft. When he's drafted your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 3), up to {rules.payout_cap}× what you paid.
+        The right reserves him for you in the rookie draft. When he's drafted your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 2), up to {rules.payout_cap}× what you paid.
         Selling pays today's price, up to {rules.payout_cap}× what you paid; cash tops out at {rules.cash_cap} from sales. {lockLine(st)}{st.frozen ? ' Prices are frozen for the offseason.' : ''}
         {st.current === false && <div style={{ color: 'var(--warn, #c66)' }}>This is last season's league. Shares move in the current season.</div>}
       </div>
@@ -107,10 +107,12 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         <button style={chip(view === 'mine')} onClick={() => setView('mine')}>MINE ({mine.length})</button>
         <button style={chip(view === 'league')} onClick={() => setView('league')}>LEAGUE ({st.players?.length ?? 0})</button>
         <button style={chip(view === 'add')} onClick={() => setView('add')}>+ BUY</button>
+        {myRoster != null && <button style={chip(view === 'trade')} onClick={() => setView('trade')}>⇄ TRADE</button>}
       </div>
       {msg && <div className="mono" style={{ fontSize: 11, color: msg.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{msg}</div>}
       {view === 'mine' && (mine.length ? mine.map((p) => row(p, true)) : <div style={small}>No shares yet. Use + BUY to find a college player before everyone else does.</div>)}
       {view === 'league' && ((st.players ?? []).length ? (st.players ?? []).map((p) => row(p, false)) : <div style={small}>Nobody in the league has bought shares yet.</div>)}
+      {view === 'trade' && myRoster != null && <ShareTradeComposer leagueId={leagueId} st={st} myRoster={myRoster} onSent={(m) => { setMsg(m); setView('mine'); void load(); }} />}
       {view === 'add' && (<>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search college players or schools…"
           style={{ width: '100%', boxSizing: 'border-box', padding: '6px 9px', border: '1px solid var(--bd)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
@@ -130,6 +132,76 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
           );
         })}
       </>)}
+    </div>
+  );
+}
+
+/** SHARE TRADES (0397) — the app twin's composer. Files through the league's
+ *  trade system, so it gets the same answer, ruling and vote as any trade. */
+function ShareTradeComposer({ leagueId, st, myRoster, onSent }: {
+  leagueId: string; st: DevySharesState; myRoster: number; onSent: (msg: string) => void;
+}) {
+  const teams = (st.teams ?? []).filter((x) => x.roster_id !== myRoster);
+  const [partner, setPartner] = useState<number | null>(teams[0]?.roster_id ?? null);
+  const [give, setGive] = useState<Record<string, number>>({});
+  const [get, setGet] = useState<Record<string, number>>({});
+  const [giveCash, setGiveCash] = useState('');
+  const [getCash, setGetCash] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const stakesOf = (rid: number | null) => (st.players ?? []).filter((p) => !p.graduated_to)
+    .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) }))
+    .filter((x): x is { p: DevySharePlayer; h: NonNullable<typeof x.h> } => !!x.h);
+  const side = (rid: number | null, val: Record<string, number>, setVal: (v: Record<string, number>) => void, cash: string, setCash: (v: string) => void, label: string) => (
+    <div style={{ marginTop: 8 }}>
+      <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>{label}</div>
+      {stakesOf(rid).length === 0 && <div style={small}>No shares.</div>}
+      {stakesOf(rid).map(({ p, h }) => (
+        <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+          <span style={{ flex: 1, color: 'var(--text)' }}>{p.name ?? p.slug} <span style={small}>{h.shares} held · {p.price ?? 1}/sh</span></span>
+          <input type="number" min={0} max={h.shares} value={val[p.slug] ?? 0}
+            onChange={(e) => setVal({ ...val, [p.slug]: Math.max(0, Math.min(h.shares, Math.floor(Number(e.target.value) || 0))) })}
+            style={{ width: 56, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>devy cash</span>
+        <input value={cash} onChange={(e) => setCash(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0"
+          style={{ width: 64, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
+        <span style={small}>has {fmtPts(teamBook(st, rid).cash)}</span>
+      </div>
+    </div>
+  );
+  const legOf = (rid: number, to: number, val: Record<string, number>, cash: string) => ({
+    roster: rid,
+    send_shares: Object.entries(val).filter(([, n]) => n > 0).map(([slug, n]) => ({ slug, shares: n, to })),
+    send_devy_cash: Number(cash) > 0 ? [{ to, amount: Math.round(Number(cash) * 100) / 100 }] : [],
+  });
+  const propose = async () => {
+    if (partner == null) return;
+    const a = legOf(myRoster, partner, give, giveCash), b = legOf(partner, myRoster, get, getCash);
+    if (!a.send_shares.length && !a.send_devy_cash.length && !b.send_shares.length && !b.send_devy_cash.length) { setErr('Pick something to trade.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const r = await proposeMultiTrade(leagueId, [a, b]);
+      if (!r.ok) setErr(`✗ ${friendlyError(r.error ?? 'failed')}`);
+      else onSent(`✓ offer sent to ${teams.find((x) => x.roster_id === partner)?.team ?? 'them'} — they answer it in the trades list`);
+    } catch (e) { setErr(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div>
+      <div style={small}>
+        Trade shares and devy cash with another team. Shares carry what they cost (so the 3× cap goes with them), and a whole maxed stake keeps its place in line for his right.
+        It goes through the league's trade review like any trade. Shares trade during the January lock too, but not during a draft.
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        {teams.map((x) => <button key={x.roster_id} style={chip(partner === x.roster_id)} onClick={() => { setPartner(x.roster_id); setGet({}); setGetCash(''); }}>{x.team}</button>)}
+      </div>
+      {side(myRoster, give, setGive, giveCash, setGiveCash, 'YOU SEND')}
+      {partner != null && side(partner, get, setGet, getCash, setGetCash, `${(teams.find((x) => x.roster_id === partner)?.team ?? 'THEY').toUpperCase()} SEND`)}
+      {err && <div className="mono" style={{ fontSize: 11, color: 'var(--opp)', marginTop: 6 }}>{err}</div>}
+      <button style={{ ...chip(true), marginTop: 8 }} disabled={busy || partner == null} onClick={() => void propose()}>{busy ? 'sending…' : 'propose trade'}</button>
     </div>
   );
 }

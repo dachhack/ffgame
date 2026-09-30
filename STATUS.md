@@ -22,7 +22,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.565.0 — devy shares trade; rounds 4–7 pay 2 (0397)
+
+> - Trade devy shares and devy cash with another team from the Devy market's new TRADE tab.
+> - A whole maxed stake keeps its place in line for the player's right, and shares still trade during the January lock.
+> - Players drafted in rounds 4–7 now pay out 2 points a share.
+
+The founder: "Let's do the tweak and get trading in."
+- The tweak: _devy_share_rules round_price R4–7 goes from 3 to 2 (the
+  validation rerun's optional tune: it trims the sniper's price-1 lottery
+  and leaves the scout untouched).
+- Trading: trade_leg.send_shares [{slug, shares, to}] and send_devy_cash
+  [{amount, to}]. propose_multi_trade accepts TWO seats when a deal moves
+  either of them, so a share trade gets the same clock, commissioner
+  ruling and league vote as any trade.
+  - Refused: when shares mode is off, on last season's row, during a live
+    draft, or on a graduate's shares. The sender must hold the shares/cash.
+  - Shares trade during the Jan 15 lock.
+  - _execute_multi_trade re-reads holdings and cash under the market lock,
+    and refuses a stake past 20 shares or cash past 200.
+  - _devy_move_shares carries cost basis. A whole stake keeps
+    maxed_at/qual_at (its place in line); a partial one starts fresh for
+    the receiver and drops the seller out of line.
+  - _trade_summary and league_trades (legs, with player names) show them.
+- devy_shares_state adds `teams`.
+- App/web: a ⇄ TRADE tab in the Devy market (pick a team, shares both
+  ways, devy cash both ways, PROPOSE). The trade center, league page and
+  admin trade lists show share legs (core devyLegParts).
+- Probes: devy-trade-probes.sql (the tweak; filing refusals; execution
+  moves stake, cost and cash; partial maxed stake drops out of line; a
+  stake past 20 refused; a whole maxed stake carries maxed_at and the
+  right; graduates and live drafts refused; legs in league_trades).
+  check-college §11 covers devyLegParts.
+
 ### v0.564.0 — the devy market, after the simulation (0396)
+
+> - Devy market fixes: shares leagues now pay out when a player is drafted, with a bonus for high draft rounds.
+> - Prices follow a smooth curve by college rank; a stake maxes at 20 shares or 60 points, and players who leave college undrafted refund half.
+> - Commissioners can set a new team's starting cash, and several loopholes are closed.
 
 A 60-league replay of the 2023 college season and the 2024 NFL draft
 (multi-agent: data, a faithful simulator, loophole, economy and UX

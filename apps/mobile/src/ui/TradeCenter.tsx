@@ -13,6 +13,7 @@
 // One deliberate merge vs the web: the commissioner's APPROVE/VETO lives on
 // the same card as everyone's trade list, not in a separate roster-tools
 // panel. Two cards listing the same trades on one phone screen is noise.
+import { devyLegParts } from '@drip/core/data/devyShares';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
@@ -146,6 +147,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     ...l.send_picks.map((p) => `${pickAssetLabel(p, l.roster_id)} → ${teamName(p.to)}`),
     ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
     ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+    ...devyLegParts(l, (rid) => String(teamName(rid))),
   ].join(', ') || 'nothing';
   const tradeLine = (x: TradeRow, side: 'give' | 'get') => {
     const slugs = (side === 'give' ? x.give : x.get)
