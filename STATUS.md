@@ -22,6 +22,60 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.564.0 — the devy market, after the simulation (0396)
+
+A 60-league replay of the 2023 college season and the 2024 NFL draft
+(multi-agent: data, a faithful simulator, loophole, economy and UX
+questioners, researchers, an evaluator) found the market paid tricks, not
+scouting, and found real holes. The founder: "fix the bugs and go with your
+recommendations for 1-5. For 6, new team would fresh 100 but make it
+adjustable for the commish. Taken over team, just gets what the taken over
+team already has. 7 your recommendation. Yes, cap players."
+- Bugs:
+  - Graduation now reaches players held only in shares
+    (graduation_candidates + alias written with no pool), with the NFL
+    draft round (worker reads ESPN's draft feed).
+  - The money pump is gone: the demand bonus is removed.
+  - Last season's league row can't move shares or flip the mode
+    (_devy_is_current).
+  - No mode change mid-draft, or mid-cycle with stakes. Leaving shares
+    cashes every stake out, and the draft's payout runs whatever the mode.
+  - Stakes on players who left college can be sold at their last price;
+    undrafted leavers refund 50% at the draft.
+  - A sole right needs 5+ shares AND 15+ spent, only a qualified stake
+    breaks one, and a stake that qualifies in the 7 days before the lock
+    can't.
+  - Reservations release when the holder has no picks left or hits a
+    position cap.
+  - The payout takes the market lock and adds to cash atomically, and is
+    not capped at 200. A sale past 200 is refused, not shaved.
+  - Shares mode is refused in auction leagues.
+  - A reserved graduate can't be picked up as FA or off waivers.
+  - The lock ends when a lineage draft completes after Jan 15.
+  - A college sweep that would retire more than 10% of 200+ active players
+    retires nobody.
+- Economics:
+  - Price = 10 − 2·log2(rank/10), clamped to 1–10, ×1.15 youth
+    (FR/SO, top 150); unranked 1.
+  - Prices freeze Jan 15–Aug 24.
+  - A stake maxes at 20 shares or 60 points spent.
+  - Payout = max(college price, NFL round price R1 8 / R2 6 / R3 5 /
+    R4–7 3) × shares, capped at 3× cost.
+  - New-team cash is set by the commissioner (set_league_devy_start_cash,
+    default 100); a taken-over seat keeps its book.
+- Validation rerun of the shipped rules: the sizing scout leads out of
+  sample; pump 0; spoiler kills 0; bandwagon, lock-timer and flipper lose;
+  league wealth steady (1190 → 1236 over 5 seasons). Optional tune not
+  taken: R4–7 3 → 2 trims a sniper replay artifact.
+- UI (app + web): new rules text, MAX buttons respect the 60 cap, a
+  confirmation before selling out of a maxed stake, a LEFT COLLEGE label,
+  last-season and frozen notes, a mode-switch confirmation, and a
+  new-team cash control.
+- Probes: devy-shares-probes rewritten (ds2–ds9, exact payouts and
+  refund). graduation-probes updated for the 7-arg signature. Worker
+  graduate-poll covers the draft-round feed. check-college §11 covers
+  maxBuy and the new rightLine.
+
 ### v0.563.1 — the illegal-roster warning sits in the best-ball spot
 
 > - A best-ball spot that is empty because the roster isn't legal now says so in the spot itself, with the reason.

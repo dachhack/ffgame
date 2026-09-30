@@ -151,7 +151,10 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   const alone = { ...mine, holders: [h(1, 3, 'Me')], right: null };
   ok(myStake(mine, 1) === 20 && myStake(mine, 3) === 0, 'a team\'s own stake');
   ok(rightLine(mine, 1).startsWith('★ YOUR RIGHT') && rightLine(theirs, 1).startsWith('Them holds'), 'whose right it is, in words');
-  ok(rightLine(alone, 1) === 'only you — 2 more to hold his right', 'a sole holder under the floor is told how far');
+  ok(rightLine(alone, 1) === 'not qualified yet — 2 more shares and 15 more points in', 'a holder under the floor is told how far (0396: 5 shares AND 15 spent)');
+  const { maxBuy } = await import('../packages/core/src/data/devyShares.ts');
+  ok(maxBuy(0, 0, 10) === 6 && maxBuy(0, 0, 1) === 20 && maxBuy(5, 50, 10) === 1 && maxBuy(6, 60, 10) === 0 && maxBuy(20, 20, 1) === 0,
+    'the most a buy may add: 20 shares or 60 points, whichever first');
   ok(lockLine({ ...st, locked: true }).startsWith('Locked') && lockLine({ ...st, on: false }) === '', 'the lock line, and silence off');
   // 0388: the market's book
   const { teamBook, stakeLine } = await import('../packages/core/src/data/devyShares.ts');

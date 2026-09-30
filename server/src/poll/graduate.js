@@ -17,6 +17,9 @@
 import { db } from '../supabase.js';
 
 const NFL_ATHLETE = (id) => `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${id}`;
+// 0396: the devy market pays by NFL draft round. The draft feed lists every
+// pick with the college athlete's ESPN id (athlete.alternativeId).
+const NFL_DRAFT = (year) => `https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/draft?season=${year}`;
 const EVERY_MS = Number(process.env.GRADUATE_POLL_MS || 86400000);
 
 /** ESPN's NFL athlete payload → his NFL team, or null if he isn't on one. */
@@ -33,12 +36,35 @@ async function getAthlete(id) {
   return res.json();
 }
 
+/** ESPN's NFL draft feed → Map(college ESPN id → round). Pure. */
+export function draftRoundsOf(feed) {
+  const m = new Map();
+  for (const p of feed?.picks ?? []) {
+    const id = p?.athlete?.alternativeId;
+    if (id && Number.isFinite(Number(p.round))) m.set(String(id), Number(p.round));
+  }
+  return m;
+}
+
+async function getDraftRounds(year) {
+  const res = await fetch(NFL_DRAFT(year), { headers: { accept: 'application/json' } });
+  if (!res.ok) throw new Error(`${res.status} draft ${year}`);
+  return draftRoundsOf(await res.json());
+}
+
 /** One pass. Injected fetch/rpc keep it testable. */
 export async function runGraduation(playerIndex, log = () => {},
-  fetchAthlete = getAthlete, rpc = (fn, args) => db().rpc(fn, args)) {
+  fetchAthlete = getAthlete, rpc = (fn, args) => db().rpc(fn, args),
+  fetchRounds = getDraftRounds, year = new Date().getUTCFullYear()) {
   const { data: cands, error } = await rpc('graduation_candidates', {});
   if (error) return { checked: 0, graduated: 0, conflicts: 0, error: error.message };
   let checked = 0, graduated = 0, conflicts = 0, waiting = 0;
+  // This year's draft (and last year's, for a late signing): round by ESPN id.
+  const rounds = new Map();
+  for (const y of [year - 1, year]) {
+    try { for (const [k, v] of await fetchRounds(y)) rounds.set(k, v); }
+    catch (e) { log('graduate draft feed', y, e.message); }
+  }
   for (const c of cands ?? []) {
     if (!c.sleeper_id) continue;
     const meta = playerIndex?.sleeper?.(c.sleeper_id);
@@ -51,9 +77,10 @@ export async function runGraduation(playerIndex, log = () => {},
     const { data, error: gerr } = await rpc('graduate_college_player', {
       p_espn_id: String(c.espn_id), p_new_slug: meta.slug, p_full_name: meta.full,
       p_pos: meta.pos, p_team: meta.team ?? team, p_sleeper_id: String(c.sleeper_id),
+      p_draft_round: rounds.get(String(c.espn_id)) ?? null,
     });
     if (gerr) { log('graduate', c.espn_id, gerr.message); continue; }
-    graduated += Number(data?.leagues ?? 0);
+    graduated += Number(data?.leagues ?? 0) + (data?.shares && !data?.leagues ? 1 : 0);
     conflicts += Number(data?.conflicts ?? 0);
     if (data?.leagues) log(`graduated ${meta.full} (${c.espn_id} → ${meta.slug}) in ${data.leagues} league(s)`);
   }

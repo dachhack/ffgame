@@ -8,10 +8,10 @@
 // — failing that, the only team in does, with 5+ — and the right reserves him
 // in the rookie draft, at any of the holder's picks.
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import { allotDevyShares, devyMarket, devySharesState, friendlyError, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy } from '@drip/core/data/devyShares';
 import { useTheme, MONO } from '../theme.native';
 import { Overlay } from './Overlay';
 import { Chip, Mono, PosPill } from './prims';
@@ -36,11 +36,12 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, view, leagueId, st]);
 
-  const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, ...(st?.rules ?? {}) };
+  const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5, ...(st?.rules ?? {}) };
   const book = teamBook(st, myRoster);
   const bySlug = useMemo(() => new Map((st?.players ?? []).map((p) => [p.slug, p])), [st]);
   const mine = (st?.players ?? []).filter((p) => myStake(p, myRoster) > 0);
-  const locked = !!st?.locked;
+  // 0396: last season's league row is read-only; the lock and the freeze say so.
+  const locked = !!st?.locked || st?.current === false;
 
   const set = async (slug: string, n: number) => {
     if (myRoster == null || busy) return;
@@ -56,18 +57,30 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
     finally { setBusy(false); }
   };
 
-  /** Buy/sell chips; a buy chip shows what it costs at today's price. */
-  const stakeControls = (slug: string, cur: number, price: number) => {
-    const buy = (k: number) => Math.min(k, rules.max - cur);
-    const afford = (k: number) => buy(k) > 0 && buy(k) * price <= book.cash;
+  /** Buy/sell chips; a buy chip shows what it costs at today's price. A stake
+   *  maxes at 20 shares or 60 points spent (0396), so TO MAX may be fewer than 20. */
+  const stakeControls = (slug: string, cur: number, price: number, cost: number, maxed: boolean, active: boolean) => {
+    const room = maxBuy(cur, cost, price, rules.max, rules.max_spend);
+    const buy = (k: number) => Math.min(k, room);
+    const afford = (k: number) => active && buy(k) > 0 && buy(k) * price <= book.cash + 1e-9;
+    const pts = (k: number) => fmtPts(Math.round(buy(k) * price * 100) / 100);
+    const sell = (to: number) => {
+      if (maxed && to < cur) {
+        Alert.alert('Give up your place?', 'This stake is maxed. Selling any of it drops you out of line for his right, and buying back puts you behind anyone else who is maxed.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sell', style: 'destructive', onPress: () => void set(slug, to) },
+        ]);
+      } else void set(slug, to);
+    };
     return (
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-        {cur > 0 && <Chip label="SELL 5" disabled={busy || locked} onPress={() => { tap(); void set(slug, cur - 5); }} />}
-        {cur > 0 && <Chip label="SELL 1" disabled={busy || locked} onPress={() => { tap(); void set(slug, cur - 1); }} />}
-        <Chip label={`+1 · ${price}`} disabled={busy || locked || !afford(1)} onPress={() => { tap(); void set(slug, cur + 1); }} />
-        <Chip label={`+5 · ${buy(5) * price}`} disabled={busy || locked || !afford(5)} onPress={() => { tap(); void set(slug, cur + 5); }} />
-        <Chip label={`TO ${rules.max} · ${buy(rules.max) * price}`} on disabled={busy || locked || !afford(rules.max)} onPress={() => { tap(); void set(slug, rules.max); }} />
-        {cur > 0 && <Chip label="SELL ALL" dim disabled={busy || locked} onPress={() => { tap(); void set(slug, 0); }} />}
+        {cur > 0 && <Chip label="SELL 5" disabled={busy || locked} onPress={() => { tap(); sell(Math.max(0, cur - 5)); }} />}
+        {cur > 0 && <Chip label="SELL 1" disabled={busy || locked} onPress={() => { tap(); sell(cur - 1); }} />}
+        {active && room > 0 && <Chip label={`+1 · ${pts(1)}`} disabled={busy || locked || !afford(1)} onPress={() => { tap(); void set(slug, cur + 1); }} />}
+        {active && room > 1 && <Chip label={`+${buy(5)} · ${pts(5)}`} disabled={busy || locked || !afford(5)} onPress={() => { tap(); void set(slug, cur + buy(5)); }} />}
+        {active && room > 0 && <Chip label={`MAX +${room} · ${pts(room)}`} on disabled={busy || locked || !afford(room)} onPress={() => { tap(); void set(slug, cur + room); }} />}
+        {maxed && <Mono size={9} tone="you" style={{ alignSelf: 'center' }}>MAXED</Mono>}
+        {cur > 0 && <Chip label="SELL ALL" dim disabled={busy || locked} onPress={() => { tap(); sell(0); }} />}
       </View>
     );
   };
@@ -90,9 +103,12 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
         {mineH && <Mono size={10} weight="700" tone={Number(mineH.value) >= Number(mineH.cost) ? 'you' : 'opp'} style={{ marginTop: 3 }}>
           {`YOU: ${cur} shares · ${stakeLine(mineH.cost, mineH.value)}`}
         </Mono>}
-        <Mono size={9.5} tone={yours ? 'you' : 'dim'} style={{ marginTop: 3 }}>{rightLine(p, myRoster, rules.floor, rules.max)}</Mono>
+        <Mono size={9.5} tone={yours ? 'you' : 'dim'} style={{ marginTop: 3 }}>{rightLine(p, myRoster, rules.floor, rules.max, rules.min_spend)}</Mono>
         <Mono size={9} tone="faint" style={{ marginTop: 2 }}>{p.holders.map((h) => `${h.team} ${h.shares}`).join(' · ')}</Mono>
-        {controls && myRoster != null && !p.graduated_to && stakeControls(p.slug, cur, price)}
+        {p.active === false && !p.graduated_to && <Mono size={9} tone="warn" style={{ marginTop: 3 }}>
+          {`LEFT COLLEGE — sell at his last price, or if he isn't drafted, ${Math.round(rules.refund * 100)}% of what was paid comes back at the rookie draft`}
+        </Mono>}
+        {controls && myRoster != null && !p.graduated_to && stakeControls(p.slug, cur, price, Number(mineH?.cost ?? 0), !!mineH?.maxed, p.active !== false)}
       </View>
     );
   };
@@ -107,7 +123,7 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
       subtitle={myRoster != null ? `CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : 'THE LEAGUE’S STAKES'}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 8 }} keyboardShouldPersistTaps="handled">
         <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
-          {`Buy shares in college players, up to ${rules.max} each. Prices follow how they're playing and how much of the league wants them, updated weekly. First to ${rules.max} shares holds a player's right (if you're the only team in, ${rules.floor}+ does), which reserves him for you in the rookie draft. Selling, or his turning pro, pays today's price, up to ${rules.payout_cap}× what you paid. Cash tops out at ${rules.cash_cap}. ${lockLine(st)}`}
+          {`Buy shares in college players. Prices follow how they're playing, updated weekly in season and frozen from Jan 15 until the next season's first stats. A stake maxes at ${rules.max} shares or ${rules.max_spend} points spent; the first team to max holds his right, or if only one team has ${rules.floor}+ shares and ${rules.min_spend}+ points in, that team does. The right reserves him for you in the rookie draft. When he's drafted into the NFL your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 3), up to ${rules.payout_cap}× what you paid. Selling pays today's price, up to ${rules.payout_cap}× what you paid; cash tops out at ${rules.cash_cap} from sales. ${lockLine(st)}${st?.frozen ? ' Prices are frozen for the offseason.' : ''}`}
         </Mono>
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
           {(['mine', 'league', 'add'] as const).map((v) => (
@@ -144,7 +160,7 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
                 <Mono size={9} tone="faint" style={{ marginTop: 2 }}>
                   {[r.school, r.class_year ? collegeClassLabel(r.class_year) : null, `#${r.rank} in college`, r.youth ? 'young riser +1' : null].filter(Boolean).join(' · ')} · nobody in yet
                 </Mono>
-                {myRoster != null && stakeControls(r.slug, 0, r.price)}
+                {myRoster != null && stakeControls(r.slug, 0, r.price, 0, false, true)}
               </View>
             );
           })}

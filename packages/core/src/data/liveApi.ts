@@ -3719,17 +3719,23 @@ export async function installCollegePoolProjections(leagueId: string): Promise<n
 // he's theirs to draft, with any pick, once he turns pro.
 export interface DevyShareHolder { roster_id: number; team: string; shares: number; maxed_at: string | null;
   /** 0388: what the stake cost, and what selling it all would pay today. */
-  cost?: number; value?: number }
+  cost?: number; value?: number;
+  /** 0396: maxed (20 shares or 60 spent) and qualified (5+ shares, 15+ spent). */
+  maxed?: boolean; qualified?: boolean }
 export interface DevySharePlayer {
   slug: string; name: string | null; pos: string | null; school: string | null; class_year: number | null;
   graduated_to: string | null; holders: DevyShareHolder[];
   right: { roster_id: number; via: 'max' | 'sole' } | null;
   /** 0388: today's price a share in this league, and his college rank. */
   price?: number; rank?: number | null;
+  /** 0396: false once he's left college (sellable at his last price). */
+  active?: boolean;
 }
 export interface DevySharesState {
   ok: boolean; error?: string; on?: boolean; locked?: boolean; lock_at?: string;
-  rules?: { budget: number; max: number; floor: number; cash_cap?: number; payout_cap?: number };
+  rules?: { budget: number; max: number; floor: number; cash_cap?: number; payout_cap?: number;
+    max_spend?: number; min_spend?: number; refund?: number; quiet_days?: number; round_price?: Record<string, number> };
+  /** 0396 */ current?: boolean; frozen?: boolean; start_cash?: number;
   used?: Record<string, number>;
   /** 0388: each team's cash, and what its stakes would pay today. */
   cash?: Record<string, number>; value?: Record<string, number>; prices_as_of?: string | null;
@@ -3746,6 +3752,10 @@ export const allotDevyShares = (leagueId: string, rosterId: number, slug: string
 export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number; youth: boolean; price: number }
 export const devyMarket = (leagueId: string, limit = 1000) =>
   rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit });
+/** 0396: the starting cash for a team with no devy book yet (commissioner). */
+export const setLeagueDevyStartCash = (leagueId: string, cash: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; start_cash?: number }>('set_league_devy_start_cash',
+    { p_league_id: leagueId, p_cash: cash }), Ev.commishAction, { tool: 'devy_start_cash' });
 export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_devy_mode',
     { p_league_id: leagueId, p_mode: mode }), Ev.commishAction, { tool: 'devy_mode' });

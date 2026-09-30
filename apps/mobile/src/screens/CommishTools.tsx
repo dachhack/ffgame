@@ -16,7 +16,7 @@ import { ActivityIndicator, Alert, Animated, Image, PanResponder, Pressable, Scr
 import {
   adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
-  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode,
+  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode, setLeagueDevyStartCash,
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
@@ -2947,15 +2947,35 @@ function DeleteLeagueCard({ leagueId, onDeleted }: { leagueId: string; onDeleted
 function DevyModeCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [on, setOn] = useState<boolean | null>(null);
+  const [cash, setCash] = useState<string>('100');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => { devySharesState(leagueId).then((r) => setOn(!!r.on)).catch(() => setOn(null)); }, [leagueId]);
+  useEffect(() => {
+    devySharesState(leagueId).then((r) => { setOn(!!r.on); setCash(String(r.start_cash ?? 100)); }).catch(() => setOn(null));
+  }, [leagueId]);
   const pick = async (mode: 'spots' | 'shares') => {
     setBusy(true); setNote(null);
     try {
       const r = await setLeagueDevyMode(leagueId, mode);
-      if (r.ok) { commit(); setOn(mode === 'shares'); setNote(mode === 'shares' ? '✓ devy shares on — the league chat says so' : '✓ back to devy spots'); }
+      if (r.ok) { commit(); setOn(mode === 'shares'); setNote(mode === 'shares' ? '✓ devy market on — the league chat says so' : '✓ back to devy spots; every share was cashed out'); }
       else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  // 0396: a switch has consequences, so it asks first.
+  const confirm = (mode: 'spots' | 'shares') => Alert.alert(
+    mode === 'shares' ? 'Turn on the devy market?' : 'Back to devy spots?',
+    mode === 'shares'
+      ? 'College players leave the player pool, and every team gets its starting cash to buy shares. It can\u2019t change again during a draft, or from Jan 15 until the rookie draft once anyone holds shares.'
+      : 'Every team\u2019s shares are sold at today\u2019s value and the cash stays with them. No one keeps a devy right.',
+    [{ text: 'Cancel', style: 'cancel' }, { text: mode === 'shares' ? 'Turn on' : 'Switch back', onPress: () => void pick(mode) }]);
+  const saveCash = async () => {
+    const n = Number(cash);
+    if (!Number.isFinite(n)) { setNote('✗ a number, 0 to 500'); return; }
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyStartCash(leagueId, n);
+      if (r.ok) { commit(); setNote(`✓ new teams start with ${r.start_cash}`); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
     } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
     finally { setBusy(false); }
   };
@@ -2963,11 +2983,20 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
   return (
     <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
       <LabelInfo label="DEVY"
-        info={'SPOTS: college players sit in devy roster spots until they turn pro.\n\nSHARES: a market. Nobody rosters college players; every team gets 100 points to buy shares in them, priced weekly by how they play and how much of the league wants them. Up to 20 shares in one player; the first team to 20 holds his right (if only one team is in, 5+ holds it), which reserves him in the rookie draft at any of the holder\u2019s picks. Selling, or his turning pro, pays today\u2019s price (up to 3× what was paid). Shares lock from Jan 15 until the rookie draft.\n\nShares need the DEVY spots at 0 and no college players on rosters.'} />
+        info={'SPOTS: college players sit in devy roster spots until they turn pro.\n\nSHARES (the devy market): nobody rosters college players. Every team gets starting cash to buy shares in them, priced weekly by how they play. A stake maxes at 20 shares or 60 points; the first team to max holds his right (or the only team with 5+ shares and 15+ points in), which reserves him in the rookie draft. When he\u2019s drafted, shares pay the better of his college price and his draft round, up to 3× what was paid; if he leaves undrafted, half comes back. Shares lock from Jan 15 until the rookie draft.\n\nShares need a snake or linear draft, the DEVY spots at 0, and no college players on rosters.'} />
       <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-        <Chip label="SPOTS" on={!on} disabled={busy || !on} onPress={() => { tap(); void pick('spots'); }} />
-        <Chip label="SHARES" on={on} disabled={busy || on} onPress={() => { tap(); void pick('shares'); }} />
+        <Chip label="SPOTS" on={!on} disabled={busy || !on} onPress={() => { tap(); confirm('spots'); }} />
+        <Chip label="SHARES" on={on} disabled={busy || on} onPress={() => { tap(); confirm('shares'); }} />
       </View>
+      {on && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+          <Mono size={8.5} tone="dim">NEW TEAM CASH</Mono>
+          <TextInput value={cash} onChangeText={(x) => setCash(x.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad"
+            style={{ minWidth: 56, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3, color: t.text, fontFamily: MONO, fontSize: fs(11) }} />
+          <Chip label="SAVE" disabled={busy} onPress={() => { tap(); void saveCash(); }} />
+        </View>
+      )}
+      {on && <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>A team with no book yet starts with this. A team someone takes over keeps what it has.</Mono>}
       {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
     </View>
   );

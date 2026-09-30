@@ -111,7 +111,7 @@ begin
   insert into favorite_player (app_user_id, player_slug) values ('00000000-0000-0000-0000-000000003801', 'c-93801');
 
   -- ══ gr1. ONLY THE WORKER ═════════════════════════════════════════════════
-  perform gr_true(not has_function_privilege('authenticated', 'graduate_college_player(text, text, text, text, text, text)', 'execute'),
+  perform gr_true(not has_function_privilege('authenticated', 'graduate_college_player(text, text, text, text, text, text, int)', 'execute'),
     'gr1 a signed-in user cannot graduate anyone');
   perform gr_true(exists (select 1 from graduation_candidates() where espn_id = '93801' and leagues = 3),
     'gr1a the worklist names him once, across three leagues');
