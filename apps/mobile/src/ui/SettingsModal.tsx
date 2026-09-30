@@ -18,9 +18,10 @@ import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { VoicePicker } from './VoicePicker';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
+import { isMarkFree, isMarkFreeForced } from '@drip/core/data/markFree';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
-import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, type PushLogRow } from '@drip/core/data/liveApi';
+import { setMyMarkFree, myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, type PushLogRow } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
 import { tap } from './feedback';
 import { Overlay } from './Overlay';
@@ -98,6 +99,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
     { id: 'theme', icon: '🎨', name: 'Color theme', value: themeName },
     { id: 'cards', icon: '🃏', name: 'Cards', value: `${sizeName} · ${skinName}` },
     { id: 'voice', icon: '🔊', name: 'Play-by-play voice', value: 'the voice that reads plays aloud' },
+    { id: 'images', icon: '🖼', name: 'Logos & photos', value: isMarkFree() ? (isMarkFreeForced() ? 'hidden for everyone' : 'hidden (mark-free)') : 'shown' },
     // A home-screen widget is Android's (react-native-android-widget).
     ...(Platform.OS === 'android' ? [{ id: 'widget' as Section, icon: '📱', name: 'Home-screen widget', value: 'which leagues it shows' }] : []),
     ...(isAdmin ? [{ id: 'rehearsal' as Section, icon: '🧪', name: 'Rehearsal tools', value: 'sim strip on test boards' }] : []),
@@ -209,6 +211,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
               </View>
             )}
             {section === 'voice' && <VoicePicker />}
+            {section === 'images' && <MarkFreeToggle />}
             {section === 'widget' && <WidgetLeaguesPicker />}
             {section === 'rehearsal' && isAdmin && <RehearsalToggle />}
           </>
@@ -242,7 +245,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   );
 }
 
-type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'widget' | 'rehearsal';
+type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'images' | 'widget' | 'rehearsal';
 
 /** One compact line in the menu's lower half: an action, not a category. */
 function ActionRow({ icon, label, hint, strong, onPress }: {
@@ -307,6 +310,43 @@ function WidgetLeaguesPicker() {
         );
       })}
       <Mono size={8.5} tone="faint">Applies to every Drip widget on your home screen. ▸ NEXT cycles through the leagues switched on.</Mono>
+    </View>
+  );
+}
+
+// LOGOS & PHOTOS (0395) — the personal mark-free switch, same as the web
+// gear's. Saved to the account, so it follows you to every device. Locked on
+// when the global switch has it on for everyone. App.tsx re-renders the tree
+// when it flips (onMarkFree), so every logo and headshot updates at once.
+function MarkFreeToggle() {
+  const t = useTheme();
+  const forced = isMarkFreeForced();
+  const [on, setOn] = useState(isMarkFree());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const flip = async () => {
+    if (forced || busy) return;
+    tap(); setBusy(true); setErr(null);
+    const r = await setMyMarkFree(!on);
+    setBusy(false);
+    setOn(!on);
+    if (!r.ok) setErr(`Saved on this phone only — ${r.error ?? 'could not reach your account'}`);
+  };
+  return (
+    <View style={{ gap: 8 }}>
+      <Mono size={8.5} weight="700" track={0.16} tone="faint">LOGOS &amp; PHOTOS</Mono>
+      <Pressable onPress={flip} disabled={forced || busy}
+        style={{ alignSelf: 'flex-start', opacity: busy ? 0.6 : 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? alpha(t.you, 12) : t.surface }}>
+        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: on ? t.you : t.dim }}>
+          {on ? (forced ? '🔒 HIDDEN FOR EVERYONE' : '✓ HIDDEN (MARK-FREE)') : 'SHOWN'}
+        </Text>
+      </Pressable>
+      <Mono size={8.5} tone="faint">
+        {forced
+          ? 'Team logos and player photos are hidden for everyone right now.'
+          : 'Hides NFL team logos and player photos; you see team abbreviations, position pills and initials instead. Saved to your account.'}
+      </Mono>
+      {err ? <Mono size={8.5} tone="warn">{err}</Mono> : null}
     </View>
   );
 }

@@ -15,8 +15,9 @@ import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
 import { GameIcon, UI_ART, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
-import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
+import { getSession, onAuth, signOut, isAdmin, setMyMarkFree } from '@drip/core/data/liveApi';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
+import { isMarkFree, isMarkFreeForced } from '@drip/core/data/markFree';
 import { webVoice, hasVoice, listVoices, onVoicesChanged, chosenVoice, chooseVoice, type VoiceOption } from './voice';
 import { weekTitle } from '@drip/core/data/nflSlate';
 
@@ -394,6 +395,36 @@ function RehearsalToggle({ lbl }: { lbl: CSSProperties }) {
   );
 }
 
+// LOGOS & PHOTOS (0395) — the personal mark-free switch, for everyone. Saved to
+// the profile when signed in, so it follows the account to every device.
+// Locked on when the global switch (or a mark-free build) has it on for all.
+function MarkFreeToggle({ lbl }: { lbl: CSSProperties }) {
+  const forced = isMarkFreeForced();
+  const [on, setOn] = useState(isMarkFree());
+  const [busy, setBusy] = useState(false);
+  const flip = async () => {
+    if (forced || busy) return;
+    setBusy(true);
+    const r = await setMyMarkFree(!on);
+    setBusy(false);
+    setOn(!on);
+    // Reload so every image on the page re-resolves together.
+    if (r.changed) { try { window.location.reload(); } catch { /* ignore */ } }
+  };
+  return (
+    <div>
+      <div style={lbl}>LOGOS &amp; PHOTOS</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 7 }}>
+        <button onClick={flip} aria-pressed={on} disabled={forced || busy}
+          title={forced ? 'Hidden for everyone right now' : 'Hide NFL team logos and player photos (saved to your account)'} className="mono"
+          style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 999, padding: '4px 10px', cursor: forced ? 'default' : 'pointer', opacity: busy ? 0.6 : 1, color: on ? 'var(--you)' : 'var(--dim)', background: on ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>
+          {on ? (forced ? '🔒 HIDDEN FOR EVERYONE' : '✓ HIDDEN (MARK-FREE)') : 'SHOWN'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function VoicePicker({ lbl }: { lbl: CSSProperties }) {
   const [voices, setVoices] = useState<VoiceOption[]>(() => listVoices());
   const [voiceId, setVoiceId] = useState<string | null>(() => chosenVoice());
@@ -578,6 +609,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             </div>
           </div>
           {hasVoice() && <VoicePicker lbl={lbl} />}
+          <MarkFreeToggle lbl={lbl} />
           {admin && <RehearsalToggle lbl={lbl} />}
           <button
             onClick={() => { setOpen(false); setRules(true); }}

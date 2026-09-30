@@ -14,6 +14,7 @@ import { isChatImageUrl } from './chatImage';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE, setCollegeWeekDates, weekName } from './nflSlate';
 import { setCollegeMeta, setCollegeNames, collegeNameFor, isCollegeSlug } from './college';
 import { setCollegeLogoIds } from './media';
+import { applyServerMarkFree, personalMarkFree, setMarkFree } from './markFree';
 import { setCollegeProjections } from '../engine/projScoring';
 import type { ProjStatLine } from './projStats2026';
 import { assignSealedRows } from '../engine/seatPicks';
@@ -1409,6 +1410,45 @@ export const adminSetDemoCardTheme = (on: boolean) =>
   rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_demo_card_theme', { p_on: on });
 export const adminSetCardTheme = (leagueId: string, on: boolean) =>
   rpc<{ ok: boolean; error?: string; card_theme?: boolean }>('admin_set_card_theme', { p_league: leagueId, p_on: on });
+
+// Mark-free switches (migration 0395): the account's own preference and the
+// global one. markFree.ts caches both on the device; this refreshes the cache.
+export const markFreeState = () => rpc<{ global: boolean; mine: boolean | null }>('mark_free_state');
+export const adminSetGlobalMarkFree = (on: boolean) =>
+  rpc<{ ok: boolean; error?: string; mark_free?: boolean }>('admin_set_global_mark_free', { p_on: on });
+
+/** Save the personal switch to the profile and to this device. Returns whether
+ *  the effective mode changed (the caller re-renders or reloads). Signed out,
+ *  it's saved on the device only. */
+export async function setMyMarkFree(on: boolean): Promise<{ ok: boolean; error?: string; changed: boolean }> {
+  const changed = setMarkFree(on);
+  const session = await getSession().catch(() => null);
+  if (!session) return { ok: true, changed };
+  try {
+    const r = await rpc<{ ok: boolean; error?: string }>('set_my_mark_free', { p_on: on });
+    return { ...r, changed };
+  } catch (e) {
+    return { ok: false, error: friendlyError(e), changed };
+  }
+}
+
+/** Pull both switches from the server into the device cache. A device that set
+ *  the personal switch before it lived on the profile uploads it once, so the
+ *  old per-browser setting isn't lost. Returns whether the effective mode
+ *  changed. Never throws: offline or unconfigured, the cache stands. */
+export async function syncMarkFree(): Promise<boolean> {
+  try {
+    const st = await markFreeState();
+    const local = personalMarkFree();
+    if (st.mine == null && local != null && (await getSession().catch(() => null))) {
+      await rpc('set_my_mark_free', { p_on: local }).catch(() => {});
+      return applyServerMarkFree({ global: st.global, mine: local });
+    }
+    return applyServerMarkFree(st);
+  } catch {
+    return false;
+  }
+}
 
 // ── Solo passes (0097): auto-issued, capped, self-serve solo access ──────────
 /** Anonymous mint from the request funnel's solo path. Over quota → waitlisted. */

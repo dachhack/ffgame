@@ -45,8 +45,7 @@ import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '@drip/core/data/metrics';
 import { NFL_CODES } from '@drip/core/data/kdst';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
-import { isMarkFree, setMarkFree } from '@drip/core/data/markFree';
-import { getPremiumTier, adminSetPremiumTier, type PremiumTier } from '@drip/core/data/liveApi';
+import { getPremiumTier, adminSetPremiumTier, type PremiumTier, markFreeState, adminSetGlobalMarkFree, syncMarkFree } from '@drip/core/data/liveApi';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
 import { seedStart, seedsCustom, moveSeed as moveSeedIn } from '@drip/core/data/seeds';
@@ -105,23 +104,37 @@ function CodeChip({ v }: { v: string }) {
   );
 }
 
-// Branding switch: flip mark-free mode (hide NFL logos + player headshots → generic
-// pills/initials) for a licensing-free / commercial build. Reloads so all imagery across
-// the app re-resolves consistently. Persists via localStorage (src/data/markFree.ts).
+// Branding switch (0395): mark-free for EVERYONE — hides NFL team logos and
+// player headshots across the app, signed in or not, and overrides each
+// player's own "logos & photos" choice in the gear. Other devices pick it up on
+// their next load; this one reloads so its own imagery re-resolves now.
 function MarkFreeToggle() {
-  const [on, setOn] = useState(isMarkFree());
-  const flip = () => { const next = !on; setOn(next); setMarkFree(next); try { window.location.reload(); } catch { /* ignore */ } };
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { markFreeState().then((st) => setOn(!!st.global)).catch((e) => setErr(errMsg(e, 'load failed'))); }, []);
+  const flip = async () => {
+    if (on == null || busy) return;
+    const next = !on; setBusy(true); setErr(null);
+    try {
+      const r = await adminSetGlobalMarkFree(next);
+      if (!r.ok) { setErr(r.error ?? 'failed'); return; }
+      setOn(next);
+      if (await syncMarkFree()) { try { window.location.reload(); } catch { /* ignore */ } }
+    } catch (e) { setErr(errMsg(e, 'failed')); } finally { setBusy(false); }
+  };
   return (
     <div style={card}>
       <div style={h}>BRANDING</div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <span className="mono" style={{ fontSize: 13.5, color: 'var(--text)' }}>
-          Mark-free mode · <b>{on ? 'ON' : 'OFF'}</b>
+          Mark-free for everyone · <b>{on == null ? '…' : on ? 'ON' : 'OFF'}</b>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--dim)', marginTop: 3, maxWidth: 360 }}>
-            Hides NFL team logos + player headshots (shows generic position pills / abbreviations / initials). For licensing-free commercial builds. Reloads to apply everywhere.
+            Hides NFL team logos + player headshots for every visitor (generic position pills / abbreviations / initials). Overrides each player's own setting. Just for you: gear → Logos &amp; photos.
           </span>
+          {err && <span style={{ display: 'block', fontSize: 12, color: 'var(--opp)', marginTop: 3 }}>{err}</span>}
         </span>
-        <button onClick={flip} style={btn(on)}>{on ? 'turn off' : 'turn on'}</button>
+        <button onClick={flip} disabled={on == null || busy} style={btn(!!on)}>{on == null ? '…' : on ? 'turn off' : 'turn on'}</button>
       </div>
     </div>
   );

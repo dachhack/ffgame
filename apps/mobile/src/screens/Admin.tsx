@@ -30,6 +30,7 @@ import {
   adminHealth, adminOverview, adminAudit, adminCodeRequests, adminSetCodeRequestHandled, friendlyError,
   adminLeagueMembers, adminAssignRoster, commishOverview, getSession, redeemCommish,
   adminMatchups, adminSetMatchup, adminResetMatchup, adminPickReadiness,
+  markFreeState, adminSetGlobalMarkFree, syncMarkFree,
   type AdminHealth, type AdminLeague, type AdminAudit, type AdminMatchup, type AdminMember, type CodeRequest, type PickReadiness,
 } from '@drip/core/data/liveApi';
 import { useTheme } from '../theme.native';
@@ -220,6 +221,8 @@ export function Admin({ onBack }: { onBack: () => void }) {
         )
       )}
 
+      {tab === 'health' && <GlobalMarkFree />}
+
       {tab === 'leagues' && !!note && (
         <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginBottom: 8 }}>{note}</Mono>
       )}
@@ -374,6 +377,45 @@ export function Admin({ onBack }: { onBack: () => void }) {
         Read-only, by choice. Deleting a league, resetting or force-resolving a matchup and rewriting someone’s picks all stay on the web — they’re irreversible and a phone is the wrong place to be sure.
       </Mono>
     </ScrollView>
+  );
+}
+
+// BRANDING (0395): mark-free for everyone — hides NFL team logos and player
+// headshots across the app, overriding each player's own gear setting. Same
+// switch as the web admin page's BRANDING card.
+function GlobalMarkFree() {
+  const t = useTheme();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { markFreeState().then((st) => setOn(!!st.global)).catch((e) => setErr(friendlyError(e))); }, []);
+  const flip = () => {
+    if (on == null || busy) return;
+    const next = !on;
+    Alert.alert(next ? 'Hide logos & photos for everyone?' : 'Show logos & photos again?',
+      next ? 'NFL team logos and player headshots disappear for every visitor, whatever their own setting.'
+           : 'Everyone goes back to their own Logos & photos setting.',
+      [{ text: 'Cancel', style: 'cancel' }, { text: next ? 'Hide for everyone' : 'Show again', onPress: async () => {
+        setBusy(true); setErr(null);
+        try {
+          const r = await adminSetGlobalMarkFree(next);
+          if (!r.ok) { warn(); setErr(r.error ?? 'failed'); return; }
+          commit(); setOn(next); void syncMarkFree();
+        } catch (e) { warn(); setErr(friendlyError(e)); } finally { setBusy(false); }
+      } }]);
+  };
+  return (
+    <Card>
+      <Mono size={9} weight="700" track={0.14} tone="faint">BRANDING</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={{ color: t.text, fontSize: 13 }}>Mark-free for everyone · {on == null ? '…' : on ? 'ON' : 'OFF'}</Text>
+          <Mono size={8.5} tone="faint">Hides NFL team logos + player headshots for every visitor. Just for you: gear → Logos &amp; photos.</Mono>
+          {err ? <Mono size={8.5} tone="warn">{err}</Mono> : null}
+        </View>
+        <Chip label={on == null ? '…' : on ? 'TURN OFF' : 'TURN ON'} on={!!on} disabled={on == null || busy} onPress={flip} />
+      </View>
+    </Card>
   );
 }
 
