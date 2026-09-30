@@ -4,7 +4,7 @@
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
 import { useEffect, useMemo, useState } from 'react';
-import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, setLeagueDevyMode, setLeagueDevyStartCash, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
+import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy } from '@drip/core/data/devyShares';
 
@@ -213,8 +213,22 @@ export function DevyModeRow({ leagueId }: { leagueId: string }) {
   const [cash, setCash] = useState('100');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => { devySharesState(leagueId).then((r) => { setOn(!!r.on); setCash(String(r.start_cash ?? 100)); }).catch(() => setOn(null)); }, [leagueId]);
+  // 0399: when the market opens — only a question until the first draft is done
+  const [openNow, setOpenNow] = useState(false);
+  const [drafted, setDrafted] = useState(true);
+  useEffect(() => { devySharesState(leagueId).then((r) => {
+    setOn(!!r.on); setCash(String(r.start_cash ?? 100)); setOpenNow(!!r.open_now); setDrafted(r.drafted !== false);
+  }).catch(() => setOn(null)); }, [leagueId]);
   if (on == null) return null;
+  const pickOpen = async (open: 'now' | 'after_draft') => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyOpen(leagueId, open);
+      if (r.ok) { setOpenNow(open === 'now'); setNote(open === 'now' ? '✓ the market is open — teams can buy shares now' : '✓ the market opens once the draft is done'); }
+      else setNote(`✗ ${friendlyError(r.error ?? 'failed')}`);
+    } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
   const pick = async (mode: 'spots' | 'shares') => {
     if (!window.confirm(mode === 'shares'
       ? 'Turn on the devy market? College players leave the player pool, and every team gets its starting cash to buy shares. It can\'t change again during a draft, or from Jan 15 until the rookie draft once anyone holds shares.'
@@ -245,6 +259,12 @@ export function DevyModeRow({ leagueId }: { leagueId: string }) {
         <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }} title="A team with no book yet starts with this; a team someone takes over keeps what it has.">new team cash</span>
         <input value={cash} onChange={(e) => setCash(e.target.value.replace(/[^0-9.]/g, ''))} style={{ width: 56, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
         <button style={chip(false)} disabled={busy} onClick={() => void saveCash()}>save</button>
+      </>}
+      {on && !drafted && <>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}
+          title="Right away lets teams scout and buy before the startup draft (paused while it runs). Either way, every year after, shares lock from Jan 15 until the rookie draft.">market opens</span>
+        <button style={chip(!openNow)} disabled={busy || !openNow} onClick={() => void pickOpen('after_draft')}>after the draft</button>
+        <button style={chip(openNow)} disabled={busy || openNow} onClick={() => void pickOpen('now')}>right away</button>
       </>}
       {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
     </div>

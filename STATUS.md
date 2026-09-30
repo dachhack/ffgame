@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.568.0 — the commissioner decides when the devy market opens
+
+> - Commissioners now choose when a new league's devy market opens: RIGHT AWAY, so teams can scout before the startup draft, or AFTER THE DRAFT.
+> - The choice is on the DEVY step when you make a league, and in COMMISH until the first draft is done.
+> - The market pauses while a draft is running, and the Jan 15 to rookie-draft lock still applies every year.
+
+The founder: "Lets make market open a commish decision".
+- 0399 settings_json.devy_open ('after_draft' default | 'now') and
+  set_league_devy_open (commissioner, before the lineage's first completed
+  draft, not mid-draft). _devy_shares_locked: a 'now' league that has
+  never drafted is open unless a draft is live; after its first draft the
+  usual rule applies. devy_shares_state adds open_now and drafted.
+- Core: setLeagueDevyOpen; lockLine says "opens when the first draft is
+  done", "open now" or "paused while the draft runs"; devyChoiceLine
+  names the opening; DEVY_CHOICE_INFO explains the choice.
+- App: MARKET OPENS chips on the Recruit DEVY step and in the
+  CommishTools DevyModeCard. Web: the same on the create form and
+  DevyModeRow.
+- Probes: devy-setup-probes do1–do6.
+
 ### v0.567.0 — devy is a step when you make a league
 
 > - Making a classic league now asks whether it is a devy league: NO DEVY, DEVY SPOTS or DEVY MARKET.

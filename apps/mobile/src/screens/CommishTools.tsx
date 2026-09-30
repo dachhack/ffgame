@@ -16,7 +16,7 @@ import { ActivityIndicator, Alert, Animated, Image, PanResponder, Pressable, Scr
 import {
   adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
-  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode, setLeagueDevyStartCash,
+  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen,
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
@@ -2950,9 +2950,23 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
   const [cash, setCash] = useState<string>('100');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // 0399: when the market opens — only a question until the first draft is done
+  const [openNow, setOpenNow] = useState(false);
+  const [drafted, setDrafted] = useState(true);
   useEffect(() => {
-    devySharesState(leagueId).then((r) => { setOn(!!r.on); setCash(String(r.start_cash ?? 100)); }).catch(() => setOn(null));
+    devySharesState(leagueId).then((r) => {
+      setOn(!!r.on); setCash(String(r.start_cash ?? 100)); setOpenNow(!!r.open_now); setDrafted(r.drafted !== false);
+    }).catch(() => setOn(null));
   }, [leagueId]);
+  const pickOpen = async (open: 'now' | 'after_draft') => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyOpen(leagueId, open);
+      if (r.ok) { commit(); setOpenNow(open === 'now'); setNote(open === 'now' ? '✓ the market is open — teams can buy shares now' : '✓ the market opens once the draft is done'); }
+      else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
   const pick = async (mode: 'spots' | 'shares') => {
     setBusy(true); setNote(null);
     try {
@@ -2997,6 +3011,16 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
         </View>
       )}
       {on && <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>A team with no book yet starts with this. A team someone takes over keeps what it has.</Mono>}
+      {on && !drafted && (
+        <View style={{ marginTop: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Mono size={8.5} tone="dim">MARKET OPENS</Mono>
+            <Chip label="AFTER THE DRAFT" on={!openNow} disabled={busy || !openNow} onPress={() => { tap(); void pickOpen('after_draft'); }} />
+            <Chip label="RIGHT AWAY" on={openNow} disabled={busy || openNow} onPress={() => { tap(); void pickOpen('now'); }} />
+          </View>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Right away lets teams scout and buy before the startup draft (paused while it runs). Either way, every year after, shares lock from Jan 15 until the rookie draft.</Mono>
+        </View>
+      )}
       {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
     </View>
   );

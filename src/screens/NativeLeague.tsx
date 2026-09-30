@@ -58,7 +58,7 @@ import {
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
-  setupLeagueDevy,
+  setupLeagueDevy, setLeagueDevyOpen,
 } from '@drip/core/data/liveApi';
 import { DevySharesPanel } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
@@ -227,6 +227,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // 0398: devy is a question at creation, not an admin switch found later.
   const [devy, setDevy] = useState<DevyChoice>('none');
   const [devySpots, setDevySpots] = useState(3);
+  // 0399: the commissioner decides when the market opens.
+  const [devyOpen, setDevyOpen] = useState<'now' | 'after_draft'>('after_draft');
   const [budget, setBudget] = useState(200);
   // Pace: LIVE = everyone in the room (seconds); SLOW = days-long drafts
   // (hour-scale clocks; queues + proxy bids keep turns fair while offline).
@@ -382,6 +384,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         setNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
         const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
         if (!dr.ok) copyReportPending = [...copyReportPending, `devy — ${friendlyError(dr.error ?? 'refused')}`];
+        else if (devyNow === 'shares' && devyOpen === 'now') {
+          const or = await setLeagueDevyOpen(r.league_id, 'now');
+          if (!or.ok) copyReportPending = [...copyReportPending, `devy market opening — ${friendlyError(or.error ?? 'refused')}`];
+        }
       }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote,
@@ -620,8 +626,20 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
                 {devy === 'none' ? 'An NFL-only league. Pick DEVY SPOTS or DEVY MARKET to make it a devy league.'
                   : devy === 'spots' ? `College players are in the draft pool, and every team gets ${devySpots} roster spot${devySpots === 1 ? '' : 's'} that hold only college players — drafted and kept like anyone else, and moved to the NFL roster when they graduate.`
-                  : 'College players stay out of the draft. Every team gets 100 points to buy shares: the first to 20 shares — or the only team with 5+ shares and 15+ points in — reserves the right to draft that player as a rookie. Prices rise as players play well, so early scouting pays. Shares open once the startup draft is done and lock on Jan 15 until the rookie draft.'}
+                  : 'College players stay out of the draft. Every team gets 100 points to buy shares: the first to 20 shares — or the only team with 5+ shares and 15+ points in — reserves the right to draft that player as a rookie. Prices rise as players play well, so early scouting pays. Every year, shares lock on Jan 15 until the rookie draft.'}
               </div>
+              {devy === 'shares' && !blk('shares') && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span className="mono" style={label}>MARKET OPENS</span>
+                  <Chip on={devyOpen === 'after_draft'} onClick={() => setDevyOpen('after_draft')}>AFTER THE DRAFT</Chip>
+                  <Chip on={devyOpen === 'now'} onClick={() => setDevyOpen('now')}>RIGHT AWAY</Chip>
+                  <span style={{ fontSize: 11.5, color: 'var(--dim)', flexBasis: '100%', lineHeight: 1.5 }}>
+                    {devyOpen === 'now'
+                      ? 'Teams can buy shares as soon as they join — scouting starts before the startup draft (paused while it runs).'
+                      : 'Shares open once the startup draft is done, so everyone starts buying at the same moment.'} You can change this in COMMISH until the draft.
+                  </span>
+                </div>
+              )}
               {blk(devy) && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn)', marginTop: 6 }}>⚠ {blk(devy)} — it won't be set up.</div>}
               {!blk(devy) && blk('shares') && devy !== 'shares' && (
                 <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6 }}>DEVY MARKET: {blk('shares')}</div>

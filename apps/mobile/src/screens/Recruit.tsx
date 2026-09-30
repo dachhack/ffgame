@@ -19,7 +19,7 @@ import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, leagueListingState,
   type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
-  setLeagueFormat, type LeagueFormat, setupLeagueDevy,
+  setLeagueFormat, type LeagueFormat, setupLeagueDevy, setLeagueDevyOpen,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
@@ -163,6 +163,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // 0398: devy is a question at creation, not an admin switch found later.
   const [devy, setDevy] = useState<DevyChoice>('none');
   const [devySpots, setDevySpots] = useState(3);
+  // 0399: the commissioner decides when the market opens.
+  const [devyOpen, setDevyOpen] = useState<'now' | 'after_draft'>('after_draft');
   // Contract types (0218) preset the room: bids become salaries, so the
   // startup can only be an auction — picking one forces the mode.
   const contractType = continuity === 'contract' || continuity === 'contract_dynasty';
@@ -417,6 +419,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         setMakeNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
         const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
         if (!dr.ok) setCopyReport((cur) => [...(cur ?? []), `devy — ${friendlyError(dr.error ?? 'refused')}`]);
+        else if (devyNow === 'shares' && devyOpen === 'now') {
+          const or = await setLeagueDevyOpen(r.league_id, 'now');
+          if (!or.ok) setCopyReport((cur) => [...(cur ?? []), `devy market opening — ${friendlyError(or.error ?? 'refused')}`]);
+        }
       }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote,
@@ -783,6 +789,21 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                       </Pressable>
                     </View>
                   )}
+                  {devy === 'shares' && !blk('shares') && (
+                    <View style={{ gap: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Mono size={8.5} tone="faint" track={0.1}>MARKET OPENS</Mono>
+                        <Chip label="AFTER THE DRAFT" on={devyOpen === 'after_draft'} onPress={() => { tap(); setDevyOpen('after_draft'); }} />
+                        <Chip label="RIGHT AWAY" on={devyOpen === 'now'} onPress={() => { tap(); setDevyOpen('now'); }} />
+                      </View>
+                      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+                        {devyOpen === 'now'
+                          ? 'Teams can buy shares as soon as they join — scouting starts before the startup draft (paused while it runs).'
+                          : 'Shares open once the startup draft is done, so everyone starts buying at the same moment.'}
+                        {' '}You can change this in COMMISH until the draft.
+                      </Mono>
+                    </View>
+                  )}
                   {blk(devy) && <Mono size={9} tone="warn" style={{ lineHeight: 13 }}>⚠ {blk(devy)} — it won't be set up.</Mono>}
                   {!blk(devy) && blk('shares') && devy !== 'shares' && (
                     <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>DEVY MARKET: {blk('shares')}</Mono>
@@ -821,7 +842,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 {game === 'classic' && (
                   <Mono size={10} tone={devy !== 'none' && !devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? 'you' : 'dim'} style={{ lineHeight: 15 }}>
                     {devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType })
-                      ? devyChoiceLine('none', 0) : devyChoiceLine(devy, devySpots)}
+                      ? devyChoiceLine('none', 0) : devyChoiceLine(devy, devySpots, devyOpen === 'now')}
                   </Mono>
                 )}
                 {copyBp && (
