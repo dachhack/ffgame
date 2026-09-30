@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.570.0 — KTC is blended into devy prices all season
+
+> - Devy market prices are now a standing 50/50 blend of KeepTradeCut's devy rankings and how the player is producing, all season long.
+> - Players KTC doesn't rank are still priced from their stats; KTC-ranked players with no stats yet are priced from KTC.
+
+The founder, after v0.569.0's early-season seed: "Let's do 2 instead".
+- 0401 _college_ktc_weight() = 0.5 and refresh_college_prices with a
+  fixed weight in place of 0400's fade over the first four games.
+  0400's table, matcher and worker read are unchanged.
+- Probes: kt4 (five games in, still blended) and kt6 (name twins get no
+  KTC price).
+
 ### v0.569.0 — KTC's devy rankings seed early-season market prices
 
 > - Devy market prices now start from KeepTradeCut's devy rankings early in the season, so a top prospect is priced like one before he has played.

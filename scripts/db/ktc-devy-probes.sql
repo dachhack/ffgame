@@ -1,4 +1,4 @@
--- 0400 probes: KTC'S DEVY BOARD SEEDS EARLY-SEASON PRICES.
+-- 0400/0401 probes: KTC'S DEVY BOARD, BLENDED INTO PRICES.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -43,11 +43,15 @@ begin
   r := refresh_college_prices();
   perform kt_true(kt_rank('96001') = 1, 'kt3 no stats yet: priced from KTC alone (rank 1)');
   perform kt_true((select base from college_price where espn_id = '96001') = 10, 'kt3a …at the top of the curve');
+  -- 0401: the blend holds all season — games played no longer fade it
   sc := kt_ord('96003');
-  perform kt_true(kt_rank('96003') = sc, 'kt4 five games this season: stats only (' || kt_rank('96003') || ' vs ' || sc || ')');
+  perform kt_true(kt_rank('96003') = greatest(1, round(exp(0.5 * ln(3) + 0.5 * ln(sc))))::int,
+    'kt4 five games in: still halfway between KTC 3 and stats ' || sc || ' → ' || kt_rank('96003'));
   sb := kt_ord('96002');
   perform kt_true(kt_rank('96002') = greatest(1, round(exp(0.5 * ln(5) + 0.5 * ln(sb))))::int,
     'kt5 two games: halfway between KTC 5 and stats ' || sb || ' → ' || kt_rank('96002'));
+  perform kt_true(not exists (select 1 from college_price p where p.espn_id in ('96004', '96005')),
+    'kt6 unmatched with no stats: no KTC price leaks onto a name twin');
 
   delete from college_ktc;
   delete from college_price where espn_id like '9600%';

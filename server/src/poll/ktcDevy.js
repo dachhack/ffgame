@@ -1,10 +1,10 @@
-// KTC'S DEVY BOARD (0400) — seeds early-season devy market prices.
+// KTC'S DEVY BOARD (0400/0401) — blended into devy market prices.
 //
 // KeepTradeCut publishes ~100 college players at /devy-rankings, 50 to a page,
 // as server-rendered rows (rank, name, school, positional rank, value). There
 // is no cross-id, so set_college_ktc matches by name + position, with the
-// school breaking a tie. refresh_college_prices gives KTC's rank a weight that
-// fades over each player's first four games of the season.
+// school breaking a tie. refresh_college_prices blends KTC's rank with the
+// stats rank, half and half, all season (0401).
 //
 // Best-effort: any failure leaves last read's board in place, and a short
 // read (under 20 rows) is refused by the RPC rather than wiping it.
