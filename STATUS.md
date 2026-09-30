@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.569.0 — KTC's devy rankings seed early-season market prices
+
+> - Devy market prices now start from KeepTradeCut's devy rankings early in the season, so a top prospect is priced like one before he has played.
+> - Each player's KTC influence fades over his first four games; after that his price comes from how he plays.
+> - A player KTC ranks with no stats yet is priced from KTC alone.
+
+The founder picked option 3 of three: "Just 3" (seed from KTC early, let
+on-field play take over; no KTC column, no permanent blend).
+- 0400 college_ktc (espn_id, ktc_rank, value) and set_college_ktc(rows),
+  which replaces the board, matching name + position with the school
+  breaking a name tie; fewer than 20 rows is refused, so a bad read
+  never wipes it. refresh_college_prices blends ranks geometrically:
+  w = max(0, 1 − games this season / 4),
+  rank = exp(w·ln ktc + (1−w)·ln stats). Frozen-season rules unchanged.
+- Worker: server/src/poll/ktcDevy.js reads keeptradecut.com/devy-rankings
+  (1QB, QB/RB/WR/TE, pages until empty, about 100 players). The college
+  sweep calls it just before refresh_college_prices; best-effort.
+- Tests: server/test/ktc-devy.mjs (parsing, paging) and
+  scripts/db/ktc-devy-probes.sql (matching, twins, short reads, KTC-only
+  price, the fade at 2 and 5 games).
+- Known, not this change: server/test/h2h-verify.mjs "coin totals are
+  positive" fails on main as well.
+
 ### v0.568.0 — the commissioner decides when the devy market opens
 
 > - Commissioners now choose when a new league's devy market opens: RIGHT AWAY, so teams can scout before the startup draft, or AFTER THE DRAFT.
