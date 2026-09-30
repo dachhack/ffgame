@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.566.0 — one trade: players, picks and devy shares together
+
+> - Trade offers can now mix players, draft picks, FAAB and devy shares or devy cash in a single deal.
+> - Look for the new DEVY SHARES section when you build a two-team trade.
+
+The founder: "yes, combine shares with players and picks".
+- No migration. 0397's legs already carry send, send_picks, send_faab,
+  send_cap, send_shares and send_devy_cash, and a two-seat deal with devy
+  items files through propose_multi_trade. So the two-team builders (app
+  TradeCenter, web NativeLeague TradeCenter) grow a 🎓 DEVY SHARES
+  section: shares each way and devy cash (I send / I ask). Any of those
+  switches the filing to propose_multi_trade with two legs built by core
+  twoSeatDevyLegs; players, picks, FAAB and cap ride along on the right
+  legs.
+- Salary retention can't ride with shares (a two-seat term). Counters
+  hide the section (a counter is a two-seat call).
+- Probes: devy-trade-probes dt4x–dt4z (a player one way, shares and cash
+  the other, one summary). check-college §11 covers twoSeatDevyLegs and
+  offersDevy.
+
 ### v0.565.0 — devy shares trade; rounds 4–7 pay 2 (0397)
 
 > - Trade devy shares and devy cash with another team from the Devy market's new TRADE tab.

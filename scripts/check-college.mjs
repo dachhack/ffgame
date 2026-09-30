@@ -158,6 +158,13 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   const { devyLegParts } = await import('../packages/core/src/data/devyShares.ts');
   const parts = devyLegParts({ send_shares: [{ slug: 'c-1', shares: 5, to: 3, name: 'Arch Manning' }, { slug: 'c-2', shares: 1, to: 3 }], send_devy_cash: [{ to: 3, amount: 12.5 }] }, (r) => `Team ${r}`);
   ok(parts.join(' | ') === '5 shares of Arch Manning → Team 3 | 1 share of c-2 → Team 3 | 12.5 devy cash → Team 3', 'a trade leg\'s devy items, in words (0397)');
+  const { twoSeatDevyLegs, offersDevy } = await import('../packages/core/src/data/devyShares.ts');
+  const legs = twoSeatDevyLegs({ me: 1, partner: 2, give: ['josh-allen'], get: [], givePicks: [], getPicks: [{ season: '2027', round: 3, orig: 2 }],
+    faab: -10, cap: 0, giveShares: {}, getShares: { 'c-9': 10 }, devyCash: 7.5 });
+  ok(legs[0].roster === 1 && legs[0].send[0].slug === 'josh-allen' && legs[0].send[0].to === 2 && legs[0].send_devy_cash[0].amount === 7.5 && legs[0].send_faab.length === 0
+    && legs[1].roster === 2 && legs[1].send_picks[0].round === 3 && legs[1].send_picks[0].to === 1 && legs[1].send_faab[0].amount === 10
+    && legs[1].send_shares[0].slug === 'c-9' && legs[1].send_shares[0].shares === 10, 'a mixed two-team offer: players, picks, FAAB, shares and cash on the right legs (0398)');
+  ok(offersDevy({}, { 'c-9': 1 }) && !offersDevy({ 'c-1': 0 }, {}, 0) && offersDevy({}, {}, -3), 'does an offer carry devy items');
   ok(lockLine({ ...st, locked: true }).startsWith('Locked') && lockLine({ ...st, on: false }) === '', 'the lock line, and silence off');
   // 0388: the market's book
   const { teamBook, stakeLine } = await import('../packages/core/src/data/devyShares.ts');
