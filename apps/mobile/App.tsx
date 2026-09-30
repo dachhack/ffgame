@@ -26,7 +26,8 @@ import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { Leagues } from './src/screens/Leagues';
-import { isAdmin, loadCollegeWeekDates, loadCollegeLogos } from '@drip/core/data/liveApi';
+import { isAdmin, loadCollegeWeekDates, loadCollegeLogos, syncMarkFree } from '@drip/core/data/liveApi';
+import { onMarkFree } from '@drip/core/data/markFree';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { LivePicks } from './src/screens/LivePicks';
 import { CommishTools } from './src/screens/CommishTools';
@@ -289,6 +290,13 @@ export function App() {
     if (!session) { setAdmin(false); return; }
     isAdmin().then((v) => setAdmin(!!v)).catch(() => setAdmin(false));
   }, [session]);
+
+  // MARK-FREE (0395): the global switch and the account's own preference live
+  // on the server; media.ts reads a device cache synchronously. Refresh it when
+  // the account changes, and re-render the tree whenever the answer flips (a
+  // sync, or the gear's toggle) so every logo and headshot re-resolves.
+  useEffect(() => onMarkFree(() => setWeekDatesVer((v) => v + 1)), []);
+  useEffect(() => { void syncMarkFree(); }, [session?.user.id]);
 
   // Push registration (0150): once signed in, ask permission and register the
   // device token. No-ops in builds without Firebase config, and when denied.

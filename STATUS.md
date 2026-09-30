@@ -22,6 +22,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.563.0 — mark-free switches in super admin: just me, and everyone
+
+> - NFL team logos are no longer offered as team or league avatars when logos are hidden.
+
+The founder: "I'd love the option to go mark free just for myself … save it
+to my profile and add it to mobile.. we need a global mark free switch too."
+Mark-free was a per-browser localStorage flag behind the web admin page.
+
+**Two server switches (0395).** `app_user.mark_free` (null = no preference) and
+a singleton `site_pref.mark_free`, read together through `mark_free_state()`
+(granted to anon, so the signed-out front door obeys the global switch).
+`set_my_mark_free` for the caller, `admin_set_global_mark_free` behind
+`is_admin()`.
+
+**Order (markFree.ts):** `VITE_MARK_FREE` build → global switch → `?markfree=`
+(this page load) → personal switch → off. The build and the global switch
+can't be undone by a personal "off" or `?markfree=0`. Both server values are
+cached in device storage because media.ts reads them synchronously on every
+render; `syncMarkFree()` refreshes the cache on boot and sign-in/out. The web
+reloads when the answer changes (the cache matches after one reload, so it
+can't loop); mobile re-renders the tree through `onMarkFree`. A device that
+set the old per-browser flag uploads it to the profile once, the first time
+the account has no preference.
+
+**Surfaces.** Super admin only, on both: the web admin page's BRANDING ·
+MARK-FREE card (System tab) and the mobile admin health tab, each with a JUST
+ME row (the personal switch, locked while EVERYONE is on) and an EVERYONE row.
+The founder: "Can we put the switches in super admin in the apps?" — so the
+players' gear has no mark-free option. `?markfree=0` no longer clears the
+stored flag; the admin card is the way back.
+
+**Avatars.** The avatar picker built ESPN logo URLs itself and skipped the
+mark-free check; it now goes through `teamLogo()`. 0394 clears team avatars
+and league crests already saved as an NFL logo, keeping the old values in
+`nfl_logo_avatar_backup` (undo SQL in the migration header).
+
+`npm run check:markfree` asserts the switch order (in `check:parity`).
+
 ### v0.562.1 — a backup who is starting is projected as the starter
 
 > - When a starter is out, the player replacing him is now projected like a starter, not like a backup.

@@ -4,12 +4,13 @@
 //
 // First-party Drip art (72 tiles cut from the owner's avatar sheets, served from
 // public/avatars/ on our own domain — no third-party avatar CDN) + the 32 NFL
-// team logos. Every URL is https, which is what the server's clean_avatar_url
+// team logos (dropped in mark-free mode — they're NFL marks). Every URL is https, which is what the server's clean_avatar_url
 // check requires (migration 0066).
 import { useMemo } from 'react';
 import { Img } from './ui';
 import { NFL_CODES } from '@drip/core/data/kdst';
 import { DRIP_AVATARS, dripAvatarUrl } from '@drip/core/data/dripAvatars';
+import { teamLogo } from '@drip/core/data/media';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', cursor: 'pointer' };
@@ -17,7 +18,7 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 export function avatarOptions(): string[] {
   return [
     ...DRIP_AVATARS.map(dripAvatarUrl),
-    ...NFL_CODES.map((code) => `https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png`),
+    ...NFL_CODES.map((code) => teamLogo(code)).filter((u): u is string => !!u),
   ];
 }
 

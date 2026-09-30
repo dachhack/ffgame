@@ -5,7 +5,8 @@ import { useStore, PHOTO_SKINS } from './app/store';
 import { THEMES, themeVars } from '@drip/core/theme';
 import { DemoBoard } from './screens/DemoBoard';
 import { yahooExchange } from '@drip/core/data/providers/yahooClient';
-import { getSession, hasAuthTokensInUrl, captureAuthUrlError } from '@drip/core/data/liveApi';
+import { getSession, hasAuthTokensInUrl, captureAuthUrlError, onAuth, syncMarkFree } from '@drip/core/data/liveApi';
+import { liveConfigured } from '@drip/core/data/liveConfig';
 import { RequestCodeFab } from './screens/RequestCode';
 import { InstallPrompt } from './app/InstallPrompt';
 import { PlayerCardHost, setCardLeague } from './app/playerCard';
@@ -50,6 +51,18 @@ export function App() {
     // College logos by school id (v0.560.0), for media.teamLogo's college branch.
     void loadCollegeLogos().then((got) => { if (got) setWeekDatesVer((v) => v + 1); });
   }, [loggedIn, liveCtx?.leagueId]);
+
+  // MARK-FREE (0395): the global switch and the account's own preference live
+  // on the server; the imagery resolvers read a device cache synchronously.
+  // Refresh the cache on boot and whenever the account changes, and reload if
+  // the answer changed so every image re-resolves at once. The cache matches
+  // after one reload, so this can't loop.
+  useEffect(() => {
+    if (!liveConfigured()) return;
+    const sync = () => { void syncMarkFree().then((changed) => { if (changed) window.location.reload(); }); };
+    sync();
+    return onAuth((_s, event) => { if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') sync(); });
+  }, []);
 
   useEffect(() => {
     document.body.style.background = THEMES[theme].bg;
