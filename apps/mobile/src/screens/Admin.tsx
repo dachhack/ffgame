@@ -24,16 +24,17 @@
 //
 // Still NOT here: deletion, forced resolution, lineup rewrites. Those keep
 // needing a keyboard and a moment's thought.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   adminHealth, adminOverview, adminAudit, adminCodeRequests, adminSetCodeRequestHandled, friendlyError,
   adminLeagueMembers, adminAssignRoster, commishOverview, getSession, redeemCommish,
   adminMatchups, adminSetMatchup, adminResetMatchup, adminPickReadiness,
-  markFreeState, adminSetGlobalMarkFree, syncMarkFree,
+  markFreeState, adminSetGlobalMarkFree, syncMarkFree, setMyMarkFree,
   type AdminHealth, type AdminLeague, type AdminAudit, type AdminMatchup, type AdminMember, type CodeRequest, type PickReadiness,
 } from '@drip/core/data/liveApi';
 import { useTheme } from '../theme.native';
+import { personalMarkFree } from '@drip/core/data/markFree';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -380,41 +381,61 @@ export function Admin({ onBack }: { onBack: () => void }) {
   );
 }
 
-// BRANDING (0395): mark-free for everyone — hides NFL team logos and player
-// headshots across the app, overriding each player's own gear setting. Same
-// switch as the web admin page's BRANDING card.
+// BRANDING (0395): the two mark-free switches, same as the web admin page's
+// BRANDING card. JUST ME is your own preference, saved to your account so it
+// follows you to every device; EVERYONE hides NFL team logos and player
+// headshots for every visitor and overrides each person's own setting.
+// App.tsx re-renders the tree when the answer flips (onMarkFree).
 function GlobalMarkFree() {
   const t = useTheme();
-  const [on, setOn] = useState<boolean | null>(null);
+  const [global, setGlobal] = useState<boolean | null>(null);
+  const [mine, setMine] = useState(personalMarkFree() === true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { markFreeState().then((st) => setOn(!!st.global)).catch((e) => setErr(friendlyError(e))); }, []);
-  const flip = () => {
-    if (on == null || busy) return;
-    const next = !on;
+  useEffect(() => { markFreeState().then((st) => setGlobal(!!st.global)).catch((e) => setErr(friendlyError(e))); }, []);
+  const flipMine = async () => {
+    if (busy || global) return;
+    tap(); setBusy(true); setErr(null);
+    const r = await setMyMarkFree(!mine);
+    setBusy(false);
+    setMine(!mine);
+    if (!r.ok) { warn(); setErr(`Saved on this phone only — ${r.error ?? 'could not reach your account'}`); }
+  };
+  const flipGlobal = () => {
+    if (global == null || busy) return;
+    const next = !global;
     Alert.alert(next ? 'Hide logos & photos for everyone?' : 'Show logos & photos again?',
       next ? 'NFL team logos and player headshots disappear for every visitor, whatever their own setting.'
-           : 'Everyone goes back to their own Logos & photos setting.',
+           : 'Everyone goes back to their own setting.',
       [{ text: 'Cancel', style: 'cancel' }, { text: next ? 'Hide for everyone' : 'Show again', onPress: async () => {
         setBusy(true); setErr(null);
         try {
           const r = await adminSetGlobalMarkFree(next);
           if (!r.ok) { warn(); setErr(r.error ?? 'failed'); return; }
-          commit(); setOn(next); void syncMarkFree();
+          commit(); setGlobal(next); void syncMarkFree();
         } catch (e) { warn(); setErr(friendlyError(e)); } finally { setBusy(false); }
       } }]);
   };
+  const row = (label: string, state: string, note: string, chip: ReactNode) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 10 }}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={{ color: t.text, fontSize: 13 }}>{label} · {state}</Text>
+        <Mono size={8.5} tone="faint">{note}</Mono>
+      </View>
+      {chip}
+    </View>
+  );
   return (
     <Card>
-      <Mono size={9} weight="700" track={0.14} tone="faint">BRANDING</Mono>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={{ color: t.text, fontSize: 13 }}>Mark-free for everyone · {on == null ? '…' : on ? 'ON' : 'OFF'}</Text>
-          <Mono size={8.5} tone="faint">Hides NFL team logos + player headshots for every visitor. Just for you: gear → Logos &amp; photos.</Mono>
-          {err ? <Mono size={8.5} tone="warn">{err}</Mono> : null}
-        </View>
-        <Chip label={on == null ? '…' : on ? 'TURN OFF' : 'TURN ON'} on={!!on} disabled={on == null || busy} onPress={flip} />
-      </View>
+      <Mono size={9} weight="700" track={0.14} tone="faint">BRANDING · MARK-FREE</Mono>
+      <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Hides NFL team logos + player headshots (position pills, abbreviations, initials instead).</Mono>
+      {row('Just me', global ? 'ON (everyone)' : mine ? 'ON' : 'OFF',
+        global ? 'On for everyone right now — turn that off to choose for yourself.' : 'Saved to your account: every device, web and app.',
+        <Chip label={mine ? 'TURN OFF' : 'TURN ON'} on={mine || !!global} disabled={busy || !!global} onPress={flipMine} />)}
+      {row('Everyone', global == null ? '…' : global ? 'ON' : 'OFF',
+        "Every visitor, signed in or not. Overrides each person's own setting.",
+        <Chip label={global == null ? '…' : global ? 'TURN OFF' : 'TURN ON'} on={!!global} disabled={global == null || busy} onPress={flipGlobal} />)}
+      {err ? <Mono size={8.5} tone="warn" style={{ marginTop: 8 }}>{err}</Mono> : null}
     </Card>
   );
 }

@@ -22,9 +22,8 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.563.0 — logos & photos: a switch for you, one for everyone
+### v0.563.0 — mark-free switches in super admin: just me, and everyone
 
-> - New in settings: **Logos & photos**. Hide NFL team logos and player photos just for you; it follows your account to every device.
 > - NFL team logos are no longer offered as team or league avatars when logos are hidden.
 
 The founder: "I'd love the option to go mark free just for myself … save it
@@ -47,10 +46,12 @@ can't loop); mobile re-renders the tree through `onMarkFree`. A device that
 set the old per-browser flag uploads it to the profile once, the first time
 the account has no preference.
 
-**Surfaces.** Web gear and mobile gear: LOGOS & PHOTOS, for everyone, shown
-locked when the global switch is on. Web admin BRANDING card and mobile admin
-health tab: mark-free for everyone. `?markfree=0` no longer clears the stored
-flag; the gear is the way back.
+**Surfaces.** Super admin only, on both: the web admin page's BRANDING ·
+MARK-FREE card (System tab) and the mobile admin health tab, each with a JUST
+ME row (the personal switch, locked while EVERYONE is on) and an EVERYONE row.
+The founder: "Can we put the switches in super admin in the apps?" — so the
+players' gear has no mark-free option. `?markfree=0` no longer clears the
+stored flag; the admin card is the way back.
 
 **Avatars.** The avatar picker built ESPN logo URLs itself and skipped the
 mark-free check; it now goes through `teamLogo()`. 0394 clears team avatars
