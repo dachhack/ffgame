@@ -27,9 +27,11 @@ import { easternDate } from './poll/sportGames.js';
 
 const log = (...a) => console.log('[sport-league]', ...a);
 
-/** Games that have started: live, final, or past their start time. */
+/** Games that have started: live, final, or still listed 'pre' past their
+ *  start (feed lag). A postponement or cancellation is never a start,
+ *  whatever its clock says. */
 export const startedGames = (games, now = Date.now()) =>
-  games.filter((g) => g.status === 'live' || g.status === 'final' || (g.startUtc && Date.parse(g.startUtc) <= now));
+  games.filter((g) => g.status === 'live' || g.status === 'final' || (g.status === 'pre' && g.startUtc && Date.parse(g.startUtc) <= now));
 
 /** Which sealed picks to lock for a started game: the seat's 'wk' rows
  *  whose player is on either team and has no lock for the day yet. */
@@ -43,7 +45,9 @@ export function locksFor(game, picks, poolTeamOf, existing, allows = () => true)
     // locks, so he never scores — the same 0 the NFL resolver gives an
     // illegal spot, decided here once rather than at every read.
     if (!allows(p.roster_slot, p.player_slug)) { log(`illegal lineup spot skipped: ${p.player_slug} in ${p.roster_slot}`); continue; }
-    const key = `${p.matchup_id}|${p.app_user_id}|${game.gameDate}|${p.roster_slot}`;
+    // One lock per slot per GAME: a doubleheader's second game locks the
+    // slot again for the day, under its own game id (0402).
+    const key = `${p.matchup_id}|${p.app_user_id}|${game.gameDate}|${p.roster_slot}|${game.gameId}`;
     if (existing.has(key)) continue;
     out.push({ matchup_id: p.matchup_id, app_user_id: p.app_user_id, game_date: game.gameDate, roster_slot: p.roster_slot, player_slug: p.player_slug, game_id: game.gameId });
   }
@@ -98,18 +102,31 @@ export function rotoTable(def, settings, rows, rosterIds) {
   }));
 }
 
-/** Is the period over, with nothing left to count? */
-export const periodDone = (period, today, liveGameDates) =>
-  today > period.to && !liveGameDates.some((d) => d <= period.to);
+/** Is the period over, with nothing left to count? A game of the period
+ *  still live holds it — but only a game FROM the period, and only for two
+ *  days: a suspended game the feed never closes must not hold every later
+ *  period hostage (repollStaleLive keeps trying it regardless). */
+export const periodDone = (period, today, liveGameDates) => {
+  if (today <= period.to) return false;
+  const cutoff = new Date(`${today}T00:00:00Z`).getTime() - 2 * 86400e3;
+  return !liveGameDates.some((d) => d >= period.from && d <= period.to && new Date(`${d}T00:00:00Z`).getTime() >= cutoff);
+};
 
 // ── I/O ──────────────────────────────────────────────────────────────────────
 
-/** Native leagues in this sport, with their sport settings. */
+/** Native leagues in this sport whose DRAFT IS COMPLETE, with their sport
+ *  settings. A league still drafting has no lineups to lock and no week to
+ *  score; going live by the calendar would freeze its schedule and stamp
+ *  0–0 finals before anyone had a team. */
 export async function sportLeagues(sport) {
   const { data, error } = await db().from('league').select('id, sport, season, settings_json')
     .eq('sport', sport).eq('provider', 'native');
   if (error) throw new Error(`league read: ${error.message}`);
-  return (data ?? []).map((l) => ({ ...l, sportSettings: sportSettingsOf(l.settings_json) })).filter((l) => l.sportSettings);
+  const all = (data ?? []).map((l) => ({ ...l, sportSettings: sportSettingsOf(l.settings_json) })).filter((l) => l.sportSettings);
+  if (!all.length) return all;
+  const { data: drafts } = await db().from('draft').select('league_id, status').in('league_id', all.map((l) => l.id));
+  const done = new Set((drafts ?? []).filter((d) => d.status === 'complete').map((d) => d.league_id));
+  return all.filter((l) => done.has(l.id));
 }
 
 /** Slot 'S<i>' may hold a player whose eligibility meets roster_slots[i-1].pos.
@@ -134,31 +151,46 @@ export async function lockStartedGames(sport, games, now = Date.now()) {
   if (!started.length) return 0;
   const leagues = await sportLeagues(sport);
   let locked = 0;
+  const teams = [...new Set(started.flatMap((g) => [g.home, g.away]))];
+  const dates = [...new Set(started.map((g) => g.gameDate))];
   for (const lg of leagues) {
+    // Four reads per league per pass, however many games started: the
+    // weeks the started games fall in, their matchups, every 'wk' pick in
+    // them, the pool rows on the started teams, and the locks already held.
+    const weeks = [...new Set(dates.map((d) => sportWeekOf(d, lg.sportSettings.period_start)).filter((w) => w != null))];
+    if (!weeks.length) continue;
+    const { data: matchups } = await db().from('matchup').select('id, week, status, home_roster_id, away_roster_id')
+      .eq('league_id', lg.id).in('week', weeks);
+    if (!matchups?.length) continue;
+    const ids = matchups.map((m) => m.id);
+    const [{ data: picks }, { data: pool }, { data: existing }] = await Promise.all([
+      db().from('sealed_pick').select('matchup_id, app_user_id, game_window, roster_slot, player_slug').in('matchup_id', ids).eq('game_window', 'wk'),
+      db().from('league_pool').select('slug, team, pos, eligible').eq('league_id', lg.id).in('team', teams),
+      db().from('sport_slot_lock').select('matchup_id, app_user_id, game_date, roster_slot, game_id').in('matchup_id', ids).in('game_date', dates),
+    ]);
+    const teamOf = new Map((pool ?? []).map((p) => [p.slug, p.team]));
+    const eligOf = new Map((pool ?? []).map((p) => [p.slug, p.eligible?.length ? p.eligible : (p.pos ? [p.pos] : [])]));
+    const have = new Set((existing ?? []).map((k) => `${k.matchup_id}|${k.app_user_id}|${k.game_date}|${k.roster_slot}|${k.game_id}`));
+    const allows = slotAllowsFor(lg.settings_json?.roster_slots, (slug) => eligOf.get(slug));
+    const rows = [];
+    const toLive = new Set();
     for (const g of started) {
       const week = sportWeekOf(g.gameDate, lg.sportSettings.period_start);
-      if (week == null) continue;
-      const { data: matchups } = await db().from('matchup').select('id, status, home_roster_id, away_roster_id')
-        .eq('league_id', lg.id).eq('week', week);
-      if (!matchups?.length) continue;
-      const ids = matchups.map((m) => m.id);
-      const [{ data: picks }, { data: pool }, { data: existing }] = await Promise.all([
-        db().from('sealed_pick').select('matchup_id, app_user_id, game_window, roster_slot, player_slug').in('matchup_id', ids).eq('game_window', 'wk'),
-        db().from('league_pool').select('slug, team, pos, eligible').eq('league_id', lg.id).in('team', [g.home, g.away]),
-        db().from('sport_slot_lock').select('matchup_id, app_user_id, game_date, roster_slot').in('matchup_id', ids).eq('game_date', g.gameDate),
-      ]);
-      const teamOf = new Map((pool ?? []).map((p) => [p.slug, p.team]));
-      const eligOf = new Map((pool ?? []).map((p) => [p.slug, p.eligible?.length ? p.eligible : (p.pos ? [p.pos] : [])]));
-      const have = new Set((existing ?? []).map((k) => `${k.matchup_id}|${k.app_user_id}|${k.game_date}|${k.roster_slot}`));
-      const rows = locksFor(g, picks ?? [], (slug) => teamOf.get(slug), have, slotAllowsFor(lg.settings_json?.roster_slots, (slug) => eligOf.get(slug)));
-      if (rows.length) {
-        const { error } = await db().from('sport_slot_lock').upsert(rows, { onConflict: 'matchup_id,app_user_id,game_date,roster_slot', ignoreDuplicates: true });
-        if (error) log(`${sport} lock ${g.gameId}: ${error.message}`);
-        else locked += rows.length;
-      }
+      const weekIds = new Set(matchups.filter((m) => m.week === week).map((m) => m.id));
+      if (!weekIds.size) continue;
+      const mine = (picks ?? []).filter((p) => weekIds.has(p.matchup_id));
+      for (const r of locksFor(g, mine, (slug) => teamOf.get(slug), have, allows)) { rows.push(r); have.add(`${r.matchup_id}|${r.app_user_id}|${r.game_date}|${r.roster_slot}|${r.game_id}`); }
       // The period is live once any of its games has started.
-      const toLive = matchups.filter((m) => m.status === 'scheduled').map((m) => m.id);
-      if (toLive.length) await db().from('matchup').update({ status: 'live', lock_at: g.startUtc ?? new Date(now).toISOString() }).in('id', toLive).eq('status', 'scheduled');
+      for (const m of matchups) if (m.week === week && m.status === 'scheduled') toLive.add(JSON.stringify([m.id, g.startUtc ?? new Date(now).toISOString()]));
+    }
+    if (rows.length) {
+      const { error } = await db().from('sport_slot_lock').upsert(rows, { onConflict: 'matchup_id,app_user_id,game_date,roster_slot,game_id', ignoreDuplicates: true });
+      if (error) log(`${sport} lock: ${error.message}`);
+      else locked += rows.length;
+    }
+    for (const j of toLive) {
+      const [id, at] = JSON.parse(j);
+      await db().from('matchup').update({ status: 'live', lock_at: at }).eq('id', id).eq('status', 'scheduled');
     }
   }
   return locked;

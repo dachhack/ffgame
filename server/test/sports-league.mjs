@@ -32,9 +32,10 @@ const games = [
   { gameId: 'a', gameDate: '2026-10-20', status: 'pre', startUtc: '2026-10-20T23:30:00Z', home: 'BOS', away: 'NYK' },
   { gameId: 'b', gameDate: '2026-10-20', status: 'pre', startUtc: '2026-10-21T02:00:00Z', home: 'LAL', away: 'GSW' },
   { gameId: 'c', gameDate: '2026-10-20', status: 'live', startUtc: '2026-10-20T23:00:00Z', home: 'MIA', away: 'ORL' },
+  { gameId: 'd', gameDate: '2026-10-20', status: 'postponed', startUtc: '2026-10-20T23:00:00Z', home: 'DEN', away: 'UTA' },
 ];
 const started = startedGames(games, now);
-ok(started.map((g) => g.gameId).join() === 'a,c', 'started: live, or past start; the 10pm ET game not yet');
+ok(started.map((g) => g.gameId).join() === 'a,c', 'started: live, or past start; the 10pm ET game not yet; a postponement never');
 const picks = [
   { matchup_id: 'm1', app_user_id: 'u1', game_window: 'wk', roster_slot: 'S1', player_slug: 'nba-1' },   // BOS
   { matchup_id: 'm1', app_user_id: 'u1', game_window: 'wk', roster_slot: 'S2', player_slug: 'nba-2' },   // LAL (not started)
@@ -45,7 +46,8 @@ const picks = [
 const teamOf = (s) => ({ 'nba-1': 'BOS', 'nba-2': 'LAL', 'nba-3': 'NYK' })[s];
 const rows = locksFor(games[0], picks, teamOf, new Set());
 ok(rows.length === 2 && rows.every((r) => r.game_date === '2026-10-20' && r.game_id === 'a') && rows.map((r) => r.player_slug).join() === 'nba-1,nba-3', 'the two players on the started game lock, the LAL one waits');
-ok(locksFor(games[0], picks, teamOf, new Set(['m1|u1|2026-10-20|S1'])).length === 1, 'an existing lock is not retaken');
+ok(locksFor(games[0], picks, teamOf, new Set(['m1|u1|2026-10-20|S1|a'])).length === 1, 'an existing lock is not retaken');
+ok(locksFor({ ...games[0], gameId: 'a2' }, picks, teamOf, new Set(['m1|u1|2026-10-20|S1|a'])).length === 2, 'a second game the same day (a doubleheader) locks the slot again under its own id');
 const allows = slotAllowsFor([{ pos: ['PG'] }, { pos: ['C'] }], (slug) => ({ 'nba-1': ['C'], 'nba-3': ['PG', 'SG'] })[slug]);
 ok(!allows('S1', 'nba-1') && allows('S2', 'nba-1') && allows('S1', 'nba-3') && allows('S9', 'nba-1') && allows('S1', 'nba-99'), 'a centre may not lock at point guard; unknown slots and players allow');
 ok(locksFor(games[0], picks, teamOf, new Set(), allows).map((r) => r.player_slug).join() === 'nba-3', 'the illegal spot is skipped at lock time');
@@ -82,6 +84,7 @@ ok(roto.find((r) => r.roster_id === 3).points === 1 + 1 + 3 && roto.find((r) => 
 // ── the period's end ─────────────────────────────────────────────────────────
 const per = { from: '2026-10-19', to: '2026-10-25' };
 ok(!periodDone(per, '2026-10-25', []) && periodDone(per, '2026-10-26', []) && !periodDone(per, '2026-10-26', ['2026-10-25']) && periodDone(per, '2026-10-26', ['2026-10-26']), 'done the day after, unless a game from inside it is still live');
+ok(periodDone(per, '2026-10-26', ['2026-10-01']) && periodDone(per, '2026-11-09', ['2026-10-25']), 'a live game from before the period, or one stuck for days, does not hold it');
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport league checks passed');
 process.exit(fails ? 1 : 0);

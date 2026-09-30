@@ -109,6 +109,10 @@ async function syncSportInjuries(sport, rows) {
  *  sweep. */
 export async function syncSportDirectory(sport, season) {
   const adapter = adapterFor(sport);
+  // The sweep's start is taken BEFORE any row is stamped: the retirement
+  // pass below marks rows seen before it, and every row this sweep writes
+  // is stamped after it.
+  const sweepStart = new Date().toISOString();
   const players = rankDirectory(sport, await adapter.directory(season));
   const rows = [];
   let skipped = 0;
@@ -119,7 +123,6 @@ export async function syncSportDirectory(sport, season) {
     } catch (e) { skipped++; log(`${sport}: skipped ${p.name}: ${e.message}`); }
   });
   if (!rows.length) throw new Error(`${sport}: directory came back empty`);
-  const startedAt = new Date().toISOString();
   for (let i = 0; i < rows.length; i += 250) {
     const { error } = await db().from('sport_player').upsert(rows.slice(i, i + 250), { onConflict: 'sport,player_key' });
     if (error) throw new Error(`sport_player upsert: ${error.message}`);
@@ -127,10 +130,15 @@ export async function syncSportDirectory(sport, season) {
   // Retirement: anyone this completed sweep did not touch.
   const { data: retired, error: rErr } = await db().from('sport_player')
     .update({ active: false, updated_at: new Date().toISOString() })
-    .eq('sport', sport).eq('active', true).lt('seen_at', startedAt).select('player_key');
+    .eq('sport', sport).eq('active', true).lt('seen_at', sweepStart).select('player_key');
   if (rErr) log(`${sport}: retirement pass: ${rErr.message}`);
+  // Every league pool of this sport follows the directory (0402): a traded
+  // player's team, a newly earned eligibility. The pool is what the locks
+  // and the DB lock read, so a stale team there is a player who never scores.
+  const { data: moved, error: mErr } = await db().rpc('sport_pool_refresh', { p_sport: sport });
+  if (mErr) log(`${sport}: pool refresh: ${mErr.message}`);
   const inj = await syncSportInjuries(sport, rows);
-  return { sport, players: rows.length, skipped, retired: retired?.length ?? 0, ...inj };
+  return { sport, players: rows.length, skipped, retired: retired?.length ?? 0, poolMoved: Number(moved ?? 0), ...inj };
 }
 
 // ── The box-score crosswalk (NBA / WNBA) ─────────────────────────────────────

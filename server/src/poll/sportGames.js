@@ -52,7 +52,9 @@ export function gamesToFetch(games, stored, force = false) {
 export async function pollSportDay(sport, date, { force = false } = {}) {
   const adapter = adapterFor(sport);
   const games = await adapter.schedule(date);
-  const counts = { sport, date, games: games.length, fetched: 0, lines: 0, live: 0, errors: 0, rows: games };
+  // `live` is the SCHEDULE's word, not the box score's: a game the feed says
+  // is on keeps the loop at its live cadence even while its box fetch fails.
+  const counts = { sport, date, games: games.length, fetched: 0, lines: 0, live: games.filter((g) => g.status === 'live').length, errors: 0, rows: games };
   if (!games.length) return counts;
 
   const { data: existing } = await db().from('sport_game').select('game_id,status')
@@ -66,7 +68,6 @@ export async function pollSportDay(sport, date, { force = false } = {}) {
     try {
       const { game, lines } = await adapter.game(g.gameId);
       counts.fetched++;
-      if (game.status === 'live') counts.live++;
       // The box score's own view of the game (score, clock, status) is fresher
       // than the schedule's — write it too.
       const merged = { ...g, ...game, gameDate: g.gameDate || game.gameDate };
@@ -87,6 +88,30 @@ export async function pollSportDay(sport, date, { force = false } = {}) {
     }
   }
   return counts;
+}
+
+/** A game the table still calls live from before yesterday — a suspended
+ *  game, or one whose final never landed — is re-read from its box score,
+ *  so it cannot hold a period's finals hostage. Returns how many moved. */
+export async function repollStaleLive(sport, now = new Date()) {
+  const adapter = adapterFor(sport);
+  const { data: stale } = await db().from('sport_game').select('season, game_id, game_date')
+    .eq('sport', sport).eq('status', 'live').lt('game_date', easternDate(now, -1));
+  let moved = 0;
+  for (const g of stale ?? []) {
+    try {
+      const { game, lines } = await adapter.game(g.game_id);
+      const merged = { ...game, sport, season: g.season, gameId: g.game_id, gameDate: g.game_date };
+      await db().from('sport_game').upsert(gameRow(merged), { onConflict: 'sport,season,game_id' });
+      const rows = [];
+      for (const l of lines) { try { rows.push(lineRow(merged, l, await xrefKey(sport, l))); } catch { /* skipped */ } }
+      for (let i = 0; i < rows.length; i += 200) await db().from('game_stat_line').upsert(rows.slice(i, i + 200), { onConflict: 'sport,season,game_id,player_key' });
+      if (game.status !== 'live') moved++;
+    } catch (e) {
+      log(`${sport} stale ${g.game_id}: ${e.message}`);
+    }
+  }
+  return moved;
 }
 
 /** Every configured sport, today and yesterday (a late West-coast final
@@ -115,6 +140,8 @@ export async function tickSports(sports, now = new Date()) {
         log(`${sport} ${date}: ${e.message}`);
       }
     }
+    try { const moved = await repollStaleLive(sport, now); if (moved) log(`${sport}: ${moved} stale live game(s) closed`); }
+    catch (e) { log(`${sport} stale: ${e.message}`); }
   }
   return { live, nextStartMs, games };
 }

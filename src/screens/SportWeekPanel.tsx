@@ -8,7 +8,7 @@
 // through the same core functions the worker uses (sports/score.ts), so the
 // number on the board is the number in matchup_state.
 import { useEffect, useMemo, useState } from 'react';
-import { SPORTS, type Sport } from '@drip/core/sports/index';
+import { SPORTS, eligibleFor, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryValue, categoryById } from '@drip/core/sports/score';
 import { sportPeriod, type SportLeagueSettings } from '@drip/core/sports/league';
 import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
@@ -144,7 +144,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
                 {s.days.map((d) => (
                   <div key={`${d.game_date}-${d.roster_slot}`} className="mono" style={{ display: 'grid', gridTemplateColumns: '58px 34px minmax(0, 1fr) 44px', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
                     <span style={{ color: 'var(--faint)' }}>{fmtDay(d.game_date)}</span>
-                    <PosPill pos={d.pos ?? d.roster_slot} />
+                    <PosPill pos={eligibleFor(sport, d.pos)[0] ?? d.roster_slot} />
                     <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {d.full_name ?? d.player_slug} <span style={{ color: 'var(--faint)' }}>{d.team}</span>
                       {d.status === 'live' && <span style={{ color: 'var(--you)', marginLeft: 4 }}>●</span>}

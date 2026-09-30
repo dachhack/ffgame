@@ -1,7 +1,7 @@
 # Multi-sport — the morning review
 
 > _Written 2026-09-30 overnight, on branch `ccr-e05744f1-ro7jlw` (v0.564.0 →
-> v0.568.0). Nothing is merged; the web and the app are yours to review._
+> v0.569.0). Nothing is merged; the web and the app are yours to review._
 
 ## What is on the branch
 
@@ -14,6 +14,7 @@ Five commits, one per version, each with a STATUS.md entry:
 | v0.566.0 | Roto (0399), eligibility enforced at the lock, names for sport keys on both boards, the mobile create flow, draft chips and week panel |
 | v0.567.0 | The commissioner's sport scoring page (0400 `set_sport_settings`), injuries on the boards |
 | v0.568.0 | NBA/WNBA schedule by date, sport leagues kept out of auto-playoffs, the mobile wire chips, this note |
+| v0.569.0 | Ten fixes from a code review of the branch (the sweep's retirement pass, pools following trades, WNBA team codes, postponements, mid-draft leagues, doubleheaders, stuck games, cadence, reads per tick, pills) |
 
 The plan and the assessment behind it: `docs/multi-sport-plan.md`.
 
@@ -42,7 +43,7 @@ the commissioner's sport scoring page.
 
 ## What it takes to run
 
-1. **Migrations 0396 → 0401**, in order. All of them applied cleanly on a
+1. **Migrations 0396 → 0402**, in order. All of them applied cleanly on a
    local Postgres 16 with Supabase shims (`auth.uid()` etc.), alongside
    every earlier migration. 0398 **drops and recreates
    `create_native_league`** with two trailing defaulted arguments; every
@@ -100,8 +101,8 @@ the commissioner's sport scoring page.
 - **MLB games-played and innings caps** are not modelled.
 - **The player card** shows NFL stats; a sport player's card is empty.
 - **Basketball ids** crosswalk by name + team between Sleeper/ESPN
-  directories and nba.com box scores; a fresh trade before the next
-  sweep misses until the sweep moves the team.
+  directories and nba.com box scores; a trade is picked up by the next
+  daily sweep, which also moves the player's team in every league pool.
 
 ## Suggested next steps
 

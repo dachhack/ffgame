@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { nhlSeasonLines, nhlStandingsTeams, nhlSeasonId, nhlRosterPlayers } from '../src/sports/nhl.js';
 import { mlbSeasonLines, mlbFieldingGames, mlbEligibility, mlbRosterStatus, mlbBuildDirectory } from '../src/sports/mlb.js';
-import { sleeperNbaPlayers, sleeperNbaSeasonLines, espnWnbaRoster } from '../src/sports/nba.js';
+import { sleeperNbaPlayers, sleeperNbaSeasonLines, espnWnbaRoster, wnbaTeam } from '../src/sports/nba.js';
 import { directoryRow, rankDirectory, buildXref, resolveXref, normName, injuryRows, boardInjury } from '../src/poll/sportDirectory.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
 import { linePoints } from '../../packages/core/src/sports/score.ts';
@@ -89,7 +89,8 @@ const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).
     { id: '99', displayName: 'Gone Player', position: { abbreviation: 'C' }, status: { type: 'inactive' } },
   ] };
   const rows = espnWnbaRoster(roster);
-  ok(rows.length === 3 && rows[0].team === 'NY' && rows[0].headshot && rows[1].injury.code === 'O' && rows[1].injury.note === 'Ankle' && rows[2].active === false, 'ESPN roster: ids, headshot, injury, inactive');
+  ok(rows.length === 3 && rows[0].team === 'NYL' && rows[0].headshot && rows[1].injury.code === 'O' && rows[1].injury.note === 'Ankle' && rows[2].active === false, 'ESPN roster: ids, the league tricode (NY → NYL), headshot, injury, inactive');
+  ok(wnbaTeam('CONN') === 'CON' && wnbaTeam('PHX') === 'PHO' && wnbaTeam('ATL') === 'ATL' && wnbaTeam('gs') === 'GSV', 'ESPN WNBA codes become the box scores\' tricodes');
   ok(directoryRow('wnba', rows[0], 1).eligible.join() === 'F', 'a WNBA forward is F');
 }
 

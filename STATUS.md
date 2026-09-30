@@ -22,6 +22,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.569.0 — what the review found: the sweep that retired everyone, and nine more
+
+> - Fixes from a code review of the sport-league branch before anyone plays on it.
+
+A review of the branch (`/code-review high`) found ten defects; all are
+fixed, tested, and re-verified on the local Postgres.
+
+1. **The sweep retired its own rows.** The retirement pass took its
+   timestamp AFTER the rows were stamped, so every player just written read
+   as unseen and went inactive — and create_native_league would then say
+   "no NHL players in the directory". The sweep's start is taken first now.
+2. **A traded player never scored again.** The locks and the DB lock read
+   `league_pool.team`, written once at seeding. `sport_pool_refresh` (0402)
+   moves every sport league's pool rows to the directory's team,
+   eligibility and position after each sweep.
+3. **WNBA team codes.** ESPN's abbreviations (NY, CONN, PHX…) never matched
+   the box scores' tricodes (NYL, CON, PHO…); `wnbaTeam` maps them.
+4. **A postponement is not a start.** `startedGames` and
+   `sport_slug_started` (0402) ignore postponed and cancelled games,
+   whatever their clock says.
+5. **A league mid-draft went live by the calendar** and could have been
+   stamped 0–0 with its schedule frozen. The worker only touches leagues
+   whose draft is complete.
+6. **Doubleheaders.** `sport_slot_lock` is keyed per game as well as per
+   slot-day (0402), so a second game the same day locks and scores.
+7. **A stuck live game held every later period.** `periodDone` counts only
+   games from inside the period, for two days; `repollStaleLive` keeps
+   re-reading any game the table still calls live from before yesterday.
+8. **The loop dropped to its idle cadence while box fetches failed.**
+   `live` is the schedule's word now, not the box score's.
+9. **Four reads per league per started game per tick** became four per
+   league per pass; the games loop in memory.
+10. **Position pills got raw feed codes** ('L', 'G-F'); both panels map
+    through `eligibleFor` first.
+
 ### v0.568.0 — the NBA schedule by date, no brackets for sport leagues yet, the review note
 
 > - Basketball leagues know tomorrow's and yesterday's games, not just today's.

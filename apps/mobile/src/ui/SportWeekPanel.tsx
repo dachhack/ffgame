@@ -5,7 +5,7 @@
 // matchup_state.
 import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { SPORTS, type Sport } from '@drip/core/sports/index';
+import { SPORTS, eligibleFor, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryById } from '@drip/core/sports/score';
 import { sportPeriod, type SportLeagueSettings } from '@drip/core/sports/league';
 import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
@@ -102,7 +102,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
             : s.days.map((d) => (
               <View key={`${d.game_date}-${d.roster_slot}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint, width: 56 }}>{fmtDay(d.game_date)}</Text>
-                <PosPill pos={(d.pos ?? d.roster_slot) as never} />
+                <PosPill pos={eligibleFor(sport, d.pos)[0] ?? d.roster_slot} />
                 <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.text, flex: 1 }} numberOfLines={1}>{d.full_name ?? d.player_slug} <Text style={{ color: t.faint }}>{d.team}</Text>{d.status === 'live' ? ' ●' : ''}</Text>
                 <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: d.line ? t.text : t.faint }}>{d.line ? d.pts.toFixed(1) : 'DNP'}</Text>
               </View>

@@ -21,6 +21,7 @@ const tables = {
   sport_slot_lock: [],
   sport_game: [],
   matchup_state: [],
+  draft: [{ league_id: 'L1', status: 'complete' }],
 };
 const membership = { U1: 1, U2: 2 };
 const lines = { 'nba-1': { pts: 20, reb: 5, ast: 5, stl: 1, blk: 1, tov: 2 }, 'nba-3': { pts: 10, reb: 10, ast: 2, stl: 0, blk: 0, tov: 1 } };
@@ -68,6 +69,10 @@ const games = [
   { gameId: 'g1', gameDate: '2026-10-19', status: 'live', startUtc: '2026-10-19T23:30:00Z', home: 'BOS', away: 'NYK' },
   { gameId: 'g2', gameDate: '2026-10-19', status: 'pre', startUtc: '2026-10-20T02:30:00Z', home: 'LAL', away: 'GSW' },
 ];
+// A league still drafting is left alone.
+tables.draft[0].status = 'live';
+ok((await lockStartedGames('nba', games, Date.parse('2026-10-20T00:00:00Z'))) === 0 && tables.matchup[0].status === 'scheduled', 'a league mid-draft locks nothing and stays scheduled');
+tables.draft[0].status = 'complete';
 const locked = await lockStartedGames('nba', games, Date.parse('2026-10-20T00:00:00Z'));
 ok(locked === 2, `two slot-days locked (${locked}): the BOS and NYK starters, not the LAL one`);
 ok(tables.sport_slot_lock.every((k) => k.game_date === '2026-10-19' && k.game_id === 'g1') && tables.sport_slot_lock.map((k) => k.player_slug).sort().join() === 'nba-1,nba-3', 'locks name the game and the day');

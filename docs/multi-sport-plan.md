@@ -63,6 +63,8 @@ posture as ESPN today.
   (`server/src/poll/sportGames.js`) gated on `SPORTS=nhl,mlb` so the NFL
   worker is unchanged when unset; CLI `sport-poll <sport> [date] [--force]`.
 
+**v0.569.0**: ten fixes from a code review (see STATUS.md).
+
 **v0.568.0**: the NBA/WNBA schedule by date, sport leagues kept out of
 auto-playoffs (0401), the mobile wire chips, `docs/multi-sport-review.md`.
 

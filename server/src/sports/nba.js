@@ -149,9 +149,14 @@ export function sleeperNbaSeasonLines(stats) {
 // (sportDirectory.js).
 const ESPN_WNBA = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 
+// ESPN's WNBA abbreviations → the league's own tricodes, which the box
+// scores (cdn.wnba.com) carry and every team join reads. Unknown codes pass.
+export const WNBA_TEAM = { NY: 'NYL', LV: 'LVA', LA: 'LAS', CONN: 'CON', PHX: 'PHO', WSH: 'WAS', GS: 'GSV' };
+export const wnbaTeam = (code) => WNBA_TEAM[String(code ?? '').toUpperCase()] ?? String(code ?? '').toUpperCase();
+
 /** One ESPN roster payload (athletes flat, or grouped) → directory rows. */
 export function espnWnbaRoster(roster) {
-  const team = roster?.team?.abbreviation ?? '';
+  const team = wnbaTeam(roster?.team?.abbreviation ?? '');
   const items = (roster?.athletes ?? []).flatMap((a) => (Array.isArray(a?.items) ? a.items : [a]));
   const out = [];
   for (const a of items) {
