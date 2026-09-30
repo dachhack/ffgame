@@ -3767,6 +3767,13 @@ export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_devy_mode',
     { p_league_id: leagueId, p_mode: mode }), Ev.commishAction, { tool: 'devy_mode' });
 
+/** 0398: make a league devy while it is being created (commissioner, before
+ *  the draft, classic on the NFL calendar) — college players on, plus devy
+ *  roster spots ('spots') or the devy market ('shares'). */
+export const setupLeagueDevy = (leagueId: string, mode: 'spots' | 'shares', spots = 3) =>
+  tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('commish_setup_devy',
+    { p_league_id: leagueId, p_mode: mode, p_spots: spots }), Ev.commishAction, { tool: 'devy_setup' });
+
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>

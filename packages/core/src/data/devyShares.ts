@@ -119,3 +119,37 @@ export function twoSeatDevyLegs(o: {
 /** Does an offer carry anything from the devy market? */
 export const offersDevy = (giveShares: Record<string, number>, getShares: Record<string, number>, devyCash?: number) =>
   Object.values(giveShares).some((n) => n > 0) || Object.values(getShares).some((n) => n > 0) || Math.abs(devyCash ?? 0) > 0;
+
+// ── League creation (0398) ─────────────────────────────────────────────────
+/** The devy question a new league answers: none, devy roster spots, or the
+ *  devy market. */
+export type DevyChoice = 'none' | 'spots' | 'shares';
+
+/** Why a devy choice is not open to this league, or null when it is. College
+ *  players are a classic-league thing, and the market runs on a snake draft's
+ *  picks (a contract type's startup is an auction). */
+export function devyChoiceBlocked(choice: DevyChoice, o: { classic: boolean; auction: boolean; contract: boolean }): string | null {
+  if (choice === 'none') return null;
+  if (!o.classic) return 'devy needs a CLASSIC league';
+  if (choice === 'shares' && o.contract) return 'the devy market needs a snake draft — contract leagues start with an auction';
+  if (choice === 'shares' && o.auction) return 'the devy market needs a snake draft — switch the draft to SNAKE';
+  return null;
+}
+
+/** One line for the review screen. */
+export function devyChoiceLine(choice: DevyChoice, spots: number): string {
+  if (choice === 'spots') return `DEVY · ${spots} college roster spot${spots === 1 ? '' : 's'} per team`;
+  if (choice === 'shares') return 'DEVY MARKET · shares in college players reserve rookie-draft rights';
+  return 'NO DEVY · NFL players only';
+}
+
+export const DEVY_CHOICE_INFO =
+  'Devy leagues let teams invest in COLLEGE players before they reach the NFL.\n\n'
+  + 'NO DEVY — NFL players only.\n\n'
+  + 'DEVY SPOTS — college players join the draft pool, and each team gets extra roster spots that only hold college players. '
+  + 'They are drafted and kept like anyone else, and move to the NFL roster when they graduate.\n\n'
+  + 'DEVY MARKET — college players stay out of the draft. Each team gets 100 points to buy shares in them: '
+  + 'the first team to 20 shares (or the only team holding 5+ shares and 15+ points) reserves the right to draft that player '
+  + 'in the rookie draft. Prices rise as players play well, so early scouting pays; shares trade like picks. '
+  + 'Shares open once the startup draft is done and lock on Jan 15 until the rookie draft.\n\n'
+  + 'After the league is made, devy spots and the SPOTS / MARKET switch live in COMMISH.';
