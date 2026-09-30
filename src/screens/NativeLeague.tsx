@@ -6,6 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
+import { devyLegParts } from '@drip/core/data/devyShares';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag, InjuryNow } from '../app/ui';
 import { useStore } from '../app/store';
@@ -3975,6 +3976,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
       ...l.send_picks.map((p) => `${pickLabel(p, l.roster_id)} → ${teamName(p.to)}`),
       ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
       ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+    ...devyLegParts(l, (rid) => String(teamName(rid))),
     ];
     return parts.join(', ') || 'nothing';
   };

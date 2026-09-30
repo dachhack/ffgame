@@ -2934,6 +2934,9 @@ export interface TradeLeg {
   send_picks: { season: string; round: number; orig: number; to: number }[];
   send_faab: { to: number; amount: number }[];
   send_cap: { to: number; amount: number }[];
+  /** 0397: devy shares (with the college player's name) and devy cash. */
+  send_shares?: { slug: string; shares: number; to: number; name?: string | null }[];
+  send_devy_cash?: { to: number; amount: number }[];
   accepted: boolean;
 }
 export const leagueTrades = (leagueId: string, limit = 30) =>
@@ -2992,6 +2995,9 @@ export const proposeMultiTrade = (
     send_picks?: { season?: string; round: number; orig: number; to: number }[];
     send_faab?: { to: number; amount: number }[];
     send_cap?: { to: number; amount: number }[];
+    /** 0397: devy shares and devy cash — with them, two teams file here too. */
+    send_shares?: { slug: string; shares: number; to: number }[];
+    send_devy_cash?: { to: number; amount: number }[];
   }[],
   note?: string, expiresHours?: number,
 ) =>
@@ -3736,6 +3742,7 @@ export interface DevySharesState {
   rules?: { budget: number; max: number; floor: number; cash_cap?: number; payout_cap?: number;
     max_spend?: number; min_spend?: number; refund?: number; quiet_days?: number; round_price?: Record<string, number> };
   /** 0396 */ current?: boolean; frozen?: boolean; start_cash?: number;
+  /** 0397: every seat, for the share-trade screen. */ teams?: { roster_id: number; team: string }[];
   used?: Record<string, number>;
   /** 0388: each team's cash, and what its stakes would pay today. */
   cash?: Record<string, number>; value?: Record<string, number>; prices_as_of?: string | null;

@@ -247,3 +247,4 @@ $RUN -f scripts/db/top-up-probes.sql | grep -E "PROBE FAIL|ALL TOP-UP PROBES" ||
 $RUN -f scripts/db/devy-shares-probes.sql | grep -E "PROBE FAIL|ALL DEVY-SHARES PROBES" || { echo "DEVY-SHARES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/locked-stash-probes.sql | grep -E "PROBE FAIL|ALL LOCKED-STASH PROBES" || { echo "LOCKED-STASH PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/mark-free-probes.sql | grep -E "PROBE FAIL|ALL MARK-FREE PROBES" || { echo "MARK-FREE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/devy-trade-probes.sql | grep -E "PROBE FAIL|ALL DEVY-TRADE PROBES" || { echo "DEVY-TRADE PROBES FAILED"; exit 1; }

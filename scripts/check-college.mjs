@@ -155,6 +155,9 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   const { maxBuy } = await import('../packages/core/src/data/devyShares.ts');
   ok(maxBuy(0, 0, 10) === 6 && maxBuy(0, 0, 1) === 20 && maxBuy(5, 50, 10) === 1 && maxBuy(6, 60, 10) === 0 && maxBuy(20, 20, 1) === 0,
     'the most a buy may add: 20 shares or 60 points, whichever first');
+  const { devyLegParts } = await import('../packages/core/src/data/devyShares.ts');
+  const parts = devyLegParts({ send_shares: [{ slug: 'c-1', shares: 5, to: 3, name: 'Arch Manning' }, { slug: 'c-2', shares: 1, to: 3 }], send_devy_cash: [{ to: 3, amount: 12.5 }] }, (r) => `Team ${r}`);
+  ok(parts.join(' | ') === '5 shares of Arch Manning → Team 3 | 1 share of c-2 → Team 3 | 12.5 devy cash → Team 3', 'a trade leg\'s devy items, in words (0397)');
   ok(lockLine({ ...st, locked: true }).startsWith('Locked') && lockLine({ ...st, on: false }) === '', 'the lock line, and silence off');
   // 0388: the market's book
   const { teamBook, stakeLine } = await import('../packages/core/src/data/devyShares.ts');

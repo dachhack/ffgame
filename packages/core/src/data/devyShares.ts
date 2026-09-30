@@ -72,3 +72,13 @@ export function lockLine(st: DevySharesState | null | undefined): string {
   if (st.locked) return 'Locked since Jan 15 until the rookie draft is done.';
   return 'You can move shares until Jan 15. From then until the rookie draft, they are locked.';
 }
+
+/** A trade leg's devy items as words (0397): "5 shares of Arch Manning → Team 3",
+ *  "12.5 devy cash → Team 3". The team namer is the screen's. */
+export function devyLegParts(l: { send_shares?: { slug: string; shares: number; to: number; name?: string | null }[]; send_devy_cash?: { to: number; amount: number }[] },
+  teamName: (rid: number) => string): string[] {
+  return [
+    ...(l.send_shares ?? []).map((x) => `${x.shares} share${x.shares === 1 ? '' : 's'} of ${x.name ?? x.slug} → ${teamName(x.to)}`),
+    ...(l.send_devy_cash ?? []).map((c) => `${fmtPts(Number(c.amount))} devy cash → ${teamName(c.to)}`),
+  ];
+}
