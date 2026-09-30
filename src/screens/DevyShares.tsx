@@ -4,9 +4,9 @@
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
 import { useEffect, useMemo, useState } from 'react';
-import { allotDevyShares, devyMarket, devySharesState, friendlyError, setLeagueDevyMode, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
+import { allotDevyShares, devyMarket, devySharesState, friendlyError, setLeagueDevyMode, setLeagueDevyStartCash, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
   fontFamily: 'var(--mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 9px',
@@ -33,10 +33,10 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
     return (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)).slice(0, 60);
   }, [market, q]);
   if (!st?.ok || !st.on) return null;
-  const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, ...(st.rules ?? {}) };
+  const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5, ...(st.rules ?? {}) };
   const book = teamBook(st, myRoster);
   const mine = (st.players ?? []).filter((p) => myStake(p, myRoster) > 0);
-  const locked = !!st.locked;
+  const locked = !!st.locked || st.current === false;
 
   const set = async (slug: string, n: number) => {
     if (myRoster == null || busy) return;
@@ -51,17 +51,24 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
     } catch (e) { setMsg(`✗ ${friendlyError(e)}`); }
     finally { setBusy(false); }
   };
-  const controls = (slug: string, cur: number, price: number) => {
-    const buy = (k: number) => Math.min(k, rules.max - cur);
-    const afford = (k: number) => buy(k) > 0 && buy(k) * price <= book.cash;
+  const controls = (slug: string, cur: number, price: number, cost: number, maxed: boolean, active: boolean) => {
+    const room = maxBuy(cur, cost, price, rules.max, rules.max_spend);
+    const buy = (k: number) => Math.min(k, room);
+    const afford = (k: number) => active && buy(k) > 0 && buy(k) * price <= book.cash + 1e-9;
+    const pts = (k: number) => fmtPts(Math.round(buy(k) * price * 100) / 100);
+    const sell = (to: number) => {
+      if (maxed && to < cur && !window.confirm('This stake is maxed. Selling any of it drops you out of line for his right, and buying back puts you behind anyone else who is maxed. Sell?')) return;
+      void set(slug, to);
+    };
     return (
-      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
-        {cur > 0 && <button style={chip(false)} disabled={busy || locked} onClick={() => void set(slug, cur - 5)}>sell 5</button>}
-        {cur > 0 && <button style={chip(false)} disabled={busy || locked} onClick={() => void set(slug, cur - 1)}>sell 1</button>}
-        <button style={chip(false)} disabled={busy || locked || !afford(1)} onClick={() => void set(slug, cur + 1)}>+1 · {price}</button>
-        <button style={chip(false)} disabled={busy || locked || !afford(5)} onClick={() => void set(slug, cur + 5)}>+5 · {buy(5) * price}</button>
-        <button style={chip(true)} disabled={busy || locked || !afford(rules.max)} onClick={() => void set(slug, rules.max)}>to {rules.max} · {buy(rules.max) * price}</button>
-        {cur > 0 && <button style={chip(false)} disabled={busy || locked} onClick={() => void set(slug, 0)}>sell all</button>}
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5, alignItems: 'center' }}>
+        {cur > 0 && <button style={chip(false)} disabled={busy || locked} onClick={() => sell(Math.max(0, cur - 5))}>sell 5</button>}
+        {cur > 0 && <button style={chip(false)} disabled={busy || locked} onClick={() => sell(cur - 1)}>sell 1</button>}
+        {active && room > 0 && <button style={chip(false)} disabled={busy || locked || !afford(1)} onClick={() => void set(slug, cur + 1)}>+1 · {pts(1)}</button>}
+        {active && room > 1 && <button style={chip(false)} disabled={busy || locked || !afford(5)} onClick={() => void set(slug, cur + buy(5))}>+{buy(5)} · {pts(5)}</button>}
+        {active && room > 0 && <button style={chip(true)} disabled={busy || locked || !afford(room)} onClick={() => void set(slug, cur + room)}>max +{room} · {pts(room)}</button>}
+        {maxed && <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>MAXED</span>}
+        {cur > 0 && <button style={chip(false)} disabled={busy || locked} onClick={() => sell(0)}>sell all</button>}
       </div>
     );
   };
@@ -77,9 +84,10 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
           <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{price}/sh</span>
         </div>
         {mineH && <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: Number(mineH.value) >= Number(mineH.cost) ? 'var(--you)' : 'var(--opp)' }}>YOU: {cur} shares · {stakeLine(mineH.cost, mineH.value)}</div>}
-        <div className="mono" style={{ fontSize: 11, color: yours ? 'var(--you)' : 'var(--dim)', marginTop: 2 }}>{rightLine(p, myRoster, rules.floor, rules.max)}</div>
+        <div className="mono" style={{ fontSize: 11, color: yours ? 'var(--you)' : 'var(--dim)', marginTop: 2 }}>{rightLine(p, myRoster, rules.floor, rules.max, rules.min_spend)}</div>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{p.holders.map((h) => `${h.team} ${h.shares}`).join(' · ')}</div>
-        {edit && myRoster != null && !p.graduated_to && controls(p.slug, cur, price)}
+        {p.active === false && !p.graduated_to && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn, #c66)' }}>LEFT COLLEGE — sell at his last price, or if he isn't drafted, {Math.round(rules.refund * 100)}% of what was paid comes back at the rookie draft</div>}
+        {edit && myRoster != null && !p.graduated_to && controls(p.slug, cur, price, Number(mineH?.cost ?? 0), !!mineH?.maxed, p.active !== false)}
       </div>
     );
   };
@@ -89,9 +97,11 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         DEVY MARKET{myRoster != null ? ` · CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : ''}
       </div>
       <div style={{ ...small, margin: '4px 0 8px' }}>
-        Buy shares in college players, up to {rules.max} each. Prices follow how they're playing and how much of the league wants them, updated weekly.
-        First to {rules.max} shares holds a player's right (if you're the only team in, {rules.floor}+ does), which reserves him for you in the rookie draft.
-        Selling, or his turning pro, pays today's price, up to {rules.payout_cap}× what you paid. Cash tops out at {rules.cash_cap}. {lockLine(st)}
+        Buy shares in college players. Prices follow how they're playing, updated weekly in season and frozen from Jan 15 until the next season's first stats.
+        A stake maxes at {rules.max} shares or {rules.max_spend} points spent; the first team to max holds his right, or if only one team has {rules.floor}+ shares and {rules.min_spend}+ points in, that team does.
+        The right reserves him for you in the rookie draft. When he's drafted your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 3), up to {rules.payout_cap}× what you paid.
+        Selling pays today's price, up to {rules.payout_cap}× what you paid; cash tops out at {rules.cash_cap} from sales. {lockLine(st)}{st.frozen ? ' Prices are frozen for the offseason.' : ''}
+        {st.current === false && <div style={{ color: 'var(--warn, #c66)' }}>This is last season's league. Shares move in the current season.</div>}
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
         <button style={chip(view === 'mine')} onClick={() => setView('mine')}>MINE ({mine.length})</button>
@@ -115,7 +125,7 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
                 <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}>{r.name} <span style={small}>{[r.pos, r.school, r.class_year ? collegeClassLabel(r.class_year) : null, `#${r.rank} in college`, r.youth ? 'young riser +1' : null].filter(Boolean).join(' · ')} · nobody in yet</span></span>
                 <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{r.price}/sh</span>
               </div>
-              {myRoster != null && controls(r.slug, 0, r.price)}
+              {myRoster != null && controls(r.slug, 0, r.price, 0, false, true)}
             </div>
           );
         })}
@@ -124,28 +134,46 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   );
 }
 
-/** The commissioner's switch: devy SPOTS (a roster shelf) or SHARES. */
+/** The commissioner's switch: devy SPOTS (a roster shelf) or SHARES (the
+ *  market), and a new team's starting cash (0396). */
 export function DevyModeRow({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<boolean | null>(null);
+  const [cash, setCash] = useState('100');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => { devySharesState(leagueId).then((r) => setOn(!!r.on)).catch(() => setOn(null)); }, [leagueId]);
+  useEffect(() => { devySharesState(leagueId).then((r) => { setOn(!!r.on); setCash(String(r.start_cash ?? 100)); }).catch(() => setOn(null)); }, [leagueId]);
   if (on == null) return null;
   const pick = async (mode: 'spots' | 'shares') => {
+    if (!window.confirm(mode === 'shares'
+      ? 'Turn on the devy market? College players leave the player pool, and every team gets its starting cash to buy shares. It can\'t change again during a draft, or from Jan 15 until the rookie draft once anyone holds shares.'
+      : 'Back to devy spots? Every team\'s shares are sold at today\'s value and the cash stays with them. No one keeps a devy right.')) return;
     setBusy(true); setNote(null);
     try {
       const r = await setLeagueDevyMode(leagueId, mode);
-      if (r.ok) { setOn(mode === 'shares'); setNote(mode === 'shares' ? '✓ devy shares on — the league chat says so' : '✓ back to devy spots'); }
+      if (r.ok) { setOn(mode === 'shares'); setNote(mode === 'shares' ? '✓ devy market on — the league chat says so' : '✓ back to devy spots; every share was cashed out'); }
       else setNote(`✗ ${friendlyError(r.error ?? 'failed')}`);
+    } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
+  const saveCash = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyStartCash(leagueId, Number(cash));
+      setNote(r.ok ? `✓ new teams start with ${r.start_cash}` : `✗ ${friendlyError(r.error ?? 'failed')}`);
     } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
     finally { setBusy(false); }
   };
   return (
     <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--dim)' }}
-        title="SPOTS: college players sit in devy roster spots. SHARES: a market — every team gets 100 points to buy shares in college players, priced by how they play; first to 20 shares (or the only team in, with 5+) holds his rookie-draft right. Shares need the DEVY spots at 0 and no college players on rosters.">DEVY</span>
+        title="SPOTS: college players sit in devy roster spots. SHARES: the devy market — teams buy shares in college players, priced weekly by how they play; the first to max a stake (20 shares or 60 points), or the only team with 5+ shares and 15+ points in, holds his rookie-draft right. Needs a snake or linear draft, DEVY spots at 0 and no college players on rosters.">DEVY</span>
       <button style={chip(!on)} disabled={busy || !on} onClick={() => void pick('spots')}>SPOTS</button>
       <button style={chip(on)} disabled={busy || on} onClick={() => void pick('shares')}>SHARES</button>
+      {on && <>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }} title="A team with no book yet starts with this; a team someone takes over keeps what it has.">new team cash</span>
+        <input value={cash} onChange={(e) => setCash(e.target.value.replace(/[^0-9.]/g, ''))} style={{ width: 56, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
+        <button style={chip(false)} disabled={busy} onClick={() => void saveCash()}>save</button>
+      </>}
       {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
     </div>
   );

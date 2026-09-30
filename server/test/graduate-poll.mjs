@@ -1,6 +1,6 @@
 // Devy graduation's worker half (0367): who gets graduated, with what slug,
 // and who waits. No network, no database.
-import { runGraduation, nflTeamOf } from '../src/poll/graduate.js';
+import { runGraduation, nflTeamOf, draftRoundsOf } from '../src/poll/graduate.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -27,12 +27,20 @@ const rpc = async (fn, args) => {
   if (fn === 'graduate_college_player') return { data: { ok: true, leagues: 2, conflicts: 0 } };
   return { error: { message: fn } };
 };
-const r = await runGraduation(index, () => {}, fetchAthlete, rpc);
+// 0396: the draft feed's rounds, by the college ESPN id (alternativeId).
+const feed = { picks: [{ round: 1, athlete: { alternativeId: '4688380' } }, { round: 3, athlete: { alternativeId: '777' } }, { round: 2, athlete: {} }] };
+const dr = draftRoundsOf(feed);
+ok(dr.get('4688380') === 1 && dr.get('777') === 3 && dr.size === 2, 'the draft feed maps a college id to his round');
+const years = [];
+const fetchRounds = async (y) => { years.push(y); return y === 2025 ? dr : new Map(); };
+const r = await runGraduation(index, () => {}, fetchAthlete, rpc, fetchRounds, 2025);
+ok(years.join(',') === '2024,2025', 'this year\'s draft and last year\'s (a late signing)');
 ok(r.graduated === 2 && r.waiting === 1 && r.checked === 2, `one player, two leagues; one waits (got ${JSON.stringify(r)})`);
 ok(!asked.includes('5000001') && !asked.includes('5000002'), 'ESPN is only asked about players the crosswalk and index can place');
 const g = calls.filter((c) => c.fn === 'graduate_college_player');
 ok(g.length === 1 && g[0].args.p_new_slug === 'cam-ward' && g[0].args.p_sleeper_id === 's1'
   && g[0].args.p_espn_id === '4688380' && g[0].args.p_pos === 'QB', 'graduated by ids, onto the index\'s slug');
+ok(g[0].args.p_draft_round === 1, 'THE POINT (0396): his NFL draft round rides along for the devy payout');
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL GRADUATION POLL CHECKS PASS');
