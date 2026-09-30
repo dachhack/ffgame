@@ -96,6 +96,22 @@ begin
     'dt4b THE POINT: a whole maxed stake carries its place in line');
   perform dt_true((select roster_id from devy_share_rights(lin) where slug = 'c-98001') = 2, 'dt4c …and with it the right');
 
+  -- ══ dt4x. A MIXED DEAL: a player, shares and devy cash in one trade (0398) ══
+  perform dt_as('01');
+  perform dt_ok(commish_top_up_pool(lid, '[{"slug":"dt-vet","full":"Nfl Vet","pos":"RB","team":"KC"}]'::jsonb), 'dt4w a vet in the pool');
+  insert into native_roster (league_id, roster_id, slug, acquired) values (lid, 2, 'dt-vet', 'commish');
+  perform dt_as('01');
+  r := propose_multi_trade(lid, '[{"roster":1,"send_shares":[{"slug":"c-98003","shares":4,"to":2}],"send_devy_cash":[{"amount":2.5,"to":2}]},
+                                  {"roster":2,"send":[{"slug":"dt-vet","to":1}]}]'::jsonb, 'a vet for shares');
+  perform dt_ok(r, 'dt4x THE POINT: a player for shares and cash files as one trade'); tid := (r ->> 'trade_id')::uuid;
+  perform dt_as('02');
+  perform respond_trade(tid, true);
+  perform dt_true((select status from trade_proposal where id = tid) = 'executed'
+              and exists (select 1 from native_roster where league_id = lid and roster_id = 1 and slug = 'dt-vet')
+              and (select shares from devy_share where lineage = lin and roster_id = 2 and slug = 'c-98003') = 14,
+    'dt4y the player crossed one way, the shares the other');
+  perform dt_true(_trade_summary(tid) like '%Nfl Vet%' and _trade_summary(tid) like '%4 shares of Trade Kid 3%', 'dt4z one summary names both: ' || _trade_summary(tid));
+
   -- ══ dt5. WHEN SHARES DON'T TRADE ═══════════════════════════════════════════
   insert into player_alias (old_slug, new_slug, espn_id, draft_round) values ('c-98003', 'dt-g3', '98003', 4) on conflict (old_slug) do nothing;
   perform dt_as('01');

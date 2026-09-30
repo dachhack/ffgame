@@ -6,7 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
-import { devyLegParts } from '@drip/core/data/devyShares';
+import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook } from '@drip/core/data/devyShares';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag, InjuryNow } from '../app/ui';
 import { useStore } from '../app/store';
@@ -57,7 +57,7 @@ import {
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
-  devySharesState,
+  devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
 import { DevySharesPanel } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
@@ -3917,12 +3917,19 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   // 0328: the league's lineup spec and scoring — what the trade grade reads
   // the replacement line off. Loaded once beside everything else.
   const [mode, setMode] = useState<GameModeInfo | null>(null);
+  // 0398: DEVY SHARES in a two-team offer; any of them files a two-leg trade.
+  const [shares, setShares] = useState<DevySharesState | null>(null);
+  const [giveShares, setGiveShares] = useState<Record<string, number>>({});
+  const [getShares, setGetShares] = useState<Record<string, number>>({});
+  const [devyCashDraft, setDevyCashDraft] = useState('');
+  const [devyCashDir, setDevyCashDir] = useState<1 | -1>(1);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     leagueContracts(leagueId).then((c) => setContracts(c.contracts ? c : null)).catch(() => {}),
     leagueGameMode(leagueId).then((m) => { if (m.ok) setMode(m); }).catch(() => {}),
+    devySharesState(leagueId).then((r) => setShares(r.ok && r.on && r.current !== false ? r : null)).catch(() => {}),
     pickAssets(leagueId).then((a) => {
       if (!a.ok) return;
       setPickTradingOn(a.pick_trading !== false);
@@ -4018,13 +4025,16 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   };
   const capDollars = (parseInt(capDraft, 10) || 0) * capDir;
   const faabDollars = (parseInt(faabDraft, 10) || 0) * faabDir;
+  const devyCash = (Number(devyCashDraft) || 0) * devyCashDir;
+  const hasDevy = offersDevy(giveShares, getShares, devyCash);
   const nothingOffered = give.length + get.length + givePicks.length + getPicks.length
-    + Math.abs(capDollars) + Math.abs(faabDollars) === 0;
+    + Math.abs(capDollars) + Math.abs(faabDollars) === 0 && !hasDevy;
   const closeModal = () => {
     setOpen(false); setCounterOf(null); setPartner(null); setGive([]); setGet([]);
     setGivePicks([]); setGetPicks([]); setNote('');
     setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setExpiryHours(null);
     setExtraTeams([]); setDest({}); setPickDest({}); setFaabTarget(null);
+    setGiveShares({}); setGetShares({}); setDevyCashDraft(''); setDevyCashDir(1);
   };
   // An offer answered with an offer (0321) is the same form: the difference is
   // which RPC files it, and that a counter's seats are already decided.
@@ -4095,6 +4105,16 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     if (busy || myRoster == null || partner == null || nothingOffered) return;
     setBusy(true); setErr(null);
     try {
+      // 0398: shares in the deal → a two-leg trade, everything else riding along.
+      if (hasDevy) {
+        if (Object.values(retain).some((v) => v > 0)) { setErr('Salary retention can\u2019t ride with devy shares — take one out.'); return; }
+        const r = await proposeMultiTrade(leagueId, twoSeatDevyLegs({
+          me: myRoster, partner, give, get, givePicks, getPicks,
+          faab: faabDollars, cap: capDollars, giveShares, getShares, devyCash,
+        }), note.trim() || undefined, expiryHours ?? undefined);
+        if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
+        closeModal(); await load(); onChanged(); return;
+      }
       const retainTerms = [...give, ...get]
         .filter((s) => (retain[s] ?? 0) > 0)
         .map((s) => ({ slug: s, amount: retain[s] }));
@@ -4444,6 +4464,43 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
                   <div className="mono" style={{ ...label, marginBottom: 5 }}>YOU GET</div>
                   {pickList(partner, get, setGet, true)}
                   {pickAssetList(partner, getPicks, setGetPicks)}
+                </div>
+              </div>
+            )}
+            {/* DEVY SHARES (0398): shares and devy cash ride a two-team offer. */}
+            {partner != null && !isMulti && !counterOf && shares && (
+              <div style={{ marginTop: 12, border: '1px solid var(--bd)', borderRadius: 6, padding: 8 }}>
+                <div className="mono" style={{ ...label, marginBottom: 4 }}>🎓 DEVY SHARES</div>
+                {([[myRoster, giveShares, setGiveShares, 'YOU SEND'], [partner, getShares, setGetShares, 'YOU GET']] as const).map(([rid, val, setVal, lbl]) => {
+                  const stakes = (shares.players ?? []).filter((p) => !p.graduated_to)
+                    .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) })).filter((x) => !!x.h);
+                  return (
+                    <div key={lbl} style={{ marginTop: 6 }}>
+                      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>{lbl}</div>
+                      {stakes.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>no shares</div>}
+                      {stakes.map(({ p, h }) => (
+                        <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+                          <span style={{ flex: 1, fontSize: 12.5, color: (val[p.slug] ?? 0) > 0 ? 'var(--you)' : 'var(--text)' }}>{p.name ?? p.slug} <span style={{ color: 'var(--faint)' }}>{h!.shares} held</span></span>
+                          <input type="number" min={0} max={h!.shares} value={val[p.slug] ?? 0}
+                            onChange={(e) => setVal({ ...val, [p.slug]: Math.max(0, Math.min(h!.shares, Math.floor(Number(e.target.value) || 0))) })}
+                            style={{ width: 56, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>DEVY CASH</span>
+                  <select value={devyCashDir} onChange={(e) => setDevyCashDir(Number(e.target.value) === -1 ? -1 : 1)}
+                    style={{ padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }}>
+                    <option value={1}>I send</option><option value={-1}>I ask</option>
+                  </select>
+                  <input value={devyCashDraft} onChange={(e) => setDevyCashDraft(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0"
+                    style={{ width: 64, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>you have {fmtPts(teamBook(shares, myRoster).cash)}</span>
+                </div>
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 4 }}>
+                  Shares carry what they cost, and a whole maxed stake keeps its place in line for the player's right.
                 </div>
               </div>
             )}

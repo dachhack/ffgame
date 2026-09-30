@@ -82,3 +82,40 @@ export function devyLegParts(l: { send_shares?: { slug: string; shares: number; 
     ...(l.send_devy_cash ?? []).map((c) => `${fmtPts(Number(c.amount))} devy cash → ${teamName(c.to)}`),
   ];
 }
+
+/** A two-team offer that carries DEVY SHARES or devy cash (0398) files as a
+ *  two-leg trade (propose_multi_trade), since the two-seat offer knows nothing
+ *  of shares. Everything else the offer holds rides along on the legs:
+ *  players, picks, FAAB and cap room, each addressed to the other seat.
+ *  Signed amounts follow the two-seat builder: + = I send, − = I ask. */
+export function twoSeatDevyLegs(o: {
+  me: number; partner: number;
+  give: string[]; get: string[];
+  givePicks: { season: string; round: number; orig: number }[];
+  getPicks: { season: string; round: number; orig: number }[];
+  faab?: number; cap?: number;
+  giveShares: Record<string, number>; getShares: Record<string, number>;
+  devyCash?: number;
+}) {
+  const shares = (m: Record<string, number>, to: number) =>
+    Object.entries(m).filter(([, n]) => n > 0).map(([slug, n]) => ({ slug, shares: n, to }));
+  const amt = (v: number | undefined, sign: 1 | -1) => ((v ?? 0) * sign > 0 ? Math.abs(v ?? 0) : 0);
+  const leg = (rid: number, to: number, players: string[], picks: { season: string; round: number; orig: number }[],
+    m: Record<string, number>, sign: 1 | -1) => ({
+    roster: rid,
+    send: players.map((slug) => ({ slug, to })),
+    send_picks: picks.map((p) => ({ season: p.season, round: p.round, orig: p.orig, to })),
+    send_faab: amt(o.faab, sign) ? [{ to, amount: amt(o.faab, sign) }] : [],
+    send_cap: amt(o.cap, sign) ? [{ to, amount: amt(o.cap, sign) }] : [],
+    send_shares: shares(m, to),
+    send_devy_cash: amt(o.devyCash, sign) ? [{ to, amount: Math.round(amt(o.devyCash, sign) * 100) / 100 }] : [],
+  });
+  return [
+    leg(o.me, o.partner, o.give, o.givePicks, o.giveShares, 1),
+    leg(o.partner, o.me, o.get, o.getPicks, o.getShares, -1),
+  ];
+}
+
+/** Does an offer carry anything from the devy market? */
+export const offersDevy = (giveShares: Record<string, number>, getShares: Record<string, number>, devyCash?: number) =>
+  Object.values(giveShares).some((n) => n > 0) || Object.values(getShares).some((n) => n > 0) || Math.abs(devyCash ?? 0) > 0;
