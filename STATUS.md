@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.571.1 — one script applies the sport migrations
+
+> - `scripts/apply-sport-migrations.sh` runs 0396 → 0404 in order against a project's connection string, stopping at the first error; safe to re-run.
+
+Founder: "You can do 1-3 and I'll playtest from there." The three steps
+(migrations, the flag, the worker with `SPORTS=`) need the real project's
+credentials, which the build container does not hold; this script is the
+first step as one command, proven idempotent by re-running it on the
+local Postgres that already carried all nine.
+
 ### v0.571.0 — the sports flag: daily-sport leagues for the founder to test
 
 > - NBA / NHL / MLB / WNBA leagues are behind a per-account feature flag, the same way in-app leagues were.

@@ -48,7 +48,7 @@ the commissioner's sport scoring page.
 
 ## What it takes to run
 
-1. **Migrations 0396 → 0404**, in order. All of them applied cleanly on a
+1. **Migrations 0396 → 0404**, in order — `DATABASE_URL=... scripts/apply-sport-migrations.sh` does it. All of them applied cleanly on a
    local Postgres 16 with Supabase shims (`auth.uid()` etc.), alongside
    every earlier migration. 0398 **drops and recreates
    `create_native_league`** with two trailing defaulted arguments; every
