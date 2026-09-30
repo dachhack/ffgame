@@ -73,6 +73,38 @@ export function rankDirectory(sport, players) {
   return scored.map(({ p }) => p);
 }
 
+// ── Injuries on the boards ───────────────────────────────────────────────────
+// The boards read one table, injury_status (O / D / Q / IR by player_slug),
+// and the directory already knows each sport's designation; so the sweep
+// writes the injured into that table under the sport key, in the NFL's
+// four-letter vocabulary, and clears the sport's rows that healed. The NFL
+// injury poll's prune skips sport keys (poll/injuries.js).
+const TO_BOARD = { O: 'O', SUSP: 'O', D: 'D', Q: 'Q', GTD: 'Q', DTD: 'Q', IR: 'IR', LTIR: 'IR', OFS: 'IR', IL7: 'IR', IL10: 'IR', IL15: 'IR', IL60: 'IR' };
+export const boardInjury = (code) => (code ? TO_BOARD[code] ?? null : null);
+
+export function injuryRows(rows) {
+  const out = [];
+  for (const r of rows) {
+    const st = boardInjury(r.injury_status);
+    if (!st) continue;
+    out.push({ player_slug: r.player_key, status: st, comment: r.injury_note ?? null, team: r.team || null, source: `${r.sport}-dir`, updated_at: new Date().toISOString() });
+  }
+  return out;
+}
+
+async function syncSportInjuries(sport, rows) {
+  const inj = injuryRows(rows);
+  const keep = new Set(inj.map((r) => r.player_slug));
+  for (let i = 0; i < inj.length; i += 250) {
+    const { error } = await db().from('injury_status').upsert(inj.slice(i, i + 250), { onConflict: 'player_slug' });
+    if (error) { log(`${sport}: injury upsert: ${error.message}`); return { injured: 0, cleared: 0 }; }
+  }
+  const { data: held } = await db().from('injury_status').select('player_slug').like('player_slug', `${sport}-%`);
+  const gone = (held ?? []).map((r) => r.player_slug).filter((k) => !keep.has(k));
+  for (let i = 0; i < gone.length; i += 200) await db().from('injury_status').delete().in('player_slug', gone.slice(i, i + 200));
+  return { injured: inj.length, cleared: gone.length };
+}
+
 /** One sport's sweep. Returns counts; throws (retiring nobody) on a partial
  *  sweep. */
 export async function syncSportDirectory(sport, season) {
@@ -97,7 +129,8 @@ export async function syncSportDirectory(sport, season) {
     .update({ active: false, updated_at: new Date().toISOString() })
     .eq('sport', sport).eq('active', true).lt('seen_at', startedAt).select('player_key');
   if (rErr) log(`${sport}: retirement pass: ${rErr.message}`);
-  return { sport, players: rows.length, skipped, retired: retired?.length ?? 0 };
+  const inj = await syncSportInjuries(sport, rows);
+  return { sport, players: rows.length, skipped, retired: retired?.length ?? 0, ...inj };
 }
 
 // ── The box-score crosswalk (NBA / WNBA) ─────────────────────────────────────

@@ -74,7 +74,11 @@ const BP = {
   const body = api.slice(api.indexOf('export const createNativeLeague'));
   const call = body.slice(body.indexOf('create_native_league'), body.indexOf('});'));
   const params = (call.match(/p_[a-z_]+:/g) ?? []).length;
-  ok('create_native_league still takes exactly the 15 the tuple fills', params === 15, params);
+  // 0398 added two DEFAULTED trailing arguments — p_sport and p_sport_settings —
+  // that the blueprint never fills (a copied league is an NFL league). The tuple
+  // still fills the first 15; the two after it must stay last and defaulted.
+  ok('create_native_league takes the 15 the tuple fills, then the two defaulted sport arguments (0398)', params === 17, params);
+  ok('the sport arguments come last', /p_continuity_n: continuityN,\s*p_sport: sport, p_sport_settings:/.test(call), call.slice(-140));
 }
 
 // ── the summary the picker prints ───────────────────────────────────────────

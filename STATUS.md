@@ -22,6 +22,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.567.0 — the commissioner's sport scoring, and injuries on the boards
+
+> - A sport league's commissioner sets its scoring, format and categories on the SCORING tab.
+> - Injured NBA / NHL / MLB / WNBA players show their status on every board.
+
+**set_sport_settings (0400).** Patches `settings_json.sport`: points per
+stat any time (the worker rescores every live matchup on its next pass);
+format and categories, and the first week's Monday and the week count,
+until the season is under way. Values are sanitised (finite numbers within
+±1000, formats points|cats|roto, category ids as plain tokens, the date
+normalised to its Monday); the SportDef decides which ids exist, so the
+page only offers real ones. `src/screens/SportSettings.tsx` is that page,
+in place of the football catalog when `league_game_mode.sport` is not nfl;
+the LINEUP tab explains the sport's standard shape instead of the builder
+(a daily-sport lineup builder is on the list).
+
+**Injuries.** The directory sweep writes each sport's injured into
+`injury_status` under the sport key, in the boards' four-letter vocabulary
+(IL-60 → IR, GTD → Q, out-for-season → IR), and clears the sport's healed
+rows; the NFL injury poll's prune now leaves sport keys alone. Every board
+that shows an injury tag shows theirs.
+
+`check-blueprint` learns the two defaulted sport arguments on
+create_native_league; `check:parity` is green.
+
 ### v0.566.0 — roto, the mobile sport league, and lineups that lock only where they may
 
 > - Sport leagues can be ROTO: one season-long ranking per category instead of weekly winners.

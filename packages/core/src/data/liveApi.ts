@@ -3776,6 +3776,12 @@ export const sportLeagueGames = (leagueId: string, from: string, to: string) =>
 export interface SportRotoRow { roster_id: number; points: number; totals: Record<string, number>; cats: Record<string, { value: number | null; points: number }>; updated_at: string }
 export const sportRotoStandings = (leagueId: string) =>
   rpc<SportRotoRow[]>('sport_roto_standings', { p_league_id: leagueId });
+/** The commissioner's sport settings (0400): scoring any time; format,
+ *  categories and the calendar until the season is under way. */
+export const setSportSettings = (leagueId: string, patch: { scoring?: Record<string, number>; format?: 'points' | 'cats' | 'roto'; categories?: string[]; period_start?: string; weeks?: number }) =>
+  tracked(rpc<{ ok: boolean; error?: string; sport?: Record<string, unknown> }>('set_sport_settings',
+    { p_league_id: leagueId, p_patch: patch }),
+    Ev.commishAction, { tool: 'sport_settings', count: Object.keys(patch).length });
 /** Re-seed a sport league's pool from the directory (commissioner, pre-draft). */
 export const seedSportPool = (leagueId: string, limit = 600) =>
   rpc<{ ok: boolean; error?: string; players?: number }>('seed_sport_pool', { p_league_id: leagueId, p_limit: limit });

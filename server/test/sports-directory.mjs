@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { nhlSeasonLines, nhlStandingsTeams, nhlSeasonId, nhlRosterPlayers } from '../src/sports/nhl.js';
 import { mlbSeasonLines, mlbFieldingGames, mlbEligibility, mlbRosterStatus, mlbBuildDirectory } from '../src/sports/mlb.js';
 import { sleeperNbaPlayers, sleeperNbaSeasonLines, espnWnbaRoster } from '../src/sports/nba.js';
-import { directoryRow, rankDirectory, buildXref, resolveXref, normName } from '../src/poll/sportDirectory.js';
+import { directoryRow, rankDirectory, buildXref, resolveXref, normName, injuryRows, boardInjury } from '../src/poll/sportDirectory.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
 import { linePoints } from '../../packages/core/src/sports/score.ts';
 
@@ -91,6 +91,17 @@ const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).
   const rows = espnWnbaRoster(roster);
   ok(rows.length === 3 && rows[0].team === 'NY' && rows[0].headshot && rows[1].injury.code === 'O' && rows[1].injury.note === 'Ankle' && rows[2].active === false, 'ESPN roster: ids, headshot, injury, inactive');
   ok(directoryRow('wnba', rows[0], 1).eligible.join() === 'F', 'a WNBA forward is F');
+}
+
+// ── injuries for the boards ──────────────────────────────────────────────────
+{
+  ok(boardInjury('IL60') === 'IR' && boardInjury('GTD') === 'Q' && boardInjury('OFS') === 'IR' && boardInjury('P') === null && boardInjury(null) === null, 'sport designations map to the boards\' O/D/Q/IR');
+  const rows = injuryRows([
+    { sport: 'mlb', player_key: 'mlb-1', team: 'NYY', injury_status: 'IL15', injury_note: 'Injured 15-Day' },
+    { sport: 'mlb', player_key: 'mlb-2', team: 'NYY', injury_status: null },
+    { sport: 'nba', player_key: 'nba-3', team: 'GSW', injury_status: 'O', injury_note: 'Knee — Surgery' },
+  ]);
+  ok(rows.length === 2 && rows[0].status === 'IR' && rows[0].source === 'mlb-dir' && rows[1].status === 'O' && rows[1].comment === 'Knee — Surgery', 'injury_status rows for the injured only');
 }
 
 // ── the crosswalk ────────────────────────────────────────────────────────────

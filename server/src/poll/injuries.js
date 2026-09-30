@@ -139,7 +139,9 @@ export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
   if (canPrune) {
     const keep = new Set(clean.map((r) => r.player_slug));
     const { data: held } = await db().from('injury_status').select('player_slug');
-    const gone = (held ?? []).map((r) => r.player_slug).filter((s) => !keep.has(s));
+    // 0397: the sport directories keep their own rows here (nba-…, nhl-…);
+    // neither NFL source designates those, and this prune is not theirs.
+    const gone = (held ?? []).map((r) => r.player_slug).filter((s) => !keep.has(s) && !/^(nba|wnba|nhl|mlb)-\d+$/.test(s));
     // Chunked: a delete-in with a thousand slugs is one URL too long for PostgREST.
     for (let i = 0; i < gone.length; i += 200) {
       const chunk = gone.slice(i, i + 200);
