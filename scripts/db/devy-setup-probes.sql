@@ -41,6 +41,19 @@ begin
   perform dv_ok(commish_setup_devy(b, 'shares'), 'dv2 …or the devy market');
   perform dv_true(_devy_shares_on(b) and _league_has_college((select settings_json from league where id = b)), 'dv2a market on, college on');
 
+  -- 0399: WHEN THE MARKET OPENS is the commissioner's call.
+  perform dv_true(_devy_shares_locked(b), 'do1 by default a new market league waits for its first draft');
+  perform dv_ok(set_league_devy_open(b, 'now'), 'do2 the commissioner opens it now');
+  perform dv_true(not _devy_shares_locked(b), 'do2a …and it is open before the draft');
+  perform dv_true((devy_shares_state(b) ->> 'open_now')::boolean and not (devy_shares_state(b) ->> 'drafted')::boolean, 'do2b the state says so');
+  update draft set status = 'live' where league_id = b;
+  perform dv_true(_devy_shares_locked(b), 'do3 a live draft locks it');
+  perform dv_err(set_league_devy_open(b, 'after_draft'), 'draft is running', 'do3a no switching mid-draft');
+  update draft set status = 'complete', completed_at = now() where league_id = b;
+  perform dv_true(not _devy_shares_locked(b), 'do4 after the draft, the yearly rhythm: open');
+  perform dv_err(set_league_devy_open(b, 'after_draft'), 'has drafted', 'do4a the choice is moot after the first draft');
+  perform dv_ok(set_league_devy_open(a, 'after_draft'), 'do5 closing again is fine before the draft');
+
   r := create_native_league('Devy Auction', '2031', 2, 8, 60, 'auction', 200, 15, 1, null, null, null, 'classic');
   c := (r ->> 'league_id')::uuid;
   perform dv_err(commish_setup_devy(c, 'shares'), 'auction', 'dv3 no market with an auction draft');
@@ -49,6 +62,7 @@ begin
   delete from league where id = (r ->> 'league_id')::uuid;
 
   perform dv_as('02'); perform native_join(code, 'DV-2');
+  perform dv_err(set_league_devy_open(a, 'now'), 'commissioner only', 'do6 a member cannot open the market');
   perform dv_err(commish_setup_devy(a, 'shares'), 'commissioner only', 'dv4 a member cannot');
   perform dv_as('01');
   update draft set status = 'complete' where league_id = a;

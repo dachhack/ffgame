@@ -3742,6 +3742,7 @@ export interface DevySharesState {
   rules?: { budget: number; max: number; floor: number; cash_cap?: number; payout_cap?: number;
     max_spend?: number; min_spend?: number; refund?: number; quiet_days?: number; round_price?: Record<string, number> };
   /** 0396 */ current?: boolean; frozen?: boolean; start_cash?: number;
+  /** 0399: the commissioner opened the market at creation; has the league drafted yet? */ open_now?: boolean; drafted?: boolean;
   /** 0397: every seat, for the share-trade screen. */ teams?: { roster_id: number; team: string }[];
   used?: Record<string, number>;
   /** 0388: each team's cash, and what its stakes would pay today. */
@@ -3763,6 +3764,11 @@ export const devyMarket = (leagueId: string, limit = 1000) =>
 export const setLeagueDevyStartCash = (leagueId: string, cash: number) =>
   tracked(rpc<{ ok: boolean; error?: string; start_cash?: number }>('set_league_devy_start_cash',
     { p_league_id: leagueId, p_cash: cash }), Ev.commishAction, { tool: 'devy_start_cash' });
+/** 0399: when a new league's market opens — 'now', or 'after_draft' (the
+ *  default). Only before the league's first completed draft. */
+export const setLeagueDevyOpen = (leagueId: string, open: 'now' | 'after_draft') =>
+  tracked(rpc<{ ok: boolean; error?: string; open?: string; locked?: boolean }>('set_league_devy_open',
+    { p_league_id: leagueId, p_open: open }), Ev.commishAction, { tool: 'devy_open' });
 export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_devy_mode',
     { p_league_id: leagueId, p_mode: mode }), Ev.commishAction, { tool: 'devy_mode' });

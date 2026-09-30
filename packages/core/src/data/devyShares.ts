@@ -69,7 +69,13 @@ export function maxBuy(cur: number, cost: number, price: number, max: number = D
 /** "Locked since Jan 15 — until the rookie draft is done" / "Locks Jan 15". */
 export function lockLine(st: DevySharesState | null | undefined): string {
   if (!st?.on) return '';
+  // 0399: a league that hasn't drafted yet waits on its first draft, unless
+  // the commissioner opened the market at creation.
+  if (st.locked && st.drafted === false) return st.open_now
+    ? 'Paused while the draft runs — it reopens when the draft is done.'
+    : 'Opens when the league\u2019s first draft is done (the commissioner can open it sooner).';
   if (st.locked) return 'Locked since Jan 15 until the rookie draft is done.';
+  if (st.drafted === false && st.open_now) return 'Open now — the commissioner opened the market before the draft. From Jan 15 until the rookie draft, shares lock.';
   return 'You can move shares until Jan 15. From then until the rookie draft, they are locked.';
 }
 
@@ -137,9 +143,9 @@ export function devyChoiceBlocked(choice: DevyChoice, o: { classic: boolean; auc
 }
 
 /** One line for the review screen. */
-export function devyChoiceLine(choice: DevyChoice, spots: number): string {
+export function devyChoiceLine(choice: DevyChoice, spots: number, openNow = false): string {
   if (choice === 'spots') return `DEVY · ${spots} college roster spot${spots === 1 ? '' : 's'} per team`;
-  if (choice === 'shares') return 'DEVY MARKET · shares in college players reserve rookie-draft rights';
+  if (choice === 'shares') return `DEVY MARKET · opens ${openNow ? 'right away' : 'after the draft'} · shares reserve rookie-draft rights`;
   return 'NO DEVY · NFL players only';
 }
 
@@ -151,5 +157,6 @@ export const DEVY_CHOICE_INFO =
   + 'DEVY MARKET — college players stay out of the draft. Each team gets 100 points to buy shares in them: '
   + 'the first team to 20 shares (or the only team holding 5+ shares and 15+ points) reserves the right to draft that player '
   + 'in the rookie draft. Prices rise as players play well, so early scouting pays; shares trade like picks. '
-  + 'Shares open once the startup draft is done and lock on Jan 15 until the rookie draft.\n\n'
+  + 'The commissioner decides when the market opens: right away, so teams can scout before the startup draft, '
+  + 'or once the startup draft is done. Every year after, shares lock on Jan 15 until the rookie draft.\n\n'
   + 'After the league is made, devy spots and the SPOTS / MARKET switch live in COMMISH.';
