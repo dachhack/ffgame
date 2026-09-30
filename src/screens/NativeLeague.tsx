@@ -6,7 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
-import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook } from '@drip/core/data/devyShares';
+import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, devyChoiceBlocked, DEVY_CHOICE_INFO, type DevyChoice } from '@drip/core/data/devyShares';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag, InjuryNow } from '../app/ui';
 import { useStore } from '../app/store';
@@ -58,6 +58,7 @@ import {
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
+  setupLeagueDevy,
 } from '@drip/core/data/liveApi';
 import { DevySharesPanel } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
@@ -223,6 +224,9 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
   const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>('snake');
+  // 0398: devy is a question at creation, not an admin switch found later.
+  const [devy, setDevy] = useState<DevyChoice>('none');
+  const [devySpots, setDevySpots] = useState(3);
   const [budget, setBudget] = useState(200);
   // Pace: LIVE = everyone in the room (seconds); SLOW = days-long drafts
   // (hour-scale clocks; queues + proxy bids keep turns fair while offline).
@@ -371,8 +375,17 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         });
         copyReportPending = steps.filter((s) => !s.ok).map((s) => `${s.step} — ${friendlyError(s.error ?? 'refused')}`);
       }
+      // DEVY before the pool: devy spots need college players IN the pool;
+      // the market keeps them out of it (they are bought, not drafted).
+      const devyNow = chosenGame === 'classic' && !devyChoiceBlocked(devy, { classic: true, auction: mode === 'auction', contract: contractType }) ? devy : 'none';
+      if (devyNow !== 'none') {
+        setNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
+        const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
+        if (!dr.ok) copyReportPending = [...copyReportPending, `devy — ${friendlyError(dr.error ?? 'refused')}`];
+      }
       setNote('Building the 2026 player pool…');
-      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
+      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote,
+        devyNow === 'spots' ? { positions: ['COLLEGE'] } : undefined));
       if (!pool.ok) { setErr(friendlyError(pool.error ?? 'Could not seed the player pool.')); setBusy(false); return; }
       setNote('Generating the season schedule…');
       const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
@@ -587,6 +600,35 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             : <div><div className="mono" style={label}>BID WINDOW (HRS)</div><div style={{ marginTop: 7 }}>{num(bellHrs, setBellHrs, 1, 48, 1)}</div></div>)}
           {mode === 'auction' && <div><div className="mono" style={label}>LOTS AT ONCE</div><div style={{ marginTop: 7 }}>{num(maxLots, setMaxLots, 1, 4, 1)}</div></div>}
         </div>
+        {/* DEVY (0398) — its own question, because a devy league is a
+            different game and nothing else on this form says so. */}
+        {kind === 'league' && game === 'classic' && (() => {
+          const blk = (c: DevyChoice) => devyChoiceBlocked(c, { classic: true, auction: mode === 'auction', contract: contractType });
+          return (
+            <div style={{ marginTop: 16 }}>
+              <div className="mono" style={label} title={DEVY_CHOICE_INFO}>DEVY (COLLEGE PLAYERS) ⓘ</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Chip on={devy === 'none'} onClick={() => setDevy('none')}>NO DEVY</Chip>
+                <Chip on={devy === 'spots'} onClick={() => setDevy('spots')}>DEVY SPOTS</Chip>
+                <Chip on={devy === 'shares'} onClick={() => { if (!blk('shares')) setDevy('shares'); }}>DEVY MARKET</Chip>
+                {devy === 'spots' && (
+                  <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginLeft: 8 }}>
+                    <span className="mono" style={{ ...label, marginTop: 0 }}>SPOTS / TEAM</span>{num(devySpots, setDevySpots, 1, 10, 1)}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+                {devy === 'none' ? 'An NFL-only league. Pick DEVY SPOTS or DEVY MARKET to make it a devy league.'
+                  : devy === 'spots' ? `College players are in the draft pool, and every team gets ${devySpots} roster spot${devySpots === 1 ? '' : 's'} that hold only college players — drafted and kept like anyone else, and moved to the NFL roster when they graduate.`
+                  : 'College players stay out of the draft. Every team gets 100 points to buy shares: the first to 20 shares — or the only team with 5+ shares and 15+ points in — reserves the right to draft that player as a rookie. Prices rise as players play well, so early scouting pays. Shares open once the startup draft is done and lock on Jan 15 until the rookie draft.'}
+              </div>
+              {blk(devy) && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn)', marginTop: 6 }}>⚠ {blk(devy)} — it won't be set up.</div>}
+              {!blk(devy) && blk('shares') && devy !== 'shares' && (
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6 }}>DEVY MARKET: {blk('shares')}</div>
+              )}
+            </div>
+          );
+        })()}
         {/* What the roster looks like is now a CONSEQUENCE of the game type,
             not a question — and every part of it is editable on the
             commissioner's ROSTER tab until the draft starts. Say what you're
@@ -610,7 +652,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         {copyReport !== null && copyReport.length > 0 && madeLeagueId && (
           <div style={{ background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 8, padding: 14, marginTop: 16 }}>
             <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)' }}>
-              ⚠ THE LEAGUE WAS CREATED — SOME SETTINGS DIDN'T COPY
+              ⚠ THE LEAGUE WAS CREATED — SOME SETTINGS DIDN'T TAKE
             </div>
             {copyReport.map((line, i) => (
               <div key={`cr-${i}`} className="mono" style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 5, lineHeight: 1.5 }}>· {line}</div>

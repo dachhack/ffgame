@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.567.0 — devy is a step when you make a league
+
+> - Making a classic league now asks whether it is a devy league: NO DEVY, DEVY SPOTS or DEVY MARKET.
+> - DEVY SPOTS lets you pick how many college roster spots each team gets; DEVY MARKET gives every team 100 points for shares.
+> - The market option explains itself when it can't be used (auction or contract leagues), and the review screen shows your choice.
+
+The founder: "It's not clear that you are creating a devy league in the
+league creation. That should be a step."
+- 0398 commish_setup_devy(league, mode, spots): college players were an
+  ADMIN switch (set_league_position_access), so a commissioner could not
+  make their own league devy. The new RPC lets the commissioner do it
+  before the draft, in a classic league on the NFL calendar: COLLEGE on,
+  plus devy roster spots added on top of the existing bench ('spots'), or
+  the devy market via set_league_devy_mode ('shares', which still refuses
+  auction drafts).
+- App (Recruit.tsx): a DEVY step after NAME & SIZE, classic leagues only.
+  Web (NativeLeague create form): the same question under DRAFT TYPE.
+  Both run the setup before the pool is seeded, and seed college players
+  into the pool for DEVY SPOTS. A refusal lands in the "some settings
+  didn't take" note rather than failing a league that already exists.
+- Core devyShares: DevyChoice, devyChoiceBlocked, devyChoiceLine,
+  DEVY_CHOICE_INFO. Client liveApi.setupLeagueDevy.
+- Probes: scripts/db/devy-setup-probes.sql (commissioner can, member
+  can't, not after the draft, not drip, market not with auction, spots
+  add rounds).
+
 ### v0.566.0 — one trade: players, picks and devy shares together
 
 > - Trade offers can now mix players, draft picks, FAAB and devy shares or devy cash in a single deal.
