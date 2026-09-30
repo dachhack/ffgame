@@ -101,6 +101,14 @@ export const config = {
   // the old flat behaviour (21600000 = the pre-v0.319.0 six hours).
   syncFloorMs: Number(process.env.SYNC_FLOOR_MS || 60000),           // 1m
   weeklySyncRefreshMs: Number(process.env.WEEKLY_SYNC_MS || 0),      // 0 = use the cadence
+  // THE DAILY SPORTS (v0.564.0): which of nba / wnba / nhl / mlb this worker
+  // polls into sport_game + game_stat_line (poll/sportGames.js). Unset = none,
+  // so a worker that only carries the NFL is byte-for-byte what it was.
+  sports: (process.env.SPORTS || '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ['nba', 'wnba', 'nhl', 'mlb'].includes(s)),
+  // Box scores are re-read this often while a game is live, and the day's
+  // schedule this often when none is.
+  sportsLivePollMs: Number(process.env.SPORTS_LIVE_POLL_MS || 60000),
+  sportsIdlePollMs: Number(process.env.SPORTS_IDLE_POLL_MS || 600000),
 };
 
 /** Throws unless the Supabase service credentials are present. */

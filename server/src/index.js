@@ -47,6 +47,7 @@ import { sweepVampireBites } from './vampireBite.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
+import { tickSports } from './poll/sportGames.js';
 import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
@@ -1070,6 +1071,21 @@ async function main() {
   };
   await trueup().catch((e) => log('true-up error', e.message));
   setInterval(() => trueup().catch((e) => log('true-up error', e.message)), 6 * 3600e3);
+
+  // THE DAILY SPORTS (v0.564.0): sport_game + game_stat_line for whatever
+  // SPORTS= names. Its own loop, never inside a play tick — an NHL box score
+  // that hangs must not stretch an NFL window. Self-paced: the next pass is
+  // scheduled when this one ends, tight while any game is live, relaxed when
+  // none is, and never overlapping.
+  if (config.sports.length) {
+    const sportsLoop = async () => {
+      let live = false;
+      try { live = await tickSports(config.sports); } catch (e) { log('sports tick error', e.message); }
+      setTimeout(() => { void sportsLoop(); }, live ? config.sportsLivePollMs : config.sportsIdlePollMs);
+    };
+    log('daily sports:', config.sports.join(', '));
+    void sportsLoop();
+  }
 
   // Weekly schedule + lineup auto-sync for all configured leagues (separate, slower
   // loop — a 100-league sync can outlast one play tick).

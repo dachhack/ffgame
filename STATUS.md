@@ -22,6 +22,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.564.0 — the sport spine: NBA, WNBA, NHL and MLB as data
+
+> - Groundwork for hockey, basketball and baseball leagues: nothing changes for NFL leagues yet.
+
+The founder: "What would it take for us to do hockey, NBA, MLB, WNBA fantasy …
+let's assume native leagues for all of these and no drip format." The
+assessment and the phased plan are in `docs/multi-sport-plan.md`; this is
+phase 1, the data half of the spine.
+
+**One SportDef per sport (`packages/core/src/sports/`).** Eligibility codes
+and the feed-position map (NBA "G-F" → SG/SF, MLB "CF" → OF), slot types and
+the Yahoo/ESPN standard lineup, the stat vocabulary a box score is normalised
+into, derived stats (double-double, PPP, IP, quality start), the default
+points table, the categories a 9-cat / 5x5 league compares, injury statuses
+and the season shape. The NFL is in the registry for shape only; it keeps
+scoring through `engine/classic.ts`. `sports/score.ts` scores a line
+(points), compares two teams category by category (team FG% is made from
+summed makes and attempts; a ratio nobody registered is a tie) and ranks a
+league roto-style (best of N takes N, ties split places).
+
+**Stat lines, not plays (0396).** A classic league needs each player's line
+per game, and every other league's official feed publishes exactly that, live.
+`league.sport` (default `nfl`), `sport_game` (the daily slate, keyed sport +
+season + feed game id) and `game_stat_line` (one cumulative line per player
+per game, `player_key` = `<sport>-<feed id>` on college's numeric-id rule).
+`sport_lines_for` reads a period's lines for a set of players.
+
+**Adapters + poller (`server/src/sports/`, `server/src/poll/sportGames.js`).**
+NHL (api-web.nhle.com: box score plus the landing page for PPA/SHA and the
+game-winner), MLB (statsapi.mlb.com live feed), NBA/WNBA (the leagues'
+liveData CDN, same shape, browser headers required). Pure over the payloads,
+tested on captures of NHL opening night and the MLB postseason
+(`server/test/sports-adapters.mjs`); the NBA test runs on the documented
+sample because the CDN refuses the build container. The poller is gated on
+`SPORTS=nhl,mlb` — unset, the NFL worker is byte-for-byte what it was — and
+paces itself: a minute while a game is live, ten when none is. CLI:
+`sport-poll <sport> [date] [--force]`. A dry run against the live feeds
+wrote 9 games and 249 lines.
+
+`npm run check:sports` (in `check:parity`) pins the definitions, the scorer,
+the adapters on their fixtures, the poller's date and re-read rules, and that
+`league.sport`'s check list is core's `SPORT_IDS`.
+
 ### v0.563.0 — mark-free switches in super admin: just me, and everyone
 
 > - NFL team logos are no longer offered as team or league avatars when logos are hidden.
