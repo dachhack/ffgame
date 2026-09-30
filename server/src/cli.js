@@ -10,6 +10,7 @@
 //   node src/cli.js leagues                    list leagues (id + sleeper id) + matchup weeks
 //   node src/cli.js seed-preseason-pool [lg] [wk=101]  deep slate-team pick pool for a preseason week
 //   node src/cli.js restamp <wk> [season] [--league=<uuid>]  ⚠ re-resolve a CLOSED week's stored finals
+//   node src/cli.js college-sweep [season]      the college sweep now (rosters, stats, KTC, devy prices)
 //   node src/cli.js diff-week <wk> [season] [--league=<uuid>] [--seat=<n>]  read-only per-slot scoring
 import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek, seedPreseasonPool } from './sync.js';
@@ -660,12 +661,18 @@ async function main() {
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.dry === true) argv.push('--dry');
+      } else if (req.mode === 'college-sweep') {
+        // v0.570.1: the worker's college sweep, now — rosters, stats, KTC's
+        // devy board and the devy market prices. Writes only what the
+        // scheduled sweep writes.
+        argv.push('college-sweep');
+        if (req.season) argv.push(String(req.season));
       } else if (req.mode === 'college-report') {
         // v0.550.1: read-only — plays stored for rostered college players.
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -721,6 +728,20 @@ async function main() {
         if (up?.length) n++; else console.log('    skipped — it moved since the read');
       }
       console.log(`refinalize-week: ${dry ? 'nothing written' : `${n} matchup(s) set final`}. Scores untouched.`);
+      break;
+    }
+    case 'college-sweep': {
+      // ▶ THE COLLEGE SWEEP, ON DEMAND (v0.570.1).
+      //   node src/cli.js college-sweep [season]
+      //   Exactly what the worker runs weekly: every FBS roster, last and this
+      //   season's stats, KTC's devy board, then refresh_college_prices.
+      const { runCollegeSweep } = await import('./poll/college.js');
+      const { loadKtcDevy } = await import('./poll/ktcDevy.js');
+      const season = args[0] ?? config.season;
+      const r = await runCollegeSweep(season, (...a) => console.log(...a), undefined, undefined, loadKtcDevy);
+      console.log(`college-sweep ${season}: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines`
+        + (r.failed ? `, ${r.failed} rosters failed (no retirement)` : `, ${r.retired} retired`) + (r.error ? ` — ${r.error}` : ''));
+      if (r.error) process.exitCode = 1;
       break;
     }
     case 'college-report': {
