@@ -1,6 +1,6 @@
 // KTC devy board parsing (0400). Fixture is a trimmed copy of the real
 // /devy-rankings row markup; no network.
-import { parseKtcDevy, loadKtcDevy } from '../src/poll/ktcDevy.js';
+import { parseKtcDevy, loadKtcDevy, statheadDevyRows, loadDevyBoard } from '../src/poll/ktcDevy.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -34,6 +34,23 @@ const pages = [page0, row(101, 'x-4', 'Kam Davis', 'UGA', 'RB40', 12), '<html>no
 let asked = 0;
 const all = await loadKtcDevy(async () => pages[asked++]);
 ok(all.length === 3 && asked === 3, `pages are read until one comes back empty (${all.length} rows, ${asked} pages)`);
+
+// ── stathead's file (v0.570.2) ──
+const sh = [
+  { playerID: 2, playerName: 'Malachi Toney', position: 'WR', team: 'MIAMI', value: 6658, superflexValue: 7487 },
+  { playerID: 1, playerName: 'Jeremiah Smith', position: 'WR', team: 'OSU', value: 9997, superflexValue: 9999 },
+  { playerID: 3, playerName: 'A Kicker', position: 'K', team: 'ALA', value: 50 },
+];
+const shRows = statheadDevyRows(sh);
+ok(shRows.length === 2 && shRows[0].name === 'Jeremiah Smith' && shRows[0].rank === 1 && shRows[1].rank === 2,
+  'stathead rows are ranked by 1QB value, kickers dropped');
+ok(shRows[1].school === 'MIAMI' && shRows[1].value === 6658, 'team → school, 1QB value kept');
+const many = Array.from({ length: 30 }, (_, i) => ({ playerName: `P ${i}`, position: 'RB', team: 'X', value: 1000 - i }));
+let scraped = 0;
+const viaSh = await loadDevyBoard(() => {}, async () => many, async () => { scraped++; return ''; });
+ok(viaSh.length === 30 && scraped === 0, 'stathead first: a full file means KTC is not read');
+const viaKtc = await loadDevyBoard(() => {}, async () => { throw new Error('404'); }, async () => (scraped++ === 0 ? page0 : ''));
+ok(viaKtc.length === 2 && scraped === 2, 'a missing stathead file falls back to KTC\'s page');
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL KTC-DEVY TESTS PASSED');

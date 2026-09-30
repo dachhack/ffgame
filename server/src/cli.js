@@ -736,9 +736,9 @@ async function main() {
       //   Exactly what the worker runs weekly: every FBS roster, last and this
       //   season's stats, KTC's devy board, then refresh_college_prices.
       const { runCollegeSweep } = await import('./poll/college.js');
-      const { loadKtcDevy } = await import('./poll/ktcDevy.js');
+      const { loadDevyBoard } = await import('./poll/ktcDevy.js');
       const season = args[0] ?? config.season;
-      const r = await runCollegeSweep(season, (...a) => console.log(...a), undefined, undefined, loadKtcDevy);
+      const r = await runCollegeSweep(season, (...a) => console.log(...a), undefined, undefined, () => loadDevyBoard((...a) => console.log(...a)));
       console.log(`college-sweep ${season}: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines`
         + (r.failed ? `, ${r.failed} rosters failed (no retirement)` : `, ${r.retired} retired`) + (r.error ? ` — ${r.error}` : ''));
       if (r.error) process.exitCode = 1;
