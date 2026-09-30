@@ -1,0 +1,4 @@
+{
+  "mode": "college-sweep",
+  "why": "Re-run after 0402: 017's sweep priced the devy market but its KTC step failed (pg_safeupdate refused set_college_ktc's unqualified DELETE), so prices were stats-only."
+}
