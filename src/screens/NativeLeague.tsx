@@ -23,6 +23,7 @@ import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { sportLeagueSettings, currentSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
+import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
@@ -198,6 +199,13 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // directory, and skips the formats and continuities that are still
   // football-only (guillotine, vampire, contracts, dynasty).
   const [sport, setSport] = useState<Sport>('nfl');
+  // THE SPORTS FLAG (0404): the chips show for holders of the 'sports'
+  // feature and admins; the create RPC enforces the same gate.
+  const [sportsOn, setSportsOn] = useState(false);
+  useEffect(() => {
+    Promise.all([readMyFeatures().catch(() => ({} as Record<string, boolean>)), readIsAdmin().catch(() => false)])
+      .then(([f, a]) => setSportsOn(!!a || f.sports === true));
+  }, []);
   const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
   const [sportWeeks, setSportWeeks] = useState<number | null>(null);
   const [sportFormat, setSportFormat] = useState<SportFormat>('points');
@@ -485,7 +493,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             continuity, format and game mode are readable only off the
             my_teams row, so a commish-only league would copy as a redraft
             drip league no matter what it really is. */}
-        {kind === 'league' && (
+        {kind === 'league' && sportsOn && (
           <>
             <div className="mono" style={label}>WHICH SPORT?</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>

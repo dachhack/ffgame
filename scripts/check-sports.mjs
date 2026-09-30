@@ -113,5 +113,16 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
   ok(game.map((c) => c.short).join() === 'PTS,REB,AST,BLK,3PM,TO' && game[0].value === '31', 'a game line shows its non-zero counting stats, no ratios');
 }
 
+// ── 7. the sports flag gates the one door ───────────────────────────────────
+{
+  const sql404 = readFileSync(new URL('../supabase/migrations/0404_sports_flag.sql', import.meta.url), 'utf8');
+  ok(/create or replace function has_sports\(\)/.test(sql404) && /features \? 'sports'/.test(sql404), 'has_sports() reads the sports feature, admins pass');
+  ok(/if sp <> 'nfl' and not has_sports\(\) then/.test(sql404) && /create or replace function create_native_league\(/.test(sql404), 'create_native_league refuses a daily sport without the flag');
+  const web = readFileSync(new URL('../src/screens/NativeLeague.tsx', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../apps/mobile/src/screens/Recruit.tsx', import.meta.url), 'utf8');
+  ok(/kind === 'league' && sportsOn &&/.test(web) && /f\.sports === true/.test(web), 'the web create form shows WHICH SPORT to flag holders and admins only');
+  ok(/sportsOn && <LabelInfo label="WHICH SPORT\?"/.test(app) && /f\.sports === true/.test(app), 'the app create flow shows WHICH SPORT to flag holders and admins only');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall sport checks passed');
 process.exit(fails ? 1 : 0);

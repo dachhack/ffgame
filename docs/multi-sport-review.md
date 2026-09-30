@@ -1,7 +1,7 @@
 # Multi-sport — the morning review
 
 > _Written 2026-09-30 overnight, on branch `ccr-e05744f1-ro7jlw` (v0.564.0 →
-> v0.570.1). Nothing is merged; the web and the app are yours to review._
+> v0.571.0). Nothing is merged; the web and the app are yours to review._
 
 ## What is on the branch
 
@@ -17,6 +17,7 @@ Five commits, one per version, each with a STATUS.md entry:
 | v0.569.0 | Ten fixes from a code review of the branch (the sweep's retirement pass, pools following trades, WNBA team codes, postponements, mid-draft leagues, doubleheaders, stuck games, cadence, reads per tick, pills) |
 | v0.570.0 | The lineup builder for sport leagues (0403), the sport player card |
 | v0.570.1 | Ten fixes from a second review pass (the card's season numbers and ratios, DNP, the headshot, last-ten ordering, the builder's rounds and frozen state) |
+| v0.571.0 | The `sports` feature flag (0404): sport leagues for flag holders and admins only |
 
 The plan and the assessment behind it: `docs/multi-sport-plan.md`.
 
@@ -47,7 +48,7 @@ the commissioner's sport scoring page.
 
 ## What it takes to run
 
-1. **Migrations 0396 → 0403**, in order. All of them applied cleanly on a
+1. **Migrations 0396 → 0404**, in order. All of them applied cleanly on a
    local Postgres 16 with Supabase shims (`auth.uid()` etc.), alongside
    every earlier migration. 0398 **drops and recreates
    `create_native_league`** with two trailing defaulted arguments; every
@@ -62,6 +63,11 @@ the commissioner's sport scoring page.
    <sport>`.
 3. A sport league needs its directory swept first — creation refuses with
    "no NBA players in the directory yet" otherwise.
+4. **The flag.** Sport leagues are behind `has_sports()`: admins pass, and
+   anyone else needs `select admin_set_feature('email', 'sports', true)`.
+   Nobody without it sees the WHICH SPORT chips or can create one, so the
+   branch can merge and deploy with the NFL product unchanged for everyone
+   else.
 
 ## What was verified, and how
 

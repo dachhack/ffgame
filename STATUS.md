@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.571.0 — the sports flag: daily-sport leagues for the founder to test
+
+> - NBA / NHL / MLB / WNBA leagues are behind a per-account feature flag, the same way in-app leagues were.
+
+Founder: "Can we feature flag all of this to me so I can test?"
+
+**has_sports() (0404)** — `is_admin()` or `app_user.features ? 'sports'`,
+granted with the existing `admin_set_feature(email, 'sports', true)`.
+`create_native_league` is the one door into a sport league and now refuses
+a non-NFL sport without it; every downstream surface (draft chips, the
+week panel, the commissioner's sport tabs, the player card) keys off
+`league.sport`, so gating creation gates all of it. NFL creation is
+untouched. Both create flows show the WHICH SPORT chips to flag holders
+and admins only (`myFeatures` + `isAdmin`, as the native gate does).
+
+The worker's side stays on `SPORTS=` in its env: the directory and game
+feeds run for whichever sports it is told to carry, flag or not, so a
+tester's league has data waiting.
+
+Verified on the local Postgres: refused without the flag, NFL creation
+still fine, allowed once granted. `check:sports` pins the gate in the SQL
+and both forms.
+
 ### v0.570.1 — the second review: the card's season numbers, the builder's rounds
 
 > - Fixes to the sport player card and the lineup builder from a second review pass.

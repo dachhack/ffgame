@@ -157,6 +157,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // construction, plays Mon–Sun periods from a start date, and skips the
   // football-only formats and continuities.
   const [sport, setSport] = useState<Sport>('nfl');
+  // THE SPORTS FLAG (0404) — holders and admins see the chips; the RPC gates.
+  const [sportsOn, setSportsOn] = useState(false);
   const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
   const [sportFormat, setSportFormat] = useState<SportFormat>('points');
   const sportDef = SPORTS[sport];
@@ -240,7 +242,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // than advertising a door the server would shut.
   useEffect(() => {
     Promise.all([myFeatures().catch(() => ({} as Record<string, boolean>)), isAdmin().catch(() => false)])
-      .then(([f, a]) => setCanCreate(!!a || f.native === true));
+      .then(([f, a]) => { setCanCreate(!!a || f.native === true); setSportsOn(!!a || f.sports === true); });
   }, []);
   const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
@@ -692,13 +694,13 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             )}
             {step === 'game' && (
               <View>
-                <LabelInfo label="WHICH SPORT?"
-                  info={'NFL plays DRIP or CLASSIC on the NFL week.\n\nNBA, NHL, MLB and WNBA play CLASSIC on Monday-to-Sunday weeks: a positional lineup you can change any day, with every player locking into his slot when his game tips off. The pool is the league\'s current rosters, ranked by last season\'s production.'} />
-                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                {sportsOn && <LabelInfo label="WHICH SPORT?"
+                  info={'NFL plays DRIP or CLASSIC on the NFL week.\n\nNBA, NHL, MLB and WNBA play CLASSIC on Monday-to-Sunday weeks: a positional lineup you can change any day, with every player locking into his slot when his game tips off. The pool is the league\'s current rosters, ranked by last season\'s production.'} />}
+                {sportsOn && <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                   {SPORT_IDS.map((sp) => (
                     <Chip key={`sp-${sp}`} label={SPORTS[sp].league} on={sport === sp} onPress={() => { tap(); pickSport(sp); }} />
                   ))}
-                </View>
+                </View>}
                 {isSport ? (
                   <View style={{ marginTop: 10, gap: 6 }}>
                     <LabelInfo label="SCORING"
