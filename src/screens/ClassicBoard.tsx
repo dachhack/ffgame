@@ -38,6 +38,9 @@ import {
 } from '@drip/core/data/liveApi';
 import { PlayerImg, PosPill, InjuryNow, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
 import { VampirePanel } from './VampirePanel';
+import { SportWeekPanel } from './SportWeekPanel';
+import type { Sport } from '@drip/core/sports/index';
+import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/league';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
@@ -459,6 +462,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // on screen, because a total that means the opposite of what it looks like
   // is the one thing this screen must never let happen.
   const [golf, setGolf] = useState(false);
+  const [sport, setSport] = useState<Sport>('nfl');
+  const [sportSettings, setSportSettings] = useState<SportLeagueSettings | null>(null);
   const [slotsSpec, setSlotsSpec] = useState<SlotSpec[] | null>(null);
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
@@ -639,6 +644,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           // engine reads at scoring time, installed exactly like the scoring
           // adjustments below and cleared on exit with them.
           if (gm.ok) { setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRoster(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm)); setGolf(gm.golf === true); }
+          // A SPORT LEAGUE (0398) draws its week from locked slot-days, not
+          // plays: the panel above the lineup is where its score lives.
+          if (gm.ok) { setSport(gm.sport ?? 'nfl'); setSportSettings(gm.sport && gm.sport !== 'nfl' ? sportSettingsOf({ sport: gm.sport_settings }) : null); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -1586,6 +1594,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           leagues only. ▶ drives THIS board through the real feed + resolver —
           the founder's call (v0.367.1): the sim runs on the actual matchup
           board, not a replica, so what it proves is the thing that ships. */}
+      {ros && matchup && sport !== 'nfl' && sportSettings && (
+        <SportWeekPanel leagueId={ros.leagueId} matchupId={matchup.id} week={matchup.week} sport={sport} settings={sportSettings}
+          homeRosterId={matchup.home_roster_id} awayRosterId={matchup.away_roster_id} myRosterId={ros.rosterId} />
+      )}
       {ros && matchup && testLive != null && <SimStrip leagueId={ros.leagueId} week={matchup.week} onChanged={() => setSimVer((v) => v + 1)} />}
 
       {/* ── SCOREBOARD (v0.228.0) ──────────────────────────────────────────

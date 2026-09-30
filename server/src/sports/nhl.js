@@ -179,8 +179,57 @@ export function nhlRosterPlayers(roster, team) {
   return out;
 }
 
+// ── The directory (phase 2) ───────────────────────────────────────────────────
+// Teams from the standings (32 rows, one call), a roster per team, and the
+// season summary reports from the stats REST API — every skater and goalie
+// in one call each, plus the "realtime" report for hits and blocks.
+const STATS = 'https://api.nhle.com/stats/rest/en';
+
+/** "2026" → 20262027, the stats API's season id. */
+export const nhlSeasonId = (season) => Number(`${season}${Number(season) + 1}`);
+
+/** A skater summary row (+ its realtime row) → a core season line. */
+export function nhlSkaterSeasonLine(sum, rt = null) {
+  const gp = sum.gamesPlayed ?? 0;
+  return {
+    gp, toi: Math.round(((sum.timeOnIcePerGame ?? 0) * gp) / 60 * 100) / 100,
+    g: sum.goals ?? 0, a: sum.assists ?? 0, pm: sum.plusMinus ?? 0, pim: sum.penaltyMinutes ?? 0,
+    sog: sum.shots ?? 0, hit: rt?.hits ?? 0, blk: rt?.blockedShots ?? 0,
+    ppg: sum.ppGoals ?? 0, ppa: Math.max(0, (sum.ppPoints ?? 0) - (sum.ppGoals ?? 0)),
+    shg: sum.shGoals ?? 0, sha: Math.max(0, (sum.shPoints ?? 0) - (sum.shGoals ?? 0)),
+    gwg: sum.gameWinningGoals ?? 0, fow: 0, fol: 0, gva: rt?.giveaways ?? 0, tka: rt?.takeaways ?? 0,
+  };
+}
+
+export function nhlGoalieSeasonLine(g) {
+  return {
+    gapp: g.gamesPlayed ?? 0, gs: g.gamesStarted ?? 0, gtoi: Math.round(((g.timeOnIce ?? 0) / 60) * 100) / 100,
+    w: g.wins ?? 0, l: g.losses ?? 0, otl: g.otLosses ?? 0,
+    ga: g.goalsAgainst ?? 0, sv: g.saves ?? 0, sa: g.shotsAgainst ?? 0, so: g.shutouts ?? 0,
+  };
+}
+
+/** Season lines by player id from the three reports. */
+export function nhlSeasonLines(skaters, goalies, realtime = null) {
+  const rt = new Map((realtime?.data ?? []).map((r) => [String(r.playerId), r]));
+  const out = new Map();
+  for (const s of skaters?.data ?? []) out.set(String(s.playerId), nhlSkaterSeasonLine(s, rt.get(String(s.playerId))));
+  for (const g of goalies?.data ?? []) out.set(String(g.playerId), nhlGoalieSeasonLine(g));
+  return out;
+}
+
+export const nhlStandingsTeams = (standings) =>
+  (standings?.standings ?? []).map((t) => t.teamAbbrev?.default ?? t.teamAbbrev).filter(Boolean);
+
 // ── I/O ──────────────────────────────────────────────────────────────────────
 export const fetchNhlSchedule = (date) => getJson(`${BASE}/schedule/${date}`);
+export const fetchNhlStandings = () => getJson(`${BASE}/standings/now`);
+const report = (kind, seasonId) => getJson(`${STATS}/${kind}?cayenneExp=seasonId=${seasonId}%20and%20gameTypeId=2&limit=-1`);
+export const fetchNhlSeason = async (season) => {
+  const id = nhlSeasonId(season);
+  const [skaters, goalies, realtime] = await Promise.all([report('skater/summary', id), report('goalie/summary', id), report('skater/realtime', id).catch(() => null)]);
+  return nhlSeasonLines(skaters, goalies, realtime);
+};
 export const fetchNhlBox = (gameId) => getJson(`${BASE}/gamecenter/${gameId}/boxscore`);
 export const fetchNhlLanding = (gameId) => getJson(`${BASE}/gamecenter/${gameId}/landing`);
 export const fetchNhlRoster = (team) => getJson(`${BASE}/roster/${team}/current`);
@@ -191,5 +240,23 @@ export const nhl = {
   async game(gameId) {
     const [box, landing] = await Promise.all([fetchNhlBox(gameId), fetchNhlLanding(gameId).catch(() => null)]);
     return nhlBoxToGame(box, landing);
+  },
+  /** Every rostered player with a season line for ranking: this season's
+   *  once he has 20 games in it, else last season's. ~35 requests. */
+  async directory(season) {
+    const teams = nhlStandingsTeams(await fetchNhlStandings());
+    const [cur, prior] = await Promise.all([fetchNhlSeason(season), fetchNhlSeason(String(Number(season) - 1))]);
+    const out = [];
+    for (const team of teams) {
+      let roster;
+      try { roster = await fetchNhlRoster(team); } catch (e) { throw new Error(`roster ${team}: ${e.message}`); }
+      for (const p of nhlRosterPlayers(roster, team)) {
+        const c = cur.get(p.extId), pr = prior.get(p.extId);
+        const played = (l) => (l?.gp ?? 0) + (l?.gapp ?? 0);
+        const use = played(c) >= 20 ? c : (pr ?? c ?? null);
+        out.push({ ...p, injury: null, season: use, seasonId: use === c && c ? season : pr ? String(Number(season) - 1) : season, gp: played(use) });
+      }
+    }
+    return out;
   },
 };

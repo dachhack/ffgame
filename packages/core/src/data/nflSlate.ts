@@ -370,8 +370,15 @@ export const collegeWeekNum = (week: number): number => week - COLLEGE_BASE;
 export const BOWL_BASE = 215;
 export const isBowlWeek = (week: number): boolean => week > BOWL_BASE;
 /** A board week as a heading: "PRESEASON WK 2", "CFB WK 3", "WEEK 5". */
+// SPORT PERIODS (0398): board weeks 301+ belong to a daily-sport league
+// (core sports/league.ts SPORT_WEEK_BASE; check-sports pins the two) and
+// read as WEEK 1, 2… of that league's own season.
+export const SPORT_WEEK_BASE_LOCAL = 300;
+export const isSportWeek = (week: number): boolean => week > SPORT_WEEK_BASE_LOCAL;
+
 export const weekTitle = (week: number): string =>
-  (isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}`
+  (isSportWeek(week) ? `WEEK ${week - SPORT_WEEK_BASE_LOCAL}`
+    : isPreseasonWeek(week) ? `PRESEASON WK ${preseasonWeekNum(week)}`
     : isCollegeWeek(week) && collegeWeekOf(week) ? `WEEK OF ${collegeWeekOf(week)}`
     : isBowlWeek(week) ? `BOWL WK ${week - BOWL_BASE}`
     : isCollegeWeek(week) ? `CFB WK ${collegeWeekNum(week)}`
@@ -443,7 +450,8 @@ export const isPostseasonWeek = (week: number): boolean => week >= 19 && week <=
  *  board weeks leak the +100 namespace — "WK 102" means nothing to anyone
  *  outside this file, and neither does "WK 22". */
 export const weekLabel = (week: number): string =>
-  (isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}`
+  (isSportWeek(week) ? `WK ${week - SPORT_WEEK_BASE_LOCAL}`
+    : isPreseasonWeek(week) ? `PRE ${preseasonWeekNum(week)}`
     : isCollegeWeek(week) && collegeWeekOfShort(week) ? `WK ${collegeWeekOfShort(week)}`
     : isBowlWeek(week) ? `BOWL ${week - BOWL_BASE}`
     : isCollegeWeek(week) ? `CFB ${collegeWeekNum(week)}`
@@ -457,6 +465,7 @@ export const weekLabel = (week: number): string =>
  *  Eastern day most of the week's games are played on. Other weeks keep
  *  "WEEK n". */
 export function boardWeekTitle(week: number, kickoffs: (string | null | undefined)[] = []): string {
+  if (isSportWeek(week)) return `WEEK ${week - SPORT_WEEK_BASE_LOCAL}`;
   if (!isCollegeWeek(week)) return `WEEK ${week}`;
   // v0.556.9: "WEEK OF 9/28/2026" — from the installed dates, or this week's
   // own kickoffs when they haven't been installed yet.

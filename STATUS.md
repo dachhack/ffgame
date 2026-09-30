@@ -22,6 +22,67 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.565.0 — sport leagues: the directory, creation, daily locks and the week's score
+
+> - Native NBA, NHL, MLB and WNBA leagues can be created: a ranked player pool, weekly head-to-head periods, and lineups that lock player by player at tip-off.
+> - Nothing changes for NFL leagues.
+
+Phases 2 and 3 of `docs/multi-sport-plan.md`, on the v0.564.0 spine.
+
+**The directory (0397, `server/src/poll/sportDirectory.js`).** `sport_player`:
+every rostered player per sport with eligibility in core's vocabulary
+(NBA "G-F" → SG/SF; MLB fielding games at 10+ → 2B/SS, starts → SP/RP, a
+two-way player DH+SP), an injury status (MLB's IL from the 40-man rosters,
+the NBA's from Sleeper), and a RANK — fantasy points under the sport's
+default table over the ranking season (this one at 20 games, else last),
+Sleeper's search rank as the NBA tiebreak. Sources: NHL standings + rosters +
+the stats REST season reports (skaters, goalies, realtime hits/blocks); MLB
+players + teams + the hitting/pitching/fielding leaderboards + 30 rosters;
+NBA Sleeper's directory and its `/stats/nba/regular/{year}` (which works —
+the research had it unverified); WNBA ESPN rosters. A sweep retires by
+absence, as college does. `league_pool.eligible text[]` (NULL = the pos
+column, every NFL row). `seed_sport_pool` fills a league's pool from the
+directory. Basketball box scores carry nba.com ids and the directories
+don't, so `xrefKey` crosswalks a line by name + team and remembers the
+match in `sport_player.alt_ids`.
+
+**Sport leagues (0398, core `sports/league.ts`, `server/src/sportLeague.js`).**
+`create_native_league` gains `p_sport` and `p_sport_settings` (the old
+15-argument door is dropped, not overloaded — PostgREST would find two
+candidates); a sport league is classic by construction, keeps `roster_slots`
+from the SportDef's standard lineup and a `settings_json.sport` block
+(format points|cats, categories, scoring overrides, period_start, weeks),
+and seeds its pool server-side. Board weeks are 301+ (`SPORT_WEEK_BASE`),
+each a Mon–Sun period from `period_start` — disjoint from 1–22 / 101+ /
+201+ so the NFL worker's week-keyed queries never touch a sport league;
+`native_generate_schedule` delegates to `sport_generate_schedule` for one.
+The lock is per game: `sport_slot_lock` is the worker's snapshot of each
+seat's starting slots when a player's game starts, and
+`enforce_sport_pick_lock` / `enforce_sport_roster_lock` refuse moving a
+player whose game today has started, in or out (`sport_slug_started`, on
+sport_game by the league's Eastern date). The worker's sports loop locks
+what just started, scores every live matchup from its locked slot-days
+(points, or the category verdict — `home_final` = category wins) into
+`matchup_state`, wakes for the next tip-off, and stamps a matchup final
+the day after its period with no game from it still live; standings read
+it as any week. `league_game_mode` carries `sport` and `sport_settings`.
+
+**Web.** The create form asks WHICH SPORT first; a sport league asks
+POINTS or CATEGORIES, the first week's Monday and the week count, hides
+the football-only formats and continuities, and skips the client-side pool.
+Draft and wire position chips are the sport's own. The classic board draws
+`SportWeekPanel` above the lineup: the period, both seats' locked slot-days
+with each line's points (or the category grid), today's slate. Position
+pills borrow a football colour family per code. Mobile: not yet.
+
+**QA.** Every migration through 0398 applied on a local Postgres 16 with
+Supabase shims; a SQL scenario created an NBA league from fixture players,
+generated a 301+ schedule, set both lineups, saw the tip-off lock refuse a
+started player's swap and drop while an idle one moved, read lines for both
+seats, and counted the final in standings. `server/test/sports-directory.mjs`,
+`sports-league.mjs` (pure) and `sports-league-io.mjs` (a chainable fake
+Supabase: lock → score → final) join `check:sports`.
+
 ### v0.564.0 — the sport spine: NBA, WNBA, NHL and MLB as data
 
 > - Groundwork for hockey, basketball and baseball leagues: nothing changes for NFL leagues yet.

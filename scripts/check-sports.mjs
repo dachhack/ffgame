@@ -3,6 +3,8 @@
 // the roto ranking do what the rulebook says. Run: npx tsx scripts/check-sports.mjs
 import { SPORTS, SPORT_IDS, sportOf, sportDef, isDailySport, eligibleFor, slotAccepts, playerKey, parsePlayerKey } from '../packages/core/src/sports/index.ts';
 import { readFileSync } from 'node:fs';
+import { SPORT_WEEK_BASE } from '../packages/core/src/sports/league.ts';
+import { SPORT_WEEK_BASE_LOCAL, weekTitle, weekLabel, boardWeekTitle } from '../packages/core/src/data/nflSlate.ts';
 import { sumLines, normalizeScoring, linePoints, linesPoints, categoryTotals, categoryValue, categoryById, compareCategories, rotoStandings } from '../packages/core/src/sports/score.ts';
 
 let fails = 0;
@@ -81,6 +83,8 @@ ok(sumLines([{ a: 1 }, { a: 2, b: 1 }]).a === 3, 'sumLines');
 const sql = readFileSync(new URL('../supabase/migrations/0396_sports.sql', import.meta.url), 'utf8');
 const inList = /sport in \(([^)]*)\)/.exec(sql)?.[1]?.match(/'([a-z]+)'/g)?.map((s) => s.replace(/'/g, '')) ?? [];
 ok(inList.join() === SPORT_IDS.join(), `league.sport's check list is SPORT_IDS (${inList.join(', ')})`);
+
+ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && weekLabel(304) === 'WK 4' && boardWeekTitle(310) === 'WEEK 10' && weekTitle(5) === 'WEEK 5', 'sport weeks title from 301 as week 1; the slate\'s base is core\'s');
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport checks passed');
 process.exit(fails ? 1 : 0);

@@ -15,7 +15,7 @@
 // when none is. `pollSportDay` is also the CLI's `sport-poll`.
 import { db } from '../supabase.js';
 import { adapterFor } from '../sports/index.js';
-import { playerKey } from '../../../packages/core/src/sports/index.ts';
+import { xrefKey } from './sportDirectory.js';
 
 const log = (...a) => console.log('[sports]', ...a);
 
@@ -32,8 +32,8 @@ const gameRow = (g) => ({
   clock: g.clock, game_type: g.gameType, updated_at: new Date().toISOString(),
 });
 
-const lineRow = (g, l) => ({
-  sport: g.sport, season: g.season, game_id: g.gameId, player_key: playerKey(g.sport, l.extId),
+const lineRow = (g, l, key) => ({
+  sport: g.sport, season: g.season, game_id: g.gameId, player_key: key,
   ext_id: l.extId, full_name: l.name, team: l.team, pos: l.pos || null, played: !!l.played,
   line: l.line, updated_at: new Date().toISOString(),
 });
@@ -52,7 +52,7 @@ export function gamesToFetch(games, stored, force = false) {
 export async function pollSportDay(sport, date, { force = false } = {}) {
   const adapter = adapterFor(sport);
   const games = await adapter.schedule(date);
-  const counts = { sport, date, games: games.length, fetched: 0, lines: 0, live: 0, errors: 0 };
+  const counts = { sport, date, games: games.length, fetched: 0, lines: 0, live: 0, errors: 0, rows: games };
   if (!games.length) return counts;
 
   const { data: existing } = await db().from('sport_game').select('game_id,status')
@@ -72,7 +72,7 @@ export async function pollSportDay(sport, date, { force = false } = {}) {
       const merged = { ...g, ...game, gameDate: g.gameDate || game.gameDate };
       const rows = [];
       for (const l of lines) {
-        try { rows.push(lineRow(merged, l)); }
+        try { rows.push(lineRow(merged, l, await xrefKey(sport, l))); }
         catch (e) { counts.errors++; log(`${sport} ${g.gameId}: skipped ${l.name}: ${e.message}`); }
       }
       await db().from('sport_game').upsert(gameRow(merged), { onConflict: 'sport,season,game_id' });
@@ -90,21 +90,31 @@ export async function pollSportDay(sport, date, { force = false } = {}) {
 }
 
 /** Every configured sport, today and yesterday (a late West-coast final
- *  lands after ET midnight). Returns true when any game is live, so the
- *  caller can tighten its cadence. */
+ *  lands after ET midnight). Returns whether any game is live (the caller
+ *  tightens its cadence), the next start still ahead (so it can wake for
+ *  a tip-off), and the games seen per sport (for the league lock pass). */
 export async function tickSports(sports, now = new Date()) {
-  let anyLive = false;
+  let live = false, nextStartMs = null;
+  const games = {};
   for (const sport of sports) {
+    games[sport] = [];
     for (const off of [-1, 0]) {
       const date = easternDate(now, off);
       try {
         const c = await pollSportDay(sport, date);
         if (c.games) log(`${sport} ${date}: ${c.games} games, ${c.fetched} fetched, ${c.lines} lines${c.live ? `, ${c.live} live` : ''}${c.errors ? `, ${c.errors} errors` : ''}`);
-        if (c.live) anyLive = true;
+        if (c.live) live = true;
+        games[sport].push(...c.rows);
+        for (const g of c.rows) {
+          if (g.status === 'pre' && g.startUtc) {
+            const t = Date.parse(g.startUtc);
+            if (t > now.getTime() && (nextStartMs == null || t < nextStartMs)) nextStartMs = t;
+          }
+        }
       } catch (e) {
         log(`${sport} ${date}: ${e.message}`);
       }
     }
   }
-  return anyLive;
+  return { live, nextStartMs, games };
 }

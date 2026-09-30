@@ -63,6 +63,13 @@ posture as ESPN today.
   (`server/src/poll/sportGames.js`) gated on `SPORTS=nhl,mlb` so the NFL
   worker is unchanged when unset; CLI `sport-poll <sport> [date] [--force]`.
 
+**Phases 2–3 (shipped v0.565.0)**: the directory and rank (`sport_player`,
+`seed_sport_pool`, `league_pool.eligible`), creation with a sport,
+periods from 301, per-game locks (`sport_slot_lock` + the two triggers),
+the worker's lock/score/final loop, the web create form, draft/wire chips
+and `SportWeekPanel`. Roto, MLB caps, injuries beyond the directory, the
+NBA/WNBA schedule by date, and the mobile screens are still open.
+
 **Still to build (phases 2–4)**
 
 - **Directory + pool seeding per sport**: `league_pool` rows from the feed's
