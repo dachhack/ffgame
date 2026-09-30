@@ -22,6 +22,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.566.0 — roto, the mobile sport league, and lineups that lock only where they may
+
+> - Sport leagues can be ROTO: one season-long ranking per category instead of weekly winners.
+> - The app can create NBA / NHL / MLB / WNBA leagues and shows the week's locked lines on the classic board.
+
+**Roto (0399, phase 4).** `settings_json.sport.format = 'roto'`: the worker
+sums every locked slot-day of the season per seat (derived per game first,
+so a double-double counts per night), ranks the league in each category
+(core `rotoStandings`: best of N takes N, ties split places, a seat with no
+line yet has 0 of everything — last in the counting categories and, as in
+every roto league before opening night, first in turnovers) and writes
+`sport_roto`; `sport_roto_standings` reads it. The weekly matchups keep
+scoring head-to-head for the board's sake. `sport_league_lines_svc` is the
+worker's league-wide read.
+
+**Eligibility at the lock.** A player in a slot he may not fill (a centre at
+point guard) never locks, so he never scores — the same 0 the NFL resolver
+gives an illegal spot, decided once at tip-off (`slotAllowsFor`,
+`league_pool.eligible` over `roster_slots`) rather than at every read.
+
+**Names.** A sport key is a feed id, and prettifying it printed "Nba 1658".
+`setSportNames` / `sportNameFor` (core sports/index.ts) hold the league's
+names the way college's do; both classic boards install them from the pools
+they already load.
+
+**Mobile.** The create flow's first question is WHICH SPORT; a sport league
+asks POINTS / CATEGORIES / ROTO and the first week's Monday (± a week),
+hides the football-only continuities and formats, and skips the client-side
+pool. The draft's position chips are the sport's. The classic board draws
+`ui/SportWeekPanel` — the period, both seats' locked slot-days, the category
+grid or the roto table, today's slate. The web form gains the ROTO chip and
+its panel the roto table.
+
+`npm run typecheck` and the app's `tsc --noEmit` both clean; `check:sports`
+gains the roto table test.
+
 ### v0.565.0 — sport leagues: the directory, creation, daily locks and the week's score
 
 > - Native NBA, NHL, MLB and WNBA leagues can be created: a ranked player pool, weekly head-to-head periods, and lineups that lock player by player at tip-off.

@@ -26,6 +26,7 @@ import {
   devySharesState,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, assignSpots, slotDisplayNames, slotAcceptsLabel, leagueEligiblePos, leagueSuperflex, type SpotPlayer } from '@drip/core/engine/classic';
+import { SPORTS } from '@drip/core/sports/index';
 import { buildDraftPool, ordinal } from '@drip/core/data/nativeLeague';
 import { tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
@@ -326,9 +327,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   // in the league roster"): the lineup spec's eligible-position set trims the
   // chips too — a builder league with no K spot shows no K filter.
   const eligPos = useMemo(() => leagueEligiblePos(gm), [gm]);
+  // A sport league's chips are its own positions (0398), in the sport's order.
   const posChips = useMemo(
-    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p) && (!eligPos || eligPos.has(p))),
-    [st?.pos_caps, eligPos]);
+    () => (gm?.sport && gm.sport !== 'nfl' ? SPORTS[gm.sport].positions : POS_FILTERS.filter((p) => p !== 'ALL'))
+      .filter((p) => !bannedPos(p) && (!eligPos || eligPos.has(p))),
+    [st?.pos_caps, eligPos, gm?.sport]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
     // A player on an OPEN LOT is not in picks, so the taken filter missed him

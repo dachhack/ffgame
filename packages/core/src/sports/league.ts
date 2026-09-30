@@ -17,7 +17,10 @@ import { SPORTS } from './index';
 
 export const SPORT_WEEK_BASE = 300;
 
-export type SportFormat = 'points' | 'cats';
+/** points: weekly totals head-to-head · cats: weekly categories head-to-head ·
+ *  roto: no weekly result counts — the season is one ranking per category
+ *  over every locked slot-day (sport_roto, computed by the worker). */
+export type SportFormat = 'points' | 'cats' | 'roto';
 
 export interface SportLeagueSettings {
   format: SportFormat;
@@ -95,7 +98,7 @@ export function sportSettingsOf(settings: Record<string, unknown> | null | undef
   const s = settings?.sport as Partial<SportLeagueSettings> | undefined;
   if (!s || typeof s !== 'object' || typeof s.period_start !== 'string') return null;
   return {
-    format: s.format === 'cats' ? 'cats' : 'points',
+    format: s.format === 'cats' ? 'cats' : s.format === 'roto' ? 'roto' : 'points',
     categories: Array.isArray(s.categories) ? s.categories.filter((c): c is string => typeof c === 'string') : [],
     scoring: s.scoring && typeof s.scoring === 'object' ? (s.scoring as Record<string, number>) : {},
     period_start: s.period_start,

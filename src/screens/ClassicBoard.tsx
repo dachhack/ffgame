@@ -39,7 +39,7 @@ import {
 import { PlayerImg, PosPill, InjuryNow, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
 import { VampirePanel } from './VampirePanel';
 import { SportWeekPanel } from './SportWeekPanel';
-import type { Sport } from '@drip/core/sports/index';
+import { setSportNames, sportNameFor, type Sport } from '@drip/core/sports/index';
 import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/league';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
@@ -139,6 +139,9 @@ const prettySlug = (slug: string): string => {
   // A college slug is an ESPN id — its name comes from the league's pool.
   const cn = collegeNameFor(slug);
   if (cn) return shortName(cn.full);
+  // A sport key (0398) is a feed id — its name comes from the league's pool.
+  const sn = sportNameFor(slug);
+  if (sn) return shortName(sn.full);
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
   return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
@@ -731,6 +734,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // an EMPTY team — which reads as a bye on the board and scores as a WR
         // in classicPoints. The pool row knows his real position and team.
         setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team })));
+        setSportNames(pl.map((x) => ({ slug: x.slug, full: x.full, team: x.team })));
         // …but a roster blob carries no IDENTITY, and the IDP bake is keyed by
         // one: three of its 963 slugs name two different men. `league_pool_ids`
         // (0205) is the map that tells them apart, and it exists for this.
@@ -801,7 +805,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     // store a lineup) fields its best projected lineup from its roster, and
     // without this the board would show that seat empty while the resolver
     // scored it. In the founder's own leagues that is seven seats in eight.
-    myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); ensureCollegeNames(ros.leagueId, p.map((x) => x.slug)).then((got) => { if (got && !stop) setFlagsVer((v) => v + 1); }).catch(() => {}); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); } }).catch(() => {});
+    myPool(ros.leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); ensureCollegeNames(ros.leagueId, p.map((x) => x.slug)).then((got) => { if (got && !stop) setFlagsVer((v) => v + 1); }).catch(() => {}); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: x.team }))); setSportNames(p.map((x) => ({ slug: x.slug, full: x.full, team: x.team }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows, gf] = await Promise.all([

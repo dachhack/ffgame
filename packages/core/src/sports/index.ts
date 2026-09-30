@@ -60,3 +60,17 @@ export function parsePlayerKey(key: string | null | undefined): { sport: Sport; 
   const m = key ? KEY_RE.exec(key) : null;
   return m ? { sport: m[1] as Sport, id: m[2] } : null;
 }
+
+// ── Names, for boards that only hold a key (0398) ────────────────────────────
+// A sport key is a feed id ('nba-1658'), so prettifying it prints "Nba 1658".
+// The host installs the league's names (from league_pool / myPool rows) and a
+// board asks here first, exactly as college's setCollegeNames works.
+const SPORT_NAMES = new Map<string, { full: string; team: string | null }>();
+export function setSportNames(rows: { slug: string; full?: string | null; full_name?: string | null; team?: string | null }[]): void {
+  for (const r of rows) {
+    const full = r.full ?? r.full_name;
+    if (full && parsePlayerKey(r.slug)) SPORT_NAMES.set(r.slug, { full, team: r.team ?? SPORT_NAMES.get(r.slug)?.team ?? null });
+  }
+}
+export const sportNameFor = (key: string | null | undefined): { full: string; team: string | null } | null =>
+  (key ? SPORT_NAMES.get(key) ?? null : null);

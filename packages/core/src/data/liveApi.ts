@@ -3771,6 +3771,11 @@ export const sportMatchupLines = (matchupId: string) =>
 export interface SportGameRow { game_id: string; game_date: string; start_utc: string | null; status: string; away: string; home: string; away_score: number | null; home_score: number | null; clock: string | null }
 export const sportLeagueGames = (leagueId: string, from: string, to: string) =>
   rpc<SportGameRow[]>('sport_league_games', { p_league_id: leagueId, p_from: from, p_to: to });
+/** ROTO (0399): the worker's season ranking per seat — total points and the
+ *  per-category value + place points. */
+export interface SportRotoRow { roster_id: number; points: number; totals: Record<string, number>; cats: Record<string, { value: number | null; points: number }>; updated_at: string }
+export const sportRotoStandings = (leagueId: string) =>
+  rpc<SportRotoRow[]>('sport_roto_standings', { p_league_id: leagueId });
 /** Re-seed a sport league's pool from the directory (commissioner, pre-draft). */
 export const seedSportPool = (leagueId: string, limit = 600) =>
   rpc<{ ok: boolean; error?: string; players?: number }>('seed_sport_pool', { p_league_id: leagueId, p_limit: limit });

@@ -21,7 +21,7 @@
 // bottom is thin.
 import { db } from './supabase.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
-import { linePoints, normalizeScoring, categoryTotals, compareCategories } from '../../packages/core/src/sports/score.ts';
+import { linePoints, normalizeScoring, categoryTotals, compareCategories, rotoStandings } from '../../packages/core/src/sports/score.ts';
 import { sportPeriod, sportWeekOf, sportSettingsOf } from '../../packages/core/src/sports/league.ts';
 import { easternDate } from './poll/sportGames.js';
 
@@ -33,12 +33,16 @@ export const startedGames = (games, now = Date.now()) =>
 
 /** Which sealed picks to lock for a started game: the seat's 'wk' rows
  *  whose player is on either team and has no lock for the day yet. */
-export function locksFor(game, picks, poolTeamOf, existing) {
+export function locksFor(game, picks, poolTeamOf, existing, allows = () => true) {
   const teams = new Set([game.home, game.away]);
   const out = [];
   for (const p of picks) {
     if (p.game_window !== 'wk' || !p.player_slug) continue;
     if (!teams.has(poolTeamOf(p.player_slug))) continue;
+    // A player in a slot he is not eligible for (a centre at guard) never
+    // locks, so he never scores — the same 0 the NFL resolver gives an
+    // illegal spot, decided here once rather than at every read.
+    if (!allows(p.roster_slot, p.player_slug)) { log(`illegal lineup spot skipped: ${p.player_slug} in ${p.roster_slot}`); continue; }
     const key = `${p.matchup_id}|${p.app_user_id}|${game.gameDate}|${p.roster_slot}`;
     if (existing.has(key)) continue;
     out.push({ matchup_id: p.matchup_id, app_user_id: p.app_user_id, game_date: game.gameDate, roster_slot: p.roster_slot, player_slug: p.player_slug, game_id: game.gameId });
@@ -76,6 +80,24 @@ export function scoreMatchup(def, settings, homeRows, awayRows) {
   return { homeScore: home.total, awayScore: away.total, slotScores: { format: 'points', home: home.slots, away: away.slots } };
 }
 
+/** ROTO (0399): every seat's season totals → the ranking. `rows` are
+ *  sport_league_lines_svc rows; seats with no line yet still appear (at the
+ *  bottom of every category). */
+export function rotoTable(def, settings, rows, rosterIds) {
+  const by = new Map(rosterIds.map((id) => [id, []]));
+  for (const r of rows) {
+    if (r.roster_id == null || !r.line) continue;
+    if (!by.has(r.roster_id)) by.set(r.roster_id, []);
+    by.get(r.roster_id).push(r.line);
+  }
+  const teams = [...by.entries()].map(([id, lines]) => ({ id: String(id), totals: categoryTotals(def, lines) }));
+  const cats = settings.categories?.length ? settings.categories : def.categoriesDefault;
+  return rotoStandings(def, teams, cats).map((row) => ({
+    league_id: null, roster_id: Number(row.id), points: row.total,
+    totals: teams.find((t) => t.id === row.id)?.totals ?? {}, cats: row.cats,
+  }));
+}
+
 /** Is the period over, with nothing left to count? */
 export const periodDone = (period, today, liveGameDates) =>
   today > period.to && !liveGameDates.some((d) => d <= period.to);
@@ -88,6 +110,21 @@ export async function sportLeagues(sport) {
     .eq('sport', sport).eq('provider', 'native');
   if (error) throw new Error(`league read: ${error.message}`);
   return (data ?? []).map((l) => ({ ...l, sportSettings: sportSettingsOf(l.settings_json) })).filter((l) => l.sportSettings);
+}
+
+/** Slot 'S<i>' may hold a player whose eligibility meets roster_slots[i-1].pos.
+ *  Unknown slot names and players allow — nothing here may lock a lineup
+ *  the platform never shaped. */
+export function slotAllowsFor(rosterSlots, eligibleOf) {
+  const specs = Array.isArray(rosterSlots) ? rosterSlots : [];
+  return (slot, slug) => {
+    const m = /^S(\d+)$/.exec(String(slot ?? ''));
+    const spec = m ? specs[Number(m[1]) - 1] : null;
+    if (!spec || !Array.isArray(spec.pos) || !spec.pos.length) return true;
+    const elig = eligibleOf(slug);
+    if (!elig || !elig.length) return true;
+    return elig.some((p) => spec.pos.includes(p));
+  };
 }
 
 /** Lock the started games' players across every league of the sport.
@@ -107,12 +144,13 @@ export async function lockStartedGames(sport, games, now = Date.now()) {
       const ids = matchups.map((m) => m.id);
       const [{ data: picks }, { data: pool }, { data: existing }] = await Promise.all([
         db().from('sealed_pick').select('matchup_id, app_user_id, game_window, roster_slot, player_slug').in('matchup_id', ids).eq('game_window', 'wk'),
-        db().from('league_pool').select('slug, team').eq('league_id', lg.id).in('team', [g.home, g.away]),
+        db().from('league_pool').select('slug, team, pos, eligible').eq('league_id', lg.id).in('team', [g.home, g.away]),
         db().from('sport_slot_lock').select('matchup_id, app_user_id, game_date, roster_slot').in('matchup_id', ids).eq('game_date', g.gameDate),
       ]);
       const teamOf = new Map((pool ?? []).map((p) => [p.slug, p.team]));
+      const eligOf = new Map((pool ?? []).map((p) => [p.slug, p.eligible?.length ? p.eligible : (p.pos ? [p.pos] : [])]));
       const have = new Set((existing ?? []).map((k) => `${k.matchup_id}|${k.app_user_id}|${k.game_date}|${k.roster_slot}`));
-      const rows = locksFor(g, picks ?? [], (slug) => teamOf.get(slug), have);
+      const rows = locksFor(g, picks ?? [], (slug) => teamOf.get(slug), have, slotAllowsFor(lg.settings_json?.roster_slots, (slug) => eligOf.get(slug)));
       if (rows.length) {
         const { error } = await db().from('sport_slot_lock').upsert(rows, { onConflict: 'matchup_id,app_user_id,game_date,roster_slot', ignoreDuplicates: true });
         if (error) log(`${sport} lock ${g.gameId}: ${error.message}`);
@@ -155,6 +193,20 @@ export async function resolveSportLeagues(sport, now = new Date()) {
       if (periodDone(period, today, liveDates)) {
         await db().from('matchup').update({ status: 'final', home_final: v.homeScore, away_final: v.awayScore }).eq('id', m.id);
         counts.finals++;
+      }
+    }
+    // ROTO (0399): the season table, from every locked slot-day so far.
+    if (lg.sportSettings.format === 'roto') {
+      const [{ data: rows, error: rErr }, { data: seats }] = await Promise.all([
+        db().rpc('sport_league_lines_svc', { p_league_id: lg.id }),
+        db().from('league_membership').select('sleeper_roster_id').eq('league_id', lg.id),
+      ]);
+      if (rErr) log(`${sport} ${lg.id}: roto lines: ${rErr.message}`);
+      else {
+        const table = rotoTable(def, lg.sportSettings, rows ?? [], (seats ?? []).map((m) => m.sleeper_roster_id));
+        const { error } = await db().from('sport_roto').upsert(table.map((t) => ({ ...t, league_id: lg.id, updated_at: new Date().toISOString() })), { onConflict: 'league_id,roster_id' });
+        if (error) log(`${sport} ${lg.id}: roto: ${error.message}`);
+        else counts.roto = (counts.roto ?? 0) + table.length;
       }
     }
     // A period whose first game was missed (worker down) still needs to go

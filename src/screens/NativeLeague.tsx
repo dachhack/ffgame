@@ -541,11 +541,14 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <Chip on={sportFormat === 'points'} onClick={() => setSportFormat('points')}>POINTS</Chip>
               <Chip on={sportFormat === 'cats'} onClick={() => setSportFormat('cats')}>CATEGORIES</Chip>
+              <Chip on={sportFormat === 'roto'} onClick={() => setSportFormat('roto')}>ROTO</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
               {sportFormat === 'points'
                 ? `Points: every stat is worth a set number (${Object.entries(sportDef.scoringDefault).slice(0, 4).map(([k, v]) => `${sportDef.stats.find((st) => st.id === k)?.short ?? k} ${v}`).join(', ')}…), tunable on the SCORING tab.`
-                : `Head-to-head categories: each week is won category by category — ${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}.`}
+                : sportFormat === 'cats'
+                  ? `Head-to-head categories: each week is won category by category — ${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}.`
+                  : `Rotisserie: no weekly winner. Every game all season counts toward one ranking per category (${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}); best of ${teams} takes ${teams} points, the standings are the sum.`}
             </div>
             <div style={{ height: 14 }} />
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>

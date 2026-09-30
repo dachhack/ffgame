@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryValue, categoryById } from '@drip/core/sports/score';
 import { sportPeriod, type SportLeagueSettings } from '@drip/core/sports/league';
-import { sportMatchupLines, sportLeagueGames, type SportMatchupLine, type SportGameRow } from '@drip/core/data/liveApi';
+import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
 import { PosPill } from '../app/ui';
 
 const MONO = 'var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)';
@@ -37,6 +37,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
   const period = useMemo(() => sportPeriod(week, settings.period_start), [week, settings.period_start]);
   const [rows, setRows] = useState<SportMatchupLine[]>([]);
   const [games, setGames] = useState<SportGameRow[]>([]);
+  const [roto, setRoto] = useState<SportRotoRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -44,9 +45,10 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
     let alive = true;
     sportMatchupLines(matchupId).then((r) => { if (alive) { setRows(r ?? []); setErr(null); } }).catch((e) => { if (alive) setErr(String(e?.message ?? e)); });
     if (period) sportLeagueGames(leagueId, period.from, period.to).then((g) => { if (alive) setGames(g ?? []); }).catch(() => {});
+    if (settings.format === 'roto') sportRotoStandings(leagueId).then((r) => { if (alive) setRoto(r ?? []); }).catch(() => {});
     const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
     return () => { alive = false; window.clearInterval(id); };
-  }, [matchupId, leagueId, period?.from, period?.to, tick]);
+  }, [matchupId, leagueId, period?.from, period?.to, tick, settings.format]);
 
   const scoring = useMemo(() => normalizeScoring(def, settings.scoring), [def, settings.scoring]);
   const side = (rid: number) => {
@@ -71,7 +73,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 12, display: 'grid', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)' }}>
-          {def.league} · {period ? `${fmtDay(period.from)} – ${fmtDay(period.to)}` : `WEEK ${week}`} · {settings.format === 'cats' ? 'CATEGORIES' : 'POINTS'}
+          {def.league} · {period ? `${fmtDay(period.from)} – ${fmtDay(period.to)}` : `WEEK ${week}`} · {settings.format === 'cats' ? 'CATEGORIES' : settings.format === 'roto' ? 'ROTO' : 'POINTS'}
         </div>
         <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
           {cats ? `${cats.wins}-${cats.losses}-${cats.ties}` : `${home.total.toFixed(1)} – ${away.total.toFixed(1)}`}
@@ -80,6 +82,39 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
       </div>
 
       {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>{err}</div>}
+
+      {settings.format === 'roto' && (
+        <div>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>ROTO STANDINGS · SEASON TO DATE</div>
+          {roto.length === 0 ? (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>No games counted yet — the table fills as lineups lock and play.</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="mono" style={{ borderCollapse: 'collapse', fontSize: 10, width: '100%' }}>
+                <thead>
+                  <tr style={{ color: 'var(--faint)' }}>
+                    <th style={{ textAlign: 'left', padding: '2px 6px' }}>SEAT</th>
+                    <th style={{ textAlign: 'right', padding: '2px 6px' }}>PTS</th>
+                    {settings.categories.map((c) => <th key={c} style={{ textAlign: 'right', padding: '2px 6px' }}>{categoryById(def, c)?.short ?? c}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {roto.map((r) => (
+                    <tr key={r.roster_id} style={{ color: r.roster_id === myRosterId ? 'var(--you)' : 'var(--text)', borderTop: '1px solid var(--bd)' }}>
+                      <td style={{ padding: '3px 6px', fontWeight: 700 }}>{seatName(r.roster_id)}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', fontWeight: 700 }}>{Number(r.points).toFixed(1)}</td>
+                      {settings.categories.map((c) => {
+                        const cat = categoryById(def, c), v = r.cats?.[c]?.value;
+                        return <td key={c} style={{ padding: '3px 6px', textAlign: 'right' }}>{v == null ? '—' : cat?.ratio ? Number(v).toFixed(cat.ratio.decimals ?? 3) : String(v)}<span style={{ color: 'var(--faint)' }}> ({r.cats?.[c]?.points ?? 0})</span></td>;
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {cats && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 6 }}>

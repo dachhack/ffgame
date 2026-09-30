@@ -2,7 +2,7 @@
 // side scores from its locked slot-days, the points and categories verdicts,
 // and when a period is done. Pure parts only. Run from server/:
 // `npx tsx test/sports-league.mjs`.
-import { startedGames, locksFor, sideScore, scoreMatchup, periodDone } from '../src/sportLeague.js';
+import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable } from '../src/sportLeague.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
 import { sportPeriod, sportWeekOf, sportRosterSlots, sportLeagueSettings, mondayOnOrBefore, currentSeason, sportSettingsOf, SPORT_WEEK_BASE } from '../../packages/core/src/sports/league.ts';
 
@@ -46,6 +46,9 @@ const teamOf = (s) => ({ 'nba-1': 'BOS', 'nba-2': 'LAL', 'nba-3': 'NYK' })[s];
 const rows = locksFor(games[0], picks, teamOf, new Set());
 ok(rows.length === 2 && rows.every((r) => r.game_date === '2026-10-20' && r.game_id === 'a') && rows.map((r) => r.player_slug).join() === 'nba-1,nba-3', 'the two players on the started game lock, the LAL one waits');
 ok(locksFor(games[0], picks, teamOf, new Set(['m1|u1|2026-10-20|S1'])).length === 1, 'an existing lock is not retaken');
+const allows = slotAllowsFor([{ pos: ['PG'] }, { pos: ['C'] }], (slug) => ({ 'nba-1': ['C'], 'nba-3': ['PG', 'SG'] })[slug]);
+ok(!allows('S1', 'nba-1') && allows('S2', 'nba-1') && allows('S1', 'nba-3') && allows('S9', 'nba-1') && allows('S1', 'nba-99'), 'a centre may not lock at point guard; unknown slots and players allow');
+ok(locksFor(games[0], picks, teamOf, new Set(), allows).map((r) => r.player_slug).join() === 'nba-3', 'the illegal spot is skipped at lock time');
 
 // ── scoring ──────────────────────────────────────────────────────────────────
 const nba = SPORTS.nba;
@@ -65,6 +68,16 @@ const cats = scoreMatchup(nba, { format: 'cats', categories: ['pts', 'reb', 'ast
 ok(cats.slotScores.format === 'cats' && cats.homeScore + cats.awayScore + cats.slotScores.ties === 9, `9-cat verdict ${cats.homeScore}-${cats.awayScore}-${cats.slotScores.ties}`);
 ok(cats.slotScores.cats.find((c) => c.id === 'tov').result === 'b' && cats.slotScores.cats.find((c) => c.id === 'reb').result === 'a', 'lower-is-better turnovers go to the away side; rebounds to home');
 ok(scoreMatchup(nba, { format: 'points', scoring: { dd: 5 } }, home, away).homeScore === pts.homeScore + 5, 'a double-double knob lands on the night it happened');
+
+// ── roto ─────────────────────────────────────────────────────────────────────
+const roto = rotoTable(nba, { format: 'roto', categories: ['pts', 'reb', 'tov'] }, [
+  { roster_id: 1, line: { pts: 30, reb: 10, tov: 4 } }, { roster_id: 1, line: { pts: 10, reb: 2, tov: 1 } },
+  { roster_id: 2, line: { pts: 25, reb: 5, tov: 1 } }, { roster_id: 3, line: null },
+], [1, 2, 3]);
+ok(roto.length === 3 && roto[0].roster_id === 1 && roto[0].points === 3 + 3 + 1 && roto.find((r) => r.roster_id === 2).points === 2 + 2 + 2, `roto: seat 1 leads ${roto[0].points} (best PTS and REB, most TO)`);
+// A seat with no line has 0 of everything: last in the counting categories
+// and — as in every roto league before its first game — first in turnovers.
+ok(roto.find((r) => r.roster_id === 3).points === 1 + 1 + 3 && roto.find((r) => r.roster_id === 3).totals.pts == null, 'a seat with no line yet sits last in the counting cats and first in turnovers');
 
 // ── the period's end ─────────────────────────────────────────────────────────
 const per = { from: '2026-10-19', to: '2026-10-25' };
