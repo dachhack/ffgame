@@ -13,7 +13,9 @@ import { linePoints } from '../../packages/core/src/sports/score.ts';
 const fx = (n) => JSON.parse(readFileSync(new URL(`./fixtures/sports/${n}`, import.meta.url), 'utf8'));
 let fails = 0;
 const ok = (c, msg) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${msg}`); if (!c) fails++; };
-const rawIds = (sport) => new Set(SPORTS[sport].stats.filter((s) => !s.derived).map((s) => s.id));
+// A season line may carry per-game derived COUNTS (dd, td, qs, nh) the
+// source summed; everything else must be a raw stat id.
+const rawIds = (sport) => new Set(SPORTS[sport].stats.filter((s) => !s.derived || ['dd', 'td', 'qs', 'nh'].includes(s.id)).map((s) => s.id));
 const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).has(k));
 
 // ── NHL ──────────────────────────────────────────────────────────────────────
@@ -71,6 +73,7 @@ const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).
   ok(hurt.length >= 3 && hurt.every((p) => ['O', 'GTD', 'OFS'].includes(p.injury.code)), `injuries mapped: ${hurt.map((p) => p.injury.code).join(',')}`);
   const lines = sleeperNbaSeasonLines(fx('sleeper-nba-stats-2025-sample.json'));
   ok(lines.size >= 20 && [...lines.values()].every((l) => onlyKnown('nba', l) && l.min > 0), `${lines.size} NBA season lines with minutes from seconds`);
+  ok([...lines.values()].some((l) => l.dd > 0) && [...lines.values()].every((l) => 'dd' in l && 'td' in l), 'double- and triple-double counts ride along as season counts');
   const withLines = dir.map((p) => ({ ...p, season: lines.get(p.extId) ?? null, seasonId: '2025', gp: lines.get(p.extId)?.gp ?? 0 }));
   const ranked = rankDirectory('nba', withLines);
   ok(linePoints(SPORTS.nba, ranked[0].season) >= linePoints(SPORTS.nba, ranked[1].season), `#1 ${ranked[0].name} by points, then search rank`);

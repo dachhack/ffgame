@@ -49,7 +49,9 @@ export function SportLineup({ leagueId, sport, gm, locked, onSaved }: {
       if (!r.ok) { setNote(friendlyError(r.error ?? 'failed')); return; }
       const sh = await setLeagueRosterShape(leagueId, bench, 0, ir, 0, 0);
       if (!sh.ok) { setNote(friendlyError(sh.error ?? 'lineup saved, but the bench/IR did not')); return; }
-      setNote(`✓ ${r.starters} starters, ${bench} bench, ${ir} IR — the draft runs ${r.rounds ?? sh.rounds ?? '?'} rounds`);
+      // `draft_rounds` is what the draft runs (starters + bench); `rounds` is
+      // the roster including the IR shelf, which is stashed into, not drafted.
+      setNote(`✓ ${r.starters} starters, ${bench} bench, ${ir} IR — the draft runs ${sh.draft_rounds ?? '?'} rounds`);
       onSaved?.();
     } catch (e) { setNote(friendlyError(e)); }
     finally { setBusy(false); }
@@ -94,7 +96,7 @@ export function SportLineup({ leagueId, sport, gm, locked, onSaved }: {
       </div>
       <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.5 }}>
         Every spot names the positions it accepts (UTIL takes anyone; {def.slotTypes.find((t) => t.pos.length > 1 && t.type !== 'UTIL')?.label ?? 'a flex'} takes {def.slotTypes.find((t) => t.pos.length > 1 && t.type !== 'UTIL')?.pos.join(' or ')}).
-        Lineups change any day; a player locks into his spot when his game starts. The draft runs starters + bench + IR rounds.
+        Lineups change any day; a player locks into his spot when his game starts. The draft runs starters + bench rounds; IR spots are stashed into, not drafted.
       </div>
       {note && <div className="mono" style={{ fontSize: 10.5, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)' }}>{note}</div>}
     </div>

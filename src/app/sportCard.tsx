@@ -5,11 +5,12 @@
 // the card was opened from (or the sport's default table).
 import { useEffect, useMemo, useState } from 'react';
 import { SPORTS, parsePlayerKey, eligibleFor } from '@drip/core/sports/index';
-import { seasonCardStats, gameCardStats } from '@drip/core/sports/card';
+import { seasonCardStats, gameCardStats, seasonPoints } from '@drip/core/sports/card';
+import { isMarkFree } from '@drip/core/data/markFree';
 import { linePoints, normalizeScoring } from '@drip/core/sports/score';
 import { sportSettingsOf } from '@drip/core/sports/league';
 import { sportPlayerCard, leagueGameMode, myFavorites, setFavorite, type SportCard } from '@drip/core/data/liveApi';
-import { ModalBackdrop, PlayerImg, PosPill } from './ui';
+import { ModalBackdrop, PlayerImg, PosPill, Img } from './ui';
 import type { PlayerCardReq } from './playerCard';
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'UTC' });
@@ -40,7 +41,7 @@ export function SportCardModal({ req, onClose }: { req: PlayerCardReq; onClose: 
   const pos = p?.pos ?? req.pos;
   const team = p?.team ?? req.team;
   const season = useMemo(() => seasonCardStats(def, p?.season_line, pos), [def, p?.season_line, pos]);
-  const fptsPerGame = p?.season_line && p.gp ? (linePoints(def, p.season_line, scoring) / p.gp) : null;
+  const fptsPerGame = p?.season_line && p.gp ? (seasonPoints(def, p.season_line, scoring) / p.gp) : null;
   const inj = p?.injury_status ? def.injuryStatuses.find((i) => i.code === p.injury_status) : null;
   const toggleStar = () => {
     if (!userId || starred == null) return;
@@ -53,7 +54,11 @@ export function SportCardModal({ req, onClose }: { req: PlayerCardReq; onClose: 
     <ModalBackdrop onClick={onClose} zIndex={90}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(440px, 92vw)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <PlayerImg playerId={slug} team={team} pos={pos} size={56} />
+          {/* The directory's own headshot URL when there is one and marks are
+              shown; the pill otherwise (media.ts knows nothing of sport keys). */}
+          {p?.headshot && !isMarkFree()
+            ? <Img src={p.headshot} size={56} radius={17} alt={slug} fallback={<PlayerImg playerId={slug} team={team} pos={pos} size={56} />} />
+            : <PlayerImg playerId={slug} team={team} pos={pos} size={56} />}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p?.full_name ?? name}</div>
             <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--dim)', marginTop: 3, flexWrap: 'wrap' }}>
@@ -111,9 +116,9 @@ export function SportCardModal({ req, onClose }: { req: PlayerCardReq; onClose: 
                     <span style={{ color: 'var(--faint)' }}>{fmtDay(g.game_date)}</span>
                     <span style={{ color: 'var(--dim)' }}>{g.home ? 'vs' : '@'} {g.opp}{g.status === 'live' ? ' ●' : ''}</span>
                     <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {g.line ? gameCardStats(def, g.line, pos).map((c) => `${c.value} ${c.short}`).join(' · ') : 'DNP'}
+                      {g.played && g.line ? gameCardStats(def, g.line, pos).map((c) => `${c.value} ${c.short}`).join(' · ') || '—' : 'DNP'}
                     </span>
-                    <span style={{ textAlign: 'right', fontWeight: 700, color: g.line ? 'var(--text)' : 'var(--faint)' }}>{g.line ? linePoints(def, g.line, scoring).toFixed(1) : '—'}</span>
+                    <span style={{ textAlign: 'right', fontWeight: 700, color: g.played && g.line ? 'var(--text)' : 'var(--faint)' }}>{g.played && g.line ? linePoints(def, g.line, scoring).toFixed(1) : '—'}</span>
                   </div>
                 ))}
               </div>

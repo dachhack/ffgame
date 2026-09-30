@@ -94,13 +94,21 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
     const list = m ? m[1].match(/'([A-Z0-9]+)'/g).map((x) => x.replace(/'/g, '')) : [];
     ok(list.join() === SPORTS[id].positions.join(), `${id}: sport_positions() is the SportDef's list (${list.join(' ')})`);
   }
-  const { seasonCardStats, gameCardStats, cardGroup } = await import('../packages/core/src/sports/card.ts');
+  const { seasonCardStats, gameCardStats, cardGroup, seasonPoints, seasonLine } = await import('../packages/core/src/sports/card.ts');
   const nbaSeason = seasonCardStats(SPORTS.nba, { gp: 10, pts: 250, reb: 100, ast: 50, stl: 10, blk: 5, tpm: 20, tov: 30, fgm: 90, fga: 200, ftm: 50, fta: 60, min: 340 });
   ok(nbaSeason.find((c) => c.short === 'PTS/G')?.value === '25' && nbaSeason.find((c) => c.short === 'FG%')?.value === '0.450', `NBA season card: ${nbaSeason.map((c) => `${c.short} ${c.value}`).join(' · ')}`);
   const goalie = seasonCardStats(SPORTS.nhl, { gapp: 20, gs: 19, w: 12, l: 6, otl: 2, ga: 50, sv: 500, sa: 550, so: 2, gtoi: 1180 }, 'G');
   ok(cardGroup(SPORTS.nhl, null, 'G') === 'goalie' && goalie.find((c) => c.short === 'W')?.value === '12' && goalie.find((c) => c.short === 'GAA')?.value === '2.54' && goalie.find((c) => c.short === 'SV%')?.value === '0.909', `NHL goalie card: ${goalie.map((c) => `${c.short} ${c.value}`).join(' · ')}`);
   const pitcher = seasonCardStats(SPORTS.mlb, { pgp: 30, gs: 30, outs: 540, w: 15, l: 6, p_k: 200, er: 60, p_h: 150, p_bb: 40 });
   ok(cardGroup(SPORTS.mlb, { pgp: 30, outs: 540 }) === 'pitcher' && pitcher.find((c) => c.short === 'ERA')?.value === '3.00' && pitcher.find((c) => c.short === 'IP/G')?.value === '6', `MLB pitcher card: ${pitcher.map((c) => `${c.short} ${c.value}`).join(' · ')}`);
+  ok(goalie.find((c) => c.short === 'SV/G')?.value === '25' && goalie.find((c) => c.short === 'SHO')?.value === '2', 'a goalie\'s saves are per game, his shutouts a total');
+  const hitter = seasonCardStats(SPORTS.mlb, { hgp: 150, ab: 500, h: 150, bb: 60, hbp: 5, sf: 5, hr: 30, r: 90, rbi: 100, sb: 10, k: 120, '2b': 30, '3b': 2 });
+  ok(hitter.find((c) => c.short === 'AVG')?.value === '0.300' && hitter.find((c) => c.short === 'OBP')?.value === '0.377', `MLB hitter card: AVG ${hitter.find((c) => c.short === 'AVG')?.value} OBP ${hitter.find((c) => c.short === 'OBP')?.value}`);
+  ok(pitcher.find((c) => c.short === 'WHIP')?.value === '1.06' && pitcher.find((c) => c.short === 'QS')?.value === '—', 'WHIP from the season line; a quality-start count the source never had is unknown, not derived');
+  const withQs = seasonCardStats(SPORTS.mlb, { pgp: 30, gs: 30, outs: 540, er: 60, p_h: 150, p_bb: 40, qs: 20 });
+  ok(withQs.find((c) => c.short === 'QS')?.value === '20', 'a stored quality-start count shows as a total');
+  const nbaLine = { gp: 10, pts: 250, reb: 100, ast: 50, stl: 10, blk: 5, tov: 30, dd: 6, td: 1 };
+  ok(seasonLine(SPORTS.nba, nbaLine).dd === 6 && seasonPoints(SPORTS.nba, nbaLine, { pts: 1, dd: 5, td: 10 }) === 250 + 30 + 10, 'a season\'s double-doubles are the stored count, not derived from totals, and score as such');
   const game = gameCardStats(SPORTS.nba, { pts: 31, reb: 12, ast: 4, stl: 0, blk: 2, tpm: 3, tov: 1, fgm: 12, fga: 20 });
   ok(game.map((c) => c.short).join() === 'PTS,REB,AST,BLK,3PM,TO' && game[0].value === '31', 'a game line shows its non-zero counting stats, no ratios');
 }

@@ -1,7 +1,7 @@
 # Multi-sport — the morning review
 
 > _Written 2026-09-30 overnight, on branch `ccr-e05744f1-ro7jlw` (v0.564.0 →
-> v0.570.0). Nothing is merged; the web and the app are yours to review._
+> v0.570.1). Nothing is merged; the web and the app are yours to review._
 
 ## What is on the branch
 
@@ -16,6 +16,7 @@ Five commits, one per version, each with a STATUS.md entry:
 | v0.568.0 | NBA/WNBA schedule by date, sport leagues kept out of auto-playoffs, the mobile wire chips, this note |
 | v0.569.0 | Ten fixes from a code review of the branch (the sweep's retirement pass, pools following trades, WNBA team codes, postponements, mid-draft leagues, doubleheaders, stuck games, cadence, reads per tick, pills) |
 | v0.570.0 | The lineup builder for sport leagues (0403), the sport player card |
+| v0.570.1 | Ten fixes from a second review pass (the card's season numbers and ratios, DNP, the headshot, last-ten ordering, the builder's rounds and frozen state) |
 
 The plan and the assessment behind it: `docs/multi-sport-plan.md`.
 

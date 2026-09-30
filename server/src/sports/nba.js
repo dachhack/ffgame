@@ -136,6 +136,9 @@ export function sleeperNbaSeasonLines(stats) {
       fgm: s.fgm ?? 0, fga: s.fga ?? 0, ftm: s.ftm ?? 0, fta: s.fta ?? 0, tpm: s.tpm ?? 0, tpa: s.tpa ?? 0,
       oreb: s.oreb ?? 0, dreb: s.dreb ?? 0, reb: s.reb ?? 0, ast: s.ast ?? 0, stl: s.stl ?? 0, blk: s.blk ?? 0,
       tov: s.to ?? 0, pf: s.pf ?? 0,
+      // Per-game derived stats as SEASON COUNTS (core sports/card.ts): a
+      // season line cannot re-derive them, so the source's counts ride along.
+      dd: s.dd ?? 0, td: s.td ?? 0,
     });
   }
   return out;

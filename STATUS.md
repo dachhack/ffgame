@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.570.1 — the second review: the card's season numbers, the builder's rounds
+
+> - Fixes to the sport player card and the lineup builder from a second review pass.
+
+Ten findings on v0.570.0, all fixed:
+
+- **A season is a sum, not one big game.** The card re-derived
+  double-doubles and quality starts from season totals (a 20-QS pitcher
+  read "QS 0"). `seasonLine` / `seasonPoints` (core `sports/card.ts`) take
+  the per-game derived stats from stored counts — Sleeper's NBA season
+  stats carry `dd` / `td`, which the directory now keeps — and show "—"
+  where a source never counted them. FPTS/G on the card runs through it.
+- **OBP and WHIP** were computed without the sport's ratio inputs (OBP
+  always "—", WHIP always 0.00); the card goes through `categoryTotals`.
+- **Totals vs per game, per sport**: a goalie's saves are per game and his
+  shutouts a total; the old global list had NHL saves as a season total.
+- **DNP** keys off `played`, not the (never-null) line.
+- **The headshot** the RPC returns is shown, unless marks are hidden.
+- **Last ten games** are chosen by date, not by game id.
+- **The builder** reports the draft's rounds (`draft_rounds`, starters +
+  bench), not the roster size; its copy says IR is stashed into, not
+  drafted; and it renders frozen once the draft has started
+  (`draft_state`), rather than letting a save discover it.
+- **roster_shape at creation** was edited into 0398 after it had run on
+  the local database; 0403 backfills any sport league without one.
+- The dead decimals ternary and the inconsistent per-game list are gone.
+
 ### v0.570.0 — a sport league shapes its own lineup, and a sport player has a card
 
 > - Commissioners of NBA / NHL / MLB / WNBA leagues build their own lineup before the draft.

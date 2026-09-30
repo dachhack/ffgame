@@ -20,6 +20,10 @@
 --     verdict (cats), written by the worker into matchup_state / matchup as
 --     every other league's is, so standings and playoffs read as before.
 --
+-- AMENDED ON THE BRANCH before any deploy (v0.570.0): create_native_league
+-- also stores roster_shape for a sport league; 0403 backfills a database
+-- that ran the earlier text.
+--
 -- Undo:
 --   drop trigger if exists enforce_sport_pick_lock on sealed_pick;
 --   drop trigger if exists enforce_sport_roster_lock on native_roster;

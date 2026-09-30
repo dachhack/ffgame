@@ -81,11 +81,24 @@ create or replace function sport_player_card(p_key text)
         'home', g.home = s.team, 'away_score', g.away_score, 'home_score', g.home_score,
         'played', s.played, 'line', s.line) order by g.game_date desc)
       from (
-        select s.* from game_stat_line s
+        select s.*, g.game_date, g.status, g.home, g.away, g.away_score, g.home_score
+          from game_stat_line s
+          join sport_game g on g.sport = s.sport and g.season = s.season and g.game_id = s.game_id
          where s.player_key = p_key
-         order by s.season desc, s.game_id desc limit 10
+         order by g.game_date desc, s.game_id desc limit 10
       ) s
       join sport_game g on g.sport = s.sport and g.season = s.season and g.game_id = s.game_id), '[]'::jsonb))
   where auth.uid() is not null;
 $$;
 grant execute on function sport_player_card(text) to authenticated;
+
+-- ── roster_shape for sport leagues created before creation stored one ───────
+-- create_native_league (0398, amended on this branch before any deploy)
+-- stores roster_shape for a sport league so _sync_classic_rounds has a bench
+-- to add. A database that ran the earlier 0398 has sport leagues without it;
+-- give them the sport block's bench and IR.
+update league
+   set settings_json = coalesce(settings_json, '{}'::jsonb) || jsonb_build_object('roster_shape', jsonb_build_object(
+         'bench', coalesce((settings_json -> 'sport' ->> 'bench')::int, 3), 'taxi', 0,
+         'ir', coalesce((settings_json -> 'sport' ->> 'ir')::int, 0), 'out', 0))
+ where sport <> 'nfl' and settings_json -> 'sport' is not null and settings_json -> 'roster_shape' is null;

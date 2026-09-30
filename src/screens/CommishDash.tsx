@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { SportSettings } from './SportSettings';
 import type { GameModeInfo } from '@drip/core/data/liveApi';
 import { SportLineup } from './SportLineup';
+import { draftState } from '@drip/core/data/liveApi';
 import type { Sport } from '@drip/core/sports/index';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
@@ -444,6 +445,12 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   const [sport, setSport] = useState<Sport>('nfl');
   const [sportBlock, setSportBlock] = useState<Record<string, unknown> | null>(null);
   const [gmInfo, setGmInfo] = useState<GameModeInfo | null>(null);
+  // The lineup freezes when the draft starts; the builder shows it frozen
+  // rather than letting a save discover it.
+  const [draftStarted, setDraftStarted] = useState(false);
+  useEffect(() => {
+    draftState(leagueId).then((d) => setDraftStarted(!!d && d.status !== 'pending')).catch(() => {});
+  }, [leagueId]);
   const saveGolf = async (on: boolean) => {
     if (busy) return;
     setBusy(true); setNote(null);
@@ -765,7 +772,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
         </div>
       )}
       {sport !== 'nfl' && view === 'lineup' && (
-        <SportLineup leagueId={leagueId} sport={sport} gm={gmInfo} locked={false}
+        <SportLineup leagueId={leagueId} sport={sport} gm={gmInfo} locked={draftStarted}
           onSaved={() => { leagueGameMode(leagueId).then((r) => { if (r.ok) setGmInfo(r); }).catch(() => {}); }} />
       )}
       {sport !== 'nfl' && view === 'scoring' && (
