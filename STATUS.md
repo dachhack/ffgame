@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.571.2 — the worker's config names its sports
+
+> - `fly.toml` sets `SPORTS = "nhl,mlb"`, so the deployed worker sweeps the NHL and MLB directories and scores their games; NFL is untouched and sport leagues stay behind the flag.
+
+The repo's own workflows carry the credentials the build container does
+not: `Apply Supabase migrations` takes the nine sport files as its `file`
+input (space-separated, on this branch), and `Deploy the worker` on this
+branch ships the worker with this env. Neither can be dispatched by the
+integration that writes the repo (a 403, as `ops-run.yml` records), so
+both are a click in the Actions tab.
+
 ### v0.571.1 — one script applies the sport migrations
 
 > - `scripts/apply-sport-migrations.sh` runs 0396 → 0404 in order against a project's connection string, stopping at the first error; safe to re-run.
