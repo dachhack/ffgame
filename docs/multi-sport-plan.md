@@ -63,15 +63,18 @@ posture as ESPN today.
   (`server/src/poll/sportGames.js`) gated on `SPORTS=nhl,mlb` so the NFL
   worker is unchanged when unset; CLI `sport-poll <sport> [date] [--force]`.
 
+**v0.568.0**: the NBA/WNBA schedule by date, sport leagues kept out of
+auto-playoffs (0401), the mobile wire chips, `docs/multi-sport-review.md`.
+
 **v0.567.0**: `set_sport_settings` + the SCORING page for a sport league;
 injuries on the boards through `injury_status`.
 
 **Phase 4 and the app (shipped v0.566.0)**: roto (`sport_roto`, the
 worker's season table), slot eligibility enforced at the lock, names for
 sport keys on both boards, the mobile create flow, draft chips and week
-panel. Still open: the NBA/WNBA schedule by date, MLB games-played and innings
-caps, playoffs awareness of periods, a lineup builder for daily sports,
-the mobile commissioner's sport scoring page.
+panel. Still open: MLB games-played and innings caps, period-aware playoffs, a
+lineup builder for daily sports, the mobile commissioner's sport scoring
+page, the player card for sport players.
 
 **Phases 2–3 (shipped v0.565.0)**: the directory and rank (`sport_player`,
 `seed_sport_pool`, `league_pool.eligible`), creation with a sport,

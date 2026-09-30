@@ -42,10 +42,14 @@ async function sweepProgression(log) {
   // Full leagues only — pods and weekly showdowns (kind <> 'league') play no
   // bracket, and mocks are practice rooms.
   const { data: leagues, error } = await db()
-    .from('league').select('id, settings_json')
+    .from('league').select('id, settings_json, sport')
     .eq('provider', 'native').eq('kind', 'league').eq('is_mock', false);
   if (error) { log('progression sweep', error.message); return { generated, advanced, eliminated }; }
   for (const lg of leagues ?? []) {
+    // A SPORT LEAGUE (0398) plays periods from week 301; the bracket rules
+    // read NFL weeks and would book playoffs over a season that has not
+    // begun. Period-aware playoffs are not built — skip, as 0401's SQL guard does.
+    if (lg.sport && lg.sport !== 'nfl') continue;
     const format = lg.settings_json?.format;
     try {
       if (format === 'guillotine') {

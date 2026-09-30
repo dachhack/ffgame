@@ -172,12 +172,61 @@ export function espnWnbaRoster(roster) {
   return out;
 }
 
+// ── The season schedule (phase 5) ────────────────────────────────────────────
+// The live scoreboard only knows today. Any other date comes from the
+// season schedule file on the same CDN (scheduleLeagueV2*.json): every game
+// of the season under gameDates[].games[], dated in Eastern time
+// ("10/22/2026 00:00:00") with a gameDateTimeUTC. Cached for six hours.
+// SHAPE FROM THE PUBLIC FILE'S DOCUMENTATION, not a capture — the CDN
+// refuses this build container (see the header) — so the parser is
+// defensive and the test runs on a documented-shape sample.
+const etDateOf = (s) => {
+  // "10/22/2026 00:00:00" → "2026-10-22"; an ISO date passes through.
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s ?? ''));
+  if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  return String(s ?? '').slice(0, 10);
+};
+
+/** The season schedule → sport_game row fields for one Eastern date. */
+export function nbaSeasonGames(payload, sport, date) {
+  const out = [];
+  for (const d of payload?.leagueSchedule?.gameDates ?? []) {
+    if (etDateOf(d.gameDate) !== date) continue;
+    for (const g of d.games ?? []) {
+      if (!g?.gameId) continue;
+      const row = nbaGameRow({ ...g, gameEt: g.gameDateTimeEst ?? g.gameDateEst ?? d.gameDate, gameTimeUTC: g.gameDateTimeUTC ?? g.gameTimeUTC ?? null }, sport);
+      row.gameDate = date;
+      // Scores on the schedule file lag the scoreboard; only carry them when
+      // the game is over.
+      if (row.status !== 'final') { row.awayScore = null; row.homeScore = null; }
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+const referer = (sport) => ({ Referer: `https://www.${sport}.com/`, Origin: `https://www.${sport}.com` });
+const scheduleCache = new Map();   // sport → { at, payload }
+const SCHEDULE_TTL_MS = 6 * 3600e3;
+const SCHEDULE_FILES = { nba: ['scheduleLeagueV2.json', 'scheduleLeagueV2_1.json'], wnba: ['scheduleLeagueV2_10.json', 'scheduleLeagueV2.json'] };
+async function seasonSchedule(sport) {
+  const c = scheduleCache.get(sport);
+  if (c && Date.now() - c.at < SCHEDULE_TTL_MS) return c.payload;
+  let lastErr = null;
+  for (const f of SCHEDULE_FILES[sport]) {
+    try {
+      const payload = await getJson(`${HOST[sport]}/static/json/staticData/${f}`, { headers: referer(sport), timeoutMs: 60000 });
+      if (payload?.leagueSchedule?.gameDates) { scheduleCache.set(sport, { at: Date.now(), payload }); return payload; }
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr ?? new Error(`${sport}: no season schedule`);
+}
+
 // ── I/O ──────────────────────────────────────────────────────────────────────
 export const fetchSleeperNba = () => getJson('https://api.sleeper.app/v1/players/nba', { timeoutMs: 60000 });
 export const fetchEspnWnbaTeams = () => getJson(`${ESPN_WNBA}/teams`);
 export const fetchEspnWnbaRoster = (teamId) => getJson(`${ESPN_WNBA}/teams/${teamId}/roster`);
 export const fetchSleeperNbaSeason = (year) => getJson(`https://api.sleeper.app/v1/stats/nba/regular/${year}`, { timeoutMs: 60000 });
-const referer = (sport) => ({ Referer: `https://www.${sport}.com/`, Origin: `https://www.${sport}.com` });
 export const fetchScoreboard = (sport) =>
   getJson(`${HOST[sport]}/static/json/liveData/scoreboard/todaysScoreboard_${LEAGUE[sport]}.json`, { headers: referer(sport) });
 export const fetchBox = (sport, gameId) =>
@@ -185,12 +234,14 @@ export const fetchBox = (sport, gameId) =>
 
 const basketball = (sport) => ({
   id: sport,
-  // The live CDN only knows today; a date other than today is answered from
-  // the season schedule in phase 2. Until then a past date returns [].
+  // Today from the live scoreboard (scores and clocks); any other date from
+  // the season schedule file. A scoreboard that is not on the asked date
+  // (early morning, before it rolls) also falls back to the file.
   async schedule(date) {
-    const sb = await fetchScoreboard(sport);
-    const games = nbaScoreboardGames(sb, sport);
-    return date && sb?.scoreboard?.gameDate && sb.scoreboard.gameDate !== date ? [] : games;
+    let sb = null;
+    try { sb = await fetchScoreboard(sport); } catch { sb = null; }
+    if (sb?.scoreboard?.gameDate && (!date || sb.scoreboard.gameDate === date)) return nbaScoreboardGames(sb, sport);
+    return nbaSeasonGames(await seasonSchedule(sport), sport, date);
   },
   async game(gameId) { return nbaBoxToGame(await fetchBox(sport, gameId), sport); },
   async directory(season) {

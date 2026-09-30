@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.568.0 — the NBA schedule by date, no brackets for sport leagues yet, the review note
+
+> - Basketball leagues know tomorrow's and yesterday's games, not just today's.
+> - Daily-sport leagues are kept out of the playoff machinery until it understands their weeks.
+
+**The season schedule (NBA / WNBA).** The live scoreboard only knows today;
+any other date now comes from the CDN's season schedule file
+(`scheduleLeagueV2*.json`, cached six hours), and an early-morning
+scoreboard that has not rolled to the asked date falls back to it. Parsed
+from the file's documented shape — the CDN refuses the build container —
+with a test on a documented-shape sample.
+
+**No bracket yet (0401).** The playoff rules read NFL weeks, and a sport
+league's 301+ matchups satisfied "the regular season is final" vacuously,
+so generate_playoffs would have booked a bracket over a season that had
+not begun. The wrapper refuses for a sport league (quietly for the auto
+poke) and the worker's progression sweep skips them; verified on the
+local Postgres against the QA league.
+
+**Mobile.** The wire's position chips are the sport's, as the draft's are.
+
+**The review note.** `docs/multi-sport-review.md`: what is on the branch,
+what to look at first on the web and in the app, what it takes to run
+(migrations 0396–0401, `SPORTS=` on the worker), what was verified and
+how, the known gaps, and suggested next steps.
+
 ### v0.567.0 — the commissioner's sport scoring, and injuries on the boards
 
 > - A sport league's commissioner sets its scoring, format and categories on the SCORING tab.

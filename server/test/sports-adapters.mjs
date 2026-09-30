@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { nhlBoxToGame, nhlScheduleGames, nhlScoringCredits, nhlRosterPlayers, toiMinutes } from '../src/sports/nhl.js';
 import { mlbBoxLines, mlbLiveToGame, mlbScheduleGames, mlbDirectoryPlayers, inningsToOuts } from '../src/sports/mlb.js';
-import { nbaBoxToGame, isoMinutes, seasonOfGameId } from '../src/sports/nba.js';
+import { nbaBoxToGame, isoMinutes, seasonOfGameId, nbaSeasonGames } from '../src/sports/nba.js';
 import { ADAPTERS } from '../src/sports/index.js';
 import { SPORTS, eligibleFor, playerKey } from '../../packages/core/src/sports/index.ts';
 import { linePoints, categoryTotals, compareCategories } from '../../packages/core/src/sports/score.ts';
@@ -94,6 +94,22 @@ const sum = (lines, k) => lines.reduce((t, l) => t + (l.line[k] ?? 0), 0);
   ok(linePoints(SPORTS.nba, brown.line) === 21 + 2 * 1.2 + 8 * 1.5 + 1 * 3 - 2, 'Yahoo default points for that line');
   ok(isoMinutes('PT00M00.00S') === 0 && seasonOfGameId('1022400012') === '2024', 'ISO minutes and WNBA season id');
   ok(eligibleFor('nba', 'G-F').join() === 'SG,SF' && eligibleFor('wnba', 'F-C').join() === 'F,C', 'basketball position maps');
+}
+
+// ── the NBA season schedule file (documented shape) ─────────────────────────
+{
+  const sched = { leagueSchedule: { seasonYear: '2026-27', leagueId: '00', gameDates: [
+    { gameDate: '10/20/2026 00:00:00', games: [
+      { gameId: '0022600001', gameCode: '20261020/OKCHOU', gameStatus: 1, gameStatusText: '7:30 pm ET', gameDateEst: '2026-10-20T00:00:00Z', gameDateTimeEst: '2026-10-20T19:30:00Z', gameDateTimeUTC: '2026-10-20T23:30:00Z', homeTeam: { teamTricode: 'HOU', score: 0 }, awayTeam: { teamTricode: 'OKC', score: 0 } },
+      { gameId: '0022600002', gameCode: '20261020/GSWLAL', gameStatus: 3, gameStatusText: 'Final', gameDateTimeEst: '2026-10-20T22:00:00Z', gameDateTimeUTC: '2026-10-21T02:00:00Z', homeTeam: { teamTricode: 'LAL', score: 110 }, awayTeam: { teamTricode: 'GSW', score: 104 } },
+    ] },
+    { gameDate: '10/21/2026 00:00:00', games: [{ gameId: '0022600003', gameStatus: 1, gameDateTimeUTC: '2026-10-21T23:00:00Z', homeTeam: { teamTricode: 'BOS' }, awayTeam: { teamTricode: 'NYK' } }] },
+  ] } };
+  const day = nbaSeasonGames(sched, 'nba', '2026-10-20');
+  ok(day.length === 2 && day.every((g) => g.gameDate === '2026-10-20' && g.sport === 'nba' && g.season === '2026'), 'the file yields the asked Eastern date only');
+  ok(day[0].status === 'pre' && day[0].startUtc === '2026-10-20T23:30:00Z' && day[0].awayScore === null, 'a game ahead: its UTC start, no score');
+  ok(day[1].status === 'final' && day[1].homeScore === 110 && day[1].gameType === 'regular', 'a final carries its score');
+  ok(nbaSeasonGames(sched, 'nba', '2026-10-22').length === 0 && nbaSeasonGames({}, 'nba', '2026-10-20').length === 0, 'no games on an empty day or an empty file');
 }
 
 ok(Object.keys(ADAPTERS).sort().join() === 'mlb,nba,nhl,wnba', 'four adapters registered');
