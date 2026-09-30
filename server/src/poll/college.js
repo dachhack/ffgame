@@ -24,7 +24,7 @@
 // requests, so it runs detached from the tick and never delays live scoring.
 import { db } from '../supabase.js';
 import { collegePos } from '../../../packages/core/src/data/college.ts';
-import { loadKtcDevy } from './ktcDevy.js';
+import { loadDevyBoard } from './ktcDevy.js';
 
 const CORE_TEAMS = (season) =>
   `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
@@ -272,7 +272,7 @@ let inflight = null;
 export function sweepCollege(season, log = () => {}) {
   if (inflight || Date.now() - last < sweepEveryMs()) return false;
   last = Date.now();
-  inflight = runCollegeSweep(season, log, undefined, undefined, loadKtcDevy)
+  inflight = runCollegeSweep(season, log, undefined, undefined, () => loadDevyBoard(log))
     .then((r) => log(`college: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines` +
       (r.failed ? `, ${r.failed} rosters failed (no retirement this sweep)` : `, ${r.retired} retired`) +
       (r.error ? ` — ${r.error}` : '')))
