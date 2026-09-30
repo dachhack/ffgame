@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.563.1 — the illegal-roster warning sits in the best-ball spot
+
+> - A best-ball spot that is empty because the roster isn't legal now says so in the spot itself, with the reason.
+> - Fixing the roster takes effect on the matchup board as soon as you pull to refresh or come back to it.
+
+The founder, on a Wednesday: "It's not auto filling my bestball spots for
+projected score." The spots were empty by rule — 0360 keeps an illegal
+roster's best-ball spots off, on the board as in the worker — and the banner
+at the top of the board said why, but the spot itself read "nobody eligible
+yet" (web) or a bare "🎯 BEST BALL" (app), and the banner scrolls away. The
+founder: "let's have a warning in the bestball spots."
+
+**In the spot (both boards).** An empty best-ball cell on a side whose roster
+is flagged reads `🎯 BEST BALL — OFF` in the warning colour with the reason
+beneath it (`Your roster isn't legal — the active roster holds 21 (room for
+20) — drop or stash 1`). Either side: the opponent's spot says "Their roster".
+`BoardCell` takes an `empty` node for it; nothing else about the row moves.
+
+**Re-asked on demand.** "Can we have that fix on a legal roster when you pull
+to refresh or revisit the matchup view?" The board asked
+`league_roster_issues` on mount and every 60s. Both boards remount on a
+revisit, so that half already held; a pull-to-refresh now re-asks too (web:
+the issues effect rides `simVer`; app: `issuesRef` joins the pull's
+`Promise.all`), and so does coming back to the app (`visibilitychange` on the
+web, `AppState` 'active' in the app). The fill itself is unchanged — the
+moment the check clears, the same `effective` memo fills the spots.
+
 ### v0.563.0 — mark-free switches in super admin: just me, and everyone
 
 > - NFL team logos are no longer offered as team or league avatars when logos are hidden.

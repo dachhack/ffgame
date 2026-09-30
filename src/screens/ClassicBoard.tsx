@@ -391,7 +391,7 @@ function SlotPill({ pos, label, width }: { pos: string[]; label: string; width: 
 
 /** A player on one side of a row: name, position line, game line, score.
  *  Mirrored for the away side so both read outward from the centre pill. */
-function BoardCell({ e, align, onName, face = 32, gap = 8, action }: {
+function BoardCell({ e, align, onName, face = 32, gap = 8, action, empty }: {
   e: import('@drip/core/engine/matchupBoard').BoardEntry | null; align: 'left' | 'right';
   /** The NAME opens the player card (v0.283.0, founder) — reading about a
    *  player and changing his spot are different intentions, so the row stops
@@ -407,9 +407,12 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action }: {
    *  position line is short ("RB · CIN") and had the room going spare, so this
    *  costs the name nothing and the row no height. */
   action?: React.ReactNode;
+  /** What an EMPTY cell says (v0.563.1): a best-ball spot switched off by an
+   *  illegal roster (0360) says so in the spot, not just in the banner. */
+  empty?: React.ReactNode;
 }) {
   const right = align === 'right';
-  if (!e) return <div className="mono" style={{ fontSize: 12, color: 'var(--faint)', textAlign: align }}>Empty</div>;
+  if (!e) return <div className="mono" style={{ fontSize: 12, color: 'var(--faint)', textAlign: align }}>{empty ?? 'Empty'}</div>;
   const dim = e.state === 'done';
   return (
     <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap, minWidth: 0 }}>
@@ -931,6 +934,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // in the worker, so the board says so rather than drawing a fill that won't
   // score. Refreshed every minute: a drop fixes it mid-week.
   const [issues, setIssues] = useState<Record<string, string>>({});
+  // RE-ASKED ON DEMAND (v0.563.1, founder: "have that fix on a legal roster
+  // when you pull to refresh or revisit the matchup view"). The board is its
+  // own route, so a revisit remounts and asks on mount; a pull-to-refresh
+  // bumps simVer, and coming back to the browser tab re-asks too — a manager
+  // who just fixed the roster on MY TEAM should not wait out the minute.
   useEffect(() => {
     const lid = ros?.leagueId;
     if (!lid) return;
@@ -938,8 +946,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     const get = () => leagueRosterIssues(lid).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); }).catch(() => {});
     void get();
     const id = window.setInterval(get, 60_000);
-    return () => { alive = false; window.clearInterval(id); };
-  }, [ros?.leagueId]);
+    const onVis = () => { if (document.visibilityState === 'visible') void get(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; window.clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+  }, [ros?.leagueId, simVer]);
   // Cleared on leaving the league, not on changing week: the cache is keyed by
   // week, so the week before's rows can't score this one, and clearing between
   // weeks would drop the board to Loading… on every ‹ WK ›.
@@ -1775,6 +1785,21 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
             {board.starters.map((row) => {
               const auto = bb.has(row.slot);
               const settable = canEdit(row.slot);
+              // THE WARNING IN THE SPOT (v0.563.1, founder: "let's have a
+              // warning in the bestball spots"). An illegal roster (0360)
+              // keeps its best-ball spots empty; the banner above says why,
+              // but the spot itself read "nobody eligible yet" — which is
+              // not the reason. Either side.
+              const homeWhy = auto && !row.home ? issues[String(board.home.rosterId)] : undefined;
+              const awayWhy = auto && !row.away ? issues[String(board.away.rosterId)] : undefined;
+              const offNote = (why: string, alignRight: boolean) => (
+                <div className="mono" style={{ minWidth: 0, textAlign: alignRight ? 'right' : 'left' }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn)' }}>🎯 BEST BALL — OFF</div>
+                  <div style={{ fontSize: 9, color: 'var(--dim)', lineHeight: 1.4, marginTop: 2 }} title={why}>
+                    {alignRight ? 'Their roster isn’t legal' : 'Your roster isn’t legal'} — {why}
+                  </div>
+                </div>
+              );
               return (
                 <div key={row.slot} style={{ padding: `10px ${rowPadX}px 12px`, borderTop: '1px solid var(--bd)' }}>
                   {/* tier 1 — who, either side of the spot pill. Pre-lock there
@@ -1801,12 +1826,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                         style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'inherit', minWidth: 0 }}>
                         <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>+ SET {row.label}</span>
                       </button>
-                    ) : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto ? '🎯 BEST BALL — nobody eligible yet' : 'Empty'}</span>}
+                    ) : homeWhy ? offNote(homeWhy, false)
+                      : <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{auto ? '🎯 BEST BALL — nobody eligible yet' : 'Empty'}</span>}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       <SlotPill pos={row.pos} label={row.label} width={spotCol} />
                       {auto && <span className="mono" title="best ball — fills itself with your best eligible player" style={{ fontSize: 8, color: 'var(--you)' }}>🎯 AUTO</span>}
                     </div>
                     <BoardCell e={row.away} align="right" face={faceSize} gap={cellGap}
+                      empty={awayWhy ? offNote(awayWhy, true) : undefined}
                       onName={row.away ? () => openPlayerCard({ slug: row.away!.slug, name: row.away!.name, pos: row.away!.pos, team: row.away!.team ?? '', week: matchup?.week, userId }) : undefined} />
                   </div>
                   {/* tier 2 — where and when, and the number */}
