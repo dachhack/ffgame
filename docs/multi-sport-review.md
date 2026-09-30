@@ -1,7 +1,7 @@
 # Multi-sport — the morning review
 
 > _Written 2026-09-30 overnight, on branch `ccr-e05744f1-ro7jlw` (v0.564.0 →
-> v0.569.0). Nothing is merged; the web and the app are yours to review._
+> v0.570.0). Nothing is merged; the web and the app are yours to review._
 
 ## What is on the branch
 
@@ -15,6 +15,7 @@ Five commits, one per version, each with a STATUS.md entry:
 | v0.567.0 | The commissioner's sport scoring page (0400 `set_sport_settings`), injuries on the boards |
 | v0.568.0 | NBA/WNBA schedule by date, sport leagues kept out of auto-playoffs, the mobile wire chips, this note |
 | v0.569.0 | Ten fixes from a code review of the branch (the sweep's retirement pass, pools following trades, WNBA team codes, postponements, mid-draft leagues, doubleheaders, stuck games, cadence, reads per tick, pills) |
+| v0.570.0 | The lineup builder for sport leagues (0403), the sport player card |
 
 The plan and the assessment behind it: `docs/multi-sport-plan.md`.
 
@@ -33,8 +34,10 @@ The plan and the assessment behind it: `docs/multi-sport-plan.md`.
    category grid or the roto table, today's slate. Position pills borrow a
    football colour family per code (`src/app/ui.tsx` POS_FAMILY).
 4. COMMISH → SCORING on a sport league: `SportSettings` (format, categories,
-   points per stat) instead of the football catalog; LINEUP explains the
-   standard shape (no builder yet).
+   points per stat) instead of the football catalog; LINEUP is
+   `SportLineup`, counts per slot type plus bench and IR, until the draft.
+5. Click any sport player: `sportCard.tsx` — eligibility pills, season
+   per-game numbers, the last ten games scored under the league's table.
 
 **Mobile** (`apps/mobile`, `npm run typecheck` is clean): the same create
 flow in Recruit (WHICH SPORT, scoring, first week ± a week), the draft's
@@ -43,7 +46,7 @@ the commissioner's sport scoring page.
 
 ## What it takes to run
 
-1. **Migrations 0396 → 0402**, in order. All of them applied cleanly on a
+1. **Migrations 0396 → 0403**, in order. All of them applied cleanly on a
    local Postgres 16 with Supabase shims (`auth.uid()` etc.), alongside
    every earlier migration. 0398 **drops and recreates
    `create_native_league`** with two trailing defaulted arguments; every
@@ -96,10 +99,7 @@ the commissioner's sport scoring page.
 - **Lineup UI honours the primary position only**; the worker's lock
   honours the full eligibility list. A player the UI let into a slot he
   may not fill never locks (logged), so he scores 0 there.
-- **No lineup builder for daily sports**; the standard shape is fixed at
-  creation. `set_league_classic_slots` whitelists NFL positions.
 - **MLB games-played and innings caps** are not modelled.
-- **The player card** shows NFL stats; a sport player's card is empty.
 - **Basketball ids** crosswalk by name + team between Sleeper/ESPN
   directories and nba.com box scores; a trade is picked up by the next
   daily sweep, which also moves the player's team in every league pool.

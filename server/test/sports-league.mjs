@@ -4,7 +4,7 @@
 // `npx tsx test/sports-league.mjs`.
 import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable } from '../src/sportLeague.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
-import { sportPeriod, sportWeekOf, sportRosterSlots, sportLeagueSettings, mondayOnOrBefore, currentSeason, sportSettingsOf, SPORT_WEEK_BASE } from '../../packages/core/src/sports/league.ts';
+import { sportPeriod, sportWeekOf, sportRosterSlots, sportLeagueSettings, mondayOnOrBefore, currentSeason, sportSettingsOf, slotCountsOf, SPORT_WEEK_BASE } from '../../packages/core/src/sports/league.ts';
 
 let fails = 0;
 const ok = (c, msg) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${msg}`); if (!c) fails++; };
@@ -20,6 +20,8 @@ ok(currentSeason('nba', new Date('2026-10-01T00:00:00Z')) === '2026' && currentS
 // ── the settings a league is created with ────────────────────────────────────
 const slots = sportRosterSlots(SPORTS.nba);
 ok(slots.length === 10 && slots.filter((s) => s.label.startsWith('C')).length === 2 && slots.find((s) => s.label === 'G').pos.join() === 'PG,SG', `NBA lineup: ${slots.map((s) => s.label).join(' ')}`);
+const counts = slotCountsOf(SPORTS.nba, sportRosterSlots(SPORTS.nba));
+ok(counts.PG === 1 && counts.G === 1 && counts.C === 2 && counts.UTIL === 2 && slotCountsOf(SPORTS.nba, [{ pos: ['sg', 'PG'] }, { pos: ['C', 'PF', 'SF'] }])['G'] === 1 && slotCountsOf(SPORTS.nba, [{ pos: ['C', 'PF', 'SF'] }])['C/PF/SF'] === 1, 'slot counts read back from a spec; a custom set keeps its own key');
 const st = sportLeagueSettings('nhl', { periodStart: '2026-10-07' });
 ok(st.roster_slots.length === 12 && st.sport.period_start === '2026-10-05' && st.sport.weeks === 27 && st.sport.format === 'points' && st.sport.categories.length === 12, 'NHL settings: 12 starters, period from the Monday, the sport block');
 const back = sportSettingsOf({ roster_slots: st.roster_slots, sport: st.sport });

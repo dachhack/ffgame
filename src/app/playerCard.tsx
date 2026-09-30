@@ -28,6 +28,8 @@ import { nflGameForTeam, kickoffLabel, weekTick, weekLabel } from '@drip/core/da
 import { projFor } from '@drip/core/data/poolSort';
 import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
 import { Ev, track } from '@drip/core/analytics';
+import { parsePlayerKey } from '@drip/core/sports/index';
+import { SportCardModal } from './sportCard';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -62,6 +64,9 @@ export function PlayerCardHost() {
   const [req, setReq] = useState<PlayerCardReq | null>(null);
   useEffect(() => { listener = setReq; return () => { listener = null; }; }, []);
   if (!req) return null;
+  // A sport key (0403) has its own card: the NFL bio, statline and season
+  // projection mean nothing for him.
+  if (parsePlayerKey(req.slug)) return <SportCardModal req={req} onClose={() => setReq(null)} />;
   return <PlayerCardModal req={req} onClose={() => setReq(null)} />;
 }
 

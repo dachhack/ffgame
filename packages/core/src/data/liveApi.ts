@@ -3782,6 +3782,19 @@ export const setSportSettings = (leagueId: string, patch: { scoring?: Record<str
   tracked(rpc<{ ok: boolean; error?: string; sport?: Record<string, unknown> }>('set_sport_settings',
     { p_league_id: leagueId, p_patch: patch }),
     Ev.commishAction, { tool: 'sport_settings', count: Object.keys(patch).length });
+/** A sport league's lineup (0403): the same spot spec classic uses, in the
+ *  sport's positions; commissioner, before the draft. */
+export const setSportLineup = (leagueId: string, slots: { pos: string[]; label?: string }[]) =>
+  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; label?: string }[]; starters?: number; rounds?: number }>('set_sport_lineup',
+    { p_league_id: leagueId, p_slots: slots }),
+    Ev.commishAction, { tool: 'sport_lineup', count: slots.length });
+/** A sport player's card (0403): the directory row and his last ten games. */
+export interface SportCardGame { game_id: string; game_date: string; status: string; team: string; opp: string; home: boolean; away_score: number | null; home_score: number | null; played: boolean; line: Record<string, number> | null }
+export interface SportCard {
+  player: { player_key: string; full_name: string; team: string; pos: string; eligible: string[]; feed_pos: string | null; jersey: string | null; headshot: string | null; injury_status: string | null; injury_note: string | null; rank: number | null; rank_pts: number | null; season: string | null; gp: number; season_line: Record<string, number> | null } | null;
+  games: SportCardGame[];
+}
+export const sportPlayerCard = (key: string) => rpc<SportCard>('sport_player_card', { p_key: key });
 /** Re-seed a sport league's pool from the directory (commissioner, pre-draft). */
 export const seedSportPool = (leagueId: string, limit = 600) =>
   rpc<{ ok: boolean; error?: string; players?: number }>('seed_sport_pool', { p_league_id: leagueId, p_limit: limit });

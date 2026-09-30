@@ -339,11 +339,18 @@ begin
     p_pos_caps, 'classic', p_continuity, p_continuity_n);
   if coalesce((r ->> 'ok')::boolean, false) is not true then return r; end if;
   lid := (r ->> 'league_id')::uuid;
+  -- roster_shape too, so _sync_classic_rounds (the lineup builder's rounds
+  -- update) has a bench and an IR count to add to the starters.
   update league
      set sport = sp,
          settings_json = coalesce(settings_json, '{}'::jsonb)
            || jsonb_build_object('roster_slots', p_sport_settings -> 'roster_slots',
-                                 'sport', p_sport_settings -> 'sport')
+                                 'sport', p_sport_settings -> 'sport',
+                                 'roster_shape', jsonb_build_object(
+                                   'bench', coalesce((p_sport_settings -> 'sport' ->> 'bench')::int, 3),
+                                   'taxi', 0,
+                                   'ir', coalesce((p_sport_settings -> 'sport' ->> 'ir')::int, 0),
+                                   'out', 0))
    where id = lid;
   seeded := seed_sport_pool(lid, coalesce((p_sport_settings ->> 'pool_limit')::int, 600));
   return r || jsonb_build_object('sport', sp, 'pool', seeded -> 'players');

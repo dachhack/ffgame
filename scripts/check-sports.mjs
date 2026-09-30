@@ -86,5 +86,24 @@ ok(inList.join() === SPORT_IDS.join(), `league.sport's check list is SPORT_IDS (
 
 ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && weekLabel(304) === 'WK 4' && boardWeekTitle(310) === 'WEEK 10' && weekTitle(5) === 'WEEK 5', 'sport weeks title from 301 as week 1; the slate\'s base is core\'s');
 
+// ── 6. the lineup builder's positions and the card ──────────────────────────
+{
+  const sql403 = readFileSync(new URL('../supabase/migrations/0403_sport_lineup_and_card.sql', import.meta.url), 'utf8');
+  for (const id of ['nba', 'wnba', 'nhl', 'mlb']) {
+    const m = new RegExp(`when '${id}'\\s+then array\\[([^\\]]*)\\]`).exec(sql403);
+    const list = m ? m[1].match(/'([A-Z0-9]+)'/g).map((x) => x.replace(/'/g, '')) : [];
+    ok(list.join() === SPORTS[id].positions.join(), `${id}: sport_positions() is the SportDef's list (${list.join(' ')})`);
+  }
+  const { seasonCardStats, gameCardStats, cardGroup } = await import('../packages/core/src/sports/card.ts');
+  const nbaSeason = seasonCardStats(SPORTS.nba, { gp: 10, pts: 250, reb: 100, ast: 50, stl: 10, blk: 5, tpm: 20, tov: 30, fgm: 90, fga: 200, ftm: 50, fta: 60, min: 340 });
+  ok(nbaSeason.find((c) => c.short === 'PTS/G')?.value === '25' && nbaSeason.find((c) => c.short === 'FG%')?.value === '0.450', `NBA season card: ${nbaSeason.map((c) => `${c.short} ${c.value}`).join(' · ')}`);
+  const goalie = seasonCardStats(SPORTS.nhl, { gapp: 20, gs: 19, w: 12, l: 6, otl: 2, ga: 50, sv: 500, sa: 550, so: 2, gtoi: 1180 }, 'G');
+  ok(cardGroup(SPORTS.nhl, null, 'G') === 'goalie' && goalie.find((c) => c.short === 'W')?.value === '12' && goalie.find((c) => c.short === 'GAA')?.value === '2.54' && goalie.find((c) => c.short === 'SV%')?.value === '0.909', `NHL goalie card: ${goalie.map((c) => `${c.short} ${c.value}`).join(' · ')}`);
+  const pitcher = seasonCardStats(SPORTS.mlb, { pgp: 30, gs: 30, outs: 540, w: 15, l: 6, p_k: 200, er: 60, p_h: 150, p_bb: 40 });
+  ok(cardGroup(SPORTS.mlb, { pgp: 30, outs: 540 }) === 'pitcher' && pitcher.find((c) => c.short === 'ERA')?.value === '3.00' && pitcher.find((c) => c.short === 'IP/G')?.value === '6', `MLB pitcher card: ${pitcher.map((c) => `${c.short} ${c.value}`).join(' · ')}`);
+  const game = gameCardStats(SPORTS.nba, { pts: 31, reb: 12, ast: 4, stl: 0, blk: 2, tpm: 3, tov: 1, fgm: 12, fga: 20 });
+  ok(game.map((c) => c.short).join() === 'PTS,REB,AST,BLK,3PM,TO' && game[0].value === '31', 'a game line shows its non-zero counting stats, no ratios');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall sport checks passed');
 process.exit(fails ? 1 : 0);

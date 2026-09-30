@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.570.0 — a sport league shapes its own lineup, and a sport player has a card
+
+> - Commissioners of NBA / NHL / MLB / WNBA leagues build their own lineup before the draft.
+> - Clicking a sport player opens a card with his season and last games.
+
+**The lineup builder (0403 `set_sport_lineup`, `src/screens/SportLineup.tsx`).**
+Counts per slot type (2 C, 1 G, 2 UTIL…) plus the bench and IR shelves, on
+the LINEUP tab in place of the football builder; one SAVE writes the spec
+in the sport's positions (`sport_positions`, pinned to the SportDef by
+check-sports) and the draft's rounds follow — creation now stores
+`roster_shape` for a sport league so `_sync_classic_rounds` has a bench to
+add. Frozen once the draft starts, like the NFL builder; filters, best
+ball and per-spot rules stay football-only.
+
+**The card (0403 `sport_player_card`, `src/app/sportCard.tsx`).** The
+player card host branches on a sport key: the directory's facts (every
+eligibility as a pill, team, jersey, injury with its note, rank), the
+season as per-game numbers and ratios (core `sports/card.ts`: PTS/G and
+FG% for basketball, GAA and SV% for a goalie, ERA and WHIP for a pitcher,
+per population), and his last ten games with the points each scores under
+the league the card was opened from. The NFL card is untouched.
+
 ### v0.569.0 — what the review found: the sweep that retired everyone, and nine more
 
 > - Fixes from a code review of the sport-league branch before anyone plays on it.

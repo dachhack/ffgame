@@ -47,6 +47,21 @@ export function sportRosterSlots(def: SportDef, roster: Record<string, number> =
   return out;
 }
 
+/** The reverse of sportRosterSlots: how many of each slot type a stored
+ *  spec holds, matching each spot's eligibility set to a slot type. A spot
+ *  that matches no type (a commissioner's custom set) counts under its
+ *  own joined key, so the builder can still show and keep it. */
+export function slotCountsOf(def: SportDef, slots: { pos: string[] }[] | null | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const s of slots ?? []) {
+    const set = [...new Set((s.pos ?? []).map((p) => String(p).toUpperCase()))].sort();
+    const st = def.slotTypes.find((t) => t.pos.length === set.length && [...t.pos].sort().every((p, i) => p === set[i]));
+    const key = st?.type ?? set.join('/');
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
+}
+
 /** Monday on or before a date (UTC calendar math on a YYYY-MM-DD). */
 export function mondayOnOrBefore(date: string): string {
   const d = new Date(`${date}T00:00:00Z`);
