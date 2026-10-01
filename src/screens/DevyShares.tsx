@@ -4,10 +4,10 @@
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
 import { useEffect, useMemo, useState } from 'react';
-import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
+import { allotDevyShares, devyMarket, devySharesState, friendlyError, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from '../app/playerCard';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, marketRowDetail, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
   fontFamily: 'var(--mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 9px',
@@ -21,6 +21,7 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   const [view, setView] = useState<'mine' | 'league' | 'add' | 'trade'>('mine');
   const [market, setMarket] = useState<DevyMarketRow[] | null>(null);
   const [q, setQ] = useState('');
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const load = () => devySharesState(leagueId).then(setSt).catch(() => {});
@@ -85,6 +86,30 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
       </div>
     );
   };
+  /** INVEST (v0.576.0): one line a player — position, name, school, price,
+   *  what you hold, +1 / +5. The name opens his devy card. */
+  const investRow = (r: DevyMarketRow) => {
+    const held = bySlug.get(r.slug);
+    const cur = held ? myStake(held, myRoster) : 0;
+    const mineH = held?.holders.find((h) => h.roster_id === myRoster);
+    const price = held?.price ?? r.price;
+    const room = maxBuy(cur, Number(mineH?.cost ?? 0), price, rules.max, rules.max_spend);
+    const can = (k: number) => myRoster != null && !locked && !busy && room > 0 && Math.min(k, room) * price <= book.cash + 1e-9;
+    return (
+      <div key={r.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+        <span className="mono" style={{ width: 22, fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{r.pos}</span>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span role="button" title="Player card" style={{ fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}
+            onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{r.name} <span style={{ ...small, fontWeight: 400 }}>{r.school ?? ''}{r.fcs ? ' FCS' : ''} ⓘ</span></span>
+        </span>
+        {cur > 0 && <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>{held?.right?.roster_id === myRoster ? '★' : ''}{cur}sh</span>}
+        <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', minWidth: 34, textAlign: 'right' }}>{fmtPts(price)}</span>
+        {myRoster != null && room > 0 && <button style={chip(false)} disabled={!can(1)} onClick={() => void set(r.slug, cur + 1)}>+1</button>}
+        {myRoster != null && room > 1 && <button style={chip(false)} disabled={!can(5)} onClick={() => void set(r.slug, cur + Math.min(5, room))}>+{Math.min(5, room)}</button>}
+        {myRoster != null && room <= 0 && cur > 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>MAX</span>}
+      </div>
+    );
+  };
   const row = (p: DevySharePlayer, edit: boolean) => {
     const cur = myStake(p, myRoster);
     const mineH = p.holders.find((h) => h.roster_id === myRoster);
@@ -107,121 +132,37 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   };
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
-      <div className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>
-        DEVY MARKET{myRoster != null ? ` · CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : ''}
+      {/* THE HEADER (v0.576.0): the book on one line, the rules behind the ⓘ,
+          a lock or freeze only when one applies. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span className="mono" style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)' }}>
+          {myRoster != null ? `CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : 'THE LEAGUE’S STAKES'}
+        </span>
+        <button className="mono" title="How the devy market works" onClick={() => setRulesOpen((o) => !o)}
+          style={{ background: 'none', border: '1px solid var(--bd)', borderRadius: 10, width: 20, height: 20, fontSize: 11, color: 'var(--dim)', cursor: 'pointer', padding: 0 }}>ⓘ</button>
       </div>
-      <div style={{ ...small, margin: '4px 0 8px' }}>
-        Buy shares in college players. Prices follow how they're playing, updated weekly in season and frozen from Jan 15 until the next season's first stats.
-        A stake maxes at {rules.max} shares or {rules.max_spend} points spent; the first team to max holds his right, or if only one team has {rules.floor}+ shares and {rules.min_spend}+ points in, that team does.
-        The right reserves him for you in the rookie draft. When he's drafted your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 2), up to {rules.payout_cap}× what you paid.
-        Selling pays today's price, up to {rules.payout_cap}× what you paid; cash tops out at {rules.cash_cap} from sales. {lockLine(st)}{st.frozen ? ' Prices are frozen for the offseason.' : ''}
-        {st.current === false && <div style={{ color: 'var(--warn, #c66)' }}>This is last season's league. Shares move in the current season.</div>}
-      </div>
+      {rulesOpen && <div style={{ ...small, whiteSpace: 'pre-line', margin: '0 0 8px', lineHeight: 1.5 }}>{devyRulesText(rules, st)}</div>}
+      {(st.locked || st.frozen || st.current === false) && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn, #c66)', marginBottom: 6 }}>{st.current === false ? 'Last season’s league — read only.' : lockLine(st)}</div>}
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
         <button style={chip(view === 'mine')} onClick={() => setView('mine')}>MINE ({mine.length})</button>
         <button style={chip(view === 'league')} onClick={() => setView('league')}>LEAGUE ({st.players?.length ?? 0})</button>
-        <button style={chip(view === 'add')} onClick={() => setView('add')}>+ BUY</button>
-        {myRoster != null && <button style={chip(view === 'trade')} onClick={() => setView('trade')}>⇄ TRADE</button>}
+        <button style={chip(view === 'add')} onClick={() => setView('add')}>INVEST</button>
       </div>
       {msg && <div className="mono" style={{ fontSize: 11, color: msg.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{msg}</div>}
-      {view === 'mine' && (mine.length ? mine.map((p) => row(p, true)) : <div style={small}>No shares yet. Use + BUY to find a college player before everyone else does.</div>)}
+      {view === 'mine' && (mine.length ? mine.map((p) => row(p, true)) : <div style={small}>No shares yet. Use INVEST to find a college player before everyone else does.</div>)}
       {view === 'league' && ((st.players ?? []).length ? (st.players ?? []).map((p) => row(p, false)) : <div style={small}>Nobody in the league has bought shares yet.</div>)}
-      {view === 'trade' && myRoster != null && <ShareTradeComposer leagueId={leagueId} st={st} myRoster={myRoster} onSent={(m) => { setMsg(m); setView('mine'); void load(); }} />}
       {view === 'add' && (<>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search college players or schools…"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search any college QB, RB, WR, TE or school…"
           style={{ width: '100%', boxSizing: 'border-box', padding: '6px 9px', border: '1px solid var(--bd)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
         {!market && <div style={small}>Loading the market…</div>}
         {market && market.length === 0 && !deep && <div style={small}>No prices yet: they appear after the first weekly stats update.</div>}
         {deep && deep.length === 0 && <div style={small}>No college QB, RB, WR or TE matches that.</div>}
-        {!deep && <div style={small}>Type 2+ letters to search every college QB, RB, WR and TE, FCS included. Unpriced players cost 1 point a share.</div>}
-        {addList.map((r) => {
-          const held = bySlug.get(r.slug);
-          if (held) return row({ ...held, price: held.price ?? r.price }, true);
-          return (
-            <div key={r.slug} style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}><span role="button" title="Player card" style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
-                  onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{r.name}</span> <span style={small}>{r.pos} · {marketRowDetail(r)} · nobody in yet</span></span>
-                <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{r.price}/sh</span>
-              </div>
-              {myRoster != null && controls(r.slug, 0, r.price, 0, false, true)}
-            </div>
-          );
-        })}
+        {addList.map((r) => investRow(r))}
       </>)}
     </div>
   );
 }
 
-/** SHARE TRADES (0397) — the app twin's composer. Files through the league's
- *  trade system, so it gets the same answer, ruling and vote as any trade. */
-function ShareTradeComposer({ leagueId, st, myRoster, onSent }: {
-  leagueId: string; st: DevySharesState; myRoster: number; onSent: (msg: string) => void;
-}) {
-  const teams = (st.teams ?? []).filter((x) => x.roster_id !== myRoster);
-  const [partner, setPartner] = useState<number | null>(teams[0]?.roster_id ?? null);
-  const [give, setGive] = useState<Record<string, number>>({});
-  const [get, setGet] = useState<Record<string, number>>({});
-  const [giveCash, setGiveCash] = useState('');
-  const [getCash, setGetCash] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const stakesOf = (rid: number | null) => (st.players ?? []).filter((p) => !p.graduated_to)
-    .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) }))
-    .filter((x): x is { p: DevySharePlayer; h: NonNullable<typeof x.h> } => !!x.h);
-  const side = (rid: number | null, val: Record<string, number>, setVal: (v: Record<string, number>) => void, cash: string, setCash: (v: string) => void, label: string) => (
-    <div style={{ marginTop: 8 }}>
-      <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>{label}</div>
-      {stakesOf(rid).length === 0 && <div style={small}>No shares.</div>}
-      {stakesOf(rid).map(({ p, h }) => (
-        <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
-          <span style={{ flex: 1, color: 'var(--text)' }}>{p.name ?? p.slug} <span style={small}>{h.shares} held · {p.price ?? 1}/sh</span></span>
-          <input type="number" min={0} max={h.shares} value={val[p.slug] ?? 0}
-            onChange={(e) => setVal({ ...val, [p.slug]: Math.max(0, Math.min(h.shares, Math.floor(Number(e.target.value) || 0))) })}
-            style={{ width: 56, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
-        </div>
-      ))}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-        <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>devy cash</span>
-        <input value={cash} onChange={(e) => setCash(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0"
-          style={{ width: 64, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
-        <span style={small}>has {fmtPts(teamBook(st, rid).cash)}</span>
-      </div>
-    </div>
-  );
-  const legOf = (rid: number, to: number, val: Record<string, number>, cash: string) => ({
-    roster: rid,
-    send_shares: Object.entries(val).filter(([, n]) => n > 0).map(([slug, n]) => ({ slug, shares: n, to })),
-    send_devy_cash: Number(cash) > 0 ? [{ to, amount: Math.round(Number(cash) * 100) / 100 }] : [],
-  });
-  const propose = async () => {
-    if (partner == null) return;
-    const a = legOf(myRoster, partner, give, giveCash), b = legOf(partner, myRoster, get, getCash);
-    if (!a.send_shares.length && !a.send_devy_cash.length && !b.send_shares.length && !b.send_devy_cash.length) { setErr('Pick something to trade.'); return; }
-    setBusy(true); setErr(null);
-    try {
-      const r = await proposeMultiTrade(leagueId, [a, b]);
-      if (!r.ok) setErr(`✗ ${friendlyError(r.error ?? 'failed')}`);
-      else onSent(`✓ offer sent to ${teams.find((x) => x.roster_id === partner)?.team ?? 'them'} — they answer it in the trades list`);
-    } catch (e) { setErr(`✗ ${friendlyError(e)}`); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div>
-      <div style={small}>
-        Trade shares and devy cash with another team. Shares carry what they cost (so the 3× cap goes with them), and a whole maxed stake keeps its place in line for his right.
-        It goes through the league's trade review like any trade. Shares trade during the January lock too, but not during a draft.
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-        {teams.map((x) => <button key={x.roster_id} style={chip(partner === x.roster_id)} onClick={() => { setPartner(x.roster_id); setGet({}); setGetCash(''); }}>{x.team}</button>)}
-      </div>
-      {side(myRoster, give, setGive, giveCash, setGiveCash, 'YOU SEND')}
-      {partner != null && side(partner, get, setGet, getCash, setGetCash, `${(teams.find((x) => x.roster_id === partner)?.team ?? 'THEY').toUpperCase()} SEND`)}
-      {err && <div className="mono" style={{ fontSize: 11, color: 'var(--opp)', marginTop: 6 }}>{err}</div>}
-      <button style={{ ...chip(true), marginTop: 8 }} disabled={busy || partner == null} onClick={() => void propose()}>{busy ? 'sending…' : 'propose trade'}</button>
-    </div>
-  );
-}
 
 /** The commissioner's switch: devy SPOTS (a roster shelf) or SHARES (the
  *  market), and a new team's starting cash (0396). */
@@ -284,6 +225,44 @@ export function DevyModeRow({ leagueId }: { leagueId: string }) {
         <button style={chip(openNow)} disabled={busy || openNow} onClick={() => void pickOpen('now')}>right away</button>
       </>}
       {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
+    </div>
+  );
+}
+
+/** DEVY STAKES (v0.576.0, founder: "have the league owned devy shares in the
+ *  other team roster views") — under whichever team's roster is on screen:
+ *  the college players it holds shares in, ★ for a right it holds. Reads the
+ *  league's devy book itself so the roster card needs nothing threaded in. */
+export function DevyStakesList({ leagueId, rid, mine, onInvest }: {
+  leagueId: string; rid: number | null; mine: boolean; onInvest?: () => void;
+}) {
+  const [st, setSt] = useState<DevySharesState | null>(null);
+  useEffect(() => { devySharesState(leagueId).then(setSt).catch(() => {}); }, [leagueId, rid]);
+  if (!st?.ok || !st.on || rid == null) return null;
+  const stakes = stakesOf(st, rid);
+  const book = teamBook(st, rid);
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ flex: 1, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>
+          DEVY STAKES ({stakes.length}) · {fmtPts(book.value)} WORTH{mine ? ` · ${fmtPts(book.cash)} CASH` : ''}
+        </span>
+        {mine && onInvest && <button className="mono" onClick={onInvest} style={{ background: 'none', border: 'none', color: 'var(--you)', fontWeight: 700, fontSize: 10.5, cursor: 'pointer' }}>INVEST ›</button>}
+      </div>
+      {stakes.length === 0 && <div style={{ ...small, marginTop: 6 }}>{mine ? 'No shares yet — INVEST to scout college players.' : 'No devy shares.'}</div>}
+      {stakes.map((x) => (
+        <div key={x.p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+          <span className="mono" style={{ width: 22, fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{x.p.pos}</span>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span role="button" title="Player card" style={{ fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}
+              onClick={() => openPlayerCard({ slug: x.p.slug, name: x.p.name ?? x.p.slug, pos: x.p.pos ?? '', team: x.p.school ?? '', leagueId })}>
+              {x.p.name ?? x.p.slug} <span style={{ ...small, fontWeight: 400 }}>{x.p.school ?? ''} ⓘ</span>
+            </span>
+          </span>
+          {x.right && <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>★ RIGHT</span>}
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)' }}>{x.shares} sh</span>
+        </div>
+      ))}
     </div>
   );
 }

@@ -9,10 +9,11 @@
 // in the rookie draft, at any of the holder's picks.
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
-import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
+import { allotDevyShares, devyMarket, devySharesState, friendlyError, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from './PlayerCardSheet';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, marketRowDetail, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
+import { InfoChip } from './InfoChip';
 import { useTheme, MONO } from '../theme.native';
 import { Overlay } from './Overlay';
 import { Chip, Mono, PosPill } from './prims';
@@ -140,6 +141,40 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
     );
   };
 
+  /** INVEST (v0.576.0, founder: "make the listings in the invest view single
+   *  row and compact. Fold extra info into the info chip"): one line a
+   *  player — position, name, school, price, what you hold, +1 / +5. The ⓘ
+   *  opens his devy card, which carries the rank, class and evaluation. */
+  const investRow = (r: DevyMarketRow) => {
+    const held = bySlug.get(r.slug);
+    const cur = held ? myStake(held, myRoster) : 0;
+    const mineH = held?.holders.find((h) => h.roster_id === myRoster);
+    const price = held?.price ?? r.price;
+    const room = maxBuy(cur, Number(mineH?.cost ?? 0), price, rules.max, rules.max_spend);
+    const can = (k: number) => myRoster != null && !locked && !busy && room > 0 && Math.min(k, room) * price <= book.cash + 1e-9;
+    const mini = (label: string, k: number) => (
+      <Pressable key={label} disabled={!can(k)} hitSlop={4} onPress={() => { tap(); void set(r.slug, cur + Math.min(k, room)); }}
+        style={{ borderWidth: 1, borderColor: can(k) ? t.you : t.bd, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4, opacity: can(k) ? 1 : 0.4 }}>
+        <Mono size={10} weight="700" tone={can(k) ? 'you' : 'faint'}>{label}</Mono>
+      </Pressable>
+    );
+    return (
+      <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+        <PosPill pos={r.pos} />
+        <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId }); }}>
+          <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>
+            {r.name} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>{r.school ?? ''}{r.fcs ? ' FCS' : ''} ⓘ</Text>
+          </Text>
+        </Pressable>
+        {cur > 0 && <Mono size={9.5} weight="700" tone="you">{held?.right?.roster_id === myRoster ? '★' : ''}{cur}sh</Mono>}
+        <Mono size={10.5} weight="700" tone="dim">{fmtPts(price)}</Mono>
+        {myRoster != null && room > 0 && mini('+1', 1)}
+        {myRoster != null && room > 1 && mini(`+${Math.min(5, room)}`, 5)}
+        {myRoster != null && room <= 0 && cur > 0 && <Mono size={9} tone="you">MAX</Mono>}
+      </View>
+    );
+  };
+
   const addList = useMemo(() => {
     if (deep) return deep;
     const needle = q.trim().toLowerCase();
@@ -148,12 +183,9 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
 
   const subtitle = myRoster != null ? `CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : 'THE LEAGUE’S STAKES';
   const body = (<>
-        <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
-          {`Buy shares in college players. Prices follow how they're playing, updated weekly in season and frozen from Jan 15 until the next season's first stats. A stake maxes at ${rules.max} shares or ${rules.max_spend} points spent; the first team to max holds his right, or if only one team has ${rules.floor}+ shares and ${rules.min_spend}+ points in, that team does. The right reserves him for you in the rookie draft. When he's drafted into the NFL your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 2), up to ${rules.payout_cap}× what you paid. Selling pays today's price, up to ${rules.payout_cap}× what you paid; cash tops out at ${rules.cash_cap} from sales. ${lockLine(st)}${st?.frozen ? ' Prices are frozen for the offseason.' : ''}`}
-        </Mono>
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-          {(['mine', 'league', 'add', 'trade'] as const).filter((v) => v !== 'trade' || myRoster != null).map((v) => (
-            <Chip key={v} label={v === 'mine' ? `MINE (${mine.length})` : v === 'league' ? `LEAGUE (${st?.players?.length ?? 0})` : v === 'add' ? '+ BUY' : '⇄ TRADE'} on={view === v}
+          {(['mine', 'league', 'add'] as const).map((v) => (
+            <Chip key={v} label={v === 'mine' ? `MINE (${mine.length})` : v === 'league' ? `LEAGUE (${st?.players?.length ?? 0})` : 'INVEST'} on={view === v}
               onPress={() => { tap(); setView(v); }} />
           ))}
         </View>
@@ -162,142 +194,49 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
 
         {view === 'mine' && (mine.length
           ? mine.map((p) => playerRow(p, true))
-          : <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>No shares yet. Tap + BUY to find a college player before everyone else does.</Mono>)}
+          : <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>No shares yet. Tap INVEST to find a college player before everyone else does.</Mono>)}
 
         {view === 'league' && ((st?.players ?? []).length
           ? (st?.players ?? []).map((p) => playerRow(p, false))
           : <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Nobody in the league has bought shares yet.</Mono>)}
 
-        {view === 'trade' && myRoster != null && st?.ok && (
-          <ShareTradeComposer leagueId={leagueId} st={st} myRoster={myRoster} onSent={(m) => { setMsg(m); setView('mine'); void load(); }} />
-        )}
 
         {view === 'add' && (<>
-          <TextInput value={q} onChangeText={setQ} placeholder="Search college players or schools…" placeholderTextColor={t.faint}
+          <TextInput value={q} onChangeText={setQ} placeholder="Search any college QB, RB, WR, TE or school…" placeholderTextColor={t.faint}
             style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: t.text, fontFamily: MONO, fontSize: 12 }} />
           {!market && <Mono size={9.5} tone="faint">Loading the market…</Mono>}
           {market && market.length === 0 && !deep && <Mono size={9.5} tone="faint">No prices yet: they appear after the first weekly stats update.</Mono>}
           {deep && deep.length === 0 && <Mono size={9.5} tone="faint">No college QB, RB, WR or TE matches that.</Mono>}
-          {!deep && <Mono size={9} tone="faint">Type 2+ letters to search every college QB, RB, WR and TE, FCS included. Unpriced players cost 1 point a share.</Mono>}
-          {addList.map((r) => {
-            const held = bySlug.get(r.slug);
-            if (held) return playerRow({ ...held, price: held.price ?? r.price }, true);
-            return (
-              <View key={r.slug} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: t.bd }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <PosPill pos={r.pos} />
-                  <Pressable hitSlop={6} style={{ flex: 1 }} onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId }); }}>
-                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{r.name} <Text style={{ fontSize: 11, color: t.faint }}>ⓘ</Text></Text>
-                  </Pressable>
-                  <Mono size={11} weight="700" tone="you">{r.price}/sh</Mono>
-                </View>
-                <Mono size={9} tone="faint" style={{ marginTop: 2 }}>
-                  {marketRowDetail(r)} · nobody in yet
-                </Mono>
-                {myRoster != null && stakeControls(r.slug, 0, r.price, 0, false, true)}
-              </View>
-            );
-          })}
+          {addList.map((r) => investRow(r))}
         </>)}
   </>);
+  // THE HEADER (v0.576.0, founder: "less tall. No wall of text, just a small
+  // info chip."): the book on one line, the rules behind the ⓘ, and a lock
+  // or freeze only when one applies — state, not explanation.
+  const header = (
+    <View style={{ gap: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Mono size={9.5} weight="700" tone="you" style={{ flex: 1 }}>{subtitle}</Mono>
+        <InfoChip title="How the devy market works">{devyRulesText(rules, st)}</InfoChip>
+      </View>
+      {(st?.locked || st?.frozen || st?.current === false) && <Mono size={9} tone="warn">{st?.current === false ? 'Last season’s league — read only.' : lockLine(st)}</Mono>}
+    </View>
+  );
   if (inline) {
     return (
       <View style={{ gap: 8 }}>
-        <Mono size={9.5} weight="700" tone="you">{subtitle}</Mono>
+        {header}
         {body}
       </View>
     );
   }
   return (
-    <Overlay visible={visible} title="Devy market" onClose={onClose ?? (() => {})} subtitle={subtitle}>
+    <Overlay visible={visible} title="Devy market" onClose={onClose ?? (() => {})}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 8 }} keyboardShouldPersistTaps="handled">
+        {header}
         {body}
       </ScrollView>
     </Overlay>
   );
 }
 
-/** SHARE TRADES (0397): shares and devy cash, both ways, with one other team.
- *  It files through the league's trade system (propose_multi_trade), so it
- *  gets the same answer, commissioner ruling and league vote as any trade;
- *  the other team answers it in the trades list. Players and picks trade in
- *  the trade center; this is for the market. */
-function ShareTradeComposer({ leagueId, st, myRoster, onSent }: {
-  leagueId: string; st: DevySharesState; myRoster: number; onSent: (msg: string) => void;
-}) {
-  const t = useTheme();
-  const teams = (st.teams ?? []).filter((x) => x.roster_id !== myRoster);
-  const [partner, setPartner] = useState<number | null>(teams[0]?.roster_id ?? null);
-  const [give, setGive] = useState<Record<string, number>>({});
-  const [get, setGet] = useState<Record<string, number>>({});
-  const [giveCash, setGiveCash] = useState('');
-  const [getCash, setGetCash] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const stakesOf = (rid: number | null) => (st.players ?? [])
-    .filter((p) => !p.graduated_to)
-    .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) }))
-    .filter((x): x is { p: DevySharePlayer; h: NonNullable<typeof x.h> } => !!x.h);
-  const stepper = (slug: string, max: number, val: Record<string, number>, setVal: (v: Record<string, number>) => void) => {
-    const n = val[slug] ?? 0;
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Chip label="−" disabled={n <= 0} onPress={() => { tap(); setVal({ ...val, [slug]: Math.max(0, n - 1) }); }} />
-        <Mono size={11} weight="700" tone={n > 0 ? 'you' : 'faint'} style={{ minWidth: 22, textAlign: 'center' }}>{n}</Mono>
-        <Chip label="+" disabled={n >= max} onPress={() => { tap(); setVal({ ...val, [slug]: Math.min(max, n + 1) }); }} />
-        <Chip label="ALL" dim disabled={n >= max} onPress={() => { tap(); setVal({ ...val, [slug]: max }); }} />
-      </View>
-    );
-  };
-  const side = (rid: number | null, val: Record<string, number>, setVal: (v: Record<string, number>) => void, cash: string, setCash: (s: string) => void, label: string) => (
-    <View style={{ gap: 6, marginTop: 6 }}>
-      <Mono size={9} tone="faint" track={0.12}>{label}</Mono>
-      {stakesOf(rid).length === 0 && <Mono size={9.5} tone="faint">No shares.</Mono>}
-      {stakesOf(rid).map(({ p, h }) => (
-        <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{p.name ?? p.slug} <Text style={{ color: t.faint, fontSize: 11 }}>{`${h.shares} held · ${p.price ?? 1}/sh`}</Text></Text>
-          {stepper(p.slug, h.shares, val, setVal)}
-        </View>
-      ))}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Mono size={9} tone="dim">DEVY CASH</Mono>
-        <TextInput value={cash} onChangeText={(x) => setCash(x.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={t.faint}
-          style={{ minWidth: 64, borderWidth: 1, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, color: t.text, fontFamily: MONO, fontSize: 12 }} />
-        <Mono size={9} tone="faint">{`has ${fmtPts(teamBook(st, rid).cash)}`}</Mono>
-      </View>
-    </View>
-  );
-  const legOf = (rid: number, to: number, val: Record<string, number>, cash: string) => ({
-    roster: rid,
-    send_shares: Object.entries(val).filter(([, n]) => n > 0).map(([slug, n]) => ({ slug, shares: n, to })),
-    send_devy_cash: Number(cash) > 0 ? [{ to, amount: Math.round(Number(cash) * 100) / 100 }] : [],
-  });
-  const propose = async () => {
-    if (partner == null) return;
-    const a = legOf(myRoster, partner, give, giveCash), b = legOf(partner, myRoster, get, getCash);
-    if (!a.send_shares.length && !a.send_devy_cash.length && !b.send_shares.length && !b.send_devy_cash.length) { setErr('Pick something to trade.'); return; }
-    setBusy(true); setErr(null);
-    try {
-      const r = await proposeMultiTrade(leagueId, [a, b]);
-      if (!r.ok) { warn(); setErr(`✗ ${friendlyError(r.error ?? 'failed')}`); return; }
-      commit(); onSent(`✓ offer sent to ${teams.find((x) => x.roster_id === partner)?.team ?? 'them'} — they answer it in the trades list`);
-    } catch (e) { warn(); setErr(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
-    finally { setBusy(false); }
-  };
-  return (
-    <View style={{ gap: 6 }}>
-      <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
-        Trade shares and devy cash with another team. Shares carry what they cost (so the 3× cap goes with them), and a whole maxed stake keeps its place in line for his right. It goes through the league{'\u2019'}s trade review like any trade. Shares trade during the January lock too, but not during a draft.
-      </Mono>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-        {teams.map((x) => <Chip key={x.roster_id} label={x.team} on={partner === x.roster_id} onPress={() => { tap(); setPartner(x.roster_id); setGet({}); setGetCash(''); }} />)}
-      </View>
-      {side(myRoster, give, setGive, giveCash, setGiveCash, 'YOU SEND')}
-      {partner != null && side(partner, get, setGet, getCash, setGetCash, `${teams.find((x) => x.roster_id === partner)?.team ?? 'THEY'} SEND`.toUpperCase())}
-      {!!err && <Mono size={9.5} tone="opp">{err}</Mono>}
-      <View style={{ flexDirection: 'row', marginTop: 6 }}>
-        <Chip label={busy ? 'SENDING…' : 'PROPOSE TRADE'} on disabled={busy || partner == null} onPress={() => { tap(); void propose(); }} />
-      </View>
-    </View>
-  );
-}

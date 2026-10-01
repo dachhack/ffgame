@@ -27,7 +27,7 @@ import {
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
-import { teamBook, fmtPts } from '@drip/core/data/devyShares';
+import { teamBook, fmtPts, stakesOf } from '@drip/core/data/devyShares';
 import { DevyMarketTab } from '../ui/DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
@@ -981,19 +981,35 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           ))}
         </>)}
 
-        {/* ── DEVY SHARES (0387) — a shares league's devy: stakes, not a shelf.
-            v0.575.0: the market itself is the DEVY tab; this row points there. */}
-        {shares?.on && (
-          <Pressable onPress={() => { tap(); setTab('devy'); }} style={{ marginTop: 14 }}>
-            <Mono size={9} tone="faint" track={0.12}>DEVY MARKET</Mono>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-              <Text style={{ flex: 1, fontSize: 13, color: t.text }}>
-                {`cash ${fmtPts(teamBook(shares, myRoster).cash)} · stakes worth ${fmtPts(teamBook(shares, myRoster).value)} · ${(shares.players ?? []).filter((p) => p.right?.roster_id === myRoster).length} rights held`}
-              </Text>
-              <Mono size={10} tone="you" weight="700">OPEN ›</Mono>
+        {/* ── DEVY STAKES (0387; v0.576.0, founder: "have the league owned
+            devy shares in the other team roster views") — whichever team the
+            card shows, the college players it holds shares in sit under its
+            roster, ★ for a right it holds. Yours link to the DEVY tab. */}
+        {shares?.on && (() => {
+          const stakes = stakesOf(shares, shownRid);
+          const book = teamBook(shares, shownRid);
+          return (
+            <View style={{ marginTop: 14 }}>
+              <Pressable disabled={!viewingMine} onPress={() => { tap(); setTab('devy'); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Mono size={9} tone="faint" track={0.12} style={{ flex: 1 }}>{`DEVY STAKES (${stakes.length}) · ${fmtPts(book.value)} WORTH${viewingMine ? ` · ${fmtPts(book.cash)} CASH` : ''}`}</Mono>
+                {viewingMine && <Mono size={9.5} tone="you" weight="700">INVEST ›</Mono>}
+              </Pressable>
+              {stakes.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>{viewingMine ? 'No shares yet — tap INVEST to scout college players.' : 'No devy shares.'}</Mono>}
+              {stakes.map((x) => (
+                <View key={x.p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+                  {!!x.p.pos && <PosPill pos={x.p.pos} />}
+                  <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: x.p.slug, name: x.p.name ?? x.p.slug, pos: x.p.pos ?? '', team: x.p.school ?? '', leagueId }); }}>
+                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: t.text }}>
+                      {x.p.name ?? x.p.slug} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>{x.p.school ?? ''} ⓘ</Text>
+                    </Text>
+                  </Pressable>
+                  {x.right && <Mono size={9.5} tone="you" weight="700">★ RIGHT</Mono>}
+                  <Mono size={10} weight="700" tone="dim">{x.shares} sh</Mono>
+                </View>
+              ))}
             </View>
-          </Pressable>
-        )}
+          );
+        })()}
 
       </Card>
 
