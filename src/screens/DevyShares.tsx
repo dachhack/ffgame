@@ -4,6 +4,7 @@
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
 import { useEffect, useMemo, useState } from 'react';
+import { draftState, leagueGameMode, setDevyRounds } from '@drip/core/data/liveApi';
 import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomCollege, CUSTOM_COLLEGE_LEVELS, type CustomCollegeRow } from '@drip/core/data/liveApi';
 import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, setLeagueDevyLaunch, commishDevyLaunchNow, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyLaunchCfg, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
@@ -422,7 +423,41 @@ export function DevyModeRow({ leagueId }: { leagueId: string }) {
       </>}
       {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
       {on && <DevyLaunchRow leagueId={leagueId} />}
+      {!on && <DevyRoundsRow leagueId={leagueId} />}
       {!on && <DevyCustomRow leagueId={leagueId} />}
+    </div>
+  );
+}
+
+/** THE DEVY DRAFT (0411), the commissioner's row: how many devy rounds end
+ *  the draft — college players only, their picks traded like rookie picks. */
+function DevyRoundsRow({ leagueId }: { leagueId: string }) {
+  const [spots, setSpots] = useState<number | null>(null);
+  const [n, setN] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    leagueGameMode(leagueId).then((g) => setSpots(g.ok ? g.shape?.devy ?? 0 : 0)).catch(() => setSpots(0));
+    draftState(leagueId).then((d) => setN(d.devy_rounds ?? 0)).catch(() => {});
+  }, [leagueId]);
+  if (!spots) return null;
+  const save = async (v: number) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setDevyRounds(leagueId, v);
+      if (r.ok) { setN(v); setNote(v ? `✓ the draft ends with ${v} devy round${v === 1 ? '' : 's'}` : '✓ no devy rounds — devy spots fill from the wire'); }
+      else setNote(`✗ ${friendlyError(r.error ?? 'failed')}`);
+    } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ flexBasis: '100%', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+      <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--dim)' }}
+        title="The draft ends with this many DEVY ROUNDS: every pick in them is a college player, and none before them. In a dynasty league with rookie picks, devy picks are assets too — trade them like any pick. In the startup draft the devy rounds fill the devy spots; every year after, they're how teams restock after players turn pro.">DEVY ROUNDS</span>
+      {Array.from({ length: Math.min(5, spots) + 1 }, (_, v) => (
+        <button key={v} style={chip(n === v)} disabled={busy || n === v} onClick={() => void save(v)}>{v === 0 ? 'off' : v}</button>
+      ))}
+      {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
     </div>
   );
 }

@@ -37,6 +37,7 @@ import {
   leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict, leagueIsCollegeCalendar,
   isAdmin, setLeaguePositionAccess, setLeagueCalendar,
 } from '@drip/core/data/liveApi';
+import { draftState as draftStateOf, leagueGameMode as gameModeOf, setDevyRounds } from '@drip/core/data/liveApi';
 import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomCollege, CUSTOM_COLLEGE_LEVELS, type CustomCollegeRow } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
@@ -3025,8 +3026,43 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
         </View>
       )}
       {on && <DevyLaunchCard leagueId={leagueId} />}
+      {!on && <DevyRoundsCard leagueId={leagueId} />}
       {!on && <DevyCustomCard leagueId={leagueId} />}
       {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
+    </View>
+  );
+}
+
+/** THE DEVY DRAFT (0411): how many devy rounds end the draft. */
+function DevyRoundsCard({ leagueId }: { leagueId: string }) {
+  const [spots, setSpots] = useState<number | null>(null);
+  const [n, setN] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    gameModeOf(leagueId).then((g) => setSpots(g.ok ? g.shape?.devy ?? 0 : 0)).catch(() => setSpots(0));
+    draftStateOf(leagueId).then((d) => setN(d.devy_rounds ?? 0)).catch(() => {});
+  }, [leagueId]);
+  if (!spots) return null;
+  const save = async (v: number) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setDevyRounds(leagueId, v);
+      if (r.ok) { commit(); setN(v); setNote(v ? `✓ the draft ends with ${v} devy round${v === 1 ? '' : 's'}` : '✓ no devy rounds — devy spots fill from the wire'); }
+      else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={{ marginTop: 10 }}>
+      <LabelInfo label="DEVY ROUNDS"
+        info={'The draft ends with this many devy rounds: every pick in them is a college player, and none before them.\n\nIn a dynasty league with rookie picks, devy picks are assets too \u2014 trade them like any pick.\n\nIn the startup draft the devy rounds fill the devy spots; every year after, they\u2019re how teams restock after players turn pro.'} />
+      <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+        {Array.from({ length: Math.min(5, spots) + 1 }, (_, v) => (
+          <Chip key={v} label={v === 0 ? 'OFF' : String(v)} on={n === v} disabled={busy || n === v} onPress={() => { tap(); void save(v); }} />
+        ))}
+      </View>
+      {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 4 }}>{note}</Mono>}
     </View>
   );
 }

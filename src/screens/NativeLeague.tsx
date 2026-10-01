@@ -64,6 +64,7 @@ import { DevySharesPanel, DevyStakesList } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
+import { devyBlockLine, devyBlockRound, draftRoundLabel, pickRoundLabel } from '@drip/core/data/devyDraft';
 import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setDynFormat } from '@drip/core/data/dyn2026';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
@@ -1281,6 +1282,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     if (myRoster == null) return c;
     for (const pk of st?.picks ?? []) {
       if (pk.roster_id !== myRoster) continue;
+      // 0411: with a devy block the college players fill devy spots, which
+      // carry no position caps (0366) — they don't count here.
+      if (st?.devy_from != null && isCollegeSlug(pk.slug)) continue;
       const p = poolBySlug.get(pk.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
     }
     for (const l of st?.lots ?? []) {
@@ -1288,8 +1292,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       const p = poolBySlug.get(l.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
     }
     return c;
-  }, [st?.picks, st?.lots, myRoster, poolBySlug]);
-  const atCap = (pos: string) => {
+  }, [st?.picks, st?.lots, st?.devy_from, myRoster, poolBySlug]);
+  const atCap = (pos: string, slug?: string) => {
+    if (st?.devy_from != null && slug && isCollegeSlug(slug)) return false;   // 0411
     const cap = st?.pos_caps?.[pos as keyof PosCaps];
     return cap != null && (myPosCount[pos] ?? 0) >= cap;
   };
@@ -1478,6 +1483,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     finally { setBusy(false); }
   };
 
+  // 0411: the devy block takes college players only — the list follows it in.
+  const inDevyBlock = !!st && st.status === 'live' && devyBlockRound(st.current_overall, st.order?.length ?? 0, st.devy_from) != null;
+  useEffect(() => { if (inDevyBlock) setLevel('cfb'); }, [inDevyBlock]);
   if (!st) return (
     <div>
       {!embedded && <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>}
@@ -1763,6 +1771,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                     {auction ? `NOMINATION ${st.current_overall + (st.lots ?? []).length}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
                   </div>
+                  {!auction && devyBlockLine(st.current_overall, teams, st.devy_from, st.devy_rounds) && (
+                    <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: devyBlockRound(st.current_overall, teams, st.devy_from) != null ? 'var(--you)' : 'var(--faint)', marginTop: 2 }}>
+                      🎓 {devyBlockLine(st.current_overall, teams, st.devy_from, st.devy_rounds)}
+                    </div>
+                  )}
                   <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : st.on_clock == null ? 'var(--faint)' : 'var(--text)', marginTop: 4 }}>
                     {st.on_clock == null ? 'Every lot is on the block — the next nomination opens when one sells'
                       : myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
@@ -2078,12 +2091,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
               const inQ = queue.includes(p.slug);
               return (
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
-                  <button onClick={() => act(p.slug)} disabled={assigning ? busy : (!myTurn || busy || atCap(p.pos))} className="mono"
-                    title={assigning ? `assign to ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}` : atCap(p.pos) ? `position limit reached (${posLabel(p.pos)})` : undefined}
+                  <button onClick={() => act(p.slug)} disabled={assigning ? busy : (!myTurn || busy || atCap(p.pos, p.slug))} className="mono"
+                    title={assigning ? `assign to ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}` : atCap(p.pos, p.slug) ? `position limit reached (${posLabel(p.pos)})` : undefined}
                     style={{ ...btn, padding: '7px 8px', fontSize: 9, width: 54, flexShrink: 0,
                       background: assigning ? 'var(--warn)' : btn.background,
-                      opacity: (assigning ? !busy : myTurn && !busy && !atCap(p.pos)) ? 1 : 0.35 }}>
-                    {assigning ? 'ASSIGN' : atCap(p.pos) ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
+                      opacity: (assigning ? !busy : myTurn && !busy && !atCap(p.pos, p.slug)) ? 1 : 0.35 }}>
+                    {assigning ? 'ASSIGN' : atCap(p.pos, p.slug) ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
                   </button>
                   <button onClick={() => setCardFor(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
                     <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={28} />
@@ -2141,7 +2154,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             if (rid == null) return null;
             const rows = pickRowsFor(rid);
             const pickOf = new Map(rows.map((pk) => [pk.slug, pk]));
-            const cost = (pk: DraftPickRow) => (auction ? `$${pk.price ?? 1}` : `R${pk.round}`);
+            const cost = (pk: DraftPickRow) => (auction ? `$${pk.price ?? 1}` : draftRoundLabel(pk.round, teams, st.devy_from));
             // One row: a tag on the left (the SPOT it fills, or the round/price
             // when there are no spots to fill), the player, where he came from.
             const row = (key: string | number, tag: string, slug: string, withCost = false) => {
@@ -2245,7 +2258,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                     ones you already get there. */}
                 {!gone && (() => {
                   const onBlock = (st.lots ?? []).some((l) => l.slug === slug);
-                  const capped = p ? atCap(p.pos) : false;
+                  const capped = p ? atCap(p.pos, p.slug) : false;
                   const can = !onBlock && !busy && (assigning || myTurn) && !capped;
                   return (
                     <button onClick={() => act(slug)} disabled={!can} className="mono"
@@ -4042,7 +4055,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
    *  slot says DRAFT rather than a season, because "2026 R1" beside "2027 R1"
    *  reads as two future picks when one is a slot in the draft running now. */
   const pickLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
-    `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+    `${p.kind === 'startup' ? 'DRAFT' : p.season} ${pickRoundLabel(p.round)}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   /** One seat's side of a multi-team deal (0322): every asset with the seat
    *  it is addressed to, since that is the only thing that says what the
    *  trade actually is. */

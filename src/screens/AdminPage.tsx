@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { pickRoundLabel } from '@drip/core/data/devyDraft';
 import { devyLegParts } from '@drip/core/data/devyShares';
 import { activityGrade, GRADE_LABEL, SOURCE_LABEL, SOURCE_ORDER, SEAT_LABEL, sourcesLine, humanShare, leagueLine, auditHeadline, type WeekAudit, type AuditTeam, type AuditLeague, type AuditSource } from '@drip/core/data/weekAudit';
 import {
@@ -936,7 +937,7 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
                   <b>{t.status === 'pending' ? (l.accepted ? '✓ ' : '· ') : ''}{teamName(l.roster_id)}</b>
                   {' '}sends {[
                     ...l.send.map((x) => `${playerName(x.slug)} → ${teamName(x.to)}`),
-                    ...l.send_picks.map((p) => `${p.season} R${p.round} → ${teamName(p.to)}`),
+                    ...l.send_picks.map((p) => `${p.season} ${pickRoundLabel(p.round)} → ${teamName(p.to)}`),
                     ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
                     ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
     ...devyLegParts(l, (rid) => String(teamName(rid))),
