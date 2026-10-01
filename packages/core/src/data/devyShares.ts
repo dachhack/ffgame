@@ -5,7 +5,7 @@
 // right; failing that, the ONLY team holding him does, if it holds 5 or more.
 // The right is a reservation in the rookie draft once he turns pro. The
 // database decides all of it (devy_share_rights); this only words it.
-import type { DevyMarketRow, DevySharePlayer, DevySharesState } from './liveApi';
+import type { DevyMarketRow, DevySharePlayer, DevySharesState, DevyLaunchState, DevyLaunchCfg } from './liveApi';
 import { collegeClassLabel } from './college';
 
 export const DEVY_SHARE_RULES = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5 } as const;
@@ -298,4 +298,55 @@ export function marketSubline(r: DevyMarketRow): string {
     r.school, r.fcs ? 'FCS' : null, r.class_year ? collegeClassLabel(r.class_year) : null,
     r.sh_rank ? `devy #${r.sh_rank}` : r.rank ? `#${r.rank} in college` : null,
   ].filter(Boolean).join(' · ');
+}
+
+// ── Launches (0407) ─────────────────────────────────────────────────────────
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const DOW_LABELS = DOW;
+/** "Tue 12:00 PM ET" — a launch slot in the commissioner's terms. */
+export function slotLabel(cfg: Pick<DevyLaunchCfg, 'dow' | 'hour'>): string {
+  const h = cfg.hour % 12 === 0 ? 12 : cfg.hour % 12;
+  return `${DOW[cfg.dow] ?? '?'} ${h}:00 ${cfg.hour < 12 ? 'AM' : 'PM'} ET`;
+}
+/** "3d 4h" / "5h 20m" / "12m" until a moment. */
+export function timeLeft(iso: string | null | undefined, now: number = Date.now()): string {
+  if (!iso) return '';
+  const ms = Date.parse(iso) - now;
+  if (!(ms > 0)) return 'closing';
+  const m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${mm}m` : `${mm}m`;
+}
+
+/** The banner over INVEST: what's launching, and when. Null when nothing is. */
+export function launchBanner(ls: DevyLaunchState | null | undefined): { tone: 'open' | 'soon'; title: string; sub: string } | null {
+  if (!ls?.ok || !ls.cfg?.on) return null;
+  if (ls.open) {
+    const n = ls.open.players.length;
+    return { tone: 'open', title: `🚀 ${ls.open.kind === 'catchup' ? 'CATCH-UP LAUNCH' : 'LAUNCH'} OPEN · ${n} new player${n === 1 ? '' : 's'}`,
+      sub: `Sealed orders close in ${timeLeft(ls.open.closes_at)}. Everyone fills together at the opening price; teams that max a player draw lots for his right.` };
+  }
+  const n = ls.pending_count ?? 0;
+  if (!n) return null;
+  return { tone: 'soon', title: `🆕 ${n} new player${n === 1 ? '' : 's'} listing`,
+    sub: ls.catchup_next || ls.locked ? 'They open together in a catch-up launch when the market reopens.'
+      : `They open together ${slotLabel(ls.cfg)} (in ${timeLeft(ls.next_at)}). Scout them now; nobody can buy them early.` };
+}
+
+/** What a sealed order may hold on one player: the commissioner's cap, a
+ *  full stake (20 shares) and the 60-point stake cap at his opening price. */
+export function launchOrderMax(price: number, cfg: Pick<DevyLaunchCfg, 'cap'> | null | undefined, rules: { max: number; max_spend?: number } = DEVY_SHARE_RULES): number {
+  if (!(price > 0)) return 0;
+  return Math.max(0, Math.min(cfg?.cap ?? rules.max, rules.max, Math.ceil((rules.max_spend ?? DEVY_SHARE_RULES.max_spend) / price)));
+}
+
+/** The launch's rules, for its ⓘ. */
+export function launchRulesText(cfg: DevyLaunchCfg | null | undefined): string {
+  const c = cfg ?? { on: true, dow: 2, hour: 12, window_h: 72, catchup_h: 168, cap: 20 };
+  return [
+    'New college players don’t go straight on sale — whoever happened to open the app first would get them. They list, and launch together.',
+    `Every week (${slotLabel(c)}) the new listings open for ${c.window_h} hours. Place a sealed order on any of them, up to ${c.cap} shares. Nobody sees anyone else’s orders, and you can change yours until the window closes.`,
+    'At the close every order fills together at the player’s opening price (his market price, or StatHead’s devy rank on the price curve). If more than one team maxes him, they draw lots: the winner is first to max and holds his right.',
+    `Players who arrive while the market is locked (Jan 15 to the rookie draft) wait, and open together in a ${Math.round(c.catchup_h / 24)}-day catch-up launch when it reopens.`,
+    'The commissioner sets the day, the hour, the windows and the order cap, and can switch launches off.',
+  ].join('\n\n');
 }

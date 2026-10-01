@@ -9,10 +9,10 @@
 // in the rookie draft, at any of the holder's picks.
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
-import { allotDevyShares, devyMarket, devySharesState, friendlyError, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
+import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from './PlayerCardSheet';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 import { InfoChip } from './InfoChip';
 import { useTheme, MONO } from '../theme.native';
 import { Overlay } from './Overlay';
@@ -47,7 +47,13 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const load = () => devySharesState(leagueId).then(setSt).catch(() => {});
+  // 0407: new-player launches — the banner, sealed orders, the preview.
+  const [ls, setLs] = useState<DevyLaunchState | null>(null);
+  const [launchView, setLaunchView] = useState(false);
+  const load = () => Promise.all([
+    devySharesState(leagueId).then(setSt).catch(() => {}),
+    devyLaunchState(leagueId, myRoster).then(setLs).catch(() => {}),
+  ]);
   useEffect(() => { if (visible) void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [visible, leagueId]);
   useEffect(() => {
     if (visible && view === 'add') devyMarket(leagueId, 1000).then((r) => setMarket(Array.isArray(r) ? r : [])).catch(() => setMarket([]));
@@ -222,9 +228,62 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
 
   const addList = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const rows = deep ?? (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle));
+    const listed = new Set([...(ls?.open?.players ?? []), ...(ls?.pending ?? [])].map((x) => x.slug));
+    const rows = (deep ?? (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)))
+      .filter((r) => !listed.has(r.slug));
     return shapeMarket(marketLines(rows, st, myRoster), filter, sort.key, sort.dir).slice(0, 80);
-  }, [market, q, deep, st, myRoster, filter, sort]);
+  }, [market, q, deep, st, myRoster, filter, sort, ls]);
+
+  const order = async (slug: string, n: number) => {
+    if (myRoster == null || busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await placeDevyLaunchOrder(leagueId, myRoster, slug, n);
+      if (!r.ok) { warn(); setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`); return; }
+      commit();
+      setMsg(n === 0 ? '✓ order cancelled' : `✓ sealed order: ${n} share${n === 1 ? '' : 's'} · ${fmtPts(Number(r.committed ?? 0))} committed this launch`);
+      setLs(await devyLaunchState(leagueId, myRoster));
+    } catch (e) { warn(); setMsg(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const banner = launchBanner(ls);
+  const launchPlayers = (ls?.open?.players ?? ls?.pending ?? []).filter((x) =>
+    (filter === 'ALL' || filter === 'OPEN' || x.pos === filter)
+    && (!q.trim() || x.name.toLowerCase().includes(q.trim().toLowerCase()) || (x.school ?? '').toLowerCase().includes(q.trim().toLowerCase())));
+  const myOrders = (ls?.open?.players ?? []).filter((x) => (x.my_order ?? 0) > 0);
+  const launchRow = (x: DevyLaunchPlayer) => {
+    const open = !!ls?.open;
+    const price = Number(x.price ?? 0);
+    const mx = launchOrderMax(price, ls?.cfg);
+    const cur = x.my_order ?? 0;
+    const step = (label: string, to: number, on = false) => (
+      <Pressable key={label} disabled={busy || to === cur || to < 0 || to > mx} hitSlop={4} onPress={() => { tap(); void order(x.slug, to); }}
+        style={{ borderWidth: 1, borderColor: on ? t.you : t.bd, backgroundColor: on ? t.you : 'transparent', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4,
+          opacity: busy || to === cur || to < 0 || to > mx ? 0.4 : 1 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: on ? t.bg : t.you }}>{label}</Text>
+      </Pressable>
+    );
+    return (
+      <View key={x.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+        <PosPill pos={x.pos} />
+        <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: x.slug, name: x.name, pos: x.pos, team: x.school ?? '', leagueId }); }}>
+          <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{x.name} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>ⓘ</Text></Text>
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: t.faint, marginTop: 1 }}>
+            {[x.school, x.fcs ? 'FCS' : null, x.class_year ? collegeClassLabel(x.class_year) : null, x.sh_rank ? `devy #${x.sh_rank}` : null].filter(Boolean).join(' · ')}
+          </Text>
+        </Pressable>
+        {open ? (<>
+          <Text style={{ width: 40, textAlign: 'right', fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.text }}>{fmtPts(price)}</Text>
+          {myRoster != null && (<>
+            {step('−', cur - 1)}
+            <Text style={{ width: 20, textAlign: 'center', fontFamily: MONO, fontSize: 11, fontWeight: '700', color: cur ? t.you : t.faint }}>{cur}</Text>
+            {step('+', cur + 1)}
+            {step('MAX', mx, cur === mx && mx > 0)}
+          </>)}
+        </>) : <Mono size={9} tone="faint">lists soon</Mono>}
+      </View>
+    );
+  };
   const head = (label: string, key: MarketSort | null, width?: number, align: 'left' | 'center' | 'right' = 'center') => {
     const on = key != null && sort.key === key;
     return (
@@ -258,6 +317,19 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
           : <Mono size={9.5} tone="faint" style={{ marginTop: 8 }}>Nobody in the league has bought shares yet.</Mono>)}
 
 
+        {view === 'add' && banner && (
+          <View style={{ borderWidth: 1, borderColor: banner.tone === 'open' ? t.you : t.bd, borderRadius: 8, padding: 10, gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Mono size={10} weight="700" tone={banner.tone === 'open' ? 'you' : 'text'} style={{ flex: 1 }}>{banner.title}</Mono>
+              <InfoChip title="New-player launches">{launchRulesText(ls?.cfg)}</InfoChip>
+            </View>
+            <Mono size={9} tone="dim" style={{ lineHeight: 13 }}>{banner.sub}</Mono>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <Chip label={launchView ? 'BACK TO THE MARKET' : banner.tone === 'open' ? `ORDER${myOrders.length ? ` (${myOrders.length} placed)` : ''}` : 'PREVIEW'}
+                on={launchView} onPress={() => { tap(); setLaunchView((v) => !v); }} />
+            </View>
+          </View>
+        )}
         {view === 'add' && (<>
           <TextInput value={q} onChangeText={setQ} placeholder="Search any college QB, RB, WR, TE or school…" placeholderTextColor={t.faint}
             style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: t.text, fontFamily: MONO, fontSize: 12 }} />
@@ -268,6 +340,11 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
               <Chip key={f.id} label={f.label} on={filter === f.id} onPress={() => { tap(); setFilter(f.id); }} />
             ))}
           </ScrollView>
+          {launchView && banner ? (<>
+            {launchPlayers.length === 0 && <Mono size={9.5} tone="faint">Nobody in this launch matches that.</Mono>}
+            {launchPlayers.slice(0, 120).map((x) => launchRow(x))}
+            {banner.tone === 'open' && <Mono size={8.5} tone="faint">Orders are sealed: nobody sees yours. Price is the opening price.</Mono>}
+          </>) : (<>
           {deep && deep.length === 0 && <Mono size={9.5} tone="faint">No college QB, RB, WR or TE matches that.</Mono>}
           {addList.length > 0 && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: t.bd }}>
@@ -281,6 +358,7 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
           )}
           {market && addList.length === 0 && !(deep && deep.length === 0) && <Mono size={9.5} tone="faint">Nobody matches that filter.</Mono>}
           {addList.map((l) => investRow(l))}
+          </>)}
         </>)}
   </>);
   // THE HEADER (v0.576.0, founder: "less tall. No wall of text, just a small

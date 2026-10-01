@@ -4,10 +4,10 @@
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
 import { useEffect, useMemo, useState } from 'react';
-import { allotDevyShares, devyMarket, devySharesState, friendlyError, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
+import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, setLeagueDevyLaunch, commishDevyLaunchNow, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyLaunchCfg, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from '../app/playerCard';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, slotLabel, DOW_LABELS, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
   fontFamily: 'var(--mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 9px',
@@ -28,7 +28,13 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   const [rulesOpen, setRulesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const load = () => devySharesState(leagueId).then(setSt).catch(() => {});
+  // 0407: new-player launches.
+  const [ls, setLs] = useState<DevyLaunchState | null>(null);
+  const [launchView, setLaunchView] = useState(false);
+  const load = () => Promise.all([
+    devySharesState(leagueId).then(setSt).catch(() => {}),
+    devyLaunchState(leagueId, myRoster).then(setLs).catch(() => {}),
+  ]);
   useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
   useEffect(() => {
     if (view === 'add') devyMarket(leagueId, 1000).then((r) => setMarket(Array.isArray(r) ? r : [])).catch(() => setMarket([]));
@@ -46,10 +52,56 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   }, [q, view, leagueId]);
   const addList = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const rows = deep ?? (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle));
+    const listed = new Set([...(ls?.open?.players ?? []), ...(ls?.pending ?? [])].map((x) => x.slug));
+    const rows = (deep ?? (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)))
+      .filter((r) => !listed.has(r.slug));
     return shapeMarket(marketLines(rows, st, myRoster), filter, sort.key, sort.dir).slice(0, 100);
-  }, [market, q, deep, st, myRoster, filter, sort]);
+  }, [market, q, deep, st, myRoster, filter, sort, ls]);
+  const order = async (slug: string, n: number) => {
+    if (myRoster == null || busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await placeDevyLaunchOrder(leagueId, myRoster, slug, n);
+      if (!r.ok) { setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`); return; }
+      setMsg(n === 0 ? '✓ order cancelled' : `✓ sealed order: ${n} share${n === 1 ? '' : 's'} · ${fmtPts(Number(r.committed ?? 0))} committed this launch`);
+      setLs(await devyLaunchState(leagueId, myRoster));
+    } catch (e) { setMsg(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
   if (!st?.ok || !st.on) return null;
+  const banner = launchBanner(ls);
+  const needleL = q.trim().toLowerCase();
+  const launchPlayers = (ls?.open?.players ?? ls?.pending ?? []).filter((x) => (filter === 'ALL' || filter === 'OPEN' || x.pos === filter)
+    && (!needleL || x.name.toLowerCase().includes(needleL) || (x.school ?? '').toLowerCase().includes(needleL)));
+  const myOrders = (ls?.open?.players ?? []).filter((x) => (x.my_order ?? 0) > 0);
+  const launchRow = (x: DevyLaunchPlayer) => {
+    const open = !!ls?.open;
+    const price = Number(x.price ?? 0);
+    const mx = launchOrderMax(price, ls?.cfg);
+    const cur = x.my_order ?? 0;
+    const btn = (label: string, to: number, on = false) => (
+      <button key={label} style={chip(on)} disabled={busy || to === cur || to < 0 || to > mx} onClick={() => void order(x.slug, to)}>{label}</button>
+    );
+    return (
+      <div key={x.slug} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0,1fr) 54px auto', gap: 8, alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
+        <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{x.pos}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden' }}>
+          <span role="button" style={{ display: 'block', fontWeight: 700, color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            onClick={() => openPlayerCard({ slug: x.slug, name: x.name, pos: x.pos, team: x.school ?? '', leagueId })}>{x.name} <span style={{ ...small, fontWeight: 400 }}>ⓘ</span></span>
+          <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)' }}>
+            {[x.school, x.fcs ? 'FCS' : null, x.class_year ? collegeClassLabel(x.class_year) : null, x.sh_rank ? `devy #${x.sh_rank}` : null].filter(Boolean).join(' · ')}</span>
+        </span>
+        <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{open ? fmtPts(price) : ''}</span>
+        {open && myRoster != null ? (
+          <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            {btn('−', cur - 1)}
+            <span className="mono" style={{ width: 22, textAlign: 'center', fontWeight: 700, color: cur ? 'var(--you)' : 'var(--faint)' }}>{cur}</span>
+            {btn('+', cur + 1)}{btn('max', mx, cur === mx && mx > 0)}
+          </span>
+        ) : <span style={{ ...small, fontSize: 10 }}>{open ? '' : 'lists soon'}</span>}
+      </div>
+    );
+  };
   const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5, ...(st.rules ?? {}) };
   const book = teamBook(st, myRoster);
   const mine = (st.players ?? []).filter((p) => myStake(p, myRoster) > 0);
@@ -199,6 +251,18 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
       {view === 'mine' && (mine.length ? mine.map((p) => row(p, true)) : <div style={small}>No shares yet. Use INVEST to find a college player before everyone else does.</div>)}
       {view === 'league' && ((st.players ?? []).length ? (st.players ?? []).map((p) => row(p, false)) : <div style={small}>Nobody in the league has bought shares yet.</div>)}
       {view === 'add' && (<>
+        {banner && (
+          <div style={{ border: `1px solid ${banner.tone === 'open' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 8, padding: 10, margin: '6px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="mono" style={{ flex: 1, fontSize: 11, fontWeight: 700, color: banner.tone === 'open' ? 'var(--you)' : 'var(--text)' }}>{banner.title}</span>
+              <button className="mono" title={launchRulesText(ls?.cfg)} onClick={() => window.alert(launchRulesText(ls?.cfg))}
+                style={{ background: 'none', border: '1px solid var(--bd)', borderRadius: 10, width: 20, height: 20, fontSize: 11, color: 'var(--dim)', cursor: 'pointer', padding: 0 }}>ⓘ</button>
+            </div>
+            <div style={{ ...small, fontSize: 10.5, margin: '4px 0 6px' }}>{banner.sub}</div>
+            <button style={chip(launchView)} onClick={() => setLaunchView((v) => !v)}>
+              {launchView ? 'back to the market' : banner.tone === 'open' ? `order${myOrders.length ? ` (${myOrders.length} placed)` : ''}` : 'preview'}</button>
+          </div>
+        )}
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search any college QB, RB, WR, TE or school…"
           style={{ width: '100%', boxSizing: 'border-box', padding: '6px 9px', border: '1px solid var(--bd)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
         {!market && <div style={small}>Loading the market…</div>}
@@ -206,6 +270,11 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', margin: '6px 0' }}>
           {MARKET_FILTERS.map((f) => <button key={f.id} style={chip(filter === f.id)} onClick={() => setFilter(f.id)}>{f.label}</button>)}
         </div>
+        {launchView && banner ? (<>
+          {launchPlayers.length === 0 && <div style={small}>Nobody in this launch matches that.</div>}
+          {launchPlayers.slice(0, 150).map((x) => launchRow(x))}
+          {banner.tone === 'open' && <div style={{ ...small, fontSize: 10, marginTop: 4 }}>Orders are sealed: nobody sees yours. Price is the opening price.</div>}
+        </>) : (<>
         {deep && deep.length === 0 && <div style={small}>No college QB, RB, WR or TE matches that.</div>}
         {addList.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 0', borderBottom: '1px solid var(--bd)' }}>
@@ -214,6 +283,7 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         )}
         {market && addList.length === 0 && !(deep && deep.length === 0) && <div style={small}>Nobody matches that filter.</div>}
         {addList.map((l) => investRow(l))}
+        </>)}
       </>)}
     </div>
   );
@@ -280,6 +350,64 @@ export function DevyModeRow({ leagueId }: { leagueId: string }) {
         <button style={chip(!openNow)} disabled={busy || !openNow} onClick={() => void pickOpen('after_draft')}>after the draft</button>
         <button style={chip(openNow)} disabled={busy || openNow} onClick={() => void pickOpen('now')}>right away</button>
       </>}
+      {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
+      {on && <DevyLaunchRow leagueId={leagueId} />}
+    </div>
+  );
+}
+
+/** NEW-PLAYER LAUNCHES (0407), the commissioner's row: on/off, the weekly
+ *  slot, the windows, the order cap and LAUNCH NOW. */
+function DevyLaunchRow({ leagueId }: { leagueId: string }) {
+  const [ls, setLs] = useState<DevyLaunchState | null>(null);
+  const [cfg, setCfg] = useState<DevyLaunchCfg | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => devyLaunchState(leagueId).then((r) => { setLs(r); if (r.cfg) setCfg(r.cfg); }).catch(() => {});
+  useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
+  if (!cfg || !ls?.can_edit) return null;
+  const save = async (patch: Partial<DevyLaunchCfg>) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyLaunch(leagueId, patch);
+      if (r.ok && r.cfg) { setCfg(r.cfg); setNote('✓ saved'); } else setNote(`✗ ${friendlyError(r.error ?? 'failed')}`);
+    } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
+  const now = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishDevyLaunchNow(leagueId);
+      if (r.ok) { setNote('✓ launch open — the league chat says so'); void load(); } else setNote(`✗ ${friendlyError(r.error ?? 'failed')}`);
+    } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
+  const num = (label: string, v: number, lo: number, hi: number, by: number, key: keyof DevyLaunchCfg, show: string) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>{label}</span>
+      <button style={chip(false)} disabled={busy || v - by < lo} onClick={() => void save({ [key]: v - by } as Partial<DevyLaunchCfg>)}>−</button>
+      <span className="mono" style={{ minWidth: 52, textAlign: 'center', fontSize: 11, fontWeight: 700 }}>{show}</span>
+      <button style={chip(false)} disabled={busy || v + by > hi} onClick={() => void save({ [key]: v + by } as Partial<DevyLaunchCfg>)}>+</button>
+    </span>
+  );
+  return (
+    <div style={{ flexBasis: '100%', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--bd)' }}>
+      <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--dim)' }} title={launchRulesText(cfg)}>NEW-PLAYER LAUNCHES ⓘ</span>
+      <button style={chip(cfg.on)} disabled={busy || cfg.on} onClick={() => void save({ on: true })}>on</button>
+      <button style={chip(!cfg.on)} disabled={busy || !cfg.on} onClick={() => void save({ on: false })}>off</button>
+      {cfg.on && <>
+        <span style={{ display: 'inline-flex', gap: 3 }}>
+          {DOW_LABELS.map((d, i) => <button key={d} style={chip(cfg.dow === i)} disabled={busy} onClick={() => void save({ dow: i })}>{d.toLowerCase()}</button>)}
+        </span>
+        {num('hour', cfg.hour, 0, 23, 1, 'hour', slotLabel({ dow: cfg.dow, hour: cfg.hour }).split(' ').slice(1).join(' '))}
+        {num('window', cfg.window_h, 12, 336, 12, 'window_h', `${cfg.window_h}h`)}
+        {num('catch-up', cfg.catchup_h, 24, 720, 24, 'catchup_h', `${cfg.catchup_h / 24} days`)}
+        {num('order cap', cfg.cap, 1, 20, 1, 'cap', `${cfg.cap} sh`)}
+        <button style={chip(false)} disabled={busy || !!ls.open || !ls.pending_count || !!ls.locked} onClick={() => void now()}>launch now</button>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>
+          {ls.open ? 'a launch is open' : ls.locked ? 'market locked — a catch-up opens when it reopens' : `${ls.pending_count ?? 0} waiting · next ${slotLabel(cfg)}`}</span>
+      </>}
+      {!cfg.on && <span style={{ ...small, fontSize: 10.5 }}>off: new college players are buyable the moment they appear</span>}
       {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
     </div>
   );

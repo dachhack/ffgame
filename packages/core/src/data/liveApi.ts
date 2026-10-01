@@ -3766,6 +3766,29 @@ export interface CollegePlayerCard {
 }
 export const collegePlayerCard = (espnId: string) =>
   rpc<CollegePlayerCard>('college_player_card', { p_espn_id: espnId });
+/** 0407: a league's new-player launches. */
+export interface DevyLaunchCfg { on: boolean; dow: number; hour: number; window_h: number; catchup_h: number; cap: number; since?: string }
+export interface DevyLaunchPlayer { slug: string; name: string; pos: string; school: string | null; class_year: number | null;
+  fcs?: boolean; sh_rank: number | null; price?: number; my_order?: number | null }
+export interface DevyLaunchState {
+  ok: boolean; error?: string; cfg?: DevyLaunchCfg; can_edit?: boolean; locked?: boolean; catchup_next?: boolean;
+  next_at?: string | null;
+  open?: { id: number; kind: 'weekly' | 'catchup' | 'commish'; opens_at: string; closes_at: string; players: DevyLaunchPlayer[] } | null;
+  pending?: DevyLaunchPlayer[]; pending_count?: number;
+  last?: { id: number; kind: string; filled_at: string; summary: { players: number; orders: number;
+    rights: { slug: string; name: string; team: string; roster_id: number; maxed: number }[] } } | null;
+}
+export const devyLaunchState = (leagueId: string, rosterId?: number | null) =>
+  rpc<DevyLaunchState>('devy_launch_state', { p_league_id: leagueId, p_roster_id: rosterId ?? null });
+export const placeDevyLaunchOrder = (leagueId: string, rosterId: number, slug: string, shares: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; shares?: number; committed?: number }>('place_devy_launch_order',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_shares: shares }), Ev.commishAction, { tool: 'devy_launch_order' });
+export const setLeagueDevyLaunch = (leagueId: string, cfg: Partial<DevyLaunchCfg>) =>
+  tracked(rpc<{ ok: boolean; error?: string; cfg?: DevyLaunchCfg }>('set_league_devy_launch', { p_league_id: leagueId, p_cfg: cfg }),
+    Ev.commishAction, { tool: 'devy_launch_cfg' });
+export const commishDevyLaunchNow = (leagueId: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; launch?: number }>('commish_devy_launch_now', { p_league_id: leagueId }),
+    Ev.commishAction, { tool: 'devy_launch_now' });
 export const devySharesState = (leagueId: string) =>
   rpc<DevySharesState>('devy_shares_state', { p_league_id: leagueId });
 export const allotDevyShares = (leagueId: string, rosterId: number, slug: string, shares: number) =>

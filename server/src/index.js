@@ -1051,6 +1051,17 @@ async function main() {
   // inside a play tick.
   setInterval(() => manualSyncTick().catch((e) => log('manual sync error', e.message)), config.playsPollMs);
 
+  // DEVY LAUNCHES (0407): open the weekly / catch-up windows and fill the ones
+  // that have closed. Its own 5-minute loop — the clock of a sealed window,
+  // not a scoring tick, so it never waits on one.
+  const launchTick = async () => {
+    const { data, error } = await db().rpc('devy_launch_tick');
+    if (error) log('devy launch tick', error.message);
+    else if (data?.opened || data?.filled) log(`devy launches: ${data.opened ?? 0} opened, ${data.filled ?? 0} filled`);
+  };
+  await launchTick().catch((e) => log('devy launch tick', e.message));
+  setInterval(() => launchTick().catch((e) => log('devy launch tick', e.message)), 5 * 60_000);
+
   // App push notifications (0150): detect + deliver on a 60s sweep, its own
   // loop — a slow FCM round must never stretch a play tick.
   await sweepPush().catch((e) => log('push sweep error', e.message));

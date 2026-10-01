@@ -1,6 +1,6 @@
 // THE DEVY MARKET TABLE (v0.577.0): progress to max, owners, filters, sorting,
 // and two-decimal numbers. Offline.
-import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline } from '../packages/core/src/data/devyShares.ts';
+import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax } from '../packages/core/src/data/devyShares.ts';
 
 let fails = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if (!cond) fails++; };
@@ -43,6 +43,21 @@ ok(nextSort({ key: 'rank', dir: 'asc' }, 'name').dir === 'asc', 'names start A�
 
 ok(marketSubline(rows[0]) === 'OKST · SO · devy #40' && marketSubline(rows[2]) === 'SAM · FCS · FR · devy #900' && marketSubline(rows[1]) === 'GT · SO · #285 in college',
   'the line under a name');
+
+// ── launches (0407) ──
+ok(slotLabel({ dow: 2, hour: 12 }) === 'Tue 12:00 PM ET' && slotLabel({ dow: 0, hour: 0 }) === 'Sun 12:00 AM ET' && slotLabel({ dow: 5, hour: 18 }) === 'Fri 6:00 PM ET', 'slot labels');
+const t0 = Date.parse('2026-10-01T12:00:00Z');
+ok(timeLeft('2026-10-04T16:30:00Z', t0) === '3d 4h' && timeLeft('2026-10-01T17:20:00Z', t0) === '5h 20m' && timeLeft('2026-10-01T12:12:00Z', t0) === '12m'
+  && timeLeft('2026-10-01T11:00:00Z', t0) === 'closing', 'time left');
+const cfg = { on: true, dow: 2, hour: 12, window_h: 72, catchup_h: 168, cap: 20 };
+ok(launchBanner({ ok: true, cfg, open: { id: 1, kind: 'weekly', opens_at: '', closes_at: '2099-01-01T00:00:00Z', players: [{}, {}] } })?.title === '🚀 LAUNCH OPEN · 2 new players',
+  'an open launch leads the banner');
+ok(launchBanner({ ok: true, cfg, open: { id: 1, kind: 'catchup', opens_at: '', closes_at: '2099-01-01T00:00:00Z', players: [{}] } })?.title.includes('CATCH-UP'), 'and says when it is a catch-up');
+ok(/catch-up launch when the market reopens/.test(launchBanner({ ok: true, cfg, locked: true, pending_count: 3 })?.sub ?? ''), 'while locked: a catch-up promise');
+ok(/Tue 12:00 PM ET/.test(launchBanner({ ok: true, cfg, pending_count: 1, next_at: '2099-01-01T00:00:00Z' })?.sub ?? ''), 'otherwise: the next slot');
+ok(launchBanner({ ok: true, cfg, pending_count: 0 }) === null && launchBanner({ ok: true, cfg: { ...cfg, on: false }, pending_count: 4 }) === null, 'nothing waiting, or launches off: no banner');
+ok(launchOrderMax(9.2, cfg) === 7 && launchOrderMax(1, cfg) === 20 && launchOrderMax(1, { cap: 5 }) === 5 && launchOrderMax(0, cfg) === 0,
+  'an order holds a full stake, the 60-point cap, or the commissioner\'s cap');
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL DEVY-MARKET CHECKS PASS');
