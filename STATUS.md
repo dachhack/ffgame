@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.571.0 — devy prices run on StatHead's devy board
+
+> - Devy market prices now blend StatHead's devy composite with each player's college production, in place of KeepTradeCut's top-100 list.
+> - StatHead's board covers 6,441 college players, so nearly every devy prospect now gets a scouting-based price, not just the top 100.
+> - Every number you see in the devy market is a StatHead or game number.
+
+StatHead's Oct 1 data handoff: "Anything you show players must be a
+StatHead number, never a raw third-party one." 0400–0402 priced from KTC's
+board, and a KTC-ranked player with no stats was priced on KTC's order
+alone.
+- 0403 stathead_devy (espn_id = StatHead's cfbdId, which is ESPN's athlete
+  id, spot-checked against ESPN; 1QB and superflex composite rank and
+  value; draft year), upsert_stathead_devy in chunks under one as_of, and
+  finish_stathead_devy, which swaps the batch in or refuses one under 1,000
+  rows. refresh_college_prices does the same 50/50 geometric blend with
+  StatHead's 1QB composite rank where KTC's was. college_ktc,
+  set_college_ktc and _college_ktc_weight are dropped.
+- Worker: server/src/poll/statheadDevy.js reads
+  dachhack.github.io/stathead/data/devy-rankings.json (5.7 MB, once per
+  college sweep). ktcDevy.js, its KTC page scraper and the stathead KTC-file
+  read are gone.
+- Probes: stathead-devy-probes.sql (short board refused, swap and prune,
+  join by id, StatHead-only, blended, stats-only, unmatched not priced).
+  server/test/stathead-devy.mjs (mapping, chunking, a failed chunk keeps
+  the old board). board-refresh-probes now dates its pulls relative to now
+  (it was pinned to Sep 21/28 and went stale on Oct 1).
+
 ### v0.570.0 — KTC is blended into devy prices all season
 
 > - Devy market prices are now a standing 50/50 blend of KeepTradeCut's devy rankings and how the player is producing, all season long.

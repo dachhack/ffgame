@@ -40,7 +40,7 @@ begin
     jsonb_build_object('key', 'ktc:9999', 'kind', 'player', 'slug', null, 'v1qb', 400, 'vsf', 380),
     jsonb_build_object('key', 'pick:2027 Early 1st', 'kind', 'pick', 'label', '2027 Early 1st',
       'v1qb', 7174, 'vsf', 6944)),
-    '2026-09-21T00:00:00Z');
+    (now() - interval '2 days')::text);
   perform br_true((r ->> 'ok')::boolean and (r ->> 'rows')::int = 4, 'br1 four rows written');
   perform br_true(dyn_board_is_fresh(), 'br1 and the board reads fresh');
 
@@ -72,7 +72,7 @@ begin
       'per_week', 17.0, 'ros_ppg', 16.4, 'games_left', 15),
     jsonb_build_object('sleeper_id', 'br2', 'slug', 'br-rb', 'ppg', 20.0, 'gp', 8.5,
       'per_week', 10.0)),
-    '2026-09-21T16:00:00Z');
+    (now() - interval '2 days')::text);
   perform br_true((r ->> 'ok')::boolean and (r ->> 'rows')::int = 2, 'br3 two season lines written');
   r := league_market(lid);
   perform br_true((r -> 'proj' ->> 'br-qb')::numeric = 17.0, 'br3 a full-season player''s rate is his PPG');
@@ -84,7 +84,7 @@ begin
   perform upsert_dyn_board(jsonb_build_array(
     jsonb_build_object('key', 'br1', 'kind', 'player', 'sleeper_id', 'br1', 'slug', 'br-qb',
       'v1qb', 6000, 'vsf', 11000)),
-    '2026-09-28T00:00:00Z');
+    (now() - interval '1 day')::text);
   perform br_true((league_market(lid) -> 'dyn' ->> 'br-qb')::numeric = 6000, 'br4 a new pull moves the value');
   perform br_true(not exists (select 1 from dyn_board where key = 'br2'),
     'br4 and a player the new board dropped leaves rather than sitting at last week''s');
