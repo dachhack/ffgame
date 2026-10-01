@@ -29,7 +29,7 @@ export interface CollegeBio {
 export interface CollegeSeasonRow { season: string; line: string; pts: number | null }
 export interface CollegeGameRow {
   id: string; week: number | null; date: string | null; opp: string | null; atVs: string | null;
-  result: string | null; score: string | null; line: string; pts: number;
+  result: string | null; score: string | null; line: string; pts: number | null;
 }
 export interface CollegeNewsItem { id: string; headline: string; at: string | null; url: string | null; blurb: string | null }
 export interface CollegeNextGame { date: string | null; name: string | null; short: string | null }
@@ -43,21 +43,35 @@ export function collegeSeasonOf(at: Date = new Date()): number {
   return at.getUTCMonth() >= 7 ? at.getUTCFullYear() : at.getUTCFullYear() - 1;
 }
 
-/** ESPN prints numbers as strings, with thousands separators and '-' for none. */
-const num = (v: unknown): number => {
-  const n = Number(String(v ?? '').replace(/,/g, ''));
-  return Number.isFinite(n) ? n : 0;
+/** ESPN prints numbers as strings, with thousands separators and '-' for
+ *  none. NOTHING IS FILLED IN (v0.585.0, founder: "let's not use filled in
+ *  data in the player cards — just show -"): a '-', a blank or a missing
+ *  value is null, never 0. */
+const num = (v: unknown): number | null => {
+  const s = String(v ?? '').replace(/,/g, '').trim();
+  if (s === '' || s === '-' || s === '--') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 };
 
-/** A name → value map from ESPN's parallel `names` and `stats` arrays. */
+/** A name → value map from ESPN's parallel `names` and `stats` arrays. A stat
+ *  ESPN didn't give is absent from the map, not zero. */
 export function statMap(names: readonly string[] | undefined, stats: readonly unknown[] | undefined): Record<string, number> {
   const out: Record<string, number> = {};
-  (names ?? []).forEach((n, i) => { out[n] = num(stats?.[i]); });
+  (names ?? []).forEach((n, i) => { const v = num(stats?.[i]); if (v != null) out[n] = v; });
   return out;
 }
 
-/** PPR points for one line (see the header). */
-export function collegePprPoints(m: Record<string, number>): number {
+/** One number for a line: the value, or '—' when the source didn't give it. */
+const sv = (v: number | null | undefined): string => (v == null || !Number.isFinite(v) ? '—' : String(v));
+
+const SCORING_KEYS = ['passingYards', 'passingTouchdowns', 'interceptions', 'rushingYards', 'rushingTouchdowns',
+  'receptions', 'receivingYards', 'receivingTouchdowns', 'fumblesLost'];
+
+/** PPR points for one line (see the header) — null when the line carries none
+ *  of the stats it's made of, rather than a 0 nobody scored. */
+export function collegePprPoints(m: Record<string, number>): number | null {
+  if (!SCORING_KEYS.some((k) => m[k] != null)) return null;
   const p = (m.passingYards ?? 0) * 0.04 + (m.passingTouchdowns ?? 0) * 4 - (m.interceptions ?? 0) * 2
     + (m.rushingYards ?? 0) * 0.1 + (m.rushingTouchdowns ?? 0) * 6
     + (m.receptions ?? 0) + (m.receivingYards ?? 0) * 0.1 + (m.receivingTouchdowns ?? 0) * 6
@@ -67,12 +81,12 @@ export function collegePprPoints(m: Record<string, number>): number {
 
 /** A stat line in the position's own order — what a scout reads first. */
 export function collegeStatLine(pos: string, m: Record<string, number>): string {
-  const pass = (m.passingAttempts ?? 0) > 0
-    ? `${m.completions ?? 0}/${m.passingAttempts} ${m.passingYards ?? 0} yd ${m.passingTouchdowns ?? 0} TD ${m.interceptions ?? 0} INT` : null;
+  const pass = (m.passingAttempts ?? 0) > 0 || (m.passingYards ?? 0) !== 0
+    ? `${sv(m.completions)}/${sv(m.passingAttempts)} ${sv(m.passingYards)} yd ${sv(m.passingTouchdowns)} TD ${sv(m.interceptions)} INT` : null;
   const rush = (m.rushingAttempts ?? 0) > 0 || (m.rushingYards ?? 0) !== 0
-    ? `${m.rushingAttempts ?? 0} ru ${m.rushingYards ?? 0} yd${m.rushingTouchdowns ? ` ${m.rushingTouchdowns} TD` : ''}` : null;
+    ? `${sv(m.rushingAttempts)} ru ${sv(m.rushingYards)} yd${m.rushingTouchdowns ? ` ${m.rushingTouchdowns} TD` : ''}` : null;
   const rec = (m.receptions ?? 0) > 0 || (m.receivingYards ?? 0) !== 0
-    ? `${m.receptions ?? 0} rec ${m.receivingYards ?? 0} yd${m.receivingTouchdowns ? ` ${m.receivingTouchdowns} TD` : ''}` : null;
+    ? `${sv(m.receptions)} rec ${sv(m.receivingYards)} yd${m.receivingTouchdowns ? ` ${m.receivingTouchdowns} TD` : ''}` : null;
   const order = pos === 'QB' ? [pass, rush, rec] : pos === 'RB' ? [rush, rec, pass] : [rec, rush, pass];
   return order.filter(Boolean).join(' · ') || 'no offensive stats';
 }
@@ -203,16 +217,17 @@ export function statheadEvalRows(card: any, pos: string, fmt: DevyFormat = '1qb'
  *  when ESPN's overview can't be reached. */
 export function storedSeasonRows(card: CollegePlayerCard | null | undefined): CollegeSeasonRow[] {
   return (card?.seasons ?? []).map((r) => {
-    const m: Record<string, number> = {
-      passingYards: r.pass_yds ?? 0, passingTouchdowns: r.pass_td ?? 0, interceptions: r.ints ?? 0,
-      rushingYards: r.rush_yds ?? 0, rushingTouchdowns: r.rush_td ?? 0,
-      receptions: r.rec ?? 0, receivingYards: r.rec_yds ?? 0, receivingTouchdowns: r.rec_td ?? 0,
-    };
+    // Only what was stored — a null stays missing (v0.585.0).
+    const m: Record<string, number> = {};
+    const put = (k: string, v: number | null | undefined) => { if (v != null && Number.isFinite(Number(v))) m[k] = Number(v); };
+    put('passingYards', r.pass_yds); put('passingTouchdowns', r.pass_td); put('interceptions', r.ints);
+    put('rushingYards', r.rush_yds); put('rushingTouchdowns', r.rush_td);
+    put('receptions', r.rec); put('receivingYards', r.rec_yds); put('receivingTouchdowns', r.rec_td);
     // Our lines carry no attempts; the yardage still reads.
     const line = [
-      m.passingYards ? `${m.passingYards} pass yd ${m.passingTouchdowns} TD ${m.interceptions} INT` : null,
+      m.passingYards ? `${m.passingYards} pass yd ${sv(m.passingTouchdowns)} TD ${sv(m.interceptions)} INT` : null,
       m.rushingYards ? `${m.rushingYards} ru yd${m.rushingTouchdowns ? ` ${m.rushingTouchdowns} TD` : ''}` : null,
-      m.receptions || m.receivingYards ? `${m.receptions} rec ${m.receivingYards} yd${m.receivingTouchdowns ? ` ${m.receivingTouchdowns} TD` : ''}` : null,
+      m.receptions || m.receivingYards ? `${sv(m.receptions)} rec ${sv(m.receivingYards)} yd${m.receivingTouchdowns ? ` ${m.receivingTouchdowns} TD` : ''}` : null,
     ].filter(Boolean).join(' · ') || 'no offensive stats';
     return { season: String(r.season), line: `${r.gp ? `${r.gp} G · ` : ''}${line}`, pts: collegePprPoints(m) };
   });
@@ -221,13 +236,16 @@ export function storedSeasonRows(card: CollegePlayerCard | null | undefined): Co
 /** The four numbers across the top of the card. */
 export function collegeFactStrip(card: CollegePlayerCard | null | undefined, bio: CollegeBio | null, fmt: DevyFormat = '1qb'): [string, string][] {
   const sh = card?.stathead;
-  const rank = sh ? (fmt === 'sf' ? sh.rank_sf ?? sh.rank_1qb : sh.rank_1qb) : null;
+  // The format's own rank only — a superflex league is not shown the 1QB one.
+  const rank = sh ? (fmt === 'sf' ? sh.rank_sf : sh.rank_1qb) : null;
   const cls = bio?.classLabel ?? card?.class_label ?? null;
   const size = [bio?.height?.replace(/\s/g, ''), bio?.weight?.replace(/\s*lbs/, '')].filter(Boolean).join(' · ');
   return [
     ['CLASS', cls ?? '—'],
     ['HT · WT', size || '—'],
     ['DEVY #', rank ? `#${rank}` : '—'],
-    ['PRICE', card?.market ? `${card.market.price}` : '—'],
+    // A priced player only: an unpriced one costs the floor, which is a rule,
+    // not a price anyone set.
+    ['PRICE', card?.market && card.market.rank != null ? `${card.market.price}` : '—'],
   ];
 }

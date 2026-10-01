@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.585.0 — player cards show a dash, never a filled-in number
+
+> - Player cards no longer fill in missing data. Where a number isn't known, the card shows —.
+> - Devy cards:
+>   - a stat ESPN doesn't give is — instead of 0, and a line with no scoring stats has — for points instead of 0.0;
+>   - superflex leagues no longer borrow the 1QB devy rank;
+>   - an unpriced player's PRICE and DEVY PRICE are — instead of the floor price.
+> - NFL cards:
+>   - a game-log week with no plays reads — instead of "did not play";
+>   - a player with no team reads — instead of "FA";
+>   - this week's projection is — when the league's projection row is missing, instead of falling back to a raw source number.
+
+- Core `collegeCard.ts`: `statMap` drops missing values (ESPN's "-" and blanks), `collegeStatLine` prints — for a missing number, `collegePprPoints` returns null with no scoring stats, `storedSeasonRows` keeps nulls, and `collegeFactStrip` uses the format's own rank and shows a price only when priced. Checks: `check:collegecard` cases.
+
 ### v0.584.0 — read the whole offer back before you send it
 
 > - Proposing a trade now has a confirm step. REVIEW THE OFFER shows the whole deal before it goes: what you get and what each other team gets, each item saying who it comes from.
