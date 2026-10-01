@@ -3481,7 +3481,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             const grad = !isCollegeSlug(p.slug);
             return (
               <RosterLine key={p.slug} badge="DV" tone="var(--you)" p={p} busy={busy}
-                sub={grad ? `${p.pos} · ${p.team} · drafted — move him to active` : [c?.declared ? 'DECLARED' : null, p.pos, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
+                sub={grad ? `${p.pos} · ${p.team} · drafted — move him to active` : [c?.declared ? 'DECLARED' : null, p.pos, c?.custom ? c.level : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
                 onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
             );
           })}

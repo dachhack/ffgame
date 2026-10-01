@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.582.0 — commissioners can add custom college players
+
+> - A commissioner can now add a college player our directory doesn't have, such as a D2 star, a JUCO transfer or a signed recruit. Give a name, position, school, class and level (D2, D3, NAIA, JUCO, HS, FCS or FBS).
+> - He goes into this league's pool only. Teams claim him from the wire or draft him like anyone else, and he lands in a devy spot.
+> - ESPN has no stats feed on these players, so they score nothing. They're a devy stash until they reach FBS. His player card says he was added by the commissioner.
+> - Find it in Commissioner tools under DEVY, as CUSTOM PLAYERS. It's for devy-spot leagues only; a devy market league prices only players it has stats for.
+> - The commissioner can remove a custom player nobody has rostered. A pre-draft pool re-seed keeps them.
+
+- 0410 adds the `college_custom` table. Ids come from a reserved range (990000001 and up), so `c-<id>` is a college slug everywhere.
+- New functions: `commish_add_custom_college`, `commish_remove_custom_college`, `league_custom_college`.
+- `seed_league_pool` keeps custom players. `league_pool_college`, `college_meta_for` and `college_player_card` include them; the devy market and `college_directory` never see them.
+- Core `isCustomCollegeId`: the player card skips ESPN for custom players.
+- Probes: `custom-college-probes.sql` (cc1–cc8).
+
 ### v0.581.0 — DECLARED: who's in this year's NFL draft class
 
 > - College players headed to this year's NFL draft now say DECLARED. It shows on your devy roster, in the devy market, and on their player card.
