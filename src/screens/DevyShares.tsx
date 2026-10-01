@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { allotDevyShares, devyMarket, devySharesState, friendlyError, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from '../app/playerCard';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
   fontFamily: 'var(--mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 9px',
@@ -18,7 +18,11 @@ const small: React.CSSProperties = { fontSize: 11.5, color: 'var(--dim)' };
 
 export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
   const [st, setSt] = useState<DevySharesState | null>(null);
-  const [view, setView] = useState<'mine' | 'league' | 'add' | 'trade'>('mine');
+  // v0.577.0: the DEVY tab opens on the market.
+  const [view, setView] = useState<'mine' | 'league' | 'add'>('add');
+  const [filter, setFilter] = useState<MarketFilter>('ALL');
+  const [sort, setSort] = useState<{ key: MarketSort; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' });
+  const [openOwners, setOpenOwners] = useState<string | null>(null);
   const [market, setMarket] = useState<DevyMarketRow[] | null>(null);
   const [q, setQ] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -40,12 +44,11 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
     }, 250);
     return () => { live = false; clearTimeout(h); };
   }, [q, view, leagueId]);
-  const bySlug = useMemo(() => new Map((st?.players ?? []).map((p) => [p.slug, p])), [st]);
   const addList = useMemo(() => {
-    if (deep) return deep;
     const needle = q.trim().toLowerCase();
-    return (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)).slice(0, 60);
-  }, [market, q, deep]);
+    const rows = deep ?? (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle));
+    return shapeMarket(marketLines(rows, st, myRoster), filter, sort.key, sort.dir).slice(0, 100);
+  }, [market, q, deep, st, myRoster, filter, sort]);
   if (!st?.ok || !st.on) return null;
   const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5, ...(st.rules ?? {}) };
   const book = teamBook(st, myRoster);
@@ -59,7 +62,7 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
       const r = await allotDevyShares(leagueId, myRoster, slug, Math.max(0, Math.min(rules.max, n)));
       if (!r.ok) setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`);
       else {
-        setMsg(r.spent ? `✓ bought at ${r.price} a share: −${fmtPts(Number(r.spent))}` : r.received ? `✓ sold at ${r.price} a share: +${fmtPts(Number(r.received))}` : null);
+        setMsg(r.spent ? `✓ bought at ${fmtPts(Number(r.price))} a share: −${fmtPts(Number(r.spent))}` : r.received ? `✓ sold at ${fmtPts(Number(r.price))} a share: +${fmtPts(Number(r.received))}` : null);
         await load();
       }
     } catch (e) { setMsg(`✗ ${friendlyError(e)}`); }
@@ -86,27 +89,60 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
       </div>
     );
   };
-  /** INVEST (v0.576.0): one line a player — position, name, school, price,
-   *  what you hold, +1 / +5. The name opens his devy card. */
-  const investRow = (r: DevyMarketRow) => {
-    const held = bySlug.get(r.slug);
-    const cur = held ? myStake(held, myRoster) : 0;
-    const mineH = held?.holders.find((h) => h.roster_id === myRoster);
-    const price = held?.price ?? r.price;
+  /** INVEST (v0.576.0; v0.577.0): position, name over school · class · rank,
+   *  price, a bar for how close the leading stake is to maxing (yours green),
+   *  an owners button that opens who holds him, and +1 / +5. */
+  const COLS = '24px minmax(0,1fr) 54px 70px 44px 92px';
+  const investRow = (l: MarketLine) => {
+    const r = l.row;
+    const cur = l.mine;
+    const mineH = l.held?.holders.find((h) => h.roster_id === myRoster);
+    const price = l.price;
     const room = maxBuy(cur, Number(mineH?.cost ?? 0), price, rules.max, rules.max_spend);
     const can = (k: number) => myRoster != null && !locked && !busy && room > 0 && Math.min(k, room) * price <= book.cash + 1e-9;
+    const open = openOwners === r.slug;
+    const pct = (x: number) => `${Math.round(x * 100)}%`;
     return (
-      <div key={r.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--bd)' }}>
-        <span className="mono" style={{ width: 22, fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{r.pos}</span>
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span role="button" title="Player card" style={{ fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}
-            onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{r.name} <span style={{ ...small, fontWeight: 400 }}>{r.school ?? ''}{r.fcs ? ' FCS' : ''} ⓘ</span></span>
-        </span>
-        {cur > 0 && <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--you)' }}>{held?.right?.roster_id === myRoster ? '★' : ''}{cur}sh</span>}
-        <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', minWidth: 34, textAlign: 'right' }}>{fmtPts(price)}</span>
-        {myRoster != null && room > 0 && <button style={chip(false)} disabled={!can(1)} onClick={() => void set(r.slug, cur + 1)}>+1</button>}
-        {myRoster != null && room > 1 && <button style={chip(false)} disabled={!can(5)} onClick={() => void set(r.slug, cur + Math.min(5, room))}>+{Math.min(5, room)}</button>}
-        {myRoster != null && room <= 0 && cur > 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>MAX</span>}
+      <div key={r.slug} style={{ borderBottom: '1px solid var(--bd)', padding: '5px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, alignItems: 'center' }}>
+          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{r.pos}</span>
+          <span style={{ minWidth: 0, overflow: 'hidden' }}>
+            <span role="button" title="Player card" style={{ display: 'block', fontWeight: 700, color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{l.right?.mine ? '★ ' : ''}{r.name} <span style={{ ...small, fontWeight: 400 }}>ⓘ</span></span>
+            <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {marketSubline(r)}{cur > 0 ? ` · you ${cur} sh` : ''}</span>
+          </span>
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{fmtPts(price)}</span>
+          <span title={l.lead >= 1 ? 'A stake is maxed — his right is owned' : `The leading stake is ${pct(l.lead)} of the way to maxing`}>
+            <span style={{ display: 'block', position: 'relative', height: 6, borderRadius: 3, background: 'var(--bd)', overflow: 'hidden' }}>
+              <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct(l.lead), background: l.leadMine ? 'var(--you)' : l.right ? 'var(--opp)' : 'var(--dim)' }} />
+              {!l.leadMine && l.myProgress > 0 && <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct(l.myProgress), background: 'var(--you)' }} />}
+            </span>
+            <span className="mono" style={{ display: 'block', textAlign: 'center', fontSize: 9, color: l.lead >= 1 ? (l.leadMine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)' }}>
+              {l.lead >= 1 ? 'OWNED' : pct(l.lead)}</span>
+          </span>
+          <button style={{ ...chip(open), padding: '2px 0' }} disabled={!l.owners.length} onClick={() => setOpenOwners(open ? null : r.slug)}
+            title="Who holds shares in him">{l.owners.length ? `${l.owners.length}${open ? '▴' : '▾'}` : '—'}</button>
+          <span style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+            {myRoster != null && room > 0 && <button style={chip(false)} disabled={!can(1)} onClick={() => void set(r.slug, cur + 1)}>+1</button>}
+            {myRoster != null && room > 1 && <button style={chip(false)} disabled={!can(5)} onClick={() => void set(r.slug, cur + Math.min(5, room))}>+{Math.min(5, room)}</button>}
+            {myRoster != null && room <= 0 && cur > 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>MAXED</span>}
+          </span>
+        </div>
+        {open && (
+          <div style={{ margin: '6px 0 2px 32px' }}>
+            {l.owners.map((o) => (
+              <div key={o.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 54px 70px 44px', gap: 8, fontSize: 10.5,
+                color: o.mine ? 'var(--you)' : 'var(--text)', fontWeight: o.right ? 700 : 400 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.right ? '★ ' : ''}{o.team}</span>
+                <span style={{ textAlign: 'right' }}>{o.shares} sh</span>
+                <span style={{ textAlign: 'right' }}>{fmtPts(o.cost)} in</span>
+                <span style={{ textAlign: 'right', color: o.progress >= 1 ? 'var(--opp)' : 'var(--faint)' }}>{pct(o.progress)}</span>
+              </div>
+            ))}
+            <div style={{ ...small, fontSize: 10, marginTop: 3 }}>% = how close a stake is to maxing ({rules.max} shares or {rules.max_spend} points). First to 100% owns his right.</div>
+          </div>
+        )}
       </div>
     );
   };
@@ -120,7 +156,7 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
           <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}><span role="button" title="Player card" style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
             onClick={() => openPlayerCard({ slug: p.slug, name: p.name ?? p.slug, pos: p.pos ?? '', team: p.school ?? '', leagueId })}>{p.name ?? p.slug}</span> <span style={small}>{[p.pos, p.school, p.class_year ? collegeClassLabel(p.class_year) : null, p.rank ? `#${p.rank} in college` : 'unranked', p.graduated_to ? 'TURNED PRO' : null].filter(Boolean).join(' · ')}</span></span>
-          <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{price}/sh</span>
+          <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{fmtPts(price)}/sh</span>
         </div>
         {mineH && <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: Number(mineH.value) >= Number(mineH.cost) ? 'var(--you)' : 'var(--opp)' }}>YOU: {cur} shares · {stakeLine(mineH.cost, mineH.value)}</div>}
         <div className="mono" style={{ fontSize: 11, color: yours ? 'var(--you)' : 'var(--dim)', marginTop: 2 }}>{rightLine(p, myRoster, rules.floor, rules.max, rules.min_spend)}</div>
@@ -128,6 +164,15 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         {p.active === false && !p.graduated_to && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn, #c66)' }}>LEFT COLLEGE — sell at his last price, or if he isn't drafted, {Math.round(rules.refund * 100)}% of what was paid comes back at the rookie draft</div>}
         {edit && myRoster != null && !p.graduated_to && controls(p.slug, cur, price, Number(mineH?.cost ?? 0), !!mineH?.maxed, p.active !== false)}
       </div>
+    );
+  };
+  const head = (label: string, key: MarketSort | null, align: 'left' | 'center' | 'right' = 'center') => {
+    const on = key != null && sort.key === key;
+    return (
+      <span key={label} className="mono" role={key ? 'button' : undefined} onClick={() => { if (key) setSort((c) => nextSort(c, key)); }}
+        style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: on ? 'var(--you)' : 'var(--faint)', textAlign: align, cursor: key ? 'pointer' : 'default', userSelect: 'none' }}>
+        {label}{on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+      </span>
     );
   };
   return (
@@ -143,10 +188,12 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
       </div>
       {rulesOpen && <div style={{ ...small, whiteSpace: 'pre-line', margin: '0 0 8px', lineHeight: 1.5 }}>{devyRulesText(rules, st)}</div>}
       {(st.locked || st.frozen || st.current === false) && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn, #c66)', marginBottom: 6 }}>{st.current === false ? 'Last season’s league — read only.' : lockLine(st)}</div>}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+      {/* v0.577.0: INVEST on the left, MINE and LEAGUE on the right. */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+        <button style={chip(view === 'add')} onClick={() => setView('add')}>INVEST</button>
+        <span style={{ flex: 1 }} />
         <button style={chip(view === 'mine')} onClick={() => setView('mine')}>MINE ({mine.length})</button>
         <button style={chip(view === 'league')} onClick={() => setView('league')}>LEAGUE ({st.players?.length ?? 0})</button>
-        <button style={chip(view === 'add')} onClick={() => setView('add')}>INVEST</button>
       </div>
       {msg && <div className="mono" style={{ fontSize: 11, color: msg.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{msg}</div>}
       {view === 'mine' && (mine.length ? mine.map((p) => row(p, true)) : <div style={small}>No shares yet. Use INVEST to find a college player before everyone else does.</div>)}
@@ -156,8 +203,17 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
           style={{ width: '100%', boxSizing: 'border-box', padding: '6px 9px', border: '1px solid var(--bd)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
         {!market && <div style={small}>Loading the market…</div>}
         {market && market.length === 0 && !deep && <div style={small}>No prices yet: they appear after the first weekly stats update.</div>}
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', margin: '6px 0' }}>
+          {MARKET_FILTERS.map((f) => <button key={f.id} style={chip(filter === f.id)} onClick={() => setFilter(f.id)}>{f.label}</button>)}
+        </div>
         {deep && deep.length === 0 && <div style={small}>No college QB, RB, WR or TE matches that.</div>}
-        {addList.map((r) => investRow(r))}
+        {addList.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 0', borderBottom: '1px solid var(--bd)' }}>
+            <span />{head('PLAYER', 'name', 'left')}{head('PRICE', 'price', 'right')}{head('TO MAX', 'lead')}{head('OWN', 'owners')}<span />
+          </div>
+        )}
+        {market && addList.length === 0 && !(deep && deep.length === 0) && <div style={small}>Nobody matches that filter.</div>}
+        {addList.map((l) => investRow(l))}
       </>)}
     </div>
   );

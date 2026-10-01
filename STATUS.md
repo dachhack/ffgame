@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.577.0 — the devy market table
+
+> - The DEVY tab now opens on the market. INVEST sits on the left, and MINE and LEAGUE on the right.
+> - Market rows show more: school, class and devy rank under the name, the price, a TO MAX bar for how close the leading stake is to owning the player (yours in green), and an owners button that opens who holds shares and how many.
+> - Columns have headers you can tap to sort (player, price, to max, owners), plus quick filters: ALL, QB, RB, WR, TE and NO RIGHT YET.
+> - Points always show two decimals (10.38, 1.00, 28.10).
+
+The founder: "We can have more in the devy market rows. Maybe a chart to
+show how far away before the player is fully owned. Also a button to click
+to see owners and shares. Let's make the numbers always have the same
+decimal places. Let's have headers on the columns and sorting. Also simple
+filter buttons … Let's have the devy tab open on the market. Let's put the
+invest chip all the way on the left and the mine and league chip all the
+way on the right."
+- Core devyShares: fmtPts is always two decimals; stakeProgress (toward 20
+  shares or 60 points), marketLines (owners ordered by progress, the
+  leading stake, mine, the right), shapeMarket (filters, sorts), nextSort
+  (useful first direction, flip, then back to market order), marketSubline,
+  MARKET_FILTERS. check:devymarket covers them.
+- App and web market: table header row, bar, owners expansion (team,
+  shares, points in, % to max, ★ right), filters; view defaults to INVEST;
+  chips reordered. Rendered in Chromium against a sample book.
+
 ### v0.576.0 — a tighter devy market, and every team's stakes on its roster
 
 > - The devy market header is one line (cash, stakes and shares) with an ⓘ for the rules, instead of a paragraph.

@@ -12,7 +12,7 @@ import { Alert, ScrollView, Text, TextInput, View, Pressable } from 'react-nativ
 import { allotDevyShares, devyMarket, devySharesState, friendlyError, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from './PlayerCardSheet';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 import { InfoChip } from './InfoChip';
 import { useTheme, MONO } from '../theme.native';
 import { Overlay } from './Overlay';
@@ -38,7 +38,11 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
 }) {
   const t = useTheme();
   const [st, setSt] = useState<DevySharesState | null>(null);
-  const [view, setView] = useState<View3>('mine');
+  // v0.577.0: the DEVY tab opens on the market.
+  const [view, setView] = useState<View3>('add');
+  const [filter, setFilter] = useState<MarketFilter>('ALL');
+  const [sort, setSort] = useState<{ key: MarketSort; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' });
+  const [openOwners, setOpenOwners] = useState<string | null>(null);
   const [market, setMarket] = useState<DevyMarketRow[] | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,7 +68,6 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
 
   const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5, ...(st?.rules ?? {}) };
   const book = teamBook(st, myRoster);
-  const bySlug = useMemo(() => new Map((st?.players ?? []).map((p) => [p.slug, p])), [st]);
   const mine = (st?.players ?? []).filter((p) => myStake(p, myRoster) > 0);
   // 0396: last season's league row is read-only; the lock and the freeze say so.
   const locked = !!st?.locked || st?.current === false;
@@ -76,8 +79,8 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
       const r = await allotDevyShares(leagueId, myRoster, slug, Math.max(0, Math.min(rules.max, n)));
       if (!r.ok) { warn(); setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`); return; }
       commit();
-      if (r.spent) setMsg(`✓ bought at ${r.price} a share: −${fmtPts(Number(r.spent))}`);
-      else if (r.received) setMsg(`✓ sold at ${r.price} a share: +${fmtPts(Number(r.received))}`);
+      if (r.spent) setMsg(`✓ bought at ${fmtPts(Number(r.price))} a share: −${fmtPts(Number(r.spent))}`);
+      else if (r.received) setMsg(`✓ sold at ${fmtPts(Number(r.price))} a share: +${fmtPts(Number(r.received))}`);
       await load();
     } catch (e) { warn(); setMsg(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
     finally { setBusy(false); }
@@ -123,7 +126,7 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
           <Pressable hitSlop={6} style={{ flex: 1 }} onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name ?? p.slug, pos: p.pos ?? '', team: p.school ?? '', leagueId }); }}>
             <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{p.name ?? p.slug} <Text style={{ fontSize: 11, color: t.faint }}>ⓘ</Text></Text>
           </Pressable>
-          <Mono size={11} weight="700" tone="you">{price}/sh</Mono>
+          <Mono size={11} weight="700" tone="you">{fmtPts(price)}/sh</Mono>
         </View>
         <Mono size={9} tone="faint" style={{ marginTop: 2 }}>
           {[p.school, p.class_year ? collegeClassLabel(p.class_year) : null, p.rank ? `#${p.rank} in college` : 'unranked', p.graduated_to ? 'TURNED PRO' : null].filter(Boolean).join(' · ')}
@@ -141,53 +144,107 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
     );
   };
 
-  /** INVEST (v0.576.0, founder: "make the listings in the invest view single
-   *  row and compact. Fold extra info into the info chip"): one line a
-   *  player — position, name, school, price, what you hold, +1 / +5. The ⓘ
-   *  opens his devy card, which carries the rank, class and evaluation. */
-  const investRow = (r: DevyMarketRow) => {
-    const held = bySlug.get(r.slug);
-    const cur = held ? myStake(held, myRoster) : 0;
+  /** INVEST (v0.576.0; v0.577.0 — founder: "more in the devy market rows.
+   *  Maybe a chart to show how far away before the player is fully owned.
+   *  Also a button to see owners and shares … headers on the columns and
+   *  sorting. Also simple filter buttons"). One row a player: position,
+   *  name over school · class · rank, price, a bar for how close the
+   *  leading stake is to maxing (yours green), an owners button that opens
+   *  who holds him, and +1 / +5. */
+  const W = { price: 40, bar: 50, own: 34, buy: 66 };
+  const investRow = (l: MarketLine) => {
+    const r = l.row;
+    const held = l.held;
+    const cur = l.mine;
     const mineH = held?.holders.find((h) => h.roster_id === myRoster);
-    const price = held?.price ?? r.price;
+    const price = l.price;
     const room = maxBuy(cur, Number(mineH?.cost ?? 0), price, rules.max, rules.max_spend);
     const can = (k: number) => myRoster != null && !locked && !busy && room > 0 && Math.min(k, room) * price <= book.cash + 1e-9;
     const mini = (label: string, k: number) => (
       <Pressable key={label} disabled={!can(k)} hitSlop={4} onPress={() => { tap(); void set(r.slug, cur + Math.min(k, room)); }}
-        style={{ borderWidth: 1, borderColor: can(k) ? t.you : t.bd, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 4, opacity: can(k) ? 1 : 0.4 }}>
+        style={{ borderWidth: 1, borderColor: can(k) ? t.you : t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, opacity: can(k) ? 1 : 0.4 }}>
         <Mono size={10} weight="700" tone={can(k) ? 'you' : 'faint'}>{label}</Mono>
       </Pressable>
     );
+    const open = openOwners === r.slug;
     return (
-      <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: t.bd }}>
-        <PosPill pos={r.pos} />
-        <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId }); }}>
-          <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>
-            {r.name} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>{r.school ?? ''}{r.fcs ? ' FCS' : ''} ⓘ</Text>
-          </Text>
-        </Pressable>
-        {cur > 0 && <Mono size={9.5} weight="700" tone="you">{held?.right?.roster_id === myRoster ? '★' : ''}{cur}sh</Mono>}
-        <Mono size={10.5} weight="700" tone="dim">{fmtPts(price)}</Mono>
-        {myRoster != null && room > 0 && mini('+1', 1)}
-        {myRoster != null && room > 1 && mini(`+${Math.min(5, room)}`, 5)}
-        {myRoster != null && room <= 0 && cur > 0 && <Mono size={9} tone="you">MAX</Mono>}
+      <View key={r.slug} style={{ borderBottomWidth: 1, borderBottomColor: t.bd, paddingVertical: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <PosPill pos={r.pos} />
+          <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId }); }}>
+            <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>
+              {l.right?.mine ? '★ ' : ''}{r.name} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>ⓘ</Text>
+            </Text>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: t.faint, marginTop: 1 }}>
+              {marketSubline(r)}{cur > 0 ? ` · you ${cur} sh` : ''}
+            </Text>
+          </Pressable>
+          <Text style={{ width: W.price, textAlign: 'right', fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.text }}>{fmtPts(price)}</Text>
+          <View style={{ width: W.bar, gap: 2 }}>
+            <View style={{ height: 6, borderRadius: 3, backgroundColor: t.bd, overflow: 'hidden' }}>
+              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.round(l.lead * 100)}%`, backgroundColor: l.leadMine ? t.you : l.right ? t.opp : t.dim }} />
+              {!l.leadMine && l.myProgress > 0 && (
+                <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.round(l.myProgress * 100)}%`, backgroundColor: t.you }} />
+              )}
+            </View>
+            <Text style={{ fontFamily: MONO, fontSize: 8.5, color: l.lead >= 1 ? (l.leadMine ? t.you : t.opp) : t.faint, textAlign: 'center' }}>
+              {l.lead >= 1 ? 'OWNED' : `${Math.round(l.lead * 100)}%`}
+            </Text>
+          </View>
+          <Pressable disabled={l.owners.length === 0} hitSlop={4} onPress={() => { tap(); setOpenOwners(open ? null : r.slug); }}
+            style={{ width: W.own, alignItems: 'center', borderWidth: l.owners.length ? 1 : 0, borderColor: open ? t.you : t.bd, borderRadius: 6, paddingVertical: 3 }}>
+            <Mono size={10} weight="700" tone={l.owners.length ? (open ? 'you' : 'dim') : 'faint'}>{l.owners.length ? `${l.owners.length}${open ? '▴' : '▾'}` : '—'}</Mono>
+          </Pressable>
+          <View style={{ width: W.buy, flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }}>
+            {myRoster != null && room > 0 && mini('+1', 1)}
+            {myRoster != null && room > 1 && mini(`+${Math.min(5, room)}`, 5)}
+            {myRoster != null && room <= 0 && cur > 0 && <Mono size={9} tone="you">MAXED</Mono>}
+          </View>
+        </View>
+        {open && (
+          <View style={{ marginTop: 6, marginLeft: 30, gap: 3 }}>
+            {l.owners.map((o) => (
+              <View key={o.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: o.mine ? t.you : t.text, fontWeight: o.right ? '700' : '400' }}>
+                  {o.right ? '★ ' : ''}{o.team}
+                </Text>
+                <Text style={{ fontFamily: MONO, fontSize: 10, color: t.dim, width: 46, textAlign: 'right' }}>{o.shares} sh</Text>
+                <Text style={{ fontFamily: MONO, fontSize: 10, color: t.dim, width: 56, textAlign: 'right' }}>{fmtPts(o.cost)} in</Text>
+                <Text style={{ fontFamily: MONO, fontSize: 10, color: o.progress >= 1 ? t.opp : t.faint, width: 40, textAlign: 'right' }}>{Math.round(o.progress * 100)}%</Text>
+              </View>
+            ))}
+            <Mono size={8.5} tone="faint">% = how close a stake is to maxing ({rules.max} shares or {rules.max_spend} points). First to 100% owns his right.</Mono>
+          </View>
+        )}
       </View>
     );
   };
 
   const addList = useMemo(() => {
-    if (deep) return deep;
     const needle = q.trim().toLowerCase();
-    return (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)).slice(0, 60);
-  }, [market, q, deep]);
+    const rows = deep ?? (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle));
+    return shapeMarket(marketLines(rows, st, myRoster), filter, sort.key, sort.dir).slice(0, 80);
+  }, [market, q, deep, st, myRoster, filter, sort]);
+  const head = (label: string, key: MarketSort | null, width?: number, align: 'left' | 'center' | 'right' = 'center') => {
+    const on = key != null && sort.key === key;
+    return (
+      <Pressable key={label} disabled={key == null} onPress={() => { if (key) { tap(); setSort((c) => nextSort(c, key)); } }}
+        style={width ? { width } : { flex: 1 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.6, color: on ? t.you : t.faint, textAlign: align }}>
+          {label}{on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+        </Text>
+      </Pressable>
+    );
+  };
 
   const subtitle = myRoster != null ? `CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : 'THE LEAGUE’S STAKES';
   const body = (<>
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-          {(['mine', 'league', 'add'] as const).map((v) => (
-            <Chip key={v} label={v === 'mine' ? `MINE (${mine.length})` : v === 'league' ? `LEAGUE (${st?.players?.length ?? 0})` : 'INVEST'} on={view === v}
-              onPress={() => { tap(); setView(v); }} />
-          ))}
+        {/* v0.577.0: INVEST on the left, MINE and LEAGUE on the right. */}
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, alignItems: 'center' }}>
+          <Chip label="INVEST" on={view === 'add'} onPress={() => { tap(); setView('add'); }} />
+          <View style={{ flex: 1 }} />
+          <Chip label={`MINE (${mine.length})`} on={view === 'mine'} onPress={() => { tap(); setView('mine'); }} />
+          <Chip label={`LEAGUE (${st?.players?.length ?? 0})`} on={view === 'league'} onPress={() => { tap(); setView('league'); }} />
         </View>
         {!!msg && <Mono size={9.5} tone={msg.startsWith('✗') ? 'opp' : 'you'}>{msg}</Mono>}
         {st && !st.ok && <Mono size={9.5} tone="opp">{st.error ?? 'Couldn’t load the market.'}</Mono>}
@@ -206,8 +263,24 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
             style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: t.text, fontFamily: MONO, fontSize: 12 }} />
           {!market && <Mono size={9.5} tone="faint">Loading the market…</Mono>}
           {market && market.length === 0 && !deep && <Mono size={9.5} tone="faint">No prices yet: they appear after the first weekly stats update.</Mono>}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+            {MARKET_FILTERS.map((f) => (
+              <Chip key={f.id} label={f.label} on={filter === f.id} onPress={() => { tap(); setFilter(f.id); }} />
+            ))}
+          </ScrollView>
           {deep && deep.length === 0 && <Mono size={9.5} tone="faint">No college QB, RB, WR or TE matches that.</Mono>}
-          {addList.map((r) => investRow(r))}
+          {addList.length > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 4, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+              <View style={{ width: 26 }} />
+              {head('PLAYER', 'name', undefined, 'left')}
+              {head('PRICE', 'price', W.price, 'right')}
+              {head('TO MAX', 'lead', W.bar)}
+              {head('OWN', 'owners', W.own)}
+              {head('', null, W.buy)}
+            </View>
+          )}
+          {market && addList.length === 0 && !(deep && deep.length === 0) && <Mono size={9.5} tone="faint">Nobody matches that filter.</Mono>}
+          {addList.map((l) => investRow(l))}
         </>)}
   </>);
   // THE HEADER (v0.576.0, founder: "less tall. No wall of text, just a small
