@@ -25,6 +25,7 @@ import { sweepXref } from './poll/xref.js';
 import { sweepCollege } from './poll/college.js';
 import { writeCollegeScores } from './poll/collegeScores.js';
 import { sweepGraduation } from './poll/graduate.js';
+import { sweepDeclared } from './poll/declared.js';
 import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS, BOWL_BASE, bowlSchedule, etTuesdayStart } from './poll/collegeSlate.js';
 import { setCollegeProjections } from '../../packages/core/src/engine/projScoring.ts';
 import { sweepDynasty } from './poll/dynasty.js';
@@ -954,6 +955,10 @@ async function tick() {
   // on an NFL team moves to his NFL slug in every league holding him.
   try { sweepGraduation(playerIndex, log); }
   catch (e) { log('graduation sweep error', e.message); }
+  // DECLARED (0409). Daily between the bowls and the draft, detached: this
+  // year's NFL draft prospect pool by college ESPN id, for the DECLARED tag.
+  try { sweepDeclared(log); }
+  catch (e) { log('declared sweep error', e.message); }
 
   // THE DYNASTY BOARD (0335). Weekly, gated inside the sweep: a dynasty value
   // is a long-horizon opinion of a career and does not move on a Tuesday.

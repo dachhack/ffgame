@@ -3662,6 +3662,7 @@ export type CollegePoolMeta = {
   espn_id: string; school: string | null; school_abbr: string | null;
   class_label: string | null; class_year: number | null; active: boolean | null;
   /** 0382 */ conference?: string | null; tier?: string | null;
+  /** 0409: in this year's NFL draft class (Jan 16 – Aug 1). */ declared?: boolean;
 };
 export const leaguePoolCollege = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; players?: Record<string, CollegePoolMeta> }>('league_pool_college', { p_league_id: leagueId });
@@ -3758,6 +3759,7 @@ export interface CollegePlayerCard {
   espn_id?: string; slug?: string; name?: string; pos?: string; school?: string | null; school_abbr?: string | null;
   class_year?: number | null; class_label?: string | null; jersey?: string | null; active?: boolean;
   division?: 'FBS' | 'FCS'; conference?: string | null; tier?: string | null; graduated_to?: string | null;
+  /** 0409 */ declared?: boolean;
   market?: { price: number; rank: number | null; youth?: boolean; as_of?: string; frozen?: boolean };
   stathead?: { rank_1qb: number; rank_sf: number | null; value_1qb: number | null; value_sf: number | null;
     draft_year: number | null; as_of: string; card: Record<string, unknown> | null } | null;
@@ -3798,7 +3800,7 @@ export const allotDevyShares = (leagueId: string, rosterId: number, slug: string
 /** 0388: the market — ranked college players and their price a share here. */
 /** 0404: rank is null for an unpriced player (he costs the floor); sh_rank is
  *  StatHead's 1QB devy composite rank where its board has him. */
-export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number; /** 0405 */ fcs?: boolean }
+export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number; /** 0405 */ fcs?: boolean; /** 0409 */ declared?: boolean }
 /** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
 export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
   rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });

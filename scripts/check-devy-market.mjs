@@ -41,6 +41,7 @@ s = nextSort(s, 'price'); ok(s.dir === 'asc', 'the same header flips');
 s = nextSort(s, 'price'); ok(s.key === 'rank', 'a third tap returns to the market order');
 ok(nextSort({ key: 'rank', dir: 'asc' }, 'name').dir === 'asc', 'names start A→Z');
 
+ok(marketSubline({ ...rows[0], declared: true }).startsWith('DECLARED · OKST'), 'a declared player says so first (0409)', marketSubline({ ...rows[0], declared: true }));
 ok(marketSubline(rows[0]) === 'OKST · SO · devy #40' && marketSubline(rows[2]) === 'SAM · FCS · FR · devy #900' && marketSubline(rows[1]) === 'GT · SO · #285 in college',
   'the line under a name');
 

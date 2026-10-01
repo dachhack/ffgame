@@ -100,6 +100,7 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
               <Mono size={9.5} tone="dim">
                 {school}{card?.division === 'FCS' ? ' · FCS' : card?.conference ? ` · ${card.conference}` : ''}{bio?.jersey ? ` · #${bio.jersey}` : ''}
               </Mono>
+              {card?.declared && <Mono size={9} weight="700" tone="warn">DECLARED</Mono>}
             </View>
           </View>
         </View>

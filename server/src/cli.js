@@ -667,12 +667,16 @@ async function main() {
         // scheduled sweep writes.
         argv.push('college-sweep');
         if (req.season) argv.push(String(req.season));
+      } else if (req.mode === 'declared-sweep') {
+        // v0.581.0: one pass of the NFL draft prospect pool (0409).
+        argv.push('declared-sweep');
+        if (req.year) argv.push(String(req.year));
       } else if (req.mode === 'college-report') {
         // v0.550.1: read-only — plays stored for rostered college players.
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -741,6 +745,18 @@ async function main() {
       const r = await runCollegeSweep(season, (...a) => console.log(...a), undefined, undefined, loadStatheadDevy);
       console.log(`college-sweep ${season}: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines`
         + (r.failed ? `, ${r.failed} rosters failed (no retirement)` : `, ${r.retired} retired`) + (r.error ? ` — ${r.error}` : ''));
+      if (r.error) process.exitCode = 1;
+      break;
+    }
+    case 'declared-sweep': {
+      // ▶ THE NFL DRAFT PROSPECT POOL, ON DEMAND (v0.581.0, 0409).
+      //   node src/cli.js declared-sweep [year]
+      //   One pass of what the worker does daily Jan 10 – May 15: list the
+      //   year's draft athletes and record each new one's college ESPN id.
+      const { runDeclared } = await import('./poll/declared.js');
+      const year = Number(args[0] ?? new Date().getUTCFullYear());
+      const r = await runDeclared(year, (...a) => console.log(...a));
+      console.log(`declared-sweep ${year}: ${r.added} new of ${r.listed} listed` + (r.error ? ` — ${r.error}` : ''));
       if (r.error) process.exitCode = 1;
       break;
     }
