@@ -16,6 +16,8 @@ import { classicPoints } from '../packages/core/src/engine/classic';
 import { setLeagueScoring, clearLeagueScoring, scopedAdjustFor, parseScoring } from '../packages/core/src/engine/leagueScoring';
 import { installRealWeek } from '../packages/core/src/data/realPbp';
 import { setLeagueFlags, clearLeagueFlags } from '../packages/core/src/data/commish';
+import { setCollegeMeta } from '../packages/core/src/data/college';
+import { scopedRuleToWire, scopedRuleLabel } from '../packages/core/src/engine/leagueScoring';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -154,6 +156,26 @@ ok('…another team\'s coach does not',
   scopedAdjustFor({ id: 'buf-hc', pos: 'HC', team: 'BUF' }).pts === 0);
 const lowered = parseScoring({ scoped: [{ pos: ['dl', 'db'], bonus_pts: 1 }] });
 ok('stored lower-case IDP codes parse up', JSON.stringify(lowered.scoped[0].pos) === '["DL","DB"]', lowered.scoped[0]);
+
+// 🎓 SCHOOL SCOPE (v0.580.0): a tier or a conference; college players only.
+setCollegeMeta([
+  { slug: 'c-111', conf: 'MAC', tier: 'G5', cls: 2 },
+  { slug: 'c-222', conf: 'SEC', tier: 'P4', cls: 3 },
+]);
+setLeagueScoring({ scoped: [{ conf: ['G5'], bonusMult: 0.8 }, { conf: ['SEC'], bonusPts: 1 }] });
+const g5 = scopedAdjustFor({ id: 'c-111', pos: 'RB', team: '' });
+ok('a G5 rule pays a MAC player ×0.8', g5.mult === 0.8 && g5.pts === 0, g5);
+const sec = scopedAdjustFor({ id: 'c-222', pos: 'WR', team: '' });
+ok('a conference rule hits its conference, the tier rule misses', sec.mult === 1 && sec.pts === 1, sec);
+const unknown = scopedAdjustFor({ id: 'c-999', pos: 'WR', team: '' });
+ok('a college player with no school facts never matches', unknown.mult === 1 && unknown.pts === 0, unknown);
+ok('an NFL player never matches a school rule', near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb));
+const parsedC = parseScoring({ scoped: [{ conf: ['G5', ' Big Ten ', ''], bonus_mult: 0.8 }] });
+ok('stored school scopes parse (trimmed, blanks dropped)', JSON.stringify(parsedC.scoped[0].conf) === '["G5","Big Ten"]', parsedC.scoped[0]);
+ok('the label says 🎓', scopedRuleLabel(parsedC.scoped[0]).includes('🎓 G5·Big Ten'), scopedRuleLabel(parsedC.scoped[0]));
+const round = scopedRuleToWire({ pos: ['QB'], slot: ['S1'], flag: ['Hot'], conf: ['P4'], bonusMult: 1.2 });
+ok('the wire keeps every scope (the KIT panel used to drop spot + flag)',
+  JSON.stringify(round) === JSON.stringify({ pos: ['QB'], slot: ['S1'], flag: ['Hot'], conf: ['P4'], bonus_mult: 1.2 }), round);
 
 clearLeagueScoring();
 ok('cleared → back to the base number', near(classicPoints(RB, WEEK, { ppr: 1 }), baseRb));
