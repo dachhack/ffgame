@@ -150,7 +150,11 @@ export function twinGeneralKeys(fgStackArmed: boolean, spots: TwinSpot[]): Set<s
 }
 
 export function buffAppliesToSpot(id: string, pos: string, metricId: string | null): boolean {
-  const drip = metricId === 'combodrip' || metricId === 'recyd' || (pos === 'RB' && metricId === 'rush');
+  // Every accumulation drip — Return Yards included (v0.586.0, founder:
+  // "return yards should benefit from an amp"). The engine always amped its
+  // drip (sim.ts minuteGain is per drip, not per metric); only this list left
+  // it out, so its card never showed Momentum / Overtime as on it.
+  const drip = metricId === 'combodrip' || metricId === 'recyd' || metricId === 'retyd' || (pos === 'RB' && metricId === 'rush');
   switch (id) {
     case 'unlock-carries-wipe': return pos === 'WR' || pos === 'TE';
     case 'hail-mary': return pos === 'QB';

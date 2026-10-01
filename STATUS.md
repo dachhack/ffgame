@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.586.0 — Return Yards takes every amp
+
+> - Return Yards is a drip, and now every amplifier counts on it: Momentum (3× while hot), Overtime and Garbage Time. Its card shows the amp chips like any other drip.
+> - The scoring engine already amped its drip. What was missing was the eligibility list behind the card chips, the "eligible" count and the refund when no starter qualifies; it named Rush, Receiving and Combo Drip but not Return Yards.
+
+- Core `buffAppliesToSpot`: `retyd` is a drip. Check: `check-draft-spots` case.
+
 ### v0.585.0 — player cards show a dash, never a filled-in number
 
 > - Player cards no longer fill in missing data. Where a number isn't known, the card shows —.
