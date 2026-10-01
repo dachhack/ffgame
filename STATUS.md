@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.576.0 — a tighter devy market, and every team's stakes on its roster
+
+> - The devy market header is one line (cash, stakes and shares) with an ⓘ for the rules, instead of a paragraph.
+> - BUY is now INVEST, and its listings are one compact row each: position, name, school, price, +1 and +5. Tap a name for his devy card.
+> - The separate TRADE chip is gone. Devy shares and cash trade in the normal trade builder, alongside players and picks.
+> - Every team's roster, yours or anyone else's, now ends with its DEVY STAKES: the college players it holds shares in, with ★ for a right.
+
+The founder, from the DEVY tab: "Lets make the team header less tall. No
+wall of text, just a small info chip. Let's have an invest chip instead of
+buy. Remove the trade chip and incorporate trades into the normal flow.
+Let's also have the league owned devy shares in the other team roster
+views. Let's make the listings in the invest view single row and compact.
+Fold extra info into the info chip."
+- Core devyShares: stakesOf(state, roster) and devyRulesText (the rules
+  paragraph, now behind the ⓘ, with where share trades live).
+- App DevyShares: header with InfoChip; MINE / LEAGUE / INVEST; investRow
+  single-line with +1 / +5; the share-trade composer is removed (0397's legs
+  stay in TradeCenter's 🎓 DEVY SHARES section). Team: DEVY STAKES under the
+  shown roster (viewRid), INVEST › to the DEVY tab on your own.
+- Web DevyShares: the same header, INVEST and compact rows;
+  DevyStakesList under the shown roster in NativeLeague.
+
 ### v0.575.0 — the devy market is a My Team tab
 
 > - In a devy market league, My Team now has a DEVY tab next to Roster, Waivers and Trades. It holds the whole market: your stakes, the league's, buying and share trades.

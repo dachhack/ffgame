@@ -177,3 +177,32 @@ export function marketRowDetail(r: DevyMarketRow): string {
 /** Typed this much, the search goes to the server and covers every college
  *  player, not just the loaded list. */
 export const DEEP_SEARCH_MIN = 2;
+
+// ── One team's stakes, for its roster view (v0.576.0) ─────────────────────
+export interface TeamStake { p: DevySharePlayer; shares: number; cost: number; value: number; right: boolean }
+
+/** Every college player a team holds shares in, biggest stake first — what
+ *  the roster card shows under any team's roster in a devy-market league. */
+export function stakesOf(st: DevySharesState | null | undefined, rid: number | null | undefined): TeamStake[] {
+  if (rid == null) return [];
+  const out: TeamStake[] = [];
+  for (const p of st?.players ?? []) {
+    const h = p.holders.find((x) => x.roster_id === rid);
+    if (!h || h.shares <= 0) continue;
+    out.push({ p, shares: h.shares, cost: Number(h.cost ?? 0), value: Number(h.value ?? 0), right: p.right?.roster_id === rid });
+  }
+  return out.sort((a, b) => Number(b.right) - Number(a.right) || b.shares - a.shares || b.value - a.value);
+}
+
+/** The rules, for the market's ⓘ — the paragraph the header used to carry. */
+export function devyRulesText(rules: { max: number; max_spend?: number; floor: number; min_spend?: number; payout_cap?: number; cash_cap?: number; refund?: number },
+  st?: DevySharesState | null): string {
+  return [
+    'Invest in college players by buying shares. Prices follow how they play, updated weekly in season and frozen from Jan 15 until the next season’s first stats.',
+    `A stake maxes at ${rules.max} shares or ${rules.max_spend ?? 60} points spent. The first team to max holds his right; if only one team has ${rules.floor}+ shares and ${rules.min_spend ?? 15}+ points in, that team does. The right reserves him for you in the rookie draft.`,
+    `When he’s drafted into the NFL your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 2), up to ${rules.payout_cap ?? 3}× what you paid. If he leaves college undrafted, ${Math.round((rules.refund ?? 0.5) * 100)}% of what you paid comes back.`,
+    `Selling pays today’s price, up to ${rules.payout_cap ?? 3}× what you paid; cash tops out at ${rules.cash_cap ?? 200} from sales.`,
+    'Shares trade like players and picks: add them to any trade offer from the TRADES tab.',
+    `${lockLine(st)}${st?.frozen ? ' Prices are frozen for the offseason.' : ''}`,
+  ].join('\n\n');
+}

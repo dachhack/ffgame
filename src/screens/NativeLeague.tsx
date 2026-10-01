@@ -60,7 +60,7 @@ import {
   devySharesState, type DevySharesState,
   setupLeagueDevy, setLeagueDevyOpen,
 } from '@drip/core/data/liveApi';
-import { DevySharesPanel } from './DevyShares';
+import { DevySharesPanel, DevyStakesList } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
@@ -3492,12 +3492,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         </>)}
 
         {/* DEVY SHARES (0387) — v0.575.0: the market is the DEVY tab now. */}
-        {devyMarketOn && (
-          <button onClick={() => setTab('devy')} className="mono"
-            style={{ marginTop: 12, background: 'none', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 10px', fontSize: 10.5, color: 'var(--you)', cursor: 'pointer' }}>
-            🎓 DEVY MARKET — buy and sell shares in college players →
-          </button>
-        )}
+        {devyMarketOn && <DevyStakesList leagueId={leagueId} rid={shownRid} mine={viewingMine} onInvest={() => setTab('devy')} />}
 
       </div>
 
