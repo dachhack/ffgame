@@ -4,6 +4,7 @@
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
 import { useEffect, useMemo, useState } from 'react';
+import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomCollege, CUSTOM_COLLEGE_LEVELS, type CustomCollegeRow } from '@drip/core/data/liveApi';
 import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, setLeagueDevyLaunch, commishDevyLaunchNow, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyLaunchCfg, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from '../app/playerCard';
@@ -421,6 +422,74 @@ export function DevyModeRow({ leagueId }: { leagueId: string }) {
       </>}
       {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</span>}
       {on && <DevyLaunchRow leagueId={leagueId} />}
+      {!on && <DevyCustomRow leagueId={leagueId} />}
+    </div>
+  );
+}
+
+/** CUSTOM COLLEGE PLAYERS (0410), the commissioner's row: add a player the
+ *  directory doesn't have — a D2 star, a JUCO transfer, a signed recruit —
+ *  into this league's pool, where teams claim or draft him like any other. */
+function DevyCustomRow({ leagueId }: { leagueId: string }) {
+  const [rows, setRows] = useState<CustomCollegeRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [pos, setPos] = useState('RB');
+  const [school, setSchool] = useState('');
+  const [cls, setCls] = useState<number | null>(null);
+  const [level, setLevel] = useState<string>('D2');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => leagueCustomCollege(leagueId).then((r) => setRows(Array.isArray(r) ? r : [])).catch(() => {});
+  useEffect(() => { void load(); }, [leagueId]);
+  const add = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishAddCustomCollege(leagueId, { name, pos, school: school || null, cls, level });
+      if (r.ok) { setNote(`✓ ${r.name} is in the pool — claim or draft him like anyone else`); setName(''); setSchool(''); setCls(null); await load(); }
+      else setNote(`✗ ${friendlyError(r.error ?? 'failed')}`);
+    } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
+  const remove = async (slug: string) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishRemoveCustomCollege(leagueId, slug);
+      setNote(r.ok ? '✓ removed from the pool' : `✗ ${friendlyError(r.error ?? 'failed')}`);
+      if (r.ok) await load();
+    } catch (e) { setNote(`✗ ${friendlyError(e)}`); }
+    finally { setBusy(false); }
+  };
+  const input: React.CSSProperties = { padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)', fontSize: 12 };
+  return (
+    <div style={{ flexBasis: '100%', marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--dim)' }}
+          title="Players the college directory doesn't have — D2, D3, NAIA, JUCO, a recruit. They go into this league's pool only. ESPN has no feed on them, so they score nothing; they're a devy stash until they reach FBS.">CUSTOM PLAYERS</span>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>{rows.length ? `${rows.length} added` : 'none'}</span>
+        <button style={chip(open)} onClick={() => setOpen(!open)}>{open ? 'close' : '+ add'}</button>
+      </div>
+      {open && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ ...input, width: 140 }} />
+          {['QB', 'RB', 'WR', 'TE', 'K'].map((p) => <button key={p} style={chip(pos === p)} onClick={() => setPos(p)}>{p}</button>)}
+          <input placeholder="School" value={school} onChange={(e) => setSchool(e.target.value)} style={{ ...input, width: 110 }} />
+          {[1, 2, 3, 4].map((c) => <button key={c} style={chip(cls === c)} onClick={() => setCls(cls === c ? null : c)}>{collegeClassLabel(c)}</button>)}
+          <select value={level} onChange={(e) => setLevel(e.target.value)} className="mono" style={input}>
+            {CUSTOM_COLLEGE_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <button style={chip(true)} disabled={busy || name.trim().length < 3} onClick={() => void add()}>ADD</button>
+        </div>
+      )}
+      {open && rows.map((r) => (
+        <div key={r.slug} className="mono" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+          <span style={{ fontWeight: 700, color: 'var(--text)' }}>{r.name}</span>
+          <span style={{ color: 'var(--dim)' }}>{[r.pos, r.level, r.school, r.class_year ? collegeClassLabel(r.class_year) : null].filter(Boolean).join(' · ')}</span>
+          <span style={{ color: 'var(--faint)' }}>{r.roster_id != null ? 'rostered' : 'in the pool'}</span>
+          {r.roster_id == null && <button style={{ ...chip(false), color: 'var(--opp)' }} disabled={busy} onClick={() => void remove(r.slug)}>remove</button>}
+        </div>
+      ))}
+      {note && <div className="mono" style={{ fontSize: 11, marginTop: 4, color: note.startsWith('✗') ? 'var(--opp)' : 'var(--you)' }}>{note}</div>}
     </div>
   );
 }

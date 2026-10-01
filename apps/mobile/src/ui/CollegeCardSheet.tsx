@@ -10,7 +10,7 @@ import {
   loadCollegeEspn, loadCollegeGameLog, statheadEvalRows, storedSeasonRows, collegeFactStrip,
   type CollegeBio, type CollegeOverview, type CollegeGameRow, type DevyFormat,
 } from '@drip/core/data/collegeCard';
-import { collegeEspnId, collegeClassLabel } from '@drip/core/data/college';
+import { collegeEspnId, collegeClassLabel, isCustomCollegeId } from '@drip/core/data/college';
 import { collegeHeadshot, collegeLogo } from '@drip/core/data/media';
 import { collegePlayerCard, leagueGameMode, nativeRosters, matchupTeams, type CollegePlayerCard } from '@drip/core/data/liveApi';
 import { leagueSuperflex } from '@drip/core/engine/classic';
@@ -41,7 +41,8 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
     let dead = false;
     setCard(null); setBio(null); setOv(null); setEspnDown(false); setLog(null); setLogErr(false); setOwner(undefined); setTab('summary');
     collegePlayerCard(espnId).then((c) => { if (!dead) setCard(c); }).catch(() => { if (!dead) setCard({ ok: false }); });
-    loadCollegeEspn(espnId, pos).then((r) => {
+    // 0410: ESPN has nothing on a commissioner's custom player — don't ask.
+    if (!isCustomCollegeId(espnId)) loadCollegeEspn(espnId, pos).then((r) => {
       if (dead) return;
       setBio(r.bio); setOv(r.overview); setEspnDown(!r.bio && !r.overview);
     }).catch(() => { if (!dead) setEspnDown(true); });
@@ -60,6 +61,7 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
 
   useEffect(() => {
     if (tab !== 'log' || log !== null) return;
+    if (isCustomCollegeId(espnId)) { setLog([]); return; }   // 0410: no feed
     let dead = false;
     loadCollegeGameLog(espnId, pos).then((r) => { if (!dead) setLog(r); }).catch(() => { if (!dead) setLogErr(true); });
     return () => { dead = true; };
@@ -126,6 +128,7 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
         {tab === 'summary' && (
           <View style={{ gap: 7 }}>
             {card?.graduated_to ? row('TURNED PRO', 'drafted into the NFL — his card now lives under his NFL name') : null}
+            {card?.custom ? row('ADDED BY', `the commissioner · ${card.level ?? 'custom'} · no stats feed, so he scores nothing until he reaches FBS`) : null}
             {card && card.active === false && !card.graduated_to ? row('STATUS', 'left college') : null}
             {evalRows.length > 0 && (
               <View style={{ borderBottomWidth: 1, borderBottomColor: t.bd, paddingBottom: 8, gap: 6 }}>

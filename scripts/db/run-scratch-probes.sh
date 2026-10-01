@@ -253,3 +253,4 @@ $RUN -f scripts/db/stathead-devy-probes.sql | grep -E "PROBE FAIL|ALL STATHEAD-D
 $RUN -f scripts/db/devy-deep-probes.sql | grep -E "PROBE FAIL|ALL DEVY-DEEP PROBES" || { echo "DEVY-DEEP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-launch-probes.sql | grep -E "PROBE FAIL|ALL DEVY-LAUNCH PROBES" || { echo "DEVY-LAUNCH PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/declared-probes.sql | grep -E "PROBE FAIL|ALL DECLARED PROBES" || { echo "DECLARED PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/custom-college-probes.sql | grep -E "PROBE FAIL|ALL CUSTOM-COLLEGE PROBES" || { echo "CUSTOM-COLLEGE PROBES FAILED"; exit 1; }

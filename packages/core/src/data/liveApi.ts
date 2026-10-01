@@ -3663,6 +3663,7 @@ export type CollegePoolMeta = {
   class_label: string | null; class_year: number | null; active: boolean | null;
   /** 0382 */ conference?: string | null; tier?: string | null;
   /** 0409: in this year's NFL draft class (Jan 16 – Aug 1). */ declared?: boolean;
+  /** 0410: the commissioner typed him in; `level` is D2 / JUCO / HS … */ custom?: boolean; level?: string | null;
 };
 export const leaguePoolCollege = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; players?: Record<string, CollegePoolMeta> }>('league_pool_college', { p_league_id: leagueId });
@@ -3760,6 +3761,7 @@ export interface CollegePlayerCard {
   class_year?: number | null; class_label?: string | null; jersey?: string | null; active?: boolean;
   division?: 'FBS' | 'FCS'; conference?: string | null; tier?: string | null; graduated_to?: string | null;
   /** 0409 */ declared?: boolean;
+  /** 0410 */ custom?: boolean; level?: string | null;
   market?: { price: number; rank: number | null; youth?: boolean; as_of?: string; frozen?: boolean };
   stathead?: { rank_1qb: number; rank_sf: number | null; value_1qb: number | null; value_sf: number | null;
     draft_year: number | null; as_of: string; card: Record<string, unknown> | null } | null;
@@ -3801,6 +3803,18 @@ export const allotDevyShares = (leagueId: string, rosterId: number, slug: string
 /** 0404: rank is null for an unpriced player (he costs the floor); sh_rank is
  *  StatHead's 1QB devy composite rank where its board has him. */
 export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number; /** 0405 */ fcs?: boolean; /** 0409 */ declared?: boolean }
+// ── Custom college players (0410), commissioner ─────────────────────────────
+export interface CustomCollegeRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; level: string; roster_id: number | null }
+export const CUSTOM_COLLEGE_LEVELS = ['D2', 'D3', 'NAIA', 'JUCO', 'HS', 'FCS', 'FBS'] as const;
+export const leagueCustomCollege = (leagueId: string) =>
+  rpc<CustomCollegeRow[]>('league_custom_college', { p_league_id: leagueId });
+export const commishAddCustomCollege = (leagueId: string, p: { name: string; pos: string; school?: string | null; cls?: number | null; level: string }) =>
+  tracked(rpc<{ ok: boolean; error?: string; slug?: string; name?: string }>('commish_add_custom_college',
+    { p_league_id: leagueId, p_name: p.name, p_pos: p.pos, p_school: p.school ?? null, p_class: p.cls ?? null, p_level: p.level }),
+    Ev.commishAction, { tool: 'custom_college' });
+export const commishRemoveCustomCollege = (leagueId: string, slug: string) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('commish_remove_custom_college', { p_league_id: leagueId, p_slug: slug }),
+    Ev.commishAction, { tool: 'custom_college_remove' });
 /** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
 export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
   rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });

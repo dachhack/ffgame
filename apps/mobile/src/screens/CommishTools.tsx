@@ -37,6 +37,7 @@ import {
   leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict, leagueIsCollegeCalendar,
   isAdmin, setLeaguePositionAccess, setLeagueCalendar,
 } from '@drip/core/data/liveApi';
+import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomCollege, CUSTOM_COLLEGE_LEVELS, type CustomCollegeRow } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
@@ -3024,7 +3025,79 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
         </View>
       )}
       {on && <DevyLaunchCard leagueId={leagueId} />}
+      {!on && <DevyCustomCard leagueId={leagueId} />}
       {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
+    </View>
+  );
+}
+
+/** CUSTOM COLLEGE PLAYERS (0410): a player the directory doesn't have — D2,
+ *  JUCO, a recruit — into this league's pool only. */
+function DevyCustomCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [rows, setRows] = useState<CustomCollegeRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [pos, setPos] = useState('RB');
+  const [school, setSchool] = useState('');
+  const [cls, setCls] = useState<number | null>(null);
+  const [level, setLevel] = useState<string>('D2');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => leagueCustomCollege(leagueId).then((r) => setRows(Array.isArray(r) ? r : [])).catch(() => {});
+  useEffect(() => { void load(); }, [leagueId]);
+  const add = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishAddCustomCollege(leagueId, { name, pos, school: school || null, cls, level });
+      if (r.ok) { commit(); setNote(`✓ ${r.name} is in the pool — claim or draft him like anyone else`); setName(''); setSchool(''); setCls(null); await load(); }
+      else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const remove = async (slug: string) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishRemoveCustomCollege(leagueId, slug);
+      if (r.ok) { commit(); setNote('✓ removed from the pool'); await load(); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const inputStyle = { borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, color: t.text, fontFamily: MONO, fontSize: fs(11) } as const;
+  return (
+    <View style={{ marginTop: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <LabelInfo label="CUSTOM PLAYERS"
+          info={'Players the college directory doesn\u2019t have \u2014 D2, D3, NAIA, JUCO, a signed recruit. They go into this league\u2019s pool only, where teams claim or draft them like anyone else. ESPN has no feed on them, so they score nothing: a devy stash until they reach FBS.'} />
+        <Mono size={8.5} tone="faint">{rows.length ? `${rows.length} added` : 'none'}</Mono>
+        <Chip label={open ? 'CLOSE' : '+ ADD'} on={open} onPress={() => { tap(); setOpen(!open); }} />
+      </View>
+      {open && (
+        <View style={{ gap: 6, marginTop: 6 }}>
+          <TextInput value={name} onChangeText={setName} placeholder="Name" placeholderTextColor={t.faint} style={inputStyle} />
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+            {['QB', 'RB', 'WR', 'TE', 'K'].map((p) => <Chip key={p} label={p} on={pos === p} onPress={() => { tap(); setPos(p); }} />)}
+          </View>
+          <TextInput value={school} onChangeText={setSchool} placeholder="School" placeholderTextColor={t.faint} style={inputStyle} />
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+            {[1, 2, 3, 4].map((c) => <Chip key={c} label={collegeClassLabel(c)} on={cls === c} onPress={() => { tap(); setCls(cls === c ? null : c); }} />)}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+            {CUSTOM_COLLEGE_LEVELS.map((l) => <Chip key={l} label={l} on={level === l} onPress={() => { tap(); setLevel(l); }} />)}
+          </View>
+          <Chip label="ADD TO THE POOL" on disabled={busy || name.trim().length < 3} onPress={() => { tap(); void add(); }} />
+          {rows.map((r) => (
+            <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Mono size={9.5} tone="text" weight="700">{r.name}</Mono>
+              <Mono size={8.5} tone="dim">{[r.pos, r.level, r.school, r.class_year ? collegeClassLabel(r.class_year) : null].filter(Boolean).join(' · ')}</Mono>
+              <View style={{ flex: 1 }} />
+              {r.roster_id != null ? <Mono size={8.5} tone="faint">rostered</Mono>
+                : <Chip label="REMOVE" disabled={busy} onPress={() => { tap(); void remove(r.slug); }} />}
+            </View>
+          ))}
+        </View>
+      )}
+      {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 4 }}>{note}</Mono>}
     </View>
   );
 }

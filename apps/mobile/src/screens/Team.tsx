@@ -971,7 +971,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             const grad = !isCollegeSlug(p.slug);
             return (
               <RosterRow key={p.slug} badge="DV" tone="you" p={p} busy={busy} t={t}
-                sub={grad ? `${p.team} · drafted — tap DV to activate` : [c?.declared ? 'DECLARED' : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
+                sub={grad ? `${p.team} · drafted — tap DV to activate` : [c?.declared ? 'DECLARED' : null, c?.custom ? c.level : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
                 onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
             );
           })}

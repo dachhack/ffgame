@@ -7,7 +7,7 @@
 // This pins both, and pins that no NFL-style slug can be read as college.
 // Run: npx tsx scripts/check-college.mjs
 import { readFileSync } from 'node:fs';
-import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS, setCollegeMeta, collegeRuleAllows } from '../packages/core/src/data/college.ts';
+import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS, setCollegeMeta, collegeRuleAllows, isCustomCollegeId } from '../packages/core/src/data/college.ts';
 import { slugOf } from './espn/espnAdapter.mjs';
 import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
 import { slotAllows, classicSlotsFromSpec, slotFilterLabel, slateAwareProj, optimalLineup } from '../packages/core/src/engine/classic.ts';
@@ -21,6 +21,8 @@ const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${la
 ok(collegeSlug('4688380') === 'c-4688380' && collegeSlug(4890973) === 'c-4890973', 'collegeSlug from string or number');
 let threw = false; try { collegeSlug('abc'); } catch { threw = true; }
 ok(threw, 'collegeSlug refuses a non-numeric id');
+ok(isCustomCollegeId('990000001') && isCollegeSlug('c-990000001') && !isCustomCollegeId('4688380') && !isCustomCollegeId('98999999') && !isCustomCollegeId(null),
+  'a custom player (0410) is a college slug from the reserved range; ESPN ids are not');
 ok(isCollegeSlug('c-4688380') && collegeEspnId('c-4688380') === '4688380' && levelOf('c-4688380') === 'college',
   'a college slug reads back its ESPN id and level');
 
