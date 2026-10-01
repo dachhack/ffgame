@@ -49,8 +49,10 @@ export interface HandCard {
   /** Why not, or when it can be — shown on the tip. */
   note?: string;
   /** 'aim' (v0.515.0): an AIMED card — played on a spot or a window. The tip's
-   *  button starts the tap-a-target step instead of arming it for the week. */
-  action?: 'arm' | 'aim';
+   *  button starts the tap-a-target step instead of arming it for the week.
+   *  'hint' (v0.572.1): a card the hand only SHOWS — a metric unlock plays
+   *  from a spot's ↻ METRIC picker, never from here. The tip says where. */
+  action?: 'arm' | 'aim' | 'hint';
   /** Always false since v0.431.0: a played card leaves the hand for good
    *  ("if you use a power up you can't take it back"). Kept optional so the
    *  fan's tint code reads the same; nothing sets it. */
@@ -75,13 +77,16 @@ const STOCK = '#2A2115';
 const STOCK_EDGE = '#000';
 const INK = '#EFE4C8';
 
-export function PowerupHand({ cards, busyId, onArm, lift = 0 }: {
+export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: {
   cards: HandCard[];
   busyId?: string | null;
   onArm: (id: string) => void;
   /** Extra bottom offset — the shell's room bar (v0.356.0) parks under the
    *  hand, so league boards lift it clear of the bar. */
   lift?: number;
+  /** Bump to open the full-hand list from outside — the board's 🃏 N readout
+   *  (v0.572.1), so what you own is one tap away even when the fan is not. */
+  listSignal?: number;
 }) {
   const t = useTheme();
   // App.tsx's SafeAreaView deliberately omits the bottom edge so the hand can sit
@@ -109,6 +114,8 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0 }: {
   useEffect(() => {
     if (raised && !cards.some((c) => c.id === raised)) setRaised(null);
   }, [cards, raised]);
+
+  useEffect(() => { if (listSignal && cards.length) setListOpen(true); }, [listSignal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!cards.length) return null;
 
@@ -248,7 +255,13 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0 }: {
         subtitle={tipPu ? (tipPu.kind === 'metric' ? 'METRIC' : tipPu.timing === 'pre' ? 'PRE-MATCH' : 'REAL-TIME') : undefined}
         titleLeft={<Text style={{ fontSize: 28 }}>{tipPu?.icon ?? '◈'}</Text>}
         onClose={() => setRaised(null)}
-        footer={tip ? (
+        footer={tip ? tip.action === 'hint' ? (
+            // Nothing to press: the card plays somewhere else, and the tip's
+            // note says where. A disabled ARM here read as "broken".
+            <View style={{ backgroundColor: t.sh, borderRadius: 8, paddingVertical: 14, alignItems: 'center' }}>
+              <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1, color: t.faint }}>PLAYS FROM A SPOT’S ↻ METRIC</Text>
+            </View>
+        ) : (
             <Pressable
               onPress={() => { if (tip.usable) { onArm(tip.id); setRaised(null); } }}
               disabled={!tip.usable}

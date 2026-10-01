@@ -222,6 +222,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
   useEffect(() => { if (openShopSignal) setShopOpen(true); }, [openShopSignal]);
+  /** Bumped by the 🃏 N readout to open the hand's full list (v0.572.1). */
+  const [handListSignal, setHandListSignal] = useState(0);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
   // Every week this league actually scheduled, in play order (v0.279.0). The
@@ -416,6 +418,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           if (!alive) return;
           if (mm) setMatchup(mm);
           setScores(ss); setRevealed(pk2);
+          // The hand and the wallet too (v0.572.1): a card bought on the web,
+          // or on this phone before a subway blip ate the read, reached the
+          // board only on a relaunch — the inventory was read once on mount.
+          // Pull-to-refresh and every realtime push now re-read both; the
+          // server's count wins over any local guess.
+          myInventory(m.id).then((inv) => { if (alive && inv) setInventory(inv); }).catch(() => {});
+          ensureWallet(m.id).then((c) => { if (alive && c != null) setCoins(Number(c)); }).catch(() => {});
           if (lp.length) setLivePlays(m.week, liveRowsToPbp(lp));
           revealedOppBuffs(m.id, userId).then((b) => { if (alive && b) setOppBuffs(b); }).catch(() => {});
           // Install the week's feeds so gameFeedFor() resolves them. The live
@@ -1020,6 +1029,12 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     );
   };
 
+  /** The metric an unlock card opens, by name — for the hand's hint. */
+  const unlockMetricName = (lock: string): string => {
+    for (const list of Object.values(METRICS)) for (const m of list) if (m.lock === lock) return m.name;
+    return powerupById(lock)?.name ?? lock;
+  };
+
   /** The hand: what you OWN and have not played (v0.431.0). An armed card
    *  used to stay fanned here, painted ARMED, so it could be disarmed — and
    *  the founder read that as the card never having left: "if I used
@@ -1031,13 +1046,24 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  hidden too — it cannot be armed twice this week, and a card that can
    *  do nothing is not a card to deal. */
   const hand: HandCard[] = POWERUPS
-    // Metric unlock cards use through the metric PICKER (pickMetricWithCard),
-    // not the hand — played from here they'd arm into `buffs`, which nothing
-    // reads for them. Underdog (0257, a slot-targeted modifier) is likewise
-    // excluded until the app grows targeted applies: playable on web meanwhile.
-    .filter((p) => p.kind !== 'metric' || p.id === 'unlock-underdog')
     .filter((p) => (inventory[p.id] ?? 0) > 0 && !buffs.has(p.id))
     .map((p): HandCard => {
+      // METRIC UNLOCKS (Air Raid, Combo Drip, Return Yards) are DEALT, not
+      // played, from here (v0.572.1). They used to be filtered out of the
+      // hand altogether — they play through a spot's ↻ METRIC picker
+      // (pickMetricWithCard), so the hand had no action for them — and the
+      // founder, Gridiron Gang week 4: "I don't see my power ups that I
+      // purchased or the power up card hand". A hand holding only unlock
+      // cards was an empty hand, and the shop's receipt was the only trace
+      // of coin spent. The web deals every owned card (its 'hint' action);
+      // now so does the app: the card shows, dimmed, and its tip says where
+      // it plays.
+      if (p.kind === 'metric') {
+        return {
+          id: p.id, qty: inventory[p.id] ?? 0, armed: false, action: 'hint', usable: false,
+          note: `Plays from a spot: tap the spot, ↻ METRIC, then pick ${unlockMetricName(p.id)}. That uses the card.`,
+        };
+      }
       // AIMED (v0.515.0): played on a spot or a window through the board's
       // tap-a-target step. Usable whenever the board has somewhere for it.
       if (isAimed(p.id)) {
@@ -1253,6 +1279,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   }
 
   const filled = slots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
+  const handCount = hand.reduce((n, c) => n + c.qty, 0);
 
   return (
     <View style={{ flex: 1 }}>
@@ -1376,6 +1403,14 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           <Chip label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />
           <View style={{ flex: 1, minWidth: 4 }} />
           <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08} numberOfLines={1}>{filled}/{slots.length} SET</Mono>
+          {/* 🃏 N — the cards in your hand (v0.572.1): one number that says a
+              purchase landed, beside the coin it cost, and a tap that lists
+              them even when the fan below is out of sight. */}
+          {hand.length > 0 && (
+            <Pressable hitSlop={8} onPress={() => { tap(); setHandListSignal((n) => n + 1); }} accessibilityLabel={`${handCount} cards in your hand`}>
+              <Mono size={10} tone="warn" weight="700" numberOfLines={1}>🃏 {handCount}</Mono>
+            </Pressable>
+          )}
           {controller !== 'ai' && (
             <>
               <Mono size={10} tone="you" weight="700" numberOfLines={1}>◆ {Math.round(coins)}</Mono>
@@ -2009,6 +2044,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       // the card feet hide under the rail (v0.375.1 — at 58 it floated).
       lift={50}
       cards={hand}
+      listSignal={handListSignal}
       busyId={buffBusy}
       onArm={(id) => (isAimed(id) ? startAim(id) : armFromHand(id))}
     />

@@ -22,6 +22,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.572.1 — every card you own is in your hand (app)
+
+> - Air Raid, Combo Drip and Return Yards cards now show in the app's hand after you buy them, with a tip that says where each one plays.
+> - A 🃏 count beside the coin says how many cards you hold; tap it to list them.
+> - Pull to refresh re-reads your hand and your coin, so a card bought on the web shows up on the phone.
+
+app only (no migration). Founder's iPhone screenshot, Gridiron Gang week 4,
+SETUP, SHOP showing ◆ 160: "I don't see my power ups that I purchased or the
+power up card hand at the bottom of the screen."
+- **Cause (the one the code can show):** LivePicks' hand filtered out every
+  `kind: 'metric'` card — the three metric unlocks play through a spot's
+  ↻ METRIC picker (pickMetricWithCard), so the hand had no action for them
+  and dealt none. A player whose purchases were all unlocks held an empty
+  hand: PowerupHand renders nothing for an empty list, the controls row
+  showed no trace of them, and the shop's OWNED ×1 was the only receipt.
+  The web deals every owned card (Matchup's `appliable` has a 'hint' action
+  for exactly these); the app now matches.
+- **Fix:** metric unlock cards are dealt with a new `hint` action: shown
+  dimmed, the tip reads "Plays from a spot: tap the spot, ↻ METRIC, then pick
+  Air Raid. That uses the card." and its footer says PLAYS FROM A SPOT'S
+  ↻ METRIC instead of a disabled ARM. Nothing about USING them changed —
+  the picker still confirms and consumes the card.
+- **🃏 N** in the controls row (beside ◆ coin): the number of cards in the
+  hand, tapping it opens the hand's full list (`listSignal` on PowerupHand).
+  One number that says a purchase landed, whatever the fan below is doing.
+- **Refresh re-reads the hand:** `refreshLive` (pull-to-refresh and every
+  realtime push) now re-reads `my_inventory` and the wallet. The inventory
+  was read once on mount, so a card bought on the web — or on the phone
+  behind a failed read — needed a relaunch to appear.
+- Not reproduced on a device here; if the 🃏 count reads 0 after a purchase
+  while the shop says OWNED, the gap is server-side (my_inventory /
+  caller_roster for that seat), not the hand.
+
 ### v0.572.0 — the devy market goes all the way down
 
 > - Search the devy market for any college QB, RB, WR or TE on an FBS roster (thousands of players), not just the top 1,000.
