@@ -12,11 +12,11 @@ import { Alert, ScrollView, Text, TextInput, View, Pressable } from 'react-nativ
 import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from './PlayerCardSheet';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, tradePreview, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 import { InfoChip } from './InfoChip';
 import { useTheme, MONO } from '../theme.native';
 import { Overlay } from './Overlay';
-import { Chip, Mono, PosPill } from './prims';
+import { Chip, Mono, PosPill, PrimaryButton } from './prims';
 import { tap, commit, warn } from './feedback';
 
 type View3 = 'mine' | 'league' | 'add' | 'trade';
@@ -43,6 +43,8 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
   const [filter, setFilter] = useState<MarketFilter>('ALL');
   const [sort, setSort] = useState<{ key: MarketSort; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' });
   const [openOwners, setOpenOwners] = useState<string | null>(null);
+  // v0.579.0: the purchase sheet — which player, buy or sell, how many.
+  const [trade, setTrade] = useState<{ slug: string; mode: 'buy' | 'sell'; n: number } | null>(null);
   const [market, setMarket] = useState<DevyMarketRow[] | null>(null);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
@@ -78,17 +80,19 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
   // 0396: last season's league row is read-only; the lock and the freeze say so.
   const locked = !!st?.locked || st?.current === false;
 
-  const set = async (slug: string, n: number) => {
-    if (myRoster == null || busy) return;
+  /** True when it went through — the purchase sheet closes only then. */
+  const set = async (slug: string, n: number): Promise<boolean> => {
+    if (myRoster == null || busy) return false;
     setBusy(true); setMsg(null);
     try {
       const r = await allotDevyShares(leagueId, myRoster, slug, Math.max(0, Math.min(rules.max, n)));
-      if (!r.ok) { warn(); setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`); return; }
+      if (!r.ok) { warn(); setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`); return false; }
       commit();
       if (r.spent) setMsg(`✓ bought at ${fmtPts(Number(r.price))} a share: −${fmtPts(Number(r.spent))}`);
       else if (r.received) setMsg(`✓ sold at ${fmtPts(Number(r.price))} a share: +${fmtPts(Number(r.received))}`);
       await load();
-    } catch (e) { warn(); setMsg(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+      return true;
+    } catch (e) { warn(); setMsg(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); return false; }
     finally { setBusy(false); }
   };
 
@@ -150,78 +154,49 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
     );
   };
 
-  /** INVEST (v0.576.0; v0.577.0 — founder: "more in the devy market rows.
-   *  Maybe a chart to show how far away before the player is fully owned.
-   *  Also a button to see owners and shares … headers on the columns and
-   *  sorting. Also simple filter buttons"). One row a player: position,
-   *  name over school · class · rank, price, a bar for how close the
-   *  leading stake is to maxing (yours green), an owners button that opens
-   *  who holds him, and +1 / +5. */
-  const W = { price: 40, bar: 50, own: 34, buy: 66 };
+  /** INVEST (v0.576.0 → v0.579.0, founder: "Instead of the own chip and the
+   *  +1 +5 chips, let's have your share, an in row owners chip, and a buy
+   *  chip that pops up a purchase interaction"). One row a player: name over
+   *  school · class · rank, price, the TO MAX bar, YOUR shares, an owners
+   *  chip (who holds him, in a pop-up), and BUY, which opens the purchase
+   *  sheet — how many, what it costs, where it leaves the stake. */
+  const W = { price: 40, bar: 46, you: 26, own: 34, buy: 44 };
   const investRow = (l: MarketLine) => {
     const r = l.row;
-    const held = l.held;
     const cur = l.mine;
-    const mineH = held?.holders.find((h) => h.roster_id === myRoster);
     const price = l.price;
-    const room = maxBuy(cur, Number(mineH?.cost ?? 0), price, rules.max, rules.max_spend);
-    const can = (k: number) => myRoster != null && !locked && !busy && room > 0 && Math.min(k, room) * price <= book.cash + 1e-9;
-    const mini = (label: string, k: number) => (
-      <Pressable key={label} disabled={!can(k)} hitSlop={4} onPress={() => { tap(); void set(r.slug, cur + Math.min(k, room)); }}
-        style={{ borderWidth: 1, borderColor: can(k) ? t.you : t.bd, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4, opacity: can(k) ? 1 : 0.4 }}>
-        <Mono size={10} weight="700" tone={can(k) ? 'you' : 'faint'}>{label}</Mono>
-      </Pressable>
-    );
-    const open = openOwners === r.slug;
     return (
-      <View key={r.slug} style={{ borderBottomWidth: 1, borderBottomColor: t.bd, paddingVertical: 6 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <PosPill pos={r.pos} />
-          <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId }); }}>
-            <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>
-              {l.right?.mine ? '★ ' : ''}{r.name} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>ⓘ</Text>
-            </Text>
-            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: t.faint, marginTop: 1 }}>
-              {marketSubline(r)}{cur > 0 ? ` · you ${cur} sh` : ''}
-            </Text>
-          </Pressable>
-          <Text style={{ width: W.price, textAlign: 'right', fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.text }}>{fmtPts(price)}</Text>
-          <View style={{ width: W.bar, gap: 2 }}>
-            <View style={{ height: 6, borderRadius: 3, backgroundColor: t.bd, overflow: 'hidden' }}>
-              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.round(l.lead * 100)}%`, backgroundColor: l.leadMine ? t.you : l.right ? t.opp : t.dim }} />
-              {!l.leadMine && l.myProgress > 0 && (
-                <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.round(l.myProgress * 100)}%`, backgroundColor: t.you }} />
-              )}
-            </View>
-            <Text style={{ fontFamily: MONO, fontSize: 8.5, color: l.lead >= 1 ? (l.leadMine ? t.you : t.opp) : t.faint, textAlign: 'center' }}>
-              {l.lead >= 1 ? 'OWNED' : `${Math.round(l.lead * 100)}%`}
-            </Text>
+      <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderBottomWidth: 1, borderBottomColor: t.bd, paddingVertical: 6 }}>
+        <PosPill pos={r.pos} />
+        <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId }); }}>
+          <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>
+            {l.right?.mine ? '★ ' : ''}{r.name} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>ⓘ</Text>
+          </Text>
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 9, color: t.faint, marginTop: 1 }}>{marketSubline(r)}</Text>
+        </Pressable>
+        <Text style={{ width: W.price, textAlign: 'right', fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.text }}>{fmtPts(price)}</Text>
+        <View style={{ width: W.bar, gap: 2 }}>
+          <View style={{ height: 6, borderRadius: 3, backgroundColor: t.bd, overflow: 'hidden' }}>
+            <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.round(l.lead * 100)}%`, backgroundColor: l.leadMine ? t.you : l.right ? t.opp : t.dim }} />
+            {!l.leadMine && l.myProgress > 0 && (
+              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.round(l.myProgress * 100)}%`, backgroundColor: t.you }} />
+            )}
           </View>
-          <Pressable disabled={l.owners.length === 0} hitSlop={4} onPress={() => { tap(); setOpenOwners(open ? null : r.slug); }}
-            style={{ width: W.own, alignItems: 'center', borderWidth: l.owners.length ? 1 : 0, borderColor: open ? t.you : t.bd, borderRadius: 6, paddingVertical: 3 }}>
-            <Mono size={10} weight="700" tone={l.owners.length ? (open ? 'you' : 'dim') : 'faint'}>{l.owners.length ? `${l.owners.length}${open ? '▴' : '▾'}` : '—'}</Mono>
-          </Pressable>
-          <View style={{ width: W.buy, flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }}>
-            {myRoster != null && room > 0 && mini('+1', 1)}
-            {myRoster != null && room > 1 && mini(`+${Math.min(5, room)}`, 5)}
-            {myRoster != null && room <= 0 && cur > 0 && <Mono size={9} tone="you">MAXED</Mono>}
-          </View>
+          <Text style={{ fontFamily: MONO, fontSize: 8.5, color: l.lead >= 1 ? (l.leadMine ? t.you : t.opp) : t.faint, textAlign: 'center' }}>
+            {l.lead >= 1 ? 'OWNED' : `${Math.round(l.lead * 100)}%`}
+          </Text>
         </View>
-        {open && (
-          <View style={{ marginTop: 6, marginLeft: 30, gap: 3 }}>
-            {l.owners.map((o) => (
-              <View key={o.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: o.mine ? t.you : t.text, fontWeight: o.right ? '700' : '400' }}>
-                  {o.right ? '★ ' : ''}{o.team}
-                </Text>
-                <Text style={{ fontFamily: MONO, fontSize: 10, color: t.dim, width: 46, textAlign: 'right' }}>{o.shares} sh</Text>
-                <Text style={{ fontFamily: MONO, fontSize: 10, color: t.dim, width: 56, textAlign: 'right' }}>{fmtPts(o.cost)} in</Text>
-                <Text style={{ fontFamily: MONO, fontSize: 10, color: o.progress >= 1 ? t.opp : t.faint, width: 40, textAlign: 'right' }}>{Math.round(o.progress * 100)}%</Text>
-              </View>
-            ))}
-            <Mono size={8.5} tone="faint">% = how close a stake is to maxing ({rules.max} shares or {rules.max_spend} points). First to 100% owns his right.</Mono>
-          </View>
-        )}
+        <Text style={{ width: W.you, textAlign: 'center', fontFamily: MONO, fontSize: 11, fontWeight: '700', color: cur ? t.you : t.faint }}>{cur || '—'}</Text>
+        <Pressable disabled={l.owners.length === 0} hitSlop={4} onPress={() => { tap(); setOpenOwners(r.slug); }}
+          style={{ width: W.own, alignItems: 'center', borderWidth: 1, borderColor: l.owners.length ? t.bd : 'transparent', borderRadius: 10, paddingVertical: 3 }}>
+          <Mono size={9.5} weight="700" tone={l.owners.length ? 'dim' : 'faint'}>{l.owners.length ? `👥${l.owners.length}` : '—'}</Mono>
+        </Pressable>
+        {myRoster != null ? (
+          <Pressable hitSlop={4} disabled={locked} onPress={() => { tap(); setTrade({ slug: r.slug, mode: 'buy', n: 1 }); }}
+            style={{ width: W.buy, alignItems: 'center', borderWidth: 1, borderColor: t.you, backgroundColor: locked ? 'transparent' : t.you, borderRadius: 6, paddingVertical: 5, opacity: locked ? 0.4 : 1 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '800', color: locked ? t.you : t.bg }}>BUY</Text>
+          </Pressable>
+        ) : <View style={{ width: W.buy }} />}
       </View>
     );
   };
@@ -352,6 +327,7 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
               {head('PLAYER', 'name', undefined, 'left')}
               {head('PRICE', 'price', W.price, 'right')}
               {head('TO MAX', 'lead', W.bar)}
+              {head('YOU', 'mine', W.you)}
               {head('OWN', 'owners', W.own)}
               {head('', null, W.buy)}
             </View>
@@ -373,11 +349,88 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
       {(st?.locked || st?.frozen || st?.current === false) && <Mono size={9} tone="warn">{st?.current === false ? 'Last season’s league — read only.' : lockLine(st)}</Mono>}
     </View>
   );
+  // ── THE POP-UPS (v0.579.0): who owns him, and the purchase sheet ──
+  const ownLine = openOwners ? addList.find((l) => l.row.slug === openOwners) ?? null : null;
+  const tl = trade ? addList.find((l) => l.row.slug === trade.slug) ?? null : null;
+  const tMine = tl?.held?.holders.find((h) => h.roster_id === myRoster);
+  const tp = tl && trade ? tradePreview({ mode: trade.mode, n: trade.n, cur: tl.mine, cost: Number(tMine?.cost ?? 0), price: tl.price, cash: book.cash, rules }) : null;
+  const ownersList = (l: MarketLine) => (
+    <View style={{ gap: 4 }}>
+      {l.owners.length === 0 && <Mono size={9.5} tone="faint">Nobody holds shares in him yet.</Mono>}
+      {l.owners.map((o) => (
+        <View key={o.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 11, color: o.mine ? t.you : t.text, fontWeight: o.right ? '700' : '400' }}>{o.right ? '★ ' : ''}{o.team}</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 11, color: t.dim, width: 46, textAlign: 'right' }}>{o.shares} sh</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 11, color: t.dim, width: 64, textAlign: 'right' }}>{fmtPts(o.cost)} in</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 11, color: o.progress >= 1 ? t.opp : t.faint, width: 42, textAlign: 'right' }}>{Math.round(o.progress * 100)}%</Text>
+        </View>
+      ))}
+      <Mono size={8.5} tone="faint" style={{ lineHeight: 12 }}>% = how close a stake is to maxing ({rules.max} shares or {rules.max_spend} points). First to 100% holds his right.</Mono>
+    </View>
+  );
+  const stat = (k: string, v: string, tone: 'text' | 'you' | 'opp' = 'text') => (
+    <View style={{ flex: 1, alignItems: 'center' }}>
+      <Mono size={8} tone="faint" weight="700" track={0.12}>{k}</Mono>
+      <Text style={{ fontFamily: MONO, fontSize: 14, fontWeight: '800', color: tone === 'you' ? t.you : tone === 'opp' ? t.opp : t.text, marginTop: 2 }}>{v}</Text>
+    </View>
+  );
+  const popups = (<>
+    <Overlay visible={!!ownLine} title={ownLine ? `${ownLine.row.name} · owners` : 'Owners'} onClose={() => setOpenOwners(null)}>
+      <ScrollView contentContainerStyle={{ padding: 14 }}>{ownLine && ownersList(ownLine)}</ScrollView>
+    </Overlay>
+    <Overlay visible={!!tl && !!trade} title={tl ? tl.row.name : 'Buy shares'} subtitle={tl ? marketSubline(tl.row) : undefined} onClose={() => setTrade(null)}>
+      {tl && trade && tp && (
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }} keyboardShouldPersistTaps="handled">
+          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: t.bd, paddingVertical: 8 }}>
+            {stat('PRICE', fmtPts(tl.price))}
+            {stat('YOU HOLD', `${tl.mine} sh`, tl.mine ? 'you' : 'text')}
+            {stat('CASH', fmtPts(book.cash))}
+            {stat('LEADER', tl.lead >= 1 ? 'OWNED' : `${Math.round(tl.lead * 100)}%`, tl.leadMine ? 'you' : tl.right ? 'opp' : 'text')}
+          </View>
+          {tl.mine > 0 && (
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <Chip label="BUY" on={trade.mode === 'buy'} onPress={() => { tap(); setTrade({ ...trade, mode: 'buy', n: 1 }); }} />
+              <Chip label="SELL" on={trade.mode === 'sell'} onPress={() => { tap(); setTrade({ ...trade, mode: 'sell', n: 1 }); }} />
+            </View>
+          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+            <Chip label="−" disabled={trade.n <= 1} onPress={() => { tap(); setTrade({ ...trade, n: Math.max(1, trade.n - 1) }); }} />
+            <Text style={{ minWidth: 70, textAlign: 'center', fontFamily: MONO, fontSize: 26, fontWeight: '800', color: t.text }}>{tp.n}</Text>
+            <Chip label="+" disabled={tp.n >= (trade.mode === 'buy' ? Math.max(1, maxBuy(tl.mine, Number(tMine?.cost ?? 0), tl.price, rules.max, rules.max_spend)) : tl.mine)}
+              onPress={() => { tap(); setTrade({ ...trade, n: tp.n + 1 }); }} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+            {[1, 5, 10].map((k) => <Chip key={k} label={`${k}`} on={tp.n === k} onPress={() => { tap(); setTrade({ ...trade, n: k }); }} />)}
+            {trade.mode === 'buy'
+              ? <Chip label={`MAX ${tp.maxN}`} disabled={tp.maxN < 1} onPress={() => { tap(); setTrade({ ...trade, n: Math.max(1, tp.maxN) }); }} />
+              : <Chip label={`ALL ${tl.mine}`} onPress={() => { tap(); setTrade({ ...trade, n: tl.mine }); }} />}
+          </View>
+          <View style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 8, padding: 10, gap: 4 }}>
+            <Mono size={10.5} weight="700">{trade.mode === 'buy' ? `Cost ${fmtPts(tp.amount)} · cash after ${fmtPts(tp.cashAfter)}` : `You get ${fmtPts(tp.amount)} · cash after ${fmtPts(tp.cashAfter)}`}</Mono>
+            <Mono size={10} tone="dim">{`Your stake: ${tl.mine} → ${tp.sharesAfter} sh · ${fmtPts(tp.costAfter)} in · ${Math.round(tp.progressAfter * 100)}% to max`}</Mono>
+            {tp.maxes && <Mono size={10} tone="you" weight="700">{tl.right && !tl.right.mine ? `★ This maxes your stake — but ${tl.right.team} already holds his right.` : '★ This maxes your stake. First to max holds his right.'}</Mono>}
+            {tp.capped && <Mono size={9.5} tone="warn">Paid at the {rules.payout_cap}× cap on what you put in, not today's full price.</Mono>}
+            {!!tp.why && <Mono size={9.5} tone="opp">{tp.why}</Mono>}
+          </View>
+          <PrimaryButton label={busy ? 'WORKING…' : trade.mode === 'buy' ? `BUY ${tp.n} · ${fmtPts(tp.amount)}` : `SELL ${tp.n} · +${fmtPts(tp.amount)}`}
+            disabled={busy || !tp.ok || locked}
+            onPress={() => { void set(tl.row.slug, trade.mode === 'buy' ? tl.mine + tp.n : tl.mine - tp.n).then((ok) => { if (ok) setTrade(null); }); }} />
+          {locked && <Mono size={9.5} tone="warn">{lockLine(st)}</Mono>}
+          {!!msg && msg.startsWith('✗') && <Mono size={9.5} tone="opp">{msg}</Mono>}
+          <View style={{ gap: 6 }}>
+            <Mono size={8.5} tone="faint" weight="700" track={0.12}>OWNERS</Mono>
+            {ownersList(tl)}
+          </View>
+        </ScrollView>
+      )}
+    </Overlay>
+  </>);
   if (inline) {
     return (
       <View style={{ gap: 8 }}>
         {header}
         {body}
+        {popups}
       </View>
     );
   }
@@ -387,6 +440,7 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
         {header}
         {body}
       </ScrollView>
+      {popups}
     </Overlay>
   );
 }

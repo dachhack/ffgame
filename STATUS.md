@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.579.0 — buy devy shares from a purchase sheet
+
+> - Market rows now show your shares (YOU), an owners chip with how many teams hold him, and a BUY button. The OWN column and the +1 / +5 buttons are gone.
+> - The owners chip opens a list of who holds him: shares, points in, and how close each stake is to maxing.
+> - BUY opens a purchase sheet with his price, your holding, your cash and the leader's progress. Pick an amount with − / + or the 1, 5, 10 and MAX chips.
+> - Before you confirm, it previews the cost, your cash after, your stake after, and whether this buy maxes you. If you hold him, switch to SELL to see what you'd get back, including the payout cap.
+> - Sort the market by YOU to bring your holdings to the top.
+
 ### v0.578.0 — fair launches for new devy players
 
 > - New college players no longer go on sale the moment they appear. They show as NEW LISTINGS you can scout, then open together in a weekly launch (Tuesday noon ET by default).
