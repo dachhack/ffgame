@@ -136,7 +136,7 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
                 {evalRows.map((r) => row(r.label, r.value))}
               </View>
             )}
-            {card?.market ? row('DEVY PRICE', `${card.market.price} a share${card.market.rank ? ` · #${card.market.rank} in college` : ' · unpriced (the floor)'}${card.market.youth ? ' · young riser' : ''}${card.market.frozen ? ' · frozen for the offseason' : ''}`) : null}
+            {card?.market ? row('DEVY PRICE', card.market.rank != null ? `${card.market.price} a share · #${card.market.rank} in college${card.market.youth ? ' · young riser' : ''}${card.market.frozen ? ' · frozen for the offseason' : ''}` : '—') : null}
             {owner !== undefined ? row('ROSTERED', owner ? `⇄ ${owner}` : 'nobody in this league holds him') : null}
             {ov?.next?.short ? row('NEXT UP', `${ov.next.short}${ov.next.date && Number.isFinite(Date.parse(ov.next.date)) ? ` · ${kickoffLabel(Date.parse(ov.next.date))}` : ''}`) : null}
             {bio?.hometown || cls ? row('BIO', [cls, bio?.hometown].filter(Boolean).join(' · ')) : null}
@@ -183,7 +183,7 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
                 {cell(24, String(g.week ?? '—'), t.text, true)}
                 {cell(54, `${g.atVs === '@' ? '@' : 'vs'} ${g.opp ?? '—'}`, t.dim)}
                 {cell(undefined, `${g.result ? `${g.result} ${g.score ?? ''} · ` : ''}${g.line}`)}
-                {cell(38, String(g.pts), g.pts > 0 ? t.you : t.faint, true, true)}
+                {cell(38, g.pts == null ? '—' : String(g.pts), (g.pts ?? 0) > 0 ? t.you : t.faint, true, true)}
               </View>
             ))}
             {!!log?.length && <Mono size={9} tone="faint" style={{ marginTop: 8 }}>This season · PPR points</Mono>}

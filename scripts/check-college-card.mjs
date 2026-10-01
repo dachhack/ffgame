@@ -59,5 +59,18 @@ ok(statheadEvalRows(null, 'WR').length === 0, 'no profile, no panel');
 ok(collegeSeasonOf(new Date('2026-10-01T00:00:00Z')) === 2026 && collegeSeasonOf(new Date('2027-01-10T00:00:00Z')) === 2026,
   'October and the January bowls are one college season');
 
+// v0.585.0: nothing filled in — a missing number is a dash, never a 0
+{
+  const cc = await import('../packages/core/src/data/collegeCard.ts');
+  const m = cc.statMap(['receptions', 'receivingYards', 'receivingTouchdowns'], ['5', '-', '1']);
+  ok(m.receptions === 5 && !('receivingYards' in m), 'ESPN\'s "-" is missing, not zero');
+  ok(cc.collegeStatLine('WR', m) === '5 rec — yd 1 TD', 'a missing number in a line reads —', cc.collegeStatLine('WR', m));
+  ok(cc.collegePprPoints({}) === null && cc.collegePprPoints({ receptions: 2 }) === 2, 'no scoring stats → no points, not 0');
+  const strip = Object.fromEntries(cc.collegeFactStrip({ ok: true, stathead: { rank_1qb: 12, rank_sf: null }, market: { price: 1, rank: null } }, null, 'sf'));
+  ok(strip['DEVY #'] === '—' && strip.PRICE === '—', 'superflex never borrows the 1QB rank; an unpriced player has no price', strip);
+  const rows = cc.storedSeasonRows({ ok: true, seasons: [{ season: 2025, gp: 3, pass_yds: null, pass_td: null, ints: null, rush_yds: 120, rush_td: null, rec: null, rec_yds: null, rec_td: null }] });
+  ok(rows[0].line === '3 G · 120 ru yd' && rows[0].pts === 12, 'stored lines keep their nulls', rows[0]);
+}
+
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL COLLEGE-CARD CHECKS PASS');

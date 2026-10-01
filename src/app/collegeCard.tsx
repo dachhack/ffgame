@@ -127,7 +127,7 @@ export function CollegeCardModal({ req, onClose }: { req: CollegeCardReq; onClos
                 {evalRows.map((r) => row(r.label, r.value))}
               </div>
             )}
-            {card?.market && row('DEVY PRICE', `${card.market.price} a share${card.market.rank ? ` · #${card.market.rank} in college` : ' · unpriced (the floor)'}${card.market.youth ? ' · young riser' : ''}${card.market.frozen ? ' · frozen for the offseason' : ''}`)}
+            {card?.market && row('DEVY PRICE', card.market.rank != null ? `${card.market.price} a share · #${card.market.rank} in college${card.market.youth ? ' · young riser' : ''}${card.market.frozen ? ' · frozen for the offseason' : ''}` : '—')}
             {owner !== undefined && row('ROSTERED', owner ? `⇄ ${owner}` : 'nobody in this league holds him')}
             {ov?.next?.short && row('NEXT UP', `${ov.next.short}${ov.next.date && Number.isFinite(Date.parse(ov.next.date)) ? ` · ${kickoffLabel(Date.parse(ov.next.date))}` : ''}`)}
             {(bio?.hometown || cls) && row('BIO', [cls, bio?.hometown].filter(Boolean).join(' · '))}
@@ -183,7 +183,7 @@ export function CollegeCardModal({ req, onClose }: { req: CollegeCardReq; onClos
                 <span className="mono" style={{ width: 58, fontSize: 9.5, color: 'var(--dim)' }}>{g.atVs === '@' ? '@' : 'vs'} {g.opp ?? '—'}</span>
                 <span className="mono" style={{ width: 62, fontSize: 9.5, color: g.result === 'W' ? 'var(--you)' : g.result === 'L' ? 'var(--opp)' : 'var(--dim)' }}>{g.result ?? ''} {g.score ?? ''}</span>
                 <span className="mono" style={{ flex: 1, fontSize: 9.5, lineHeight: 1.4, color: 'var(--text)' }}>{g.line}</span>
-                <span className="mono" style={{ width: 40, textAlign: 'right', fontSize: 10.5, fontWeight: 700, color: g.pts > 0 ? 'var(--you)' : 'var(--faint)' }}>{g.pts}</span>
+                <span className="mono" style={{ width: 40, textAlign: 'right', fontSize: 10.5, fontWeight: 700, color: (g.pts ?? 0) > 0 ? 'var(--you)' : 'var(--faint)' }}>{g.pts ?? '—'}</span>
               </div>
             ))}
           </div>

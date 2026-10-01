@@ -100,10 +100,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       // 0330: the row, not the scalar — with a multiplier in hand the card
       // shows the week in THIS league's scoring rather than the source's PPR.
       leagueWeekProjections(leagueId, week)
-        .then((r) => { if (!dead) setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug]
-          ?? (r.projections?.[slug] != null
-            ? { pts: r.projections[slug], mult: null, opp: null, home: null, status: null, source: 'espn' }
-            : null))); })
+        .then((r) => { if (!dead) setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug] ?? null)); })
         .catch(() => { if (!dead) setWkProj(null); });
     }
     // The headlines this league's feed carries ABOUT HIM. Asked through the
@@ -245,7 +242,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
               <span style={{ fontWeight: 700 }}>{pos}</span>
               <Img src={teamLogo(showTeam, { slug })} size={13} radius={2} fallback={<span />} />
-              <span>{showTeam || 'FA'}</span>
+              <span>{showTeam || '—'}</span>
               {bio?.num != null && <span>· #{bio.num}</span>}
             </div>
           </div>
@@ -379,11 +376,12 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
                 <span className="mono" style={{ width: 30, fontSize: 10, fontWeight: 700, color: 'var(--text)' }}>{weekTick(r.week)}</span>
                 <span className="mono" style={{ width: 56, fontSize: 9.5, color: 'var(--dim)' }}>{r.opponent ?? '—'}</span>
                 <span className="mono" style={{ flex: 1, fontSize: 9.5, lineHeight: 1.4, color: r.blank ? 'var(--faint)' : 'var(--text)' }}>
-                  {r.blank ? 'did not play' : r.line}
+                  {/* v0.585.0: no plays is no data, not a claim he sat — a dash. */}
+                  {r.blank ? '—' : r.line}
                 </span>
                 {r.points != null && (
-                  <span className="mono" style={{ width: 44, textAlign: 'right', fontSize: 10.5, fontWeight: 700, color: r.points > 0 ? 'var(--you)' : 'var(--faint)' }}>
-                    {r.points.toFixed(1)}
+                  <span className="mono" style={{ width: 44, textAlign: 'right', fontSize: 10.5, fontWeight: 700, color: !r.blank && r.points > 0 ? 'var(--you)' : 'var(--faint)' }}>
+                    {r.blank ? '—' : r.points.toFixed(1)}
                   </span>
                 )}
               </div>
