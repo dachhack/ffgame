@@ -251,3 +251,4 @@ $RUN -f scripts/db/devy-trade-probes.sql | grep -E "PROBE FAIL|ALL DEVY-TRADE PR
 $RUN -f scripts/db/devy-setup-probes.sql | grep -E "PROBE FAIL|ALL DEVY-SETUP PROBES" || { echo "DEVY-SETUP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/stathead-devy-probes.sql | grep -E "PROBE FAIL|ALL STATHEAD-DEVY PROBES" || { echo "STATHEAD-DEVY PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-deep-probes.sql | grep -E "PROBE FAIL|ALL DEVY-DEEP PROBES" || { echo "DEVY-DEEP PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/devy-launch-probes.sql | grep -E "PROBE FAIL|ALL DEVY-LAUNCH PROBES" || { echo "DEVY-LAUNCH PROBES FAILED"; exit 1; }

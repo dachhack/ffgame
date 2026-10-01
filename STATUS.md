@@ -22,6 +22,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.578.0 — fair launches for new devy players
+
+> - New college players no longer go on sale the moment they appear. They show as NEW LISTINGS you can scout, then open together in a weekly launch (Tuesday noon ET by default).
+> - During a launch (72 hours by default) every team places sealed orders at the player's opening price. Nobody sees anyone else's, and you can change yours until the close.
+> - At the close all orders fill together. If more than one team maxes a player, they draw lots for his right, and the league chat posts the results.
+> - Players who arrive while the market is locked (Jan 15 to the rookie draft) open together in a 7-day catch-up launch when it reopens.
+> - Commissioners control it all: on/off, the day and hour, both window lengths, the order cap, and LAUNCH NOW.
+
+The founder: "We need a way to launch new players into the market in a way
+that is fair for users." Then: "build it with a sim first and do an off
+season version that does a catch up. This should all be commish
+controllable."
+- scripts/sim-devy-launch.mjs (400 seasons, 12 teams: 2 hourly, 4
+  twice-daily, 6 every-3-days managers). RACE (before this): grinders won
+  15× a casual's share of new players' rights. A 10-share sealed window
+  barely helped (12×: the race restarts at the close). A sealed window with
+  full orders and a lottery among simultaneous maxers is near-fair; 72h
+  brings casuals to 0.88× (96h 0.93×), so 72h is the default.
+- 0407: college_player.first_seen (existing rows backfilled to Jan 1, so
+  nothing current lists); devy_launch, devy_launch_player (opening price),
+  devy_launch_order (sealed), devy_launch_lock (catch-up memory).
+  _devy_pending / _devy_listing; allot_devy_shares refuses a listing.
+  devy_launch_tick (worker, 5 min): fills due windows in random draw order
+  (clock_timestamp maxed_at, so the first maxer in the draw holds the
+  right), marks locked lineages, opens a catch-up on reopen, else the weekly
+  slot. A window that would run into Jan 15 is cut there, or deferred to
+  the catch-up if under 12h. Opening price: market price, else StatHead rank
+  on the curve (written as his market price), else the floor.
+  set_league_devy_launch (validated; switching back on counts from then),
+  commish_devy_launch_now, place_devy_launch_order (cap, 60-point stake
+  cap, cash across open orders), devy_launch_state (own orders only).
+- Core devyShares: launchBanner, launchOrderMax, launchRulesText, slotLabel,
+  timeLeft, DOW_LABELS (check:devymarket). App and web: launch banner over
+  INVEST with ORDER / PREVIEW, sealed order rows (− n + MAX), listings kept
+  out of the buy table; COMMISH launch controls on the devy card.
+- Probes: devy-launch-probes dl1–dl8 (listing, opening prices, sealed
+  orders, the draw, settings, off/on, catch-up, the weekly slot).
+  graduation-probes classify the launch tables; round-audit-probes date
+  relative to now (pinned Sep 21, stale on Oct 1).
+
 ### v0.577.0 — the devy market table
 
 > - The DEVY tab now opens on the market. INVEST sits on the left, and MINE and LEAGUE on the right.

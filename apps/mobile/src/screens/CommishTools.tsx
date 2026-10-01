@@ -17,6 +17,7 @@ import {
   adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
   commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen,
+  devyLaunchState, setLeagueDevyLaunch, commishDevyLaunchNow, type DevyLaunchState, type DevyLaunchCfg,
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
@@ -62,6 +63,7 @@ const SPOT_PRESETS: { chip: string; pos: string[]; label: string; bb?: boolean; 
   { chip: 'VET 8+ FLEX', pos: ['RB', 'WR', 'TE'], label: 'Vet 8+ Flex', fMin: '8' },
 ];
 import { useTheme, MONO, fs } from '../theme.native';
+import { DOW_LABELS, slotLabel, launchRulesText } from '@drip/core/data/devyShares';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -3021,6 +3023,73 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
           <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Right away lets teams scout and buy before the startup draft (paused while it runs). Either way, every year after, shares lock from Jan 15 until the rookie draft.</Mono>
         </View>
       )}
+      {on && <DevyLaunchCard leagueId={leagueId} />}
+      {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
+    </View>
+  );
+}
+
+/** NEW-PLAYER LAUNCHES (0407) — every number the commissioner's: on/off, the
+ *  weekly slot, the window, the catch-up window, the order cap, LAUNCH NOW. */
+function DevyLaunchCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [ls, setLs] = useState<DevyLaunchState | null>(null);
+  const [cfg, setCfg] = useState<DevyLaunchCfg | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => devyLaunchState(leagueId).then((r) => { setLs(r); if (r.cfg) setCfg(r.cfg); }).catch(() => {});
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  if (!cfg || !ls?.can_edit) return null;
+  const save = async (patch: Partial<DevyLaunchCfg>) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyLaunch(leagueId, patch);
+      if (r.ok && r.cfg) { commit(); setCfg(r.cfg); setNote('✓ saved'); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const now = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishDevyLaunchNow(leagueId);
+      if (r.ok) { commit(); setNote('✓ launch open — the league chat says so'); void load(); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const stepper = (label: string, v: number, lo: number, hi: number, by: number, key: keyof DevyLaunchCfg, show: (n: number) => string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      <Mono size={8.5} tone="dim" style={{ width: 92 }}>{label}</Mono>
+      <Chip label="−" disabled={busy || v - by < lo} onPress={() => { tap(); void save({ [key]: v - by } as Partial<DevyLaunchCfg>); }} />
+      <Text style={{ minWidth: 64, textAlign: 'center', fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{show(v)}</Text>
+      <Chip label="+" disabled={busy || v + by > hi} onPress={() => { tap(); void save({ [key]: v + by } as Partial<DevyLaunchCfg>); }} />
+    </View>
+  );
+  return (
+    <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Mono size={9} tone="dim" weight="700" style={{ flex: 1 }}>NEW-PLAYER LAUNCHES</Mono>
+        <InfoChip title="New-player launches">{launchRulesText(cfg)}</InfoChip>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+        <Chip label="ON" on={cfg.on} disabled={busy || cfg.on} onPress={() => { tap(); void save({ on: true }); }} />
+        <Chip label="OFF" on={!cfg.on} disabled={busy || !cfg.on} onPress={() => { tap(); void save({ on: false }); }} />
+      </View>
+      {!cfg.on && <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Off: new college players are buyable the moment they appear.</Mono>}
+      {cfg.on && (<>
+        <View style={{ flexDirection: 'row', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+          {DOW_LABELS.map((d, i) => <Chip key={d} label={d.toUpperCase()} on={cfg.dow === i} disabled={busy} onPress={() => { tap(); void save({ dow: i }); }} />)}
+        </View>
+        {stepper('HOUR (ET)', cfg.hour, 0, 23, 1, 'hour', (n) => slotLabel({ dow: cfg.dow, hour: n }).split(' ').slice(1).join(' '))}
+        {stepper('WINDOW', cfg.window_h, 12, 336, 12, 'window_h', (n) => `${n}h`)}
+        {stepper('CATCH-UP', cfg.catchup_h, 24, 720, 24, 'catchup_h', (n) => `${n / 24} days`)}
+        {stepper('ORDER CAP', cfg.cap, 1, 20, 1, 'cap', (n) => `${n} sh`)}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <Chip label="LAUNCH NOW" disabled={busy || !!ls.open || !ls.pending_count || !!ls.locked} onPress={() => { tap(); void now(); }} />
+          <Mono size={8.5} tone="faint" style={{ flex: 1 }}>
+            {ls.open ? 'A launch is open.' : ls.locked ? 'Market locked — a catch-up opens when it reopens.' : `${ls.pending_count ?? 0} waiting · next ${slotLabel(cfg)}`}
+          </Mono>
+        </View>
+      </>)}
       {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
     </View>
   );

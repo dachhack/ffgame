@@ -39,6 +39,8 @@ declare known text[] := array[
   -- 0387: devy shares stay on the college slug; the draft reads the alias,
   -- and the stake is cleared once the draft that uses it is done
   'devy_share.slug',
+  -- 0407: launch history — listings and sealed orders on the college slug
+  'devy_launch_player.slug', 'devy_launch_order.slug',
   -- feed: NFL boards keyed by the feeds
   'adp_board.slug', 'dyn_board.slug', 'market_board.slug', 'player_market.slug', 'proj_board.slug',
   'trend_board.slug', 'player_depth.slug', 'player_team_override.slug', 'injury_status.player_slug',
