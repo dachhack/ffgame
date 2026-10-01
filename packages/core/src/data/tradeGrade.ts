@@ -40,7 +40,7 @@
 import { projectedPoints, leagueCatalogOf } from '../engine/projScoring';
 import { leagueSlotDefs, leagueSuperflex, type ClassicSlotDef } from '../engine/classic';
 import { dynFor } from './dyn2026';
-import { pickMarketValue, type PickFormat } from './pickValues2026';
+import { pickMarketValue, PICK_MAX_ROUND, type PickFormat } from './pickValues2026';
 
 // projectedPoints answers PER WEEK (the bake stores a weekly rate). A trade is
 // argued about in season points — "he is worth forty points to me over the
@@ -191,6 +191,11 @@ function pickValue(pick: GradePick, ctx: PickCtx): number {
   if (mv != null) {
     const vor = vorForMarket(ctx.curve, mv);
     if (vor != null) return Math.round(vor * 10) / 10;
+  } else if (round > PICK_MAX_ROUND && ctx.curve.length >= 5) {
+    // Past the market's deepest round it prices nothing, and that is the
+    // answer (v0.572.0): a fifth-round rookie pick is not an asset. The blunt
+    // share below is for a league with no market data at all.
+    return 0;
   }
   // No board and no curve: the old blunt share, kept so a league with no
   // dynasty data at all still gets a number rather than a zero.
