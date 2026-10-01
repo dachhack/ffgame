@@ -7,7 +7,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, setLeagueDevyLaunch, commishDevyLaunchNow, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyLaunchCfg, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from '../app/playerCard';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, slotLabel, DOW_LABELS, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
+import { ModalBackdrop } from '../app/ui';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, slotLabel, DOW_LABELS, tradePreview, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
   fontFamily: 'var(--mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 9px',
@@ -23,6 +24,8 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   const [filter, setFilter] = useState<MarketFilter>('ALL');
   const [sort, setSort] = useState<{ key: MarketSort; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' });
   const [openOwners, setOpenOwners] = useState<string | null>(null);
+  // v0.579.0: the purchase sheet.
+  const [trade, setTrade] = useState<{ slug: string; mode: 'buy' | 'sell'; n: number } | null>(null);
   const [market, setMarket] = useState<DevyMarketRow[] | null>(null);
   const [q, setQ] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -107,17 +110,16 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   const mine = (st.players ?? []).filter((p) => myStake(p, myRoster) > 0);
   const locked = !!st.locked || st.current === false;
 
-  const set = async (slug: string, n: number) => {
-    if (myRoster == null || busy) return;
+  const set = async (slug: string, n: number): Promise<boolean> => {
+    if (myRoster == null || busy) return false;
     setBusy(true); setMsg(null);
     try {
       const r = await allotDevyShares(leagueId, myRoster, slug, Math.max(0, Math.min(rules.max, n)));
-      if (!r.ok) setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`);
-      else {
-        setMsg(r.spent ? `✓ bought at ${fmtPts(Number(r.price))} a share: −${fmtPts(Number(r.spent))}` : r.received ? `✓ sold at ${fmtPts(Number(r.price))} a share: +${fmtPts(Number(r.received))}` : null);
-        await load();
-      }
-    } catch (e) { setMsg(`✗ ${friendlyError(e)}`); }
+      if (!r.ok) { setMsg(`✗ ${friendlyError(r.error ?? 'failed')}`); return false; }
+      setMsg(r.spent ? `✓ bought at ${fmtPts(Number(r.price))} a share: −${fmtPts(Number(r.spent))}` : r.received ? `✓ sold at ${fmtPts(Number(r.price))} a share: +${fmtPts(Number(r.received))}` : null);
+      await load();
+      return true;
+    } catch (e) { setMsg(`✗ ${friendlyError(e)}`); return false; }
     finally { setBusy(false); }
   };
   const controls = (slug: string, cur: number, price: number, cost: number, maxed: boolean, active: boolean) => {
@@ -141,60 +143,35 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
       </div>
     );
   };
-  /** INVEST (v0.576.0; v0.577.0): position, name over school · class · rank,
-   *  price, a bar for how close the leading stake is to maxing (yours green),
-   *  an owners button that opens who holds him, and +1 / +5. */
-  const COLS = '24px minmax(0,1fr) 54px 70px 44px 92px';
+  /** INVEST (v0.576.0 → v0.579.0): price, the TO MAX bar, YOUR shares, an
+   *  owners chip (who holds him, in a pop-up) and BUY, which opens the
+   *  purchase sheet. */
+  const COLS = '24px minmax(0,1fr) 54px 64px 36px 44px 52px';
   const investRow = (l: MarketLine) => {
     const r = l.row;
-    const cur = l.mine;
-    const mineH = l.held?.holders.find((h) => h.roster_id === myRoster);
-    const price = l.price;
-    const room = maxBuy(cur, Number(mineH?.cost ?? 0), price, rules.max, rules.max_spend);
-    const can = (k: number) => myRoster != null && !locked && !busy && room > 0 && Math.min(k, room) * price <= book.cash + 1e-9;
-    const open = openOwners === r.slug;
     const pct = (x: number) => `${Math.round(x * 100)}%`;
     return (
-      <div key={r.slug} style={{ borderBottom: '1px solid var(--bd)', padding: '5px 0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, alignItems: 'center' }}>
-          <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{r.pos}</span>
-          <span style={{ minWidth: 0, overflow: 'hidden' }}>
-            <span role="button" title="Player card" style={{ display: 'block', fontWeight: 700, color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-              onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{l.right?.mine ? '★ ' : ''}{r.name} <span style={{ ...small, fontWeight: 400 }}>ⓘ</span></span>
-            <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {marketSubline(r)}{cur > 0 ? ` · you ${cur} sh` : ''}</span>
+      <div key={r.slug} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, alignItems: 'center', borderBottom: '1px solid var(--bd)', padding: '5px 0' }}>
+        <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{r.pos}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden' }}>
+          <span role="button" title="Player card" style={{ display: 'block', fontWeight: 700, color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{l.right?.mine ? '★ ' : ''}{r.name} <span style={{ ...small, fontWeight: 400 }}>ⓘ</span></span>
+          <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{marketSubline(r)}</span>
+        </span>
+        <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{fmtPts(l.price)}</span>
+        <span title={l.lead >= 1 ? 'A stake is maxed — his right is owned' : `The leading stake is ${pct(l.lead)} of the way to maxing`}>
+          <span style={{ display: 'block', position: 'relative', height: 6, borderRadius: 3, background: 'var(--bd)', overflow: 'hidden' }}>
+            <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct(l.lead), background: l.leadMine ? 'var(--you)' : l.right ? 'var(--opp)' : 'var(--dim)' }} />
+            {!l.leadMine && l.myProgress > 0 && <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct(l.myProgress), background: 'var(--you)' }} />}
           </span>
-          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{fmtPts(price)}</span>
-          <span title={l.lead >= 1 ? 'A stake is maxed — his right is owned' : `The leading stake is ${pct(l.lead)} of the way to maxing`}>
-            <span style={{ display: 'block', position: 'relative', height: 6, borderRadius: 3, background: 'var(--bd)', overflow: 'hidden' }}>
-              <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct(l.lead), background: l.leadMine ? 'var(--you)' : l.right ? 'var(--opp)' : 'var(--dim)' }} />
-              {!l.leadMine && l.myProgress > 0 && <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: pct(l.myProgress), background: 'var(--you)' }} />}
-            </span>
-            <span className="mono" style={{ display: 'block', textAlign: 'center', fontSize: 9, color: l.lead >= 1 ? (l.leadMine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)' }}>
-              {l.lead >= 1 ? 'OWNED' : pct(l.lead)}</span>
-          </span>
-          <button style={{ ...chip(open), padding: '2px 0' }} disabled={!l.owners.length} onClick={() => setOpenOwners(open ? null : r.slug)}
-            title="Who holds shares in him">{l.owners.length ? `${l.owners.length}${open ? '▴' : '▾'}` : '—'}</button>
-          <span style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-            {myRoster != null && room > 0 && <button style={chip(false)} disabled={!can(1)} onClick={() => void set(r.slug, cur + 1)}>+1</button>}
-            {myRoster != null && room > 1 && <button style={chip(false)} disabled={!can(5)} onClick={() => void set(r.slug, cur + Math.min(5, room))}>+{Math.min(5, room)}</button>}
-            {myRoster != null && room <= 0 && cur > 0 && <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>MAXED</span>}
-          </span>
-        </div>
-        {open && (
-          <div style={{ margin: '6px 0 2px 32px' }}>
-            {l.owners.map((o) => (
-              <div key={o.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 54px 70px 44px', gap: 8, fontSize: 10.5,
-                color: o.mine ? 'var(--you)' : 'var(--text)', fontWeight: o.right ? 700 : 400 }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.right ? '★ ' : ''}{o.team}</span>
-                <span style={{ textAlign: 'right' }}>{o.shares} sh</span>
-                <span style={{ textAlign: 'right' }}>{fmtPts(o.cost)} in</span>
-                <span style={{ textAlign: 'right', color: o.progress >= 1 ? 'var(--opp)' : 'var(--faint)' }}>{pct(o.progress)}</span>
-              </div>
-            ))}
-            <div style={{ ...small, fontSize: 10, marginTop: 3 }}>% = how close a stake is to maxing ({rules.max} shares or {rules.max_spend} points). First to 100% owns his right.</div>
-          </div>
-        )}
+          <span className="mono" style={{ display: 'block', textAlign: 'center', fontSize: 9, color: l.lead >= 1 ? (l.leadMine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)' }}>{l.lead >= 1 ? 'OWNED' : pct(l.lead)}</span>
+        </span>
+        <span className="mono" style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: l.mine ? 'var(--you)' : 'var(--faint)' }}>{l.mine || '—'}</span>
+        <button style={{ ...chip(false), padding: '2px 0' }} disabled={!l.owners.length} onClick={() => setOpenOwners(r.slug)} title="Who holds shares in him">
+          {l.owners.length ? `👥${l.owners.length}` : '—'}</button>
+        {myRoster != null
+          ? <button style={{ ...chip(true), padding: '3px 0', fontWeight: 800 }} disabled={locked} onClick={() => setTrade({ slug: r.slug, mode: 'buy', n: 1 })}>BUY</button>
+          : <span />}
       </div>
     );
   };
@@ -278,15 +255,107 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         {deep && deep.length === 0 && <div style={small}>No college QB, RB, WR or TE matches that.</div>}
         {addList.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 0', borderBottom: '1px solid var(--bd)' }}>
-            <span />{head('PLAYER', 'name', 'left')}{head('PRICE', 'price', 'right')}{head('TO MAX', 'lead')}{head('OWN', 'owners')}<span />
+            <span />{head('PLAYER', 'name', 'left')}{head('PRICE', 'price', 'right')}{head('TO MAX', 'lead')}{head('YOU', 'mine')}{head('OWN', 'owners')}<span />
           </div>
         )}
         {market && addList.length === 0 && !(deep && deep.length === 0) && <div style={small}>Nobody matches that filter.</div>}
         {addList.map((l) => investRow(l))}
         </>)}
       </>)}
+      {popups()}
     </div>
   );
+
+  /** Who owns him, and the purchase sheet (v0.579.0). */
+  function popups() {
+    const ownLine = openOwners ? addList.find((l) => l.row.slug === openOwners) ?? null : null;
+    const tl = trade ? addList.find((l) => l.row.slug === trade.slug) ?? null : null;
+    const tMine = tl?.held?.holders.find((h) => h.roster_id === myRoster);
+    const tp = tl && trade ? tradePreview({ mode: trade.mode, n: trade.n, cur: tl.mine, cost: Number(tMine?.cost ?? 0), price: tl.price, cash: book.cash, rules }) : null;
+    const ownersList = (l: MarketLine) => (
+      <div>
+        {l.owners.length === 0 && <div style={small}>Nobody holds shares in him yet.</div>}
+        {l.owners.map((o) => (
+          <div key={o.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 54px 72px 44px', gap: 8, fontSize: 11.5, padding: '2px 0',
+            color: o.mine ? 'var(--you)' : 'var(--text)', fontWeight: o.right ? 700 : 400 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.right ? '★ ' : ''}{o.team}</span>
+            <span style={{ textAlign: 'right' }}>{o.shares} sh</span>
+            <span style={{ textAlign: 'right' }}>{fmtPts(o.cost)} in</span>
+            <span style={{ textAlign: 'right', color: o.progress >= 1 ? 'var(--opp)' : 'var(--faint)' }}>{Math.round(o.progress * 100)}%</span>
+          </div>
+        ))}
+        <div style={{ ...small, fontSize: 10, marginTop: 4 }}>% = how close a stake is to maxing ({rules.max} shares or {rules.max_spend} points). First to 100% holds his right.</div>
+      </div>
+    );
+    const box: React.CSSProperties = { width: 'min(420px, 92vw)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 };
+    const stat = (k: string, v: string, color = 'var(--text)') => (
+      <div style={{ flex: 1, textAlign: 'center' }}>
+        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>{k}</div>
+        <div className="mono" style={{ fontSize: 15, fontWeight: 800, color, marginTop: 2 }}>{v}</div>
+      </div>
+    );
+    return (<>
+      {ownLine && (
+        <ModalBackdrop onClick={() => setOpenOwners(null)} zIndex={95}>
+          <div onClick={(e) => e.stopPropagation()} style={box}>
+            <div className="grotesk" style={{ fontSize: 16, fontWeight: 700 }}>{ownLine.row.name} · owners</div>
+            {ownersList(ownLine)}
+          </div>
+        </ModalBackdrop>
+      )}
+      {tl && trade && tp && (
+        <ModalBackdrop onClick={() => setTrade(null)} zIndex={95}>
+          <div onClick={(e) => e.stopPropagation()} style={box}>
+            <div>
+              <div className="grotesk" style={{ fontSize: 17, fontWeight: 700 }}>{tl.row.name}</div>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{tl.row.pos} · {marketSubline(tl.row)}</div>
+            </div>
+            <div style={{ display: 'flex', borderTop: '1px solid var(--bd)', borderBottom: '1px solid var(--bd)', padding: '8px 0' }}>
+              {stat('PRICE', fmtPts(tl.price))}
+              {stat('YOU HOLD', `${tl.mine} sh`, tl.mine ? 'var(--you)' : 'var(--text)')}
+              {stat('CASH', fmtPts(book.cash))}
+              {stat('LEADER', tl.lead >= 1 ? 'OWNED' : `${Math.round(tl.lead * 100)}%`, tl.leadMine ? 'var(--you)' : tl.right ? 'var(--opp)' : 'var(--text)')}
+            </div>
+            {tl.mine > 0 && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button style={chip(trade.mode === 'buy')} onClick={() => setTrade({ ...trade, mode: 'buy', n: 1 })}>BUY</button>
+                <button style={chip(trade.mode === 'sell')} onClick={() => setTrade({ ...trade, mode: 'sell', n: 1 })}>SELL</button>
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+              <button style={chip(false)} disabled={trade.n <= 1} onClick={() => setTrade({ ...trade, n: Math.max(1, trade.n - 1) })}>−</button>
+              <span className="mono" style={{ minWidth: 70, textAlign: 'center', fontSize: 26, fontWeight: 800 }}>{tp.n}</span>
+              <button style={chip(false)} disabled={tp.n >= (trade.mode === 'buy' ? Math.max(1, maxBuy(tl.mine, Number(tMine?.cost ?? 0), tl.price, rules.max, rules.max_spend)) : tl.mine)}
+                onClick={() => setTrade({ ...trade, n: tp.n + 1 })}>+</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+              {[1, 5, 10].map((k) => <button key={k} style={chip(tp.n === k)} onClick={() => setTrade({ ...trade, n: k })}>{k}</button>)}
+              {trade.mode === 'buy'
+                ? <button style={chip(false)} disabled={tp.maxN < 1} onClick={() => setTrade({ ...trade, n: Math.max(1, tp.maxN) })}>max {tp.maxN}</button>
+                : <button style={chip(false)} onClick={() => setTrade({ ...trade, n: tl.mine })}>all {tl.mine}</button>}
+            </div>
+            <div className="mono" style={{ border: '1px solid var(--bd)', borderRadius: 8, padding: 10, fontSize: 11, lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700 }}>{trade.mode === 'buy' ? `Cost ${fmtPts(tp.amount)} · cash after ${fmtPts(tp.cashAfter)}` : `You get ${fmtPts(tp.amount)} · cash after ${fmtPts(tp.cashAfter)}`}</div>
+              <div style={{ color: 'var(--dim)' }}>Your stake: {tl.mine} → {tp.sharesAfter} sh · {fmtPts(tp.costAfter)} in · {Math.round(tp.progressAfter * 100)}% to max</div>
+              {tp.maxes && <div style={{ color: 'var(--you)', fontWeight: 700 }}>{tl.right && !tl.right.mine ? `★ This maxes your stake — but ${tl.right.team} already holds his right.` : '★ This maxes your stake. First to max holds his right.'}</div>}
+              {tp.capped && <div style={{ color: 'var(--warn)' }}>Paid at the {rules.payout_cap}× cap on what you put in, not today's full price.</div>}
+              {tp.why && <div style={{ color: 'var(--opp)' }}>{tp.why}</div>}
+              {msg && msg.startsWith('✗') && <div style={{ color: 'var(--opp)' }}>{msg}</div>}
+            </div>
+            <button className="mono" disabled={busy || !tp.ok || locked}
+              onClick={() => { void set(tl.row.slug, trade.mode === 'buy' ? tl.mine + tp.n : tl.mine - tp.n).then((ok) => { if (ok) setTrade(null); }); }}
+              style={{ ...chip(true), borderRadius: 8, padding: '10px 0', fontSize: 12, fontWeight: 800, opacity: busy || !tp.ok || locked ? 0.5 : 1 }}>
+              {busy ? 'WORKING…' : trade.mode === 'buy' ? `BUY ${tp.n} · ${fmtPts(tp.amount)}` : `SELL ${tp.n} · +${fmtPts(tp.amount)}`}</button>
+            {locked && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn)' }}>{lockLine(st)}</div>}
+            <div>
+              <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 4 }}>OWNERS</div>
+              {ownersList(tl)}
+            </div>
+          </div>
+        </ModalBackdrop>
+      )}
+    </>);
+  }
 }
 
 

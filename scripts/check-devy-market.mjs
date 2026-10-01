@@ -1,6 +1,6 @@
 // THE DEVY MARKET TABLE (v0.577.0): progress to max, owners, filters, sorting,
 // and two-decimal numbers. Offline.
-import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax } from '../packages/core/src/data/devyShares.ts';
+import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview } from '../packages/core/src/data/devyShares.ts';
 
 let fails = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if (!cond) fails++; };
@@ -58,6 +58,18 @@ ok(/Tue 12:00 PM ET/.test(launchBanner({ ok: true, cfg, pending_count: 1, next_a
 ok(launchBanner({ ok: true, cfg, pending_count: 0 }) === null && launchBanner({ ok: true, cfg: { ...cfg, on: false }, pending_count: 4 }) === null, 'nothing waiting, or launches off: no banner');
 ok(launchOrderMax(9.2, cfg) === 7 && launchOrderMax(1, cfg) === 20 && launchOrderMax(1, { cap: 5 }) === 5 && launchOrderMax(0, cfg) === 0,
   'an order holds a full stake, the 60-point cap, or the commissioner\'s cap');
+
+// ── the purchase sheet (v0.579.0) ──
+let tp = tradePreview({ mode: 'buy', n: 5, cur: 0, cost: 0, price: 10.38, cash: 28.1 });
+ok(tp.n === 5 && tp.amount === 51.9 && !tp.ok && /you have 28.10/.test(tp.why ?? ''), 'a buy you can\'t afford says so');
+ok(tp.maxN === 2, 'and the most you could buy is 2 (cash)');
+tp = tradePreview({ mode: 'buy', n: 1, cur: 5, cost: 51.9, price: 10.38, cash: 28.1 });
+ok(tp.ok && tp.maxes && tp.sharesAfter === 6 && tp.costAfter === 62.28 && tp.progressAfter === 1, 'a buy that passes 60 points maxes him');
+ok(tradePreview({ mode: 'buy', n: 3, cur: 5, cost: 51.9, price: 10.38, cash: 99 }).n === 1, 'and a buy past the max is trimmed to it');
+ok(tradePreview({ mode: 'buy', n: 1, cur: 20, cost: 20, price: 1, cash: 99 }).why === 'your stake is maxed', 'a maxed stake takes no more');
+tp = tradePreview({ mode: 'sell', n: 5, cur: 5, cost: 10, price: 10, cash: 20 });
+ok(tp.amount === 30 && tp.capped && tp.sharesAfter === 0 && tp.ok, 'a sale pays at most 3× what was paid');
+ok(!tradePreview({ mode: 'sell', n: 5, cur: 5, cost: 50, price: 10, cash: 190 }).ok, 'and never past the 200 cash ceiling');
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL DEVY-MARKET CHECKS PASS');

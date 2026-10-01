@@ -257,7 +257,7 @@ export function marketLines(rows: DevyMarketRow[], st: DevySharesState | null | 
   });
 }
 
-export type MarketSort = 'rank' | 'name' | 'price' | 'lead' | 'owners';
+export type MarketSort = 'rank' | 'name' | 'price' | 'lead' | 'owners' | 'mine';
 export type MarketFilter = 'ALL' | 'QB' | 'RB' | 'WR' | 'TE' | 'OPEN';
 export const MARKET_FILTERS: { id: MarketFilter; label: string }[] = [
   { id: 'ALL', label: 'ALL' }, { id: 'QB', label: 'QB' }, { id: 'RB', label: 'RB' },
@@ -273,7 +273,7 @@ export function shapeMarket(lines: MarketLine[], filter: MarketFilter, sort: Mar
     : l.row.pos === filter);
   if (sort === 'rank') return dir === 'asc' ? kept : [...kept].reverse();
   const val = (l: MarketLine): number | string =>
-    sort === 'name' ? l.row.name.toLowerCase() : sort === 'price' ? l.price : sort === 'lead' ? l.lead : l.owners.length;
+    sort === 'name' ? l.row.name.toLowerCase() : sort === 'price' ? l.price : sort === 'lead' ? l.lead : sort === 'mine' ? l.mine : l.owners.length;
   const sgn = dir === 'asc' ? 1 : -1;
   return [...kept].sort((a, b) => {
     const va = val(a), vb = val(b);
@@ -349,4 +349,55 @@ export function launchRulesText(cfg: DevyLaunchCfg | null | undefined): string {
     `Players who arrive while the market is locked (Jan 15 to the rookie draft) wait, and open together in a ${Math.round(c.catchup_h / 24)}-day catch-up launch when it reopens.`,
     'The commissioner sets the day, the hour, the windows and the order cap, and can switch launches off.',
   ].join('\n\n');
+}
+
+// ── The purchase sheet (v0.579.0) ───────────────────────────────────────────
+export interface TradePreview {
+  mode: 'buy' | 'sell';
+  /** Shares this trade moves (clamped to what's allowed). */
+  n: number;
+  /** The most this trade could move: room to max and cash (buy), or the stake (sell). */
+  maxN: number;
+  /** Points out (buy) or in (sell). */
+  amount: number;
+  cashAfter: number;
+  sharesAfter: number; costAfter: number; progressAfter: number;
+  /** A buy that maxes his stake. */
+  maxes: boolean;
+  /** A sale paid at the 3× cap rather than today's price. */
+  capped: boolean;
+  ok: boolean; why: string | null;
+}
+const r2 = (x: number) => Math.round(x * 100) / 100;
+
+/** What a buy or sale of `n` shares would do — the server's arithmetic
+ *  (0396: 20 shares or 60 points maxes a stake; a sale pays today's price up
+ *  to 3× what was paid; cash tops out at 200 from sales). */
+export function tradePreview(o: { mode: 'buy' | 'sell'; n: number; cur: number; cost: number; price: number; cash: number;
+  rules?: { max: number; max_spend?: number; payout_cap?: number; cash_cap?: number } }): TradePreview {
+  const R = { ...DEVY_SHARE_RULES, ...(o.rules ?? {}) };
+  const price = Number(o.price) || 0;
+  if (o.mode === 'buy') {
+    const room = maxBuy(o.cur, o.cost, price, R.max, R.max_spend);
+    const afford = price > 0 ? Math.floor((o.cash + 1e-9) / price) : 0;
+    const maxN = Math.max(0, Math.min(room, afford));
+    const n = Math.max(0, Math.min(Math.round(o.n), room));
+    const amount = r2(n * price);
+    const sharesAfter = o.cur + n, costAfter = r2(o.cost + amount);
+    const ok = n > 0 && amount <= o.cash + 1e-9;
+    return { mode: 'buy', n, maxN, amount, cashAfter: r2(o.cash - amount), sharesAfter, costAfter,
+      progressAfter: stakeProgress(sharesAfter, costAfter, R), maxes: sharesAfter >= R.max || costAfter >= (R.max_spend ?? 60),
+      capped: false, ok,
+      why: room <= 0 ? 'your stake is maxed' : n > 0 && !ok ? `that's ${fmtPts(amount)} — you have ${fmtPts(o.cash)}` : null };
+  }
+  const n = Math.max(0, Math.min(Math.round(o.n), o.cur));
+  const full = price * n;
+  const capAmt = o.cur > 0 ? (R.payout_cap ?? 3) * o.cost * n / o.cur : 0;
+  const amount = r2(Math.min(full, capAmt));
+  const cashAfter = r2(o.cash + amount);
+  const ok = n > 0 && cashAfter <= (R.cash_cap ?? 200) + 1e-9;
+  const sharesAfter = o.cur - n, costAfter = o.cur > 0 ? r2(Math.max(0, o.cost - o.cost * n / o.cur)) : 0;
+  return { mode: 'sell', n, maxN: o.cur, amount, cashAfter, sharesAfter, costAfter,
+    progressAfter: stakeProgress(sharesAfter, costAfter, R), maxes: false, capped: amount < r2(full), ok,
+    why: n > 0 && !ok ? `cash tops out at ${R.cash_cap ?? 200} — sell fewer` : null };
 }
