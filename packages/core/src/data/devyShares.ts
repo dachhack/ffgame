@@ -27,8 +27,9 @@ export function stakeLine(cost: number | undefined, value: number | undefined): 
   return `paid ${fmtPts(c)} · worth ${fmtPts(v)} (${d >= 0 ? '+' : ''}${fmtPts(d)})`;
 }
 
-/** Points, without trailing zeros: 20, 12.5. */
-export const fmtPts = (n: number): string => String(Math.round(n * 100) / 100);
+/** Points, always two decimals (v0.577.0, founder: "make the numbers always
+ *  have the same decimal places"): 20.00, 12.50, 10.38. */
+export const fmtPts = (n: number): string => (Math.round(Number(n || 0) * 100) / 100).toFixed(2);
 
 /** Shares a team has placed, and what's left of its budget. */
 export function sharesUsed(st: DevySharesState | null | undefined, rosterId: number | null | undefined): { used: number; free: number; budget: number } {
@@ -205,4 +206,96 @@ export function devyRulesText(rules: { max: number; max_spend?: number; floor: n
     'Shares trade like players and picks: add them to any trade offer from the TRADES tab.',
     `${lockLine(st)}${st?.frozen ? ' Prices are frozen for the offseason.' : ''}`,
   ].join('\n\n');
+}
+
+// ── The market table (v0.577.0) ─────────────────────────────────────────────
+// Founder: "a chart to show how far away before the player is fully owned …
+// a button to see owners and shares … headers on the columns and sorting …
+// simple filter buttons."
+
+/** How far a stake is toward maxing — 20 shares or 60 points spent, whichever
+ *  comes first — as 0..1. 1 is a maxed stake; the first to 1 owns the right. */
+export function stakeProgress(shares: number, cost: number, rules: { max: number; max_spend?: number } = DEVY_SHARE_RULES): number {
+  const bySh = rules.max > 0 ? shares / rules.max : 0;
+  const byPts = (rules.max_spend ?? DEVY_SHARE_RULES.max_spend) > 0 ? cost / (rules.max_spend ?? DEVY_SHARE_RULES.max_spend) : 0;
+  return Math.max(0, Math.min(1, Math.max(bySh, byPts)));
+}
+
+export interface MarketOwner { roster_id: number; team: string; shares: number; cost: number; progress: number; right: boolean; mine: boolean }
+export interface MarketLine {
+  row: DevyMarketRow; held: DevySharePlayer | null; price: number;
+  /** My stake in shares, and how far it is toward maxing. */
+  mine: number; myProgress: number;
+  /** The furthest stake toward maxing (anyone's, mine included) — the bar. */
+  lead: number; leadMine: boolean;
+  owners: MarketOwner[]; totalShares: number;
+  /** Who holds his right, if anyone. */
+  right: { team: string; mine: boolean } | null;
+}
+
+/** A market row with the league's stakes in him laid alongside. */
+export function marketLines(rows: DevyMarketRow[], st: DevySharesState | null | undefined, myRoster: number | null | undefined): MarketLine[] {
+  const rules = { ...DEVY_SHARE_RULES, ...(st?.rules ?? {}) };
+  const bySlug = new Map((st?.players ?? []).map((p) => [p.slug, p]));
+  return rows.map((row) => {
+    const held = bySlug.get(row.slug) ?? null;
+    const owners: MarketOwner[] = (held?.holders ?? []).filter((h) => h.shares > 0).map((h) => ({
+      roster_id: h.roster_id, team: h.team, shares: h.shares, cost: Number(h.cost ?? 0),
+      progress: h.maxed ? 1 : stakeProgress(h.shares, Number(h.cost ?? 0), rules),
+      right: held?.right?.roster_id === h.roster_id, mine: myRoster != null && h.roster_id === myRoster,
+    })).sort((a, b) => Number(b.right) - Number(a.right) || b.progress - a.progress || b.shares - a.shares);
+    const me = owners.find((o) => o.mine);
+    const top = owners[0];
+    const rightOwner = owners.find((o) => o.right);
+    return {
+      row, held, price: held?.price ?? row.price,
+      mine: me?.shares ?? 0, myProgress: me?.progress ?? 0,
+      lead: top?.progress ?? 0, leadMine: !!top?.mine,
+      owners, totalShares: owners.reduce((n, o) => n + o.shares, 0),
+      right: rightOwner ? { team: rightOwner.team, mine: rightOwner.mine } : null,
+    };
+  });
+}
+
+export type MarketSort = 'rank' | 'name' | 'price' | 'lead' | 'owners';
+export type MarketFilter = 'ALL' | 'QB' | 'RB' | 'WR' | 'TE' | 'OPEN';
+export const MARKET_FILTERS: { id: MarketFilter; label: string }[] = [
+  { id: 'ALL', label: 'ALL' }, { id: 'QB', label: 'QB' }, { id: 'RB', label: 'RB' },
+  { id: 'WR', label: 'WR' }, { id: 'TE', label: 'TE' }, { id: 'OPEN', label: 'NO RIGHT YET' },
+];
+
+/** Filter and sort the market. 'rank' is the market's own order (priced
+ *  first, then StatHead's devy rank); a sort's first tap is the useful
+ *  direction — A→Z for names, highest first for the numbers. */
+export function shapeMarket(lines: MarketLine[], filter: MarketFilter, sort: MarketSort, dir: 'asc' | 'desc'): MarketLine[] {
+  const kept = lines.filter((l) => filter === 'ALL' ? true
+    : filter === 'OPEN' ? !l.right && l.lead < 1
+    : l.row.pos === filter);
+  if (sort === 'rank') return dir === 'asc' ? kept : [...kept].reverse();
+  const val = (l: MarketLine): number | string =>
+    sort === 'name' ? l.row.name.toLowerCase() : sort === 'price' ? l.price : sort === 'lead' ? l.lead : l.owners.length;
+  const sgn = dir === 'asc' ? 1 : -1;
+  return [...kept].sort((a, b) => {
+    const va = val(a), vb = val(b);
+    const c = typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+    return c * sgn || a.row.name.localeCompare(b.row.name);
+  });
+}
+
+/** The next state when a column header is tapped: a new column starts in its
+ *  useful direction, the same column flips, and a third tap returns to the
+ *  market's own order. */
+export function nextSort(cur: { key: MarketSort; dir: 'asc' | 'desc' }, key: MarketSort): { key: MarketSort; dir: 'asc' | 'desc' } {
+  const first: 'asc' | 'desc' = key === 'name' ? 'asc' : 'desc';
+  if (cur.key !== key) return { key, dir: first };
+  if (cur.dir === first) return { key, dir: first === 'asc' ? 'desc' : 'asc' };
+  return { key: 'rank', dir: 'asc' };
+}
+
+/** The small line under a name: school, class, and where he ranks. */
+export function marketSubline(r: DevyMarketRow): string {
+  return [
+    r.school, r.fcs ? 'FCS' : null, r.class_year ? collegeClassLabel(r.class_year) : null,
+    r.sh_rank ? `devy #${r.sh_rank}` : r.rank ? `#${r.rank} in college` : null,
+  ].filter(Boolean).join(' · ');
 }
