@@ -24,7 +24,7 @@
 // requests, so it runs detached from the tick and never delays live scoring.
 import { db } from '../supabase.js';
 import { collegePos } from '../../../packages/core/src/data/college.ts';
-import { loadDevyBoard } from './ktcDevy.js';
+import { loadStatheadDevy } from './statheadDevy.js';
 
 const CORE_TEAMS = (season) =>
   `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
@@ -199,7 +199,7 @@ async function getJson(url, tries = 3) {
 }
 
 /** Fetch every roster, write the rows, and retire the unseen if nothing failed. */
-export async function runCollegeSweep(season, log = () => {}, fetchJson = getJson, rpc = (fn, args) => db().rpc(fn, args), ktc = null) {
+export async function runCollegeSweep(season, log = () => {}, fetchJson = getJson, rpc = (fn, args) => db().rpc(fn, args), devyBoard = null) {
   const started = new Date().toISOString();
   const ids = fbsTeamIds(await fetchJson(CORE_TEAMS(season)));
   if (!ids.length) return { schools: 0, rows: 0, failed: 0, retired: 0, error: 'no FBS teams' };
@@ -247,14 +247,10 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
   }
   // 0388: the devy market's prices follow the ranking these lines just moved.
   if (stats > 0) {
-    // 0400: KTC's devy board first — it seeds the early-season prices.
-    if (ktc) {
-      try {
-        const rows = await ktc();
-        const { data, error } = await rpc('set_college_ktc', { p_rows: rows });
-        if (error) log('ktc devy', error.message);
-        else log(`ktc devy: ${data?.matched ?? 0} of ${rows.length} matched${data?.ok === false ? ` — ${data.error}` : ''}`);
-      } catch (e) { log('ktc devy', e.message); }
+    // 0403: StatHead's devy board first — half of every devy price.
+    if (devyBoard) {
+      try { await devyBoard(rpc, log); }
+      catch (e) { log('stathead devy', e.message); }
     }
     try {
       const { data, error } = await rpc('refresh_college_prices', {});
@@ -272,7 +268,7 @@ let inflight = null;
 export function sweepCollege(season, log = () => {}) {
   if (inflight || Date.now() - last < sweepEveryMs()) return false;
   last = Date.now();
-  inflight = runCollegeSweep(season, log, undefined, undefined, () => loadDevyBoard(log))
+  inflight = runCollegeSweep(season, log, undefined, undefined, loadStatheadDevy)
     .then((r) => log(`college: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines` +
       (r.failed ? `, ${r.failed} rosters failed (no retirement this sweep)` : `, ${r.retired} retired`) +
       (r.error ? ` — ${r.error}` : '')))

@@ -249,4 +249,4 @@ $RUN -f scripts/db/locked-stash-probes.sql | grep -E "PROBE FAIL|ALL LOCKED-STAS
 $RUN -f scripts/db/mark-free-probes.sql | grep -E "PROBE FAIL|ALL MARK-FREE PROBES" || { echo "MARK-FREE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-trade-probes.sql | grep -E "PROBE FAIL|ALL DEVY-TRADE PROBES" || { echo "DEVY-TRADE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-setup-probes.sql | grep -E "PROBE FAIL|ALL DEVY-SETUP PROBES" || { echo "DEVY-SETUP PROBES FAILED"; exit 1; }
-$RUN -f scripts/db/ktc-devy-probes.sql | grep -E "PROBE FAIL|ALL KTC-DEVY PROBES" || { echo "KTC-DEVY PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/stathead-devy-probes.sql | grep -E "PROBE FAIL|ALL STATHEAD-DEVY PROBES" || { echo "STATHEAD-DEVY PROBES FAILED"; exit 1; }
