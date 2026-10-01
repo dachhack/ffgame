@@ -615,8 +615,10 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
         for (const r of lp ?? []) { poolBySlug.set(r.slug, r); if (r.pos) poolPos.set(r.slug, r.pos); }
       }
       // 0383: a conference / class spot rule needs the college facts, only
-      // when this matchup's rosters hold college players at all.
-      if ((ros ?? []).some((r) => /^c-\d+$/.test(r.slug)) && slotDefs.some((d) => d.flt?.confs?.length || d.flt?.classes?.length)) {
+      // when this matchup's rosters hold college players at all. v0.580.0: so
+      // does a 🎓 school-scoped scoring rule ("G5 ×0.8").
+      if ((ros ?? []).some((r) => /^c-\d+$/.test(r.slug))
+        && (slotDefs.some((d) => d.flt?.confs?.length || d.flt?.classes?.length) || scoringKnobs.scoped.some((r) => r.conf?.length))) {
         await installCollegeMetaFor((ros ?? []).map((r) => r.slug));
       }
       // A PICKUP COUNTS FROM THE GAME HE WAS OWNED FOR (v0.434.4). A player

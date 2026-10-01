@@ -31,6 +31,7 @@
 import { PLAYER_BIO } from '../data/playerBio';
 import { teamFor } from '../data/playerTeam';
 import { flagFor } from '../data/commish';
+import { isCollegeSlug, collegeMetaFor, collegeRuleAllows } from '../data/college';
 
 /** A scoped bonus rule (0145): applies only to players matching EVERY given
  *  filter (a missing filter matches all). Rules stack — multipliers multiply,
@@ -56,6 +57,13 @@ export interface ScopedBonus {
    *  other direction — one scoped rule that pays every player wearing a flag,
    *  set once instead of edited into each flag. */
   flag?: string[];
+  /** THE SCHOOL'S TIER OR CONFERENCE (v0.580.0, devy leagues: "scoring
+   *  adjustments differentiate P5, G5 and FCS"). Tier codes (P4 / G5 / IND /
+   *  FBS) or conference names, matched the way a spot's 🎓 CONFERENCE rule
+   *  matches (collegeRuleAllows). Only a college player can match one — an NFL
+   *  player, or a college player whose school facts aren't installed, never
+   *  does (the no-guess rule). "G5 ×0.8" is the canonical use. */
+  conf?: string[];
   bonusMult?: number;
   bonusPts?: number;
   tdBonus?: number;
@@ -140,6 +148,10 @@ export function parseScoring(raw: unknown): LeagueScoring {
       if (r.tenure === 'rookie' || r.tenure === 'y2_3' || r.tenure === 'vet4') rule.tenure = r.tenure;
       if (Array.isArray(r.slot)) rule.slot = r.slot.filter((x): x is string => typeof x === 'string').map((x) => x.toUpperCase()).slice(0, 20);
       if (Array.isArray(r.flag)) rule.flag = r.flag.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean).slice(0, 12);
+      if (Array.isArray(r.conf)) {
+        const c = r.conf.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter((x) => x && x.length <= 16).slice(0, 12);
+        if (c.length) rule.conf = c;
+      }
       const bm = Math.round(num(r.bonus_mult ?? r.bonusMult, 1, 0.5, 3) * 10) / 10;
       if (bm !== 1) rule.bonusMult = bm;
       const bp = Math.round(num(r.bonus_pts ?? r.bonusPts, 0, -10, 10) * 10) / 10;
@@ -188,6 +200,9 @@ export function scopedAdjustFor(
       const lab = flagLabel.trim().toLowerCase();
       if (!r.flag.some((f) => f.trim().toLowerCase() === lab)) continue;
     }
+    if (r.conf) {
+      if (!isCollegeSlug(player.id) || !collegeRuleAllows(collegeMetaFor(player.id), r.conf)) continue;
+    }
     if (r.tenure) {
       if (exp == null) continue;                      // unknown tenure never matches a tenure rule
       if (r.tenure === 'rookie' && exp !== 0) continue;
@@ -218,6 +233,24 @@ export function scoringLabel(s: LeagueScoring = active): string {
   return parts.join(' · ');
 }
 
+/** A rule back into the settings_json shape set_league_scoring stores — EVERY
+ *  scope it carries (v0.580.0). One helper because the KIT's bulk-flag panel
+ *  re-saved the existing rules through its own copy that predated spots and
+ *  flags, and quietly stripped them from every rule it rewrote. */
+export function scopedRuleToWire(r: ScopedBonus): Record<string, unknown> {
+  return {
+    ...(r.pos?.length ? { pos: r.pos } : {}),
+    ...(r.team?.length ? { team: r.team } : {}),
+    ...(r.tenure ? { tenure: r.tenure } : {}),
+    ...(r.slot?.length ? { slot: r.slot } : {}),
+    ...(r.flag?.length ? { flag: r.flag } : {}),
+    ...(r.conf?.length ? { conf: r.conf } : {}),
+    ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
+    ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
+    ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
+  };
+}
+
 /** One scoped rule as the editor lists it: "QB·WR / DAL / rookies: ×1.5 +3".
  *  `slotNames` (v0.300.0) maps slot ids to the league's own spot names, so a
  *  spot rule reads "in FLEX" rather than "in S7" wherever the caller knows the
@@ -229,6 +262,7 @@ export function scopedRuleLabel(r: ScopedBonus, slotNames?: Record<string, strin
     r.tenure === 'rookie' ? 'rookies' : r.tenure === 'y2_3' ? '2nd–3rd yr' : r.tenure === 'vet4' ? 'vets 4+' : null,
     r.slot?.length ? `in ${r.slot.map((x) => slotNames?.[x] ?? x).join('·')}` : null,
     r.flag?.length ? `⚑ ${r.flag.join('·')}` : null,
+    r.conf?.length ? `🎓 ${r.conf.join('·')}` : null,
   ].filter(Boolean).join(' / ') || 'everyone';
   const vals = [
     r.bonusMult != null ? `×${r.bonusMult}` : null,

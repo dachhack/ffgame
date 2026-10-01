@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.580.0 — score college players by school tier
+
+> - A scoped scoring rule can now name a college tier (P4, G5, IND) or a conference. "G5 ×0.8" pays Group of Five players 80% of their points. It only ever matches college players.
+> - Find it in ⚖ SCORING under SCOPED BONUSES, in the new 🎓 SCHOOL row. It shows in leagues with college players.
+> - Fixed: saving a scoped rule from the KIT's bulk-flag panel no longer strips the spot and flag scopes from the league's existing rules.
+
+- 0408 `sanitize_scoped_rules` keeps `conf` (letters, digits, spaces and hyphens, at most 16 chars, at most 12 per rule).
+- Core: `ScopedBonus.conf` matched through `collegeRuleAllows`; the shared `scopedRuleToWire` helper; the worker installs college facts when a school rule exists.
+- FCS players aren't in roster leagues' pools, and the college slate follows FBS games only, so there's no FCS tier yet.
+
 ### v0.579.0 — buy devy shares from a purchase sheet
 
 > - Market rows now show your shares (YOU), an owners chip with how many teams hold him, and a BUY button. The OWN column and the +1 / +5 buttons are gone.

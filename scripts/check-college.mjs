@@ -151,13 +151,13 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   const alone = { ...mine, holders: [h(1, 3, 'Me')], right: null };
   ok(myStake(mine, 1) === 20 && myStake(mine, 3) === 0, 'a team\'s own stake');
   ok(rightLine(mine, 1).startsWith('★ YOUR RIGHT') && rightLine(theirs, 1).startsWith('Them holds'), 'whose right it is, in words');
-  ok(rightLine(alone, 1) === 'not qualified yet — 2 more shares and 15 more points in', 'a holder under the floor is told how far (0396: 5 shares AND 15 spent)');
+  ok(rightLine(alone, 1) === 'not qualified yet — 2 more shares and 15.00 more points in', 'a holder under the floor is told how far (0396: 5 shares AND 15 spent)');
   const { maxBuy } = await import('../packages/core/src/data/devyShares.ts');
   ok(maxBuy(0, 0, 10) === 6 && maxBuy(0, 0, 1) === 20 && maxBuy(5, 50, 10) === 1 && maxBuy(6, 60, 10) === 0 && maxBuy(20, 20, 1) === 0,
     'the most a buy may add: 20 shares or 60 points, whichever first');
   const { devyLegParts } = await import('../packages/core/src/data/devyShares.ts');
   const parts = devyLegParts({ send_shares: [{ slug: 'c-1', shares: 5, to: 3, name: 'Arch Manning' }, { slug: 'c-2', shares: 1, to: 3 }], send_devy_cash: [{ to: 3, amount: 12.5 }] }, (r) => `Team ${r}`);
-  ok(parts.join(' | ') === '5 shares of Arch Manning → Team 3 | 1 share of c-2 → Team 3 | 12.5 devy cash → Team 3', 'a trade leg\'s devy items, in words (0397)');
+  ok(parts.join(' | ') === '5 shares of Arch Manning → Team 3 | 1 share of c-2 → Team 3 | 12.50 devy cash → Team 3', 'a trade leg\'s devy items, in words (0397)');
   const { twoSeatDevyLegs, offersDevy } = await import('../packages/core/src/data/devyShares.ts');
   const legs = twoSeatDevyLegs({ me: 1, partner: 2, give: ['josh-allen'], get: [], givePicks: [], getPicks: [{ season: '2027', round: 3, orig: 2 }],
     faab: -10, cap: 0, giveShares: {}, getShares: { 'c-9': 10 }, devyCash: 7.5 });
@@ -170,7 +170,7 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   const { teamBook, stakeLine } = await import('../packages/core/src/data/devyShares.ts');
   const mk = { ...st, cash: { 1: 58 }, value: { 1: 120 }, used: { 1: 61 } };
   ok(teamBook(mk, 1).cash === 58 && teamBook(mk, 1).value === 120 && teamBook(mk, 2).cash === 100, 'a team\'s cash and stakes; a new team has 100');
-  ok(stakeLine(19, 57) === 'paid 19 · worth 57 (+38)' && stakeLine(20, 12.5) === 'paid 20 · worth 12.5 (-7.5)', 'a stake against what it cost');
+  ok(stakeLine(19, 57) === 'paid 19.00 · worth 57.00 (+38.00)' && stakeLine(20, 12.5) === 'paid 20.00 · worth 12.50 (-7.50)', 'a stake against what it cost');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
