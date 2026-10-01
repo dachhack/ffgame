@@ -27,6 +27,8 @@ import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
 import { nflGameForTeam, kickoffLabel, weekTick, weekLabel } from '@drip/core/data/nflSlate';
 import { projFor } from '@drip/core/data/poolSort';
 import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
+import { CollegeCardModal } from './collegeCard';
+import { isCollegeSlug } from '@drip/core/data/college';
 import { Ev, track } from '@drip/core/analytics';
 
 export interface PlayerCardReq {
@@ -62,6 +64,9 @@ export function PlayerCardHost() {
   const [req, setReq] = useState<PlayerCardReq | null>(null);
   useEffect(() => { listener = setReq; return () => { listener = null; }; }, []);
   if (!req) return null;
+  // 0406: a college player gets the devy card — its own component, so moving
+  // between an NFL card and a college one never shares a hook's state.
+  if (isCollegeSlug(req.slug)) return <CollegeCardModal req={req} onClose={() => setReq(null)} />;
   return <PlayerCardModal req={req} onClose={() => setReq(null)} />;
 }
 

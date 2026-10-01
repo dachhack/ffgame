@@ -222,7 +222,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [pickerSlot, setPickerSlot] = useState<{ key: string; win: WindowId } | null>(null);
   const [shopOpen, setShopOpen] = useState(false);
   useEffect(() => { if (openShopSignal) setShopOpen(true); }, [openShopSignal]);
-  /** Bumped by the 🃏 N readout to open the hand's full list (v0.572.1). */
+  /** Bumped by the 🃏 N readout to open the hand's full list (v0.574.1). */
   const [handListSignal, setHandListSignal] = useState(0);
   const [matchPremium, setMatchPremium] = useState(true); // default true = no false locks until we know
   const [weekSel, setWeekSel] = useState<number | null>(null);
@@ -418,7 +418,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           if (!alive) return;
           if (mm) setMatchup(mm);
           setScores(ss); setRevealed(pk2);
-          // The hand and the wallet too (v0.572.1): a card bought on the web,
+          // The hand and the wallet too (v0.574.1): a card bought on the web,
           // or on this phone before a subway blip ate the read, reached the
           // board only on a relaunch — the inventory was read once on mount.
           // Pull-to-refresh and every realtime push now re-read both; the
@@ -1049,7 +1049,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     .filter((p) => (inventory[p.id] ?? 0) > 0 && !buffs.has(p.id))
     .map((p): HandCard => {
       // METRIC UNLOCKS (Air Raid, Combo Drip, Return Yards) are DEALT, not
-      // played, from here (v0.572.1). They used to be filtered out of the
+      // played, from here (v0.574.1). They used to be filtered out of the
       // hand altogether — they play through a spot's ↻ METRIC picker
       // (pickMetricWithCard), so the hand had no action for them — and the
       // founder, Gridiron Gang week 4: "I don't see my power ups that I
@@ -1403,7 +1403,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           <Chip label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />
           <View style={{ flex: 1, minWidth: 4 }} />
           <Mono size={9.5} weight="700" tone={filled === slots.length ? 'you' : 'faint'} track={0.08} numberOfLines={1}>{filled}/{slots.length} SET</Mono>
-          {/* 🃏 N — the cards in your hand (v0.572.1): one number that says a
+          {/* 🃏 N — the cards in your hand (v0.574.1): one number that says a
               purchase landed, beside the coin it cost, and a tap that lists
               them even when the fan below is out of sight. */}
           {hand.length > 0 && (

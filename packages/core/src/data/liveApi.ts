@@ -3750,6 +3750,22 @@ export interface DevySharesState {
   players?: DevySharePlayer[];
   reserved?: { slug: string; roster_id: number; college_slug: string }[];
 }
+/** 0406: what the devy player card needs from us — identity, the devy market
+ *  price, StatHead's devy profile (`stathead.card`, StatHead numbers only) and
+ *  our stored season lines (the fallback when ESPN can't be reached). */
+export interface CollegePlayerCard {
+  ok: boolean; error?: string;
+  espn_id?: string; slug?: string; name?: string; pos?: string; school?: string | null; school_abbr?: string | null;
+  class_year?: number | null; class_label?: string | null; jersey?: string | null; active?: boolean;
+  division?: 'FBS' | 'FCS'; conference?: string | null; tier?: string | null; graduated_to?: string | null;
+  market?: { price: number; rank: number | null; youth?: boolean; as_of?: string; frozen?: boolean };
+  stathead?: { rank_1qb: number; rank_sf: number | null; value_1qb: number | null; value_sf: number | null;
+    draft_year: number | null; as_of: string; card: Record<string, unknown> | null } | null;
+  seasons?: { season: number; gp: number | null; pass_yds: number | null; pass_td: number | null; ints: number | null;
+    rush_yds: number | null; rush_td: number | null; rec: number | null; rec_yds: number | null; rec_td: number | null }[];
+}
+export const collegePlayerCard = (espnId: string) =>
+  rpc<CollegePlayerCard>('college_player_card', { p_espn_id: espnId });
 export const devySharesState = (leagueId: string) =>
   rpc<DevySharesState>('devy_shares_state', { p_league_id: leagueId });
 export const allotDevyShares = (leagueId: string, rosterId: number, slug: string, shares: number) =>
@@ -3759,7 +3775,7 @@ export const allotDevyShares = (leagueId: string, rosterId: number, slug: string
 /** 0388: the market — ranked college players and their price a share here. */
 /** 0404: rank is null for an unpriced player (he costs the floor); sh_rank is
  *  StatHead's 1QB devy composite rank where its board has him. */
-export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number }
+export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number; /** 0405 */ fcs?: boolean }
 /** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
 export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
   rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });

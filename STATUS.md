@@ -22,7 +22,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.572.1 — every card you own is in your hand (app)
+### v0.574.1 — every card you own is in your hand (app)
 
 > - Air Raid, Combo Drip and Return Yards cards now show in the app's hand after you buy them, with a tip that says where each one plays.
 > - A 🃏 count beside the coin says how many cards you hold; tap it to list them.
@@ -57,6 +57,55 @@ power up card hand at the bottom of the screen."
 - Not reproduced on a device here; if the 🃏 count reads 0 after a purchase
   while the shop says OWNED, the gap is server-side (my_inventory /
   caller_roster for that seat), not the hand.
+
+### v0.574.0 — player cards for devy players
+
+> - Tap any college player (draft room, rosters, the devy market) for a full devy card: bio, height and weight, hometown and next game.
+> - SEASONS shows every college season with PPR totals, and GAME LOG shows this season game by game with each game's PPR points.
+> - The card adds StatHead's evaluation: devy rank, the rookie-draft pick he prices as, NFL outlook, breakout age, dominator and recruiting stars. It also shows his devy market price and his latest news.
+
+The founder: "Let's make player cards for the devy players with previous
+season stats and game logs for current season and any other eval info or
+news."
+- 0406: stathead_devy.card holds StatHead's devy profile per player (its
+  composite and model ranks, NFL career projection, profile, rookie-pick
+  equivalent; the third-party list fields are not stored).
+  upsert_stathead_devy carries it. college_player_card(espn_id) returns
+  identity, conference or FCS, the devy market price and rank, StatHead's
+  card, and our stored season lines as a fallback.
+- Core collegeCard.ts: ESPN's core athlete record (bio), athlete overview
+  (seasons, news, next game) and season game log, all browser-callable and
+  read when the card opens (the game log only when its tab opens). Pure
+  parsers; PPR on the college_directory line; statheadEvalRows in the
+  league's format (superflex leagues read the SF ranks).
+- Web src/app/collegeCard.tsx and native CollegeCardSheet.tsx; the card hosts
+  route any c-<espn_id> slug to them. Devy market names open the card.
+- Worker: the StatHead board loader sends each player's card (chunks of
+  800).
+- Tests: check:collegecard against trimmed real ESPN responses and a real
+  StatHead row (Jeremiah Smith 12 rec 217 yd 4 TD = 57.7 PPR, a QB line,
+  eval rows, no third-party text), stathead-devy card tests, and
+  devy-deep-probes dd6. Rendered in Chromium against real ESPN data.
+
+### v0.573.0 — FCS players in the devy market
+
+> - The devy market now includes players from FCS schools (130 of them, like Samford and Montana), not just FBS.
+> - FCS players are marked FCS and priced from StatHead's devy board, or 1 point a share if unranked.
+> - Devy-spot leagues and draft pools are unchanged: FCS players are only in the devy market.
+
+The founder: "yes add FCS rosters". StatHead's devy board ranks ~3,800 FCS
+players we never held; the sweep read FBS rosters only (ESPN group 80).
+- 0405 college_player.division ('FBS' default | 'FCS');
+  upsert_college_players carries it (a transfer updates it).
+  college_directory keeps to FBS, so pools, college projections and the
+  stats half of a devy price are unchanged. devy_market rows carry fcs.
+- Worker: the college sweep also reads ESPN group 81 (130 schools), tags
+  rows FCS, and a school on both lists is read once. If the FCS list can't
+  be read, FBS still lands and the sweep retires nobody.
+- Client: marketRowDetail shows "FCS".
+- Tests: devy-deep-probes dd5–dd5d, college-poll FCS cases.
+  adp-board-probes now date their pulls relative to now (pinned to Sep
+  21/22, stale by Oct 1).
 
 ### v0.572.0 — the devy market goes all the way down
 

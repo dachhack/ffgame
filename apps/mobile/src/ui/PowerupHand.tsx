@@ -50,7 +50,7 @@ export interface HandCard {
   note?: string;
   /** 'aim' (v0.515.0): an AIMED card — played on a spot or a window. The tip's
    *  button starts the tap-a-target step instead of arming it for the week.
-   *  'hint' (v0.572.1): a card the hand only SHOWS — a metric unlock plays
+   *  'hint' (v0.574.1): a card the hand only SHOWS — a metric unlock plays
    *  from a spot's ↻ METRIC picker, never from here. The tip says where. */
   action?: 'arm' | 'aim' | 'hint';
   /** Always false since v0.431.0: a played card leaves the hand for good
@@ -85,7 +85,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
    *  hand, so league boards lift it clear of the bar. */
   lift?: number;
   /** Bump to open the full-hand list from outside — the board's 🃏 N readout
-   *  (v0.572.1), so what you own is one tap away even when the fan is not. */
+   *  (v0.574.1), so what you own is one tap away even when the fan is not. */
   listSignal?: number;
 }) {
   const t = useTheme();
@@ -108,7 +108,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
     // animation dropped under the new architecture would leave it there.
     const to = dealt ? 1 : 0;
     Animated.timing(rise, { toValue: to, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-    // AND a backstop (v0.572.1, founder's Android screenshot with no hand at
+    // AND a backstop (v0.574.1, founder's Android screenshot with no hand at
     // all): whatever became of the tween, the hand ends where it was going.
     // setValue is a plain write — nothing can drop it — so a lost animation
     // costs the rise, never the cards.

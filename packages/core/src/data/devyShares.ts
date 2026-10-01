@@ -167,7 +167,7 @@ export const DEVY_CHOICE_INFO =
  *  he is unpriced and costs the floor) and StatHead's devy rank. */
 export function marketRowDetail(r: DevyMarketRow): string {
   return [
-    r.school, r.class_year ? collegeClassLabel(r.class_year) : null,
+    r.school, r.fcs ? 'FCS' : null, r.class_year ? collegeClassLabel(r.class_year) : null,
     r.rank ? `#${r.rank} in college` : 'unpriced (1-pt floor)',
     r.sh_rank ? `StatHead devy #${r.sh_rank}` : null,
     r.youth ? 'young riser +1' : null,

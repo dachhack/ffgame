@@ -1,0 +1,193 @@
+{
+ "statistics": {
+  "displayName": "Career Stats",
+  "categories": [
+   {
+    "name": "receiving",
+    "displayName": "Receiving",
+    "count": 5
+   },
+   {
+    "name": "rushing",
+    "displayName": "Rushing",
+    "count": 5
+   },
+   {
+    "name": "fumbles",
+    "displayName": "Fumbles",
+    "count": 2
+   }
+  ],
+  "labels": [
+   "REC",
+   "YDS",
+   "AVG",
+   "TD",
+   "LNG",
+   "CAR",
+   "YDS",
+   "AVG",
+   "TD",
+   "LNG",
+   "FUM",
+   "LST"
+  ],
+  "names": [
+   "receptions",
+   "receivingYards",
+   "yardsPerReception",
+   "receivingTouchdowns",
+   "longReception",
+   "rushingAttempts",
+   "rushingYards",
+   "yardsPerRushAttempt",
+   "rushingTouchdowns",
+   "longRushing",
+   "fumbles",
+   "fumblesLost"
+  ],
+  "displayNames": [
+   "Receptions",
+   "Receiving Yards",
+   "Yards Per Reception",
+   "Receiving Touchdowns",
+   "Long Reception",
+   "Rushing Attempts",
+   "Rushing Yards",
+   "Yards Per Rush Attempt",
+   "Rushing Touchdowns",
+   "Long Rushing",
+   "Fumbles",
+   "Fumbles Lost"
+  ],
+  "splits": [
+   {
+    "displayName": "2026",
+    "stats": [
+     "33",
+     "617",
+     "18.7",
+     "7",
+     "72",
+     "1",
+     "5",
+     "5.0",
+     "0",
+     "5",
+     "0",
+     "0"
+    ]
+   },
+   {
+    "displayName": "2025",
+    "stats": [
+     "87",
+     "1,243",
+     "14.3",
+     "12",
+     "87",
+     "3",
+     "21",
+     "7.0",
+     "1",
+     "17",
+     "0",
+     "0"
+    ]
+   },
+   {
+    "displayName": "2024",
+    "stats": [
+     "76",
+     "1,315",
+     "17.3",
+     "15",
+     "70",
+     "6",
+     "47",
+     "7.8",
+     "1",
+     "19",
+     "0",
+     "0"
+    ]
+   }
+  ]
+ },
+ "news": [
+  {
+   "id": 50053472,
+   "headline": "Looking at the Heisman and CFP odds: Where do Baugh and Florida stack up?",
+   "published": "2026-09-29T10:41:18.000+00:00",
+   "lastModified": "2026-09-29T10:41:18.000+00:00",
+   "description": "Let's break down the odds boards for the CFP and Heisman races after Week 4.",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/50053472"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/wireless/story?storyId=50053472"
+    },
+    "web": {
+     "href": "https://www.espn.com/espn/betting/story/_/id/50053472/college-football-playoff-heisman-odds-favorites-week-4-2026"
+    }
+   }
+  },
+  {
+   "id": 49921234,
+   "headline": "Betting buzz: Jeremiah Smith new Heisman favorite, leapfrogging QBs",
+   "published": "2026-09-27T03:02:48.000+00:00",
+   "lastModified": "2026-09-27T03:02:48.000+00:00",
+   "description": "With four touchdowns Saturday in the win over Illinois, Ohio State star WR Jeremiah Smith's Heisman odds shortened considerably.",
+   "links": {
+    "api": {
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/sports/news/49921234"
+     }
+    },
+    "mobile": {
+     "href": "http://m.espn.go.com/wireless/story?storyId=49921234"
+    },
+    "web": {
+     "href": "https://www.espn.com/espn/betting/story/_/id/49921234/college-football-betting-buzz-odds-updates-line-moves-spreads"
+    }
+   }
+  },
+  {
+   "id": 50037194,
+   "headline": "Jeremiah Smith explains his improvement from last year",
+   "published": "2026-09-26T23:15:27.000+00:00",
+   "lastModified": "2026-09-26T23:15:27.000+00:00",
+   "description": "Jeremiah Smith explains his improvement from last year",
+   "links": {
+    "api": {
+     "artwork": {
+      "href": "https://artwork.api.espn.com/artwork/collections/media/54d3294a-fe90-4050-bf5f-1073dc01aeaa"
+     },
+     "self": {
+      "href": "https://content.core.api.espn.com/v1/video/clips/50037194"
+     }
+    },
+    "web": {
+     "href": "https://www.espn.com/video/clip/_/id/50037194/jeremiah-smith-explains-improvement-last-year",
+     "self": {
+      "href": "https://www.espn.com/video/clip/_/id/50037194/jeremiah-smith-explains-improvement-last-year"
+     }
+    }
+   }
+  }
+ ],
+ "nextGame": {
+  "league": {
+   "events": [
+    {
+     "date": "2026-10-03T19:30:00.000+00:00",
+     "name": "Ohio State Buckeyes at Iowa Hawkeyes",
+     "shortName": "OSU @ IOWA"
+    }
+   ]
+  }
+ }
+}
