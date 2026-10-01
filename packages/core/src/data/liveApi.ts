@@ -3757,9 +3757,12 @@ export const allotDevyShares = (leagueId: string, rosterId: number, slug: string
     right?: { slug: string; roster_id: number; via: 'max' | 'sole' } | null }>('allot_devy_shares',
     { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_shares: shares }), Ev.commishAction, { tool: 'allot_devy_shares' });
 /** 0388: the market — ranked college players and their price a share here. */
-export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number; youth: boolean; price: number }
-export const devyMarket = (leagueId: string, limit = 1000) =>
-  rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit });
+/** 0404: rank is null for an unpriced player (he costs the floor); sh_rank is
+ *  StatHead's 1QB devy composite rank where its board has him. */
+export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number }
+/** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
+export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
+  rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });
 /** 0396: the starting cash for a team with no devy book yet (commissioner). */
 export const setLeagueDevyStartCash = (leagueId: string, cash: number) =>
   tracked(rpc<{ ok: boolean; error?: string; start_cash?: number }>('set_league_devy_start_cash',

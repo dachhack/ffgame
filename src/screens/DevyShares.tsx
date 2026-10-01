@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, marketRowDetail, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
   fontFamily: 'var(--mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 9px',
@@ -27,11 +27,23 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   useEffect(() => {
     if (view === 'add') devyMarket(leagueId, 1000).then((r) => setMarket(Array.isArray(r) ? r : [])).catch(() => setMarket([]));
   }, [view, leagueId, st]);
+  // 0404: past two letters the search covers every college player.
+  const [deep, setDeep] = useState<DevyMarketRow[] | null>(null);
+  useEffect(() => {
+    const needle = q.trim();
+    if (view !== 'add' || needle.length < DEEP_SEARCH_MIN) { setDeep(null); return; }
+    let live = true;
+    const h = setTimeout(() => {
+      devyMarket(leagueId, 60, needle).then((r) => { if (live) setDeep(Array.isArray(r) ? r : []); }).catch(() => { if (live) setDeep([]); });
+    }, 250);
+    return () => { live = false; clearTimeout(h); };
+  }, [q, view, leagueId]);
   const bySlug = useMemo(() => new Map((st?.players ?? []).map((p) => [p.slug, p])), [st]);
   const addList = useMemo(() => {
+    if (deep) return deep;
     const needle = q.trim().toLowerCase();
     return (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)).slice(0, 60);
-  }, [market, q]);
+  }, [market, q, deep]);
   if (!st?.ok || !st.on) return null;
   const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5, ...(st.rules ?? {}) };
   const book = teamBook(st, myRoster);
@@ -117,14 +129,16 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search college players or schools…"
           style={{ width: '100%', boxSizing: 'border-box', padding: '6px 9px', border: '1px solid var(--bd)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
         {!market && <div style={small}>Loading the market…</div>}
-        {market && market.length === 0 && <div style={small}>No prices yet: they appear after the first weekly stats update.</div>}
+        {market && market.length === 0 && !deep && <div style={small}>No prices yet: they appear after the first weekly stats update.</div>}
+        {deep && deep.length === 0 && <div style={small}>No college QB, RB, WR or TE matches that.</div>}
+        {!deep && <div style={small}>Type 2+ letters to search every college QB, RB, WR and TE, deep sleepers included. Unpriced players cost 1 point a share.</div>}
         {addList.map((r) => {
           const held = bySlug.get(r.slug);
           if (held) return row({ ...held, price: held.price ?? r.price }, true);
           return (
             <div key={r.slug} style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}>{r.name} <span style={small}>{[r.pos, r.school, r.class_year ? collegeClassLabel(r.class_year) : null, `#${r.rank} in college`, r.youth ? 'young riser +1' : null].filter(Boolean).join(' · ')} · nobody in yet</span></span>
+                <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}>{r.name} <span style={small}>{r.pos} · {marketRowDetail(r)} · nobody in yet</span></span>
                 <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{r.price}/sh</span>
               </div>
               {myRoster != null && controls(r.slug, 0, r.price, 0, false, true)}

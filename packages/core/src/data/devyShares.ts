@@ -5,7 +5,8 @@
 // right; failing that, the ONLY team holding him does, if it holds 5 or more.
 // The right is a reservation in the rookie draft once he turns pro. The
 // database decides all of it (devy_share_rights); this only words it.
-import type { DevySharePlayer, DevySharesState } from './liveApi';
+import type { DevyMarketRow, DevySharePlayer, DevySharesState } from './liveApi';
+import { collegeClassLabel } from './college';
 
 export const DEVY_SHARE_RULES = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5 } as const;
 
@@ -160,3 +161,19 @@ export const DEVY_CHOICE_INFO =
   + 'The commissioner decides when the market opens: right away, so teams can scout before the startup draft, '
   + 'or once the startup draft is done. Every year after, shares lock on Jan 15 until the rookie draft.\n\n'
   + 'After the league is made, devy spots and the SPOTS / MARKET switch live in COMMISH.';
+
+// ── The deep market (0404) ─────────────────────────────────────────────────
+/** A market row's detail line: school, class, where the price sits (or that
+ *  he is unpriced and costs the floor) and StatHead's devy rank. */
+export function marketRowDetail(r: DevyMarketRow): string {
+  return [
+    r.school, r.class_year ? collegeClassLabel(r.class_year) : null,
+    r.rank ? `#${r.rank} in college` : 'unpriced (1-pt floor)',
+    r.sh_rank ? `StatHead devy #${r.sh_rank}` : null,
+    r.youth ? 'young riser +1' : null,
+  ].filter(Boolean).join(' · ');
+}
+
+/** Typed this much, the search goes to the server and covers every college
+ *  player, not just the loaded list. */
+export const DEEP_SEARCH_MIN = 2;

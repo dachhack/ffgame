@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, marketRowDetail, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
 import { useTheme, MONO } from '../theme.native';
 import { Overlay } from './Overlay';
 import { Chip, Mono, PosPill } from './prims';
@@ -35,6 +35,18 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
     if (visible && view === 'add') devyMarket(leagueId, 1000).then((r) => setMarket(Array.isArray(r) ? r : [])).catch(() => setMarket([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, view, leagueId, st]);
+  // 0404: past two letters the search covers every college player, deep ones
+  // included — debounced so typing doesn't fire a query per keystroke.
+  const [deep, setDeep] = useState<DevyMarketRow[] | null>(null);
+  useEffect(() => {
+    const needle = q.trim();
+    if (!visible || view !== 'add' || needle.length < DEEP_SEARCH_MIN) { setDeep(null); return; }
+    let live = true;
+    const h = setTimeout(() => {
+      devyMarket(leagueId, 60, needle).then((r) => { if (live) setDeep(Array.isArray(r) ? r : []); }).catch(() => { if (live) setDeep([]); });
+    }, 250);
+    return () => { live = false; clearTimeout(h); };
+  }, [q, visible, view, leagueId]);
 
   const rules = { budget: 100, max: 20, floor: 5, cash_cap: 200, payout_cap: 3, max_spend: 60, min_spend: 15, refund: 0.5, ...(st?.rules ?? {}) };
   const book = teamBook(st, myRoster);
@@ -114,9 +126,10 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
   };
 
   const addList = useMemo(() => {
+    if (deep) return deep;
     const needle = q.trim().toLowerCase();
     return (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)).slice(0, 60);
-  }, [market, q]);
+  }, [market, q, deep]);
 
   return (
     <Overlay visible={visible} title="Devy market" onClose={onClose}
@@ -150,7 +163,9 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
           <TextInput value={q} onChangeText={setQ} placeholder="Search college players or schools…" placeholderTextColor={t.faint}
             style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: t.text, fontFamily: MONO, fontSize: 12 }} />
           {!market && <Mono size={9.5} tone="faint">Loading the market…</Mono>}
-          {market && market.length === 0 && <Mono size={9.5} tone="faint">No prices yet: they appear after the first weekly stats update.</Mono>}
+          {market && market.length === 0 && !deep && <Mono size={9.5} tone="faint">No prices yet: they appear after the first weekly stats update.</Mono>}
+          {deep && deep.length === 0 && <Mono size={9.5} tone="faint">No college QB, RB, WR or TE matches that.</Mono>}
+          {!deep && <Mono size={9} tone="faint">Type 2+ letters to search every college QB, RB, WR and TE, deep sleepers included. Unpriced players cost 1 point a share.</Mono>}
           {addList.map((r) => {
             const held = bySlug.get(r.slug);
             if (held) return playerRow({ ...held, price: held.price ?? r.price }, true);
@@ -162,7 +177,7 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
                   <Mono size={11} weight="700" tone="you">{r.price}/sh</Mono>
                 </View>
                 <Mono size={9} tone="faint" style={{ marginTop: 2 }}>
-                  {[r.school, r.class_year ? collegeClassLabel(r.class_year) : null, `#${r.rank} in college`, r.youth ? 'young riser +1' : null].filter(Boolean).join(' · ')} · nobody in yet
+                  {marketRowDetail(r)} · nobody in yet
                 </Mono>
                 {myRoster != null && stakeControls(r.slug, 0, r.price, 0, false, true)}
               </View>
