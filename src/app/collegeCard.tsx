@@ -91,6 +91,7 @@ export function CollegeCardModal({ req, onClose }: { req: CollegeCardReq; onClos
               {card?.division === 'FCS' && <span style={{ fontWeight: 700 }}>· FCS</span>}
               {card?.conference && card.division !== 'FCS' && <span>· {card.conference}</span>}
               {bio?.jersey && <span>· #{bio.jersey}</span>}
+              {card?.declared && <span title="In this year's NFL draft class" style={{ fontWeight: 800, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 3, padding: '0 4px' }}>DECLARED</span>}
             </div>
           </div>
         </div>

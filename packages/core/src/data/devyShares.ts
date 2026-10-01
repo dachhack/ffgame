@@ -168,6 +168,7 @@ export const DEVY_CHOICE_INFO =
  *  he is unpriced and costs the floor) and StatHead's devy rank. */
 export function marketRowDetail(r: DevyMarketRow): string {
   return [
+    r.declared ? 'DECLARED' : null,
     r.school, r.fcs ? 'FCS' : null, r.class_year ? collegeClassLabel(r.class_year) : null,
     r.rank ? `#${r.rank} in college` : 'unpriced (1-pt floor)',
     r.sh_rank ? `StatHead devy #${r.sh_rank}` : null,
@@ -295,6 +296,7 @@ export function nextSort(cur: { key: MarketSort; dir: 'asc' | 'desc' }, key: Mar
 /** The small line under a name: school, class, and where he ranks. */
 export function marketSubline(r: DevyMarketRow): string {
   return [
+    r.declared ? 'DECLARED' : null,
     r.school, r.fcs ? 'FCS' : null, r.class_year ? collegeClassLabel(r.class_year) : null,
     r.sh_rank ? `devy #${r.sh_rank}` : r.rank ? `#${r.rank} in college` : null,
   ].filter(Boolean).join(' · ');

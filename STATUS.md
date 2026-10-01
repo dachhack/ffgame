@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.581.0 — DECLARED: who's in this year's NFL draft class
+
+> - College players headed to this year's NFL draft now say DECLARED. It shows on your devy roster, in the devy market, and on their player card.
+> - It appears after the NFL's early-entry deadline (Jan 16) and lasts until the summer. Before the deadline, ESPN's prospect list is a big board that includes underclassmen who may go back to school, so we don't show it then.
+> - Nothing about the roster changes: a declared player stays in his devy spot and moves to his NFL identity when he's drafted or signs.
+
+- 0409 adds `nfl_prospect` (draft year, ESPN draft-athlete id, college ESPN id) and `_college_declared` (Jan 16 to Aug 1 of the draft year). `devy_market`, `college_player_card` and `league_pool_college` now return `declared`.
+- Worker `poll/declared.js` runs daily from Jan 10 to May 15. It reads ESPN's season draft prospect pool and fetches only entries it doesn't already hold; the 2026 pool was 689 entries, 682 with a college id, in about 7 s. Run it on demand with `node src/cli.js declared-sweep [year]` or the ops mode `declared-sweep`.
+- Tests: server `test/declared.mjs`; probes `declared-probes.sql` (dc1–dc3).
+
 ### v0.580.0 — score college players by school tier
 
 > - A scoped scoring rule can now name a college tier (P4, G5, IND) or a conference. "G5 ×0.8" pays Group of Five players 80% of their points. It only ever matches college players.
