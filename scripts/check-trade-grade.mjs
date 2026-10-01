@@ -115,6 +115,11 @@ const money = grade({ players: [], faab: 20 }, { players: [] });
 ok(money.faab === -20 && /\$-?20 FAAB/.test(money.summary), 'FAAB is reported as money, not points');
 
 // 8. a player with no projection at all is named rather than silently zeroed
+// 0411: a devy pick counts for something, and less than a rookie 1st
+const devy1 = grade({ players: [] }, { players: [], picks: [{ season: '2027', round: 101 }] });
+const devy3 = grade({ players: [] }, { players: [], picks: [{ season: '2027', round: 103 }] });
+ok(devy1.delta > 0 && devy1.delta < withPick.delta && devy3.delta <= devy1.delta,
+  `a devy pick is worth something, under a rookie 1st, and later ones less (D1 ${devy1.delta}, D3 ${devy3.delta}, R1 ${withPick.delta})`);
 const nobody = grade({ players: [] }, { players: [{ slug: 'not-a-real-player', pos: 'RB' }] });
 ok(nobody.missing.includes('not-a-real-player'), 'an unprojected player is flagged');
 

@@ -1,5 +1,6 @@
 // THE DEVY MARKET TABLE (v0.577.0): progress to max, owners, filters, sorting,
 // and two-decimal numbers. Offline.
+import { pickRoundLabel, isDevyPickRound, devyBlockRound, draftRoundLabel, devyBlockLine } from '../packages/core/src/data/devyDraft.ts';
 import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview } from '../packages/core/src/data/devyShares.ts';
 
 let fails = 0;
@@ -72,5 +73,10 @@ tp = tradePreview({ mode: 'sell', n: 5, cur: 5, cost: 10, price: 10, cash: 20 })
 ok(tp.amount === 30 && tp.capped && tp.sharesAfter === 0 && tp.ok, 'a sale pays at most 3× what was paid');
 ok(!tradePreview({ mode: 'sell', n: 5, cur: 5, cost: 50, price: 10, cash: 190 }).ok, 'and never past the 200 cash ceiling');
 
+// ── the devy draft (0411) ──
+ok(pickRoundLabel(3) === 'R3' && pickRoundLabel(101) === 'DEVY R1' && isDevyPickRound(102) && !isDevyPickRound(99), 'devy picks are rounds 101+, labelled DEVY R<k>');
+ok(devyBlockRound(22, 2, 23) === null && devyBlockRound(23, 2, 23) === 1 && devyBlockRound(25, 2, 23) === 2 && devyBlockRound(5, 2, null) === null, 'which devy round a pick falls in');
+ok(draftRoundLabel(11, 2, 23) === 'R11' && draftRoundLabel(12, 2, 23) === 'D1' && draftRoundLabel(13, 2, 23) === 'D2', 'board columns: R… then D…');
+ok(devyBlockLine(23, 2, 23, 2) === 'DEVY ROUND 1 of 2 — college players only' && devyBlockLine(3, 2, 23, 2).includes('pick 23') && devyBlockLine(3, 2, null, 0) === null, 'the room\'s devy line');
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL DEVY-MARKET CHECKS PASS');

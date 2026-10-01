@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.583.0 — the devy draft: devy rounds and devy picks that trade
+
+> - Devy leagues get a devy draft. The commissioner sets DEVY ROUNDS (off or 1–5, at most the number of devy spots) under DEVY in Commissioner tools.
+> - The draft ends with that many devy rounds. Every pick in them must be a college player, and nobody can take a college player before them. The draft room says when the devy rounds start and switches its list to college players when they do.
+> - In the startup draft, the devy rounds fill the devy spots (pick 8.01 can be Devy 1.01). Every year after, they're how teams restock after players turn pro. A team whose devy spots are already full can still pick, then drops one, the same rule as drafting with extra traded picks.
+> - In dynasty leagues with rookie picks, devy picks are picks too: "2027 DEVY R1" trades like any rookie pick, and whoever holds it makes that pick. Trade grades count a devy 1st like a rookie 3rd.
+> - Draft-room fix: in a draft with devy rounds, college players no longer count against NFL position limits there; devy spots never had position caps.
+
+- 0411 adds `draft.devy_from` and `draft.devy_rounds`, `_devy_rounds`, `_draft_plan` and `set_devy_rounds`.
+- Devy pick assets are rounds 101–105, so they never collide with rookie rounds (1–10) or startup slots (≤ 99). The `pick_asset` round check was widened to allow them.
+- `_provision_pick_assets` now touches rookie rounds only and keeps devy picks in step. `_start_draft_now` builds the devy block and `native_exec_pick` enforces it. The queue, autopick, `draft_state`, `rollover_league` and `_pick_overall` know the block (a mid-draft trade locks a used devy pick).
+- Core `devyDraft.ts`: `pickRoundLabel`, `devyBlockRound`, `draftRoundLabel`, `devyBlockLine`.
+- Probes: `devy-draft-probes.sql` (dd1–dd6). Checks: `check:devymarket` and `check:tradegrade` cases.
+
 ### v0.582.0 — commissioners can add custom college players
 
 > - A commissioner can now add a college player our directory doesn't have, such as a D2 star, a JUCO transfer or a signed recruit. Give a name, position, school, class and level (D2, D3, NAIA, JUCO, HS, FCS or FBS).

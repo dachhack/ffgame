@@ -3815,6 +3815,10 @@ export const commishAddCustomCollege = (leagueId: string, p: { name: string; pos
 export const commishRemoveCustomCollege = (leagueId: string, slug: string) =>
   tracked(rpc<{ ok: boolean; error?: string }>('commish_remove_custom_college', { p_league_id: leagueId, p_slug: slug }),
     Ev.commishAction, { tool: 'custom_college_remove' });
+/** 0411: how many devy rounds end the draft (commissioner; 0 = none). */
+export const setDevyRounds = (leagueId: string, rounds: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; devy_rounds?: number }>('set_devy_rounds', { p_league_id: leagueId, p_rounds: rounds }),
+    Ev.commishAction, { tool: 'devy_rounds', rounds });
 /** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
 export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
   rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });
@@ -4009,6 +4013,9 @@ export interface DraftState {
   my_autodraft: boolean;
   /** Practice room vs the AI — no schedule/season behind it, deletable. */
   is_mock?: boolean;
+  /** THE DEVY BLOCK (0411): the overall pick it starts at (live) and how many
+   *  devy rounds it runs (a pending draft previews the count). */
+  devy_from?: number | null; devy_rounds?: number | null;
   /** Per-position roster limits (null value = uncapped). */
   pos_caps?: PosCaps;
   /** Dynasty (0182): `rounds` is the rounds actually DRAFTED. keeper_slots

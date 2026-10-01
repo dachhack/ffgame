@@ -13,6 +13,7 @@
 // One deliberate merge vs the web: the commissioner's APPROVE/VETO lives on
 // the same card as everyone's trade list, not in a separate roster-tools
 // panel. Two cards listing the same trades on one phone screen is noise.
+import { pickRoundLabel } from '@drip/core/data/devyDraft';
 import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook } from '@drip/core/data/devyShares';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -147,7 +148,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
    *  reads as two future picks when one of them is a slot in the draft running
    *  right now. */
   const pickAssetLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
-    `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+    `${p.kind === 'startup' ? 'DRAFT' : p.season} ${pickRoundLabel(p.round)}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   /** One seat's side of a multi-team deal (0322): every asset with the seat
    *  it is addressed to, since that is the only thing that says what the
    *  trade actually is. */
