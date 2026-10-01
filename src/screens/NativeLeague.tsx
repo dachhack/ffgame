@@ -2412,7 +2412,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
 export type TeamFocus = 'trades' | 'waivers' | 'options';
 /** MY TEAM's tabs (v0.296.5) — the app's three, plus KEEPERS where the league
  *  keeps anyone. ROSTER first, always: it is what the screen is for. */
-type TeamTab = 'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts';
+type TeamTab = 'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts' | 'devy';
 
 // ── Keepers (0182): declare who you carry into next season ──────────────────
 // Renders nothing unless the commissioner set a keeper count. Undeclared spots
@@ -2983,6 +2983,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // itself the same way, but a tab that opens onto nothing is worse than a tab
   // that isn't there.
   const [keeperCount, setKeeperCount] = useState(0);
+  // v0.575.0 (founder: "make it one of the top tabs on the my team page"):
+  // a devy-market league gets a DEVY tab holding the market.
+  const [devyMarketOn, setDevyMarketOn] = useState(false);
+  useEffect(() => { devySharesState(leagueId).then((r) => setDevyMarketOn(!!(r.ok && r.on))).catch(() => {}); }, [leagueId]);
 
   const refresh = async () => {
     try {
@@ -3361,6 +3365,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           ['trades', 'TRADES'],
           ...(hasContracts ? [['contracts', 'CONTRACTS'] as const] : []),
           ...(keeperCount > 0 ? [['keepers', 'KEEPERS'] as const] : []),
+          ...(devyMarketOn ? [['devy', 'DEVY'] as const] : []),
         ] as const).map(([id, label]) => (
           <Chip key={id} on={tab === id} onClick={() => setTab(id)}>{label}</Chip>
         ))}
@@ -3486,8 +3491,13 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           ))}
         </>)}
 
-        {/* DEVY SHARES (0387) — shows only in a shares league */}
-        {(gm?.positions ?? []).includes('COLLEGE') && <DevySharesPanel leagueId={leagueId} myRoster={myRoster} />}
+        {/* DEVY SHARES (0387) — v0.575.0: the market is the DEVY tab now. */}
+        {devyMarketOn && (
+          <button onClick={() => setTab('devy')} className="mono"
+            style={{ marginTop: 12, background: 'none', border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 10px', fontSize: 10.5, color: 'var(--you)', cursor: 'pointer' }}>
+            🎓 DEVY MARKET — buy and sell shares in college players →
+          </button>
+        )}
 
       </div>
 
@@ -3498,6 +3508,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           for it in the two weeks a year it matters and where it is noise for
           the other fifty. */}
       {tab === 'keepers' && myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
+
+      {tab === 'devy' && devyMarketOn && (
+        <div style={{ ...card, marginBottom: 12 }}><DevySharesPanel leagueId={leagueId} myRoster={myRoster} /></div>
+      )}
 
       {tab === 'waivers' && (<>
       {/* pending + recent claims */}

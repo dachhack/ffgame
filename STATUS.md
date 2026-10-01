@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.575.0 — the devy market is a My Team tab
+
+> - In a devy market league, My Team now has a DEVY tab next to Roster, Waivers and Trades. It holds the whole market: your stakes, the league's, buying and share trades.
+> - The devy market line under your roster now jumps straight to that tab.
+
+The founder: "Let's make it more prominent. Let's make it one of the top
+tabs on the my team page." Until now the market was a row at the bottom of
+the roster that opened a sheet (app), or a panel under the roster (web).
+- App: DevyShares.tsx renders the market either as the sheet or inline
+  (DevyMarketTab); Team.tsx adds DEVY to the tab bar when the league plays
+  devy shares, and the roster row switches to it. The sheet is no longer
+  opened from Team.
+- Web: NativeLeague's team view adds a DEVY tab (devy_shares_state on), with
+  DevySharesPanel moved into it and a link from the roster tab.
+
 ### v0.574.1 — every card you own is in your hand (app)
 
 > - Air Raid, Combo Drip and Return Yards cards now show in the app's hand after you buy them, with a tip that says where each one plays.

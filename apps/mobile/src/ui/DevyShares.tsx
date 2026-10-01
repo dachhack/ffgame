@@ -20,8 +20,20 @@ import { tap, commit, warn } from './feedback';
 
 type View3 = 'mine' | 'league' | 'add' | 'trade';
 
-export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
-  visible: boolean; leagueId: string; myRoster: number | null; onClose: () => void;
+/** The devy market as a sheet (opened from a roster row). */
+export function DevySharesSheet(p: { visible: boolean; leagueId: string; myRoster: number | null; onClose: () => void }) {
+  return <DevyMarketView {...p} />;
+}
+
+/** The devy market inline — My Team's DEVY tab (v0.575.0, founder: "Let's
+ *  make it more prominent. Let's make it one of the top tabs on the my team
+ *  page."). The same market, laid into the page instead of a sheet. */
+export function DevyMarketTab({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
+  return <DevyMarketView visible inline leagueId={leagueId} myRoster={myRoster} />;
+}
+
+function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
+  visible: boolean; leagueId: string; myRoster: number | null; onClose?: () => void; inline?: boolean;
 }) {
   const t = useTheme();
   const [st, setSt] = useState<DevySharesState | null>(null);
@@ -134,10 +146,8 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
     return (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)).slice(0, 60);
   }, [market, q, deep]);
 
-  return (
-    <Overlay visible={visible} title="Devy market" onClose={onClose}
-      subtitle={myRoster != null ? `CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : 'THE LEAGUE’S STAKES'}>
-      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 8 }} keyboardShouldPersistTaps="handled">
+  const subtitle = myRoster != null ? `CASH ${fmtPts(book.cash)} · STAKES WORTH ${fmtPts(book.value)} · ${book.shares} SHARES` : 'THE LEAGUE’S STAKES';
+  const body = (<>
         <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
           {`Buy shares in college players. Prices follow how they're playing, updated weekly in season and frozen from Jan 15 until the next season's first stats. A stake maxes at ${rules.max} shares or ${rules.max_spend} points spent; the first team to max holds his right, or if only one team has ${rules.floor}+ shares and ${rules.min_spend}+ points in, that team does. The right reserves him for you in the rookie draft. When he's drafted into the NFL your shares pay the better of his college price and his draft round (R1 8, R2 6, R3 5, later 2), up to ${rules.payout_cap}× what you paid. Selling pays today's price, up to ${rules.payout_cap}× what you paid; cash tops out at ${rules.cash_cap} from sales. ${lockLine(st)}${st?.frozen ? ' Prices are frozen for the offseason.' : ''}`}
         </Mono>
@@ -189,6 +199,19 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
             );
           })}
         </>)}
+  </>);
+  if (inline) {
+    return (
+      <View style={{ gap: 8 }}>
+        <Mono size={9.5} weight="700" tone="you">{subtitle}</Mono>
+        {body}
+      </View>
+    );
+  }
+  return (
+    <Overlay visible={visible} title="Devy market" onClose={onClose ?? (() => {})} subtitle={subtitle}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 8 }} keyboardShouldPersistTaps="handled">
+        {body}
       </ScrollView>
     </Overlay>
   );
