@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.584.0 — read the whole offer back before you send it
+
+> - Proposing a trade now has a confirm step. REVIEW THE OFFER shows the whole deal before it goes: what you get and what each other team gets, each item saying who it comes from.
+> - The summary covers players (with contract terms and any salary someone keeps paying), picks (including devy picks), FAAB, cap room, devy shares and devy cash.
+> - It also shows the trade grade, how long the offer stands, what happens when it's accepted (it goes through, the commissioner rules, or the league votes) and your note.
+> - SEND THE OFFER files it. "← edit the offer" goes back with everything as you left it. The same applies to counters and multi-team trades, on web and mobile.
+
+- Core `tradeConfirm.ts`: `tradeConfirm` (legs → each team's gets), `expiryLine`, `reviewLine`. Two-team offers read back through `twoSeatDevyLegs`, and multi-team offers through the same legs builder that files them. Checks: `check:tradegrade` cases.
+
 ### v0.583.0 — the devy draft: devy rounds and devy picks that trade
 
 > - Devy leagues get a devy draft. The commissioner sets DEVY ROUNDS (off or 1–5, at most the number of devy spots) under DEVY in Commissioner tools.

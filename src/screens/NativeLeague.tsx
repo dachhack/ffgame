@@ -19,6 +19,7 @@ import { clearsOn } from '@drip/core/data/waiverDays';
 import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
 import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
+import { tradeConfirm, expiryLine, reviewLine, type ConfirmLeg } from '@drip/core/data/tradeConfirm';
 import { ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -4001,6 +4002,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const [mode, setMode] = useState<GameModeInfo | null>(null);
   // 0398: DEVY SHARES in a two-team offer; any of them files a two-leg trade.
   const [shares, setShares] = useState<DevySharesState | null>(null);
+  // v0.584.0: the offer is read back, in full, before it goes.
+  const [confirming, setConfirming] = useState(false);
   const [giveShares, setGiveShares] = useState<Record<string, number>>({});
   const [getShares, setGetShares] = useState<Record<string, number>>({});
   const [devyCashDraft, setDevyCashDraft] = useState('');
@@ -4112,6 +4115,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   const nothingOffered = give.length + get.length + givePicks.length + getPicks.length
     + Math.abs(capDollars) + Math.abs(faabDollars) === 0 && !hasDevy;
   const closeModal = () => {
+    setConfirming(false);
     setOpen(false); setCounterOf(null); setPartner(null); setGive([]); setGet([]);
     setGivePicks([]); setGetPicks([]); setNote('');
     setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setExpiryHours(null);
@@ -4160,21 +4164,39 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
       scoring: mode?.scoring,
     })
     : null;
+  /** A three-plus-team offer as legs: each seat and what it sends where. */
+  const multiLegs = () => teamsIn.map((rid) => ({
+    roster: rid,
+    send: Object.entries(dest)
+      .filter(([slug]) => holderOf(slug) === rid)
+      .map(([slug, to]) => ({ slug, to })),
+    send_picks: assets
+      .filter((p) => p.owner === rid && pickDest[pickKey(p)] != null)
+      .map((p) => ({ season: p.season, round: p.round, orig: p.orig, to: pickDest[pickKey(p)] })),
+    ...(rid === myRoster && faabDollars > 0 && faabTarget != null
+      ? { send_faab: [{ to: faabTarget, amount: faabDollars }] } : {}),
+  }));
+  /** THE READ-BACK (v0.584.0): what every team gets, the terms around it. */
+  const confirmTeams = () => {
+    if (myRoster == null || partner == null) return [];
+    const legs: ConfirmLeg[] = isMulti ? multiLegs() : twoSeatDevyLegs({
+      me: myRoster, partner, give, get,
+      givePicks: givePicks.map((p) => ({ ...p })), getPicks: getPicks.map((p) => ({ ...p })),
+      faab: faabDollars, cap: capDollars, giveShares, getShares, devyCash,
+    }).map((l) => ({ ...l, send_picks: l.send_picks.map((p) => ({ ...p, kind: [...givePicks, ...getPicks].find((x) => x.season === p.season && x.round === p.round && x.orig === p.orig)?.kind })) }));
+    return tradeConfirm(legs, {
+      me: myRoster, teamName: (rid) => String(teamName(rid) ?? `Team ${rid}`),
+      player: (s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); },
+      pick: (p, holder) => pickLabel(p, holder),
+      shareName: (s) => shares?.players?.find((x) => x.slug === s)?.name ?? s,
+      retain,
+    });
+  };
   const proposeMulti = async () => {
     if (busy || myRoster == null || multiAssets === 0) return;
     setBusy(true); setErr(null);
     try {
-      const legs = teamsIn.map((rid) => ({
-        roster: rid,
-        send: Object.entries(dest)
-          .filter(([slug]) => holderOf(slug) === rid)
-          .map(([slug, to]) => ({ slug, to })),
-        send_picks: assets
-          .filter((p) => p.owner === rid && pickDest[pickKey(p)] != null)
-          .map((p) => ({ season: p.season, round: p.round, orig: p.orig, to: pickDest[pickKey(p)] })),
-        ...(rid === myRoster && faabDollars > 0 && faabTarget != null
-          ? { send_faab: [{ to: faabTarget, amount: faabDollars }] } : {}),
-      }));
+      const legs = multiLegs();
       const r = await proposeMultiTrade(leagueId, legs, note.trim() || undefined, expiryHours ?? undefined);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       closeModal();
@@ -4746,15 +4768,51 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             </div>
             <input value={note} maxLength={140} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)…" style={{ ...input, marginTop: 12 }} />
             {err && <div className="mono" style={errStyle}>{err}</div>}
-            <button onClick={propose}
+            <button onClick={() => { setErr(null); setConfirming(true); }}
               disabled={busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered)}
               className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered) ? 0.5 : 1 }}>
-              {counterOf ? '⇄ SEND THE COUNTER'
-                : isMulti ? `⇄ SEND THE ${teamsIn.length}-TEAM OFFER` : '⇄ SEND THE OFFER'}
-              {tradeReview === 'commish' ? ' (commish must approve)'
-                : tradeReview === 'league' ? ' (the league votes)' : ''}
+              {counterOf ? 'REVIEW THE COUNTER →' : isMulti ? `REVIEW THE ${teamsIn.length}-TEAM OFFER →` : 'REVIEW THE OFFER →'}
             </button>
             <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={closeModal} className="mono" style={linkBtn}>cancel</button></div>
+          </div>
+        </div>
+      )}
+      {/* THE READ-BACK (v0.584.0): the whole offer, one last look, then send. */}
+      {open && confirming && myRoster != null && partner != null && (
+        <div onClick={() => setConfirming(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 440, maxHeight: '85vh', overflowY: 'auto' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+              {counterOf ? 'Confirm your counter' : 'Confirm your offer'}
+            </div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 3 }}>
+              {isMulti ? `${teamsIn.length}-team trade with ${teamsIn.filter((r) => r !== myRoster).map((r) => teamName(r)).join(', ')}` : `Trade with ${teamName(partner)}`}
+            </div>
+            {confirmTeams().map((t) => (
+              <div key={t.roster} style={{ marginTop: 12, border: `1px solid ${t.mine ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 6, padding: 8 }}>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', fontWeight: 700, color: t.mine ? 'var(--you)' : 'var(--dim)' }}>{t.title}</div>
+                {t.gets.length === 0 && <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>nothing</div>}
+                {t.gets.map((g, i) => <div key={i} style={{ fontSize: 12.5, color: 'var(--text)', marginTop: 4, lineHeight: 1.4 }}>• {g}</div>)}
+              </div>
+            ))}
+            {grade && (
+              <div className="mono" style={{ fontSize: 10.5, marginTop: 12, lineHeight: 1.5,
+                color: grade.verdict === 'for' ? 'var(--you)' : grade.verdict === 'against' ? 'var(--opp)' : 'var(--warn)' }}>
+                ⚖ {grade.summary}
+              </div>
+            )}
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.6 }}>
+              <div>⏱ {expiryLine(expiryHours, offerDays)}</div>
+              <div>⚑ {reviewLine(tradeReview)}</div>
+              {note.trim() && <div>✎ “{note.trim()}”</div>}
+            </div>
+            {err && <div className="mono" style={errStyle}>{err}</div>}
+            <button onClick={() => void propose()} disabled={busy} className="mono"
+              style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.5 : 1 }}>
+              {busy ? 'SENDING…' : counterOf ? '⇄ SEND THE COUNTER' : '⇄ SEND THE OFFER'}
+            </button>
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <button onClick={() => setConfirming(false)} className="mono" style={linkBtn}>← edit the offer</button>
+            </div>
           </div>
         </div>
       )}
