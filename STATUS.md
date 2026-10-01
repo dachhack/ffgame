@@ -28,7 +28,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 > - A 🃏 count beside the coin says how many cards you hold; tap it to list them.
 > - Pull to refresh re-reads your hand and your coin, so a card bought on the web shows up on the phone.
 
-app only (no migration). Founder's iPhone screenshot, Gridiron Gang week 4,
+app only (no migration). Founder's Android screenshot, Gridiron Gang week 4,
 SETUP, SHOP showing ◆ 160: "I don't see my power ups that I purchased or the
 power up card hand at the bottom of the screen."
 - **Cause (the one the code can show):** LivePicks' hand filtered out every
@@ -51,6 +51,9 @@ power up card hand at the bottom of the screen."
   realtime push) now re-reads `my_inventory` and the wallet. The inventory
   was read once on mount, so a card bought on the web — or on the phone
   behind a failed read — needed a relaunch to appear.
+- **Android backstop:** the hand's rise tween is already on the JS driver
+  (v0.559.2), but a 400 ms `setValue` now settles it at its target whatever
+  became of the tween — a lost animation costs the rise, never the cards.
 - Not reproduced on a device here; if the 🃏 count reads 0 after a purchase
   while the shop says OWNED, the gap is server-side (my_inventory /
   caller_roster for that seat), not the hand.

@@ -106,7 +106,14 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
   useEffect(() => {
     // JS driver (v0.559.2): the hand starts hidden below the bar, so a native
     // animation dropped under the new architecture would leave it there.
-    Animated.timing(rise, { toValue: dealt ? 1 : 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    const to = dealt ? 1 : 0;
+    Animated.timing(rise, { toValue: to, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    // AND a backstop (v0.572.1, founder's Android screenshot with no hand at
+    // all): whatever became of the tween, the hand ends where it was going.
+    // setValue is a plain write — nothing can drop it — so a lost animation
+    // costs the rise, never the cards.
+    const settle = setTimeout(() => rise.setValue(to), 400);
+    return () => clearTimeout(settle);
   }, [dealt, rise]);
 
   // A card that leaves the hand (armed away, consumed) must not stay raised —
