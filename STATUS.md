@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.572.0 — the devy market goes all the way down
+
+> - Search the devy market for any college QB, RB, WR or TE on an FBS roster (thousands of players), not just the top 1,000.
+> - Deep sleepers with no price yet cost 1 point a share, so an early find is cheap.
+> - Each player shows StatHead's devy rank, so you can see where the board has him even before he has a price.
+
+The founder: "Can we go super deep with devy players for shares?"
+allot_devy_shares already accepted any active college player (unpriced at the
+_devy_price floor of 1); what stopped it was the list: devy_market returned the
+top 1,000 priced players and both apps searched only that.
+- 0404 devy_market(league, limit, query): every active college QB/RB/WR/TE,
+  ordered by price rank, then StatHead's devy rank for the unpriced, then
+  name; p_query searches name, school name and abbreviation; each row
+  carries sh_rank (StatHead 1QB composite). Limit up to 5,000.
+- App and web + BUY: past two letters the search goes to the server
+  (debounced) and covers the whole pool. Rows use core marketRowDetail
+  ("unpriced (1-pt floor)", "StatHead devy #N").
+- Probes: devy-deep-probes.sql (order, unpriced floor, StatHead rank,
+  school search, limit, members only).
+
 ### v0.571.0 — devy prices run on StatHead's devy board
 
 > - Devy market prices now blend StatHead's devy composite with each player's college production, in place of KeepTradeCut's top-100 list.
