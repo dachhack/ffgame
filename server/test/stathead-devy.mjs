@@ -1,5 +1,5 @@
 // StatHead's devy board (0403): mapping and chunked loading. No network.
-import { statheadDevyRows, loadStatheadDevy } from '../src/poll/statheadDevy.js';
+import { statheadDevyRows, loadStatheadDevy, cardOf } from '../src/poll/statheadDevy.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -26,7 +26,7 @@ const calls = [];
 const rpc = async (fn, args) => { calls.push([fn, args]); return { data: fn === 'finish_stathead_devy' ? { ok: true, matched: 7 } : { ok: true }, error: null }; };
 const r = await loadStatheadDevy(rpc, () => {}, async () => big);
 const ups = calls.filter(([fn]) => fn === 'upsert_stathead_devy');
-ok(ups.length === 3 && ups.reduce((n, [, a]) => n + a.p_rows.length, 0) === 3200, 'loaded in three chunks, every row once');
+ok(ups.length === 4 && ups.reduce((n, [, a]) => n + a.p_rows.length, 0) === 3200, 'loaded in chunks of 800, every row once');
 ok(new Set(calls.map(([, a]) => a.p_as_of)).size === 1, 'every chunk and the finish share one as_of');
 ok(calls.at(-1)[0] === 'finish_stathead_devy' && r.matched === 7, 'finished last, and its answer comes back');
 
@@ -34,6 +34,12 @@ let threw = false;
 try { await loadStatheadDevy(async (fn) => ({ data: null, error: fn === 'upsert_stathead_devy' ? { message: 'boom' } : null }), () => {}, async () => big); }
 catch { threw = true; }
 ok(threw, 'a failed chunk stops before finishing, so the old board stays');
+
+// 0406: the card keeps StatHead's numbers and drops the third-party list facts
+const card = cardOf({ compositeRank: { oneQB: 3 }, profile: { stars: 5 }, marketListed: true, pListed: 0.9, name: 'X' });
+ok(card.compositeRank?.oneQB === 3 && card.profile?.stars === 5, 'the card carries StatHead\'s ranks and profile');
+ok(!('marketListed' in card) && !('pListed' in card), 'and never whether a third-party list carries him');
+ok(rows[0].card && rows[0].card.compositeRank?.oneQB === 1, 'every row brings its card');
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL STATHEAD-DEVY TESTS PASSED');

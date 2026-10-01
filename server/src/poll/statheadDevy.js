@@ -12,7 +12,20 @@
 // one as_of, then finish_stathead_devy swaps it in — or refuses a short read
 // and keeps last week's board.
 const URL = process.env.STATHEAD_DEVY_URL || 'https://dachhack.github.io/stathead/data/devy-rankings.json';
-const CHUNK = 1500;
+const CHUNK = 800;   // 0406: rows carry a ~1 KB card each now
+
+/** 0406: what the player card shows — StatHead's own numbers for him, as
+ *  its board publishes them. marketListed / pListed (whether a third-party
+ *  devy list carries him) are left out: third-party facts are inputs, never
+ *  shown. */
+const CARD_FIELDS = ['compositeValue', 'compositeRank', 'compositePosRank', 'compositeWeight',
+  'marketValue', 'marketRank', 'marketPosRank', 'careerScore', 'careerPPG', 'careerRank', 'careerPct',
+  'careerVsMarket', 'dynasty', 'profile', 'careerModel2027', 'draftYear', 'school'];
+export function cardOf(p) {
+  const out = {};
+  for (const k of CARD_FIELDS) if (p?.[k] != null) out[k] = p[k];
+  return out;
+}
 
 /** The board's players → our rows. Players with no ESPN id or no 1QB
  *  composite rank are skipped. */
@@ -29,6 +42,7 @@ export function statheadDevyRows(json) {
       rank_1qb: Math.round(r1), rank_sf: num(p.compositeRank?.sf),
       value_1qb: num(p.compositeValue?.oneQB), value_sf: num(p.compositeValue?.sf),
       draft_year: num(p.draftYear),
+      card: cardOf(p),
     });
   }
   return out;

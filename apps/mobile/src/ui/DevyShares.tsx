@@ -8,9 +8,10 @@
 // — failing that, the only team in does, with 5+ — and the right reserves him
 // in the rookie draft, at any of the holder's picks.
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
 import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
+import { openPlayerCard } from './PlayerCardSheet';
 import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, marketRowDetail, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
 import { useTheme, MONO } from '../theme.native';
 import { Overlay } from './Overlay';
@@ -106,7 +107,9 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
       <View key={p.slug} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: t.bd }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {!!p.pos && <PosPill pos={p.pos} />}
-          <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: '700', color: t.text }}>{p.name ?? p.slug}</Text>
+          <Pressable hitSlop={6} style={{ flex: 1 }} onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name ?? p.slug, pos: p.pos ?? '', team: p.school ?? '', leagueId }); }}>
+            <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{p.name ?? p.slug} <Text style={{ fontSize: 11, color: t.faint }}>ⓘ</Text></Text>
+          </Pressable>
           <Mono size={11} weight="700" tone="you">{price}/sh</Mono>
         </View>
         <Mono size={9} tone="faint" style={{ marginTop: 2 }}>
@@ -173,7 +176,9 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
               <View key={r.slug} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: t.bd }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <PosPill pos={r.pos} />
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: '700', color: t.text }}>{r.name}</Text>
+                  <Pressable hitSlop={6} style={{ flex: 1 }} onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId }); }}>
+                    <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{r.name} <Text style={{ fontSize: 11, color: t.faint }}>ⓘ</Text></Text>
+                  </Pressable>
                   <Mono size={11} weight="700" tone="you">{r.price}/sh</Mono>
                 </View>
                 <Mono size={9} tone="faint" style={{ marginTop: 2 }}>

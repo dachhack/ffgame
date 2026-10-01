@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { allotDevyShares, devyMarket, devySharesState, friendlyError, proposeMultiTrade, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
+import { openPlayerCard } from '../app/playerCard';
 import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, marketRowDetail, DEEP_SEARCH_MIN } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
@@ -92,7 +93,8 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
     return (
       <div key={p.slug} style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-          <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}>{p.name ?? p.slug} <span style={small}>{[p.pos, p.school, p.class_year ? collegeClassLabel(p.class_year) : null, p.rank ? `#${p.rank} in college` : 'unranked', p.graduated_to ? 'TURNED PRO' : null].filter(Boolean).join(' · ')}</span></span>
+          <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}><span role="button" title="Player card" style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
+            onClick={() => openPlayerCard({ slug: p.slug, name: p.name ?? p.slug, pos: p.pos ?? '', team: p.school ?? '', leagueId })}>{p.name ?? p.slug}</span> <span style={small}>{[p.pos, p.school, p.class_year ? collegeClassLabel(p.class_year) : null, p.rank ? `#${p.rank} in college` : 'unranked', p.graduated_to ? 'TURNED PRO' : null].filter(Boolean).join(' · ')}</span></span>
           <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{price}/sh</span>
         </div>
         {mineH && <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: Number(mineH.value) >= Number(mineH.cost) ? 'var(--you)' : 'var(--opp)' }}>YOU: {cur} shares · {stakeLine(mineH.cost, mineH.value)}</div>}
@@ -138,7 +140,8 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
           return (
             <div key={r.slug} style={{ padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}>{r.name} <span style={small}>{r.pos} · {marketRowDetail(r)} · nobody in yet</span></span>
+                <span style={{ fontWeight: 700, color: 'var(--text)', flex: 1 }}><span role="button" title="Player card" style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
+                  onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{r.name}</span> <span style={small}>{r.pos} · {marketRowDetail(r)} · nobody in yet</span></span>
                 <span className="mono" style={{ fontWeight: 700, color: 'var(--you)' }}>{r.price}/sh</span>
               </div>
               {myRoster != null && controls(r.slug, 0, r.price, 0, false, true)}

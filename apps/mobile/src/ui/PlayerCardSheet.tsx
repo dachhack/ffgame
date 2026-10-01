@@ -27,6 +27,8 @@ import { Mono } from './prims';
 import { Ev, track } from '@drip/core/analytics';
 import { Overlay } from './Overlay';
 import { InjuryBadge } from './rosterGroup';
+import { CollegeCardSheet } from './CollegeCardSheet';
+import { isCollegeSlug } from '@drip/core/data/college';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -64,6 +66,9 @@ export function PlayerCardHost() {
   const [req, setReq] = useState<PlayerCardReq | null>(null);
   useEffect(() => { listener = setReq; return () => { listener = null; }; }, []);
   if (!req) return null;
+  // 0406: a college player gets the devy card — its own component, so moving
+  // between an NFL card and a college one never shares a hook's state.
+  if (isCollegeSlug(req.slug)) return <CollegeCardSheet req={req} onClose={() => setReq(null)} />;
   return <PlayerCardSheet req={req} onClose={() => setReq(null)} />;
 }
 
