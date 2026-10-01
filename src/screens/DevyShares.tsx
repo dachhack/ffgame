@@ -131,7 +131,7 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         {!market && <div style={small}>Loading the market…</div>}
         {market && market.length === 0 && !deep && <div style={small}>No prices yet: they appear after the first weekly stats update.</div>}
         {deep && deep.length === 0 && <div style={small}>No college QB, RB, WR or TE matches that.</div>}
-        {!deep && <div style={small}>Type 2+ letters to search every college QB, RB, WR and TE, deep sleepers included. Unpriced players cost 1 point a share.</div>}
+        {!deep && <div style={small}>Type 2+ letters to search every college QB, RB, WR and TE, FCS included. Unpriced players cost 1 point a share.</div>}
         {addList.map((r) => {
           const held = bySlug.get(r.slug);
           if (held) return row({ ...held, price: held.price ?? r.price }, true);

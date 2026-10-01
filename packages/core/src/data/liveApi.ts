@@ -3759,7 +3759,7 @@ export const allotDevyShares = (leagueId: string, rosterId: number, slug: string
 /** 0388: the market — ranked college players and their price a share here. */
 /** 0404: rank is null for an unpriced player (he costs the floor); sh_rank is
  *  StatHead's 1QB devy composite rank where its board has him. */
-export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number }
+export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number; /** 0405 */ fcs?: boolean }
 /** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
 export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
   rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });

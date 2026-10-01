@@ -40,7 +40,7 @@ begin
     jsonb_build_object('sleeper_id', 'ab2', 'slug', 'ab-rb', 'adp_ppr', 10.1, 'adp_half', 11.0,
       'adp_std', 12.0, 'adp_2qb', 18.0),
     jsonb_build_object('sleeper_id', 'ab9', 'slug', null, 'adp_ppr', 99.0)),
-    '2026-09-21T06:00:00Z');
+    (now() - interval '2 days')::text);
   perform ab_true((r ->> 'ok')::boolean and (r ->> 'rows')::int = 3, 'ab1 three rows written');
   perform ab_true((select slug from adp_board where sleeper_id = 'ab9') is null,
     'ab1 a row we cannot place keeps its id and a null slug rather than a guessed name');
@@ -51,7 +51,7 @@ begin
   -- takes it away again on purpose.)
   insert into adp_board (sleeper_id, slug, adp_ppr, adp_half, adp_std, adp_2qb, source, fetched_at)
     select 'bulk' || g, 'bulk-' || g, 100 + g, 100 + g, 100 + g, 100 + g, 'sleeper',
-           '2026-09-21T06:00:00Z'::timestamptz
+           now() - interval '2 days'
       from generate_series(1, 320) g
     on conflict (sleeper_id) do nothing;
 
@@ -114,7 +114,7 @@ begin
   -- ── ab4. the refresh ──
   r := upsert_adp_board(jsonb_build_array(
     jsonb_build_object('sleeper_id', 'ab1', 'slug', 'ab-qb', 'adp_ppr', 35.0, 'adp_2qb', 11.0)),
-    '2026-09-22T06:00:00Z');
+    (now() - interval '1 day')::text);
   perform ab_true((league_market(lid) -> 'adp' ->> 'ab-qb')::numeric = 35.0, 'ab4 a new pull moves the number');
   perform ab_true(not exists (select 1 from adp_board where sleeper_id = 'ab2'),
     'ab4 and a player this pull stopped pricing leaves the board rather than sitting at yesterday''s');

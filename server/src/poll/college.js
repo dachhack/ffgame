@@ -26,8 +26,12 @@ import { db } from '../supabase.js';
 import { collegePos } from '../../../packages/core/src/data/college.ts';
 import { loadStatheadDevy } from './statheadDevy.js';
 
-const CORE_TEAMS = (season) =>
-  `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
+const CORE_TEAMS = (season, group = 80) =>
+  `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/${group}/teams?limit=300`;
+// 0405: FCS (group 81) rosters too — for the devy market only. Their players
+// carry division 'FCS', which keeps them out of pools, projections and the
+// stats ranking (college_directory reads FBS only).
+const FCS_GROUP = 81;
 const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`;
 // 0382: every FBS conference and its teams, in one request.
 const STANDINGS = (season) => `https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80&season=${season}`;
@@ -204,13 +208,20 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
   const ids = fbsTeamIds(await fetchJson(CORE_TEAMS(season)));
   if (!ids.length) return { schools: 0, rows: 0, failed: 0, retired: 0, error: 'no FBS teams' };
 
-  const rows = [];
   let failed = 0;
+  // 0405: the FCS list. If it can't be read, the sweep still writes FBS but
+  // counts a failure — so it retires nobody, rather than every FCS player.
+  let fcs = [];
+  try { fcs = fbsTeamIds(await fetchJson(CORE_TEAMS(season, FCS_GROUP))).filter((id) => !ids.includes(id)); }
+  catch (e) { failed++; log('college FCS list', e.message); }
+  const schools = [...ids.map((id) => [id, 'FBS']), ...fcs.map((id) => [id, 'FCS'])];
+
+  const rows = [];
   let next = 0;
   const worker = async () => {
-    while (next < ids.length) {
-      const id = ids[next++];
-      try { rows.push(...rosterRows(await fetchJson(ROSTER(id)))); }
+    while (next < schools.length) {
+      const [id, division] = schools[next++];
+      try { rows.push(...rosterRows(await fetchJson(ROSTER(id))).map((r) => ({ ...r, division }))); }
       catch (e) { failed++; log('college roster', id, e.message); }
     }
   };
@@ -219,7 +230,7 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
   let wrote = 0;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const { data, error } = await rpc('upsert_college_players', { p_rows: rows.slice(i, i + CHUNK) });
-    if (error) return { schools: ids.length, rows: wrote, failed, retired: 0, error: error.message };
+    if (error) return { schools: schools.length, rows: wrote, failed, retired: 0, error: error.message };
     wrote += Number(data?.rows ?? 0);
   }
 
@@ -258,7 +269,7 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
       else log(`college prices: ${data?.priced ?? 0} priced`);
     } catch (e) { log('college prices', e.message); }
   }
-  return { schools: ids.length, rows: wrote, failed, retired, stats };
+  return { schools: schools.length, fcs: fcs.length, rows: wrote, failed, retired, stats };
 }
 
 let last = 0;

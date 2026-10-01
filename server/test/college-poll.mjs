@@ -71,7 +71,8 @@ const teamsFeed = { items: [
 ] };
 {
   const { calls, rpc } = fakeRpc();
-  const fetchJson = async (url) => url.includes('groups/80') ? teamsFeed : { ...ALA, team: { ...ALA.team, id: url.match(/teams\/(\d+)/)[1] } };
+  const fetchJson = async (url) => url.includes('groups/80') ? teamsFeed : url.includes('groups/81') ? { items: [] }
+    : { ...ALA, team: { ...ALA.team, id: url.match(/teams\/(\d+)/)[1] } };
   const r = await runCollegeSweep(2026, () => {}, fetchJson, rpc);
   ok(r.schools === 2 && r.rows === 10 && r.failed === 0, `clean sweep writes both schools (got ${JSON.stringify(r)})`);
   ok(calls.some((c) => c.fn === 'finish_college_sweep') && r.retired === 7, 'a clean sweep retires the unseen');
@@ -87,6 +88,30 @@ const teamsFeed = { items: [
   ok(r.failed === 1 && r.rows === 5, 'one failed roster: the other school still lands');
   ok(!calls.some((c) => c.fn === 'finish_college_sweep') && r.retired === 0,
     'THE POINT: a sweep with a failed roster retires nobody');
+}
+
+// ── 3b. FCS rosters (0405): read too, tagged, and a lost list retires nobody ──
+{
+  const { calls, rpc } = fakeRpc();
+  const fcsFeed = { items: [{ $ref: '.../seasons/2026/teams/2534?x' }, { $ref: '.../seasons/2026/teams/57?x' }] };
+  const fetchJson = async (url) => url.includes('groups/80') ? teamsFeed : url.includes('groups/81') ? fcsFeed
+    : { ...ALA, team: { ...ALA.team, id: url.match(/teams\/(\d+)/)[1] } };
+  const r = await runCollegeSweep(2026, () => {}, fetchJson, rpc);
+  const rows = calls.filter((c) => c.fn === 'upsert_college_players').flatMap((c) => c.args.p_rows);
+  ok(r.schools === 3 && r.fcs === 1, `FBS plus FCS, a school on both lists read once (got ${JSON.stringify(r)})`);
+  ok(rows.filter((x) => x.division === 'FCS').length === 5 && rows.filter((x) => x.division === 'FBS').length === 10,
+    'every row says its division');
+}
+{
+  const { calls, rpc } = fakeRpc();
+  const fetchJson = async (url) => {
+    if (url.includes('groups/80')) return teamsFeed;
+    if (url.includes('groups/81')) throw new Error('503');
+    return ALA;
+  };
+  const r = await runCollegeSweep(2026, () => {}, fetchJson, rpc);
+  ok(r.rows === 10 && r.failed === 1, 'no FCS list: FBS still lands');
+  ok(!calls.some((c) => c.fn === 'finish_college_sweep'), 'and nobody is retired — not the FCS players it never read');
 }
 
 // ── 4. cadence ──
