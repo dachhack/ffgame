@@ -1426,6 +1426,9 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
   // "fix" that adds a case there would badge a lone Field General.
   ok('the per-spot rule still refuses it, which is why the pair rule exists',
     buffAppliesToSpot('fg-stack', 'QB', 'fg') === false);
+// v0.586.0: Return Yards is a drip — every amp is on its card.
+ok('Return Yards takes Momentum, Overtime and Garbage Time',
+  ['momentum', 'overtime', 'garbage-time'].every((id) => buffAppliesToSpot(id, 'WR', 'retyd') && buffAppliesToSpot(id, 'RB', 'retyd')));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL DRAFT-SPOT ASSERTIONS PASSED');
