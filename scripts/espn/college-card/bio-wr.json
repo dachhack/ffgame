@@ -1,0 +1,25 @@
+{
+ "displayHeight": "6' 4\"",
+ "displayWeight": "222 lbs",
+ "birthPlace": {
+  "city": "Miami Gardens",
+  "state": "FL",
+  "country": "USA"
+ },
+ "experience": {
+  "years": 3,
+  "displayValue": "Junior",
+  "abbreviation": "JR"
+ },
+ "jersey": "4",
+ "headshot": {
+  "href": "https://a.espncdn.com/i/headshots/college-football/players/full/5079720.png",
+  "alt": "Jeremiah Smith"
+ },
+ "status": {
+  "id": "1",
+  "name": "Active",
+  "type": "active",
+  "abbreviation": "Active"
+ }
+}

@@ -60,6 +60,21 @@ begin
   perform dd_true((select division from college_player where espn_id = '96205') = 'FBS', 'dd5d a transfer up to FBS changes his division');
   delete from college_player_stats where espn_id = '96205';
 
+  -- ── 0406: the devy player card ──
+  update stathead_devy set card = '{"compositeRank": {"oneQB": 3500, "sf": 3400}, "profile": {"stars": 3}}'::jsonb where espn_id = '96202';
+  perform dd_as('01');
+  m := college_player_card('96202');
+  perform dd_true((m ->> 'ok')::boolean and m ->> 'name' = 'Board Deepkid' and m ->> 'division' = 'FBS',
+    'dd6 the card names him: ' || m::text);
+  perform dd_true((m -> 'stathead' ->> 'rank_1qb')::int = 3500 and (m -> 'stathead' -> 'card' -> 'profile' ->> 'stars')::int = 3,
+    'dd6a with StatHead''s rank and profile');
+  perform dd_true((m -> 'market' ->> 'price')::numeric = 1 and (m -> 'market' ->> 'rank') is null, 'dd6b unpriced: the floor, no rank');
+  m := college_player_card('96201');
+  perform dd_true((m -> 'market' ->> 'rank')::int = 4000 and m -> 'stathead' = 'null'::jsonb, 'dd6c priced, and no StatHead row is null');
+  perform dd_true(not (college_player_card('99999999') ->> 'ok')::boolean, 'dd6d an unknown id is refused');
+  perform set_config('app.uid', '', false);
+  perform dd_true(not (college_player_card('96202') ->> 'ok')::boolean, 'dd6e signed out, no card');
+
   perform dd_as('02');
   perform dd_true(devy_market(lid, 50, 'deepkid') = '[]'::jsonb, 'dd4 not a member, no list');
 

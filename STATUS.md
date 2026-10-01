@@ -22,6 +22,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.574.0 — player cards for devy players
+
+> - Tap any college player (draft room, rosters, the devy market) for a full devy card: bio, height and weight, hometown and next game.
+> - SEASONS shows every college season with PPR totals, and GAME LOG shows this season game by game with each game's PPR points.
+> - The card adds StatHead's evaluation: devy rank, the rookie-draft pick he prices as, NFL outlook, breakout age, dominator and recruiting stars. It also shows his devy market price and his latest news.
+
+The founder: "Let's make player cards for the devy players with previous
+season stats and game logs for current season and any other eval info or
+news."
+- 0406: stathead_devy.card holds StatHead's devy profile per player (its
+  composite and model ranks, NFL career projection, profile, rookie-pick
+  equivalent; the third-party list fields are not stored).
+  upsert_stathead_devy carries it. college_player_card(espn_id) returns
+  identity, conference or FCS, the devy market price and rank, StatHead's
+  card, and our stored season lines as a fallback.
+- Core collegeCard.ts: ESPN's core athlete record (bio), athlete overview
+  (seasons, news, next game) and season game log, all browser-callable and
+  read when the card opens (the game log only when its tab opens). Pure
+  parsers; PPR on the college_directory line; statheadEvalRows in the
+  league's format (superflex leagues read the SF ranks).
+- Web src/app/collegeCard.tsx and native CollegeCardSheet.tsx; the card hosts
+  route any c-<espn_id> slug to them. Devy market names open the card.
+- Worker: the StatHead board loader sends each player's card (chunks of
+  800).
+- Tests: check:collegecard against trimmed real ESPN responses and a real
+  StatHead row (Jeremiah Smith 12 rec 217 yd 4 TD = 57.7 PPR, a QB line,
+  eval rows, no third-party text), stathead-devy card tests, and
+  devy-deep-probes dd6. Rendered in Chromium against real ESPN data.
+
 ### v0.573.0 — FCS players in the devy market
 
 > - The devy market now includes players from FCS schools (130 of them, like Samford and Montana), not just FBS.
