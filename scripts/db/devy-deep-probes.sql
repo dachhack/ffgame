@@ -39,6 +39,27 @@ begin
   perform dd_true(jsonb_array_length(devy_market(lid, 5000, 'deep state')) = 3, 'dd2a and so does the school name');
   perform dd_true(jsonb_array_length(devy_market(lid, 5)) <= 5, 'dd3 the limit holds');
 
+  -- ── 0405: FCS players are in the market, and nowhere else ──
+  perform set_config('app.uid', '', false);
+  perform upsert_college_players(jsonb_build_array(
+    jsonb_build_object('espn_id', '96205', 'full_name', 'Fcs Deepkid', 'pos', 'WR', 'school', 'Samford Bulldogs', 'school_abbr', 'SAM', 'class_year', 2, 'division', 'FCS')));
+  perform upsert_college_stats(_college_season() - 1, jsonb_build_array(
+    jsonb_build_object('espn_id', '96205', 'gp', 12, 'rec', 90, 'rec_yds', 1500, 'rec_td', 15)));
+  perform dd_true((select division from college_player where espn_id = '96205') = 'FCS'
+              and (select division from college_player where espn_id = '96201') = 'FBS', 'dd5 a row says its division, FBS by default');
+  perform dd_true(not exists (select 1 from jsonb_array_elements(college_directory(array['WR'], 2000)) e where e ->> 'espn_id' = '96205'),
+    'dd5a a big FCS season stays out of the directory — pools, projections and the stats rank');
+  perform dd_as('01');
+  m := devy_market(lid, 50, 'fcs deepkid');
+  perform dd_true(jsonb_array_length(m) = 1 and (m -> 0 ->> 'fcs')::boolean and (m -> 0 ->> 'price')::numeric = 1,
+    'dd5b but the market finds him, marked FCS, at the floor: ' || m::text);
+  perform dd_true(not (devy_market(lid, 50, 'priced deepkid') -> 0 ->> 'fcs')::boolean, 'dd5c an FBS player is not marked');
+  perform set_config('app.uid', '', false);
+  perform upsert_college_players(jsonb_build_array(
+    jsonb_build_object('espn_id', '96205', 'full_name', 'Fcs Deepkid', 'pos', 'WR', 'school', 'Big School', 'school_abbr', 'BIG', 'class_year', 3)));
+  perform dd_true((select division from college_player where espn_id = '96205') = 'FBS', 'dd5d a transfer up to FBS changes his division');
+  delete from college_player_stats where espn_id = '96205';
+
   perform dd_as('02');
   perform dd_true(devy_market(lid, 50, 'deepkid') = '[]'::jsonb, 'dd4 not a member, no list');
 

@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.573.0 — FCS players in the devy market
+
+> - The devy market now includes players from FCS schools (130 of them, like Samford and Montana), not just FBS.
+> - FCS players are marked FCS and priced from StatHead's devy board, or 1 point a share if unranked.
+> - Devy-spot leagues and draft pools are unchanged: FCS players are only in the devy market.
+
+The founder: "yes add FCS rosters". StatHead's devy board ranks ~3,800 FCS
+players we never held; the sweep read FBS rosters only (ESPN group 80).
+- 0405 college_player.division ('FBS' default | 'FCS');
+  upsert_college_players carries it (a transfer updates it).
+  college_directory keeps to FBS, so pools, college projections and the
+  stats half of a devy price are unchanged. devy_market rows carry fcs.
+- Worker: the college sweep also reads ESPN group 81 (130 schools), tags
+  rows FCS, and a school on both lists is read once. If the FCS list can't
+  be read, FBS still lands and the sweep retires nobody.
+- Client: marketRowDetail shows "FCS".
+- Tests: devy-deep-probes dd5–dd5d, college-poll FCS cases.
+  adp-board-probes now date their pulls relative to now (pinned to Sep
+  21/22, stale by Oct 1).
+
 ### v0.572.0 — the devy market goes all the way down
 
 > - Search the devy market for any college QB, RB, WR or TE on an FBS roster (thousands of players), not just the top 1,000.

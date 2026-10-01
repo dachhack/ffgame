@@ -165,7 +165,7 @@ export function DevySharesSheet({ visible, leagueId, myRoster, onClose }: {
           {!market && <Mono size={9.5} tone="faint">Loading the market…</Mono>}
           {market && market.length === 0 && !deep && <Mono size={9.5} tone="faint">No prices yet: they appear after the first weekly stats update.</Mono>}
           {deep && deep.length === 0 && <Mono size={9.5} tone="faint">No college QB, RB, WR or TE matches that.</Mono>}
-          {!deep && <Mono size={9} tone="faint">Type 2+ letters to search every college QB, RB, WR and TE, deep sleepers included. Unpriced players cost 1 point a share.</Mono>}
+          {!deep && <Mono size={9} tone="faint">Type 2+ letters to search every college QB, RB, WR and TE, FCS included. Unpriced players cost 1 point a share.</Mono>}
           {addList.map((r) => {
             const held = bySlug.get(r.slug);
             if (held) return playerRow({ ...held, price: held.price ?? r.price }, true);
