@@ -2095,6 +2095,9 @@ export const clearTargeted = (matchupId: string, powerupId: string, payload?: Re
 export const useSpy = (matchupId: string, win: string, slot: string, reveal: 'player' | 'metric') =>
   rpc<{ ok: boolean; error?: string; reveal?: string | null; present?: boolean }>('use_spy', { p_matchup_id: matchupId, p_win: win, p_slot: slot, p_reveal: reveal });
 export interface TargetedState {
+  /** 0259 arm stamps: a buff armed after the week's first kickoff counts only
+   *  in windows kicking after it (buffsForWindow). Read for the card chips. */
+  buffsAt?: Record<string, number>;
   don?: { win: string; slot: string };
   byeSteal?: { win: string; slot: string; slug: string; pts: number };
   emp?: Record<string, number>;
@@ -2147,6 +2150,8 @@ export async function myTargeted(matchupId: string, userId: string): Promise<Tar
   const pj = data?.payload_json as { targeted?: TargetedState; extraSlots?: Record<string, number> } | null;
   const t: TargetedState = { ...(pj?.targeted ?? {}) };
   if (pj?.extraSlots && typeof pj.extraSlots === 'object') t.extraSlots = pj.extraSlots;
+  const at = (data?.payload_json as { buffsAt?: Record<string, number> } | null)?.buffsAt;
+  if (at && typeof at === 'object') t.buffsAt = at;
   return t;
 }
 /** Play one owned Extra Slot card on a window (0305): before the week's first

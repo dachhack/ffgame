@@ -163,7 +163,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
 }
 
 /** One side of a live duel: the mini card plus everything that changes. */
-export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, windowEmpty = false, phantom, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
+export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, windowEmpty = false, phantom, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress, chips }: {
   side: 'you' | 'their';
   slug?: string; name?: string; pos?: string; team?: string | null;
   /** Face-down: the deck's back at the mini footprint, no identity leaked. */
@@ -188,6 +188,10 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
   coin?: number | null;
   idx?: number;
   onPress?: () => void;
+  /** The power-ups on this card (v0.587.0, founder: "show amp and any power
+   *  up chips on locked and live cards") — what the setup card wore, kept on
+   *  it after the lock. */
+  chips?: { icon: string; name: string }[];
 }) {
   const t = useTheme();
   const accent = side === 'you' ? t.you : t.opp;
@@ -318,6 +322,16 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
         )}
         {!!stat && (
           <Text numberOfLines={2} style={{ fontSize: 8.6, lineHeight: 12, color: t.dimstrong, textAlign: mirror ? 'right' : 'left' }}>{stat}</Text>
+        )}
+        {!!chips?.length && (
+          <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 3 }}>
+            {chips.map((c, i) => (
+              <View key={`${c.name}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 50), borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+                <Text style={{ fontSize: 8 }}>{c.icon}</Text>
+                <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: accent }}>{c.name.toUpperCase()}</Text>
+              </View>
+            ))}
+          </View>
         )}
       </View>
     </Pressable>
