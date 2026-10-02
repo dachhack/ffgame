@@ -1,5 +1,5 @@
 // StatHead's devy board (0403): mapping and chunked loading. No network.
-import { statheadDevyRows, loadStatheadDevy, cardOf } from '../src/poll/statheadDevy.js';
+import { statheadDevyRows, loadStatheadDevy, cardOf, checkDevyBoard } from '../src/poll/statheadDevy.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -40,6 +40,25 @@ const card = cardOf({ compositeRank: { oneQB: 3 }, profile: { stars: 5 }, market
 ok(card.compositeRank?.oneQB === 3 && card.profile?.stars === 5, 'the card carries StatHead\'s ranks and profile');
 ok(!('marketListed' in card) && !('pListed' in card), 'and never whether a third-party list carries him');
 ok(rows[0].card && rows[0].card.compositeRank?.oneQB === 1, 'every row brings its card');
+
+// v0.592.0: the weekly reprice — only when profilesThrough moves
+{
+  const st = { through: null };
+  const seen = [];
+  const rpc2 = async (fn) => { seen.push(fn); return { data: fn === 'refresh_college_prices' ? { ok: true, priced: 42 } : { ok: true, matched: 7 }, error: null }; };
+  const wk4 = { ...big, profilesThrough: '2026 week 4' };
+  const r1 = await checkDevyBoard(rpc2, () => {}, async () => wk4, st);
+  ok(r1.changed && r1.priced === 42 && st.through === '2026 week 4' && seen.at(-1) === 'refresh_college_prices', 'a new week loads the board, then reprices');
+  seen.length = 0;
+  const r2 = await checkDevyBoard(rpc2, () => {}, async () => wk4, st);
+  ok(!r2.changed && seen.length === 0, 'the same week does nothing');
+  const r3 = await checkDevyBoard(rpc2, () => {}, async () => ({ ...big, profilesThrough: '2026 week 5' }), st);
+  ok(r3.changed && st.through === '2026 week 5', 'next Sunday\'s week reprices again');
+  const bad = async (fn) => ({ data: null, error: fn === 'refresh_college_prices' ? { message: 'boom' } : null });
+  let threw2 = false;
+  try { await checkDevyBoard(bad, () => {}, async () => ({ ...big, profilesThrough: '2026 week 6' }), st); } catch { threw2 = true; }
+  ok(threw2 && st.through === '2026 week 5', 'a failed reprice is retried next check (the week is not marked done)');
+}
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL STATHEAD-DEVY TESTS PASSED');

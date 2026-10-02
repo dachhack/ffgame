@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.592.0 — devy prices reprice when StatHead's weekly rescore lands
+
+> - The devy market now reprices as soon as StatHead's board has a new week of stats, following StatHead's handoff ("pull devy-rankings.json after the Sunday run, check profilesThrough"). Before, the college sweep ran every seven days from whenever the worker last started, so prices could sit a week behind.
+> - The worker checks the board every 3 hours and reprices only when `profilesThrough` moves (for example "2026 week 4" to "week 5"). Between Sundays prices hold still.
+> - Deploying this reprices right away off StatHead's in-season board from Oct 2 (MCP 1.0.106). That board scales this season's stats to a full season and calibrates for competition. For example, KJ Duff moves from #51 to #35 (1QB) and Sam Leavitt from #22 to #80.
+
+- Worker `poll/statheadDevy.js`: `checkDevyBoard` and `sweepDevyBoard`, run every 3 h (`STATHEAD_WATCH_MS`). A failed reprice leaves the week marked unpriced, so the next check tries again. The weekly college sweep still runs as before. Tests: four new cases in `server/test/stathead-devy.mjs`.
+
 ### v0.591.0 — devy prices follow StatHead's composite, not college production
 
 > - Devy prices now come from StatHead's devy composite rank alone. StatHead's audit found our prices tracked raw college fantasy points (correlation 0.69), not its composite (0.19), so production against weak schedules was paid in full. That is the "not calibrated for level of competition" complaint from Reddit.
