@@ -163,6 +163,19 @@ export const DEVY_CHOICE_INFO =
   + 'or once the startup draft is done. Every year after, shares lock on Jan 15 until the rookie draft.\n\n'
   + 'After the league is made, devy spots and the SPOTS / MARKET switch live in COMMISH.';
 
+// ── The underclass discount (0413) ─────────────────────────────────────────
+/** A freshman prices ×0.85 and a sophomore ×0.92 of his rank's price, so a
+ *  young player who holds his rank gains as he ages. Mirrors 0413's
+ *  _college_class_mult. */
+export function underclassMult(classYear: number | null | undefined): number {
+  return classYear === 1 ? 0.85 : classYear === 2 ? 0.92 : 1;
+}
+/** "underclass −15%", or null for a junior and up. */
+export function underclassLabel(classYear: number | null | undefined): string | null {
+  const m = underclassMult(classYear);
+  return m < 1 ? `underclass −${Math.round((1 - m) * 100)}%` : null;
+}
+
 // ── The deep market (0404) ─────────────────────────────────────────────────
 /** A market row's detail line: school, class, where the price sits (or that
  *  he is unpriced and costs the floor) and StatHead's devy rank. */
@@ -172,7 +185,7 @@ export function marketRowDetail(r: DevyMarketRow): string {
     r.school, r.fcs ? 'FCS' : null, r.class_year ? collegeClassLabel(r.class_year) : null,
     r.rank ? `#${r.rank} in college` : 'unpriced (1-pt floor)',
     r.sh_rank ? `StatHead devy #${r.sh_rank}` : null,
-    r.youth ? 'young riser +1' : null,
+    r.youth ? underclassLabel(r.class_year) : null,
   ].filter(Boolean).join(' · ');
 }
 

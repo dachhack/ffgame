@@ -136,7 +136,7 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
                 {evalRows.map((r) => row(r.label, r.value))}
               </View>
             )}
-            {card?.market ? row('DEVY PRICE', card.market.rank != null ? `${card.market.price} a share · #${card.market.rank} in college${card.market.youth ? ' · young riser' : ''}${card.market.frozen ? ' · frozen for the offseason' : ''}` : '—') : null}
+            {card?.market ? row('DEVY PRICE', card.market.rank != null ? `${card.market.price} a share · #${card.market.rank} in college${card.market.youth ? ' · underclass discount (rises as he ages)' : ''}${card.market.frozen ? ' · frozen for the offseason' : ''}` : '—') : null}
             {owner !== undefined ? row('ROSTERED', owner ? `⇄ ${owner}` : 'nobody in this league holds him') : null}
             {ov?.next?.short ? row('NEXT UP', `${ov.next.short}${ov.next.date && Number.isFinite(Date.parse(ov.next.date)) ? ` · ${kickoffLabel(Date.parse(ov.next.date))}` : ''}`) : null}
             {bio?.hometown || cls ? row('BIO', [cls, bio?.hometown].filter(Boolean).join(' · ')) : null}

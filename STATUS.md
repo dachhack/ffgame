@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.593.0 — underclassmen price cheaper; the top 10 spread out
+
+> - Freshmen and sophomores now cost less, not more. A freshman prices at 85% of his StatHead rank's price and a sophomore at 92%; juniors and up pay full. A young player who holds his rank gains value as he ages, so scouting early pays. Before, a top-150 freshman or sophomore cost 15% more, so sophomore #8 (11.50) cost more than StatHead's #1 (10.00), and holders lost 13% the day he became a junior.
+> - The top 10 no longer price the same. StatHead's #1 is 12.00, #2 11.40, #5 10.60 and #10 10.00. From #10 down nothing changes.
+> - The market row and the college card say "underclass −15%" (or −8%) where the discount applies.
+> - Today's prices moved over at deploy. Stakes keep what they cost; anyone who bought a freshman or sophomore at the old ×1.15 sees that stake's value drop to the new price.
+
+- 0413: `college_price.mult` (stored, so the offseason freeze holds it too), `_college_class_mult`, the spread `_college_curve`, and `_devy_price` = max(1, base × mult). `refresh_college_prices` and `_devy_open_price` write `mult`; `youth` now means "a discount applies". Probes ds2a–c; the launch probe's freshman moved to StatHead #5 so the order math still holds. Core `underclassMult` and `underclassLabel`, checked in check:devymarket.
+
 ### v0.592.0 — devy prices reprice when StatHead's weekly rescore lands
 
 > - The devy market now reprices as soon as StatHead's board has a new week of stats, following StatHead's handoff ("pull devy-rankings.json after the Sunday run, check profilesThrough"). Before, the college sweep ran every seven days from whenever the worker last started, so prices could sit a week behind.
