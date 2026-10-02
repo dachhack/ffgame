@@ -22,6 +22,11 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.590.0 — the field view's labels are readable on a phone
+
+> - The smallest text on the field view is bigger: yard numbers 6.5 → 10.5 (and darker), end-zone team names 9 → 13, the team on the ball marker 6 → 9, the direction arrow 8 → 10, and the ball carrier's name 6.5 → 9.5 on a wider tag. This applies to the web and the app.
+> - The field is drawn 400 units wide and shown about 330 points wide on a phone, so the old yard numbers came out around 5pt.
+
 ### v0.589.0 — no score fill on the cards
 
 > - Player cards no longer fill up with colour as the score climbs. The points shown beside the card say it. This applies on web and mobile, to the full cards and the mini cards on the board.
