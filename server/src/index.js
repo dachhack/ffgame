@@ -23,6 +23,7 @@ import { sweepTrending } from './poll/trending.js';
 import { sweepProjections, installLiveProjRate } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { sweepCollege } from './poll/college.js';
+import { sweepDevyBoard } from './poll/statheadDevy.js';
 import { writeCollegeScores } from './poll/collegeScores.js';
 import { sweepGraduation } from './poll/graduate.js';
 import { sweepDeclared } from './poll/declared.js';
@@ -944,6 +945,10 @@ async function tick() {
   // roster requests, so it runs detached: the tick starts it and moves on.
   try { sweepCollege(config.season, log); }
   catch (e) { log('college sweep error', e.message); }
+  // StatHead's devy board (v0.592.0): reprice the devy market the moment a
+  // new week of profiles lands (profilesThrough moves) — the Sunday rescore.
+  try { sweepDevyBoard((fn, args) => db().rpc(fn, args), log); }
+  catch (e) { log('stathead devy watch error', e.message); }
   // THE COLLEGE SLATE (0371), daily: all fifteen weeks at board week 200 + N,
   // so a league switched to the college calendar can lay its schedule at once.
   try {

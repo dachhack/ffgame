@@ -68,3 +68,41 @@ export async function loadStatheadDevy(rpc, log = () => {}, fetchBoard = getBoar
     + (data?.ok === false ? ` — ${data.error}` : ''));
   return data;
 }
+
+// ── THE WEEKLY REPRICE (v0.592.0) ──────────────────────────────────────────
+// StatHead's handoff: "Reprice weekly, in season. Pull devy-rankings.json
+// after the Sunday run (check profilesThrough, e.g. '2026 week 5') and re-run
+// the rank-preserving remap." The college sweep runs every seven days from
+// whenever the worker last booted, so it could land the day before the
+// rescore and price off a week-old board for six days. This watcher reads the
+// board every few hours and reprices the moment profilesThrough moves — the
+// board's own signal that a new week of stats is in. A boot reprices once, off
+// whatever board is current, which is the same answer as before the boot.
+const WATCH_EVERY_MS = Number(process.env.STATHEAD_WATCH_MS || 3 * 3600 * 1000);
+
+/** One check. `state.through` is the profilesThrough last priced from. */
+export async function checkDevyBoard(rpc, log = () => {}, fetchBoard = getBoard, state = { through: null }) {
+  const board = await fetchBoard();
+  const through = board?.profilesThrough ?? null;
+  if (!through || through === state.through) return { changed: false, through };
+  await loadStatheadDevy(rpc, log, async () => board);
+  const { data, error } = await rpc('refresh_college_prices', {});
+  if (error) throw new Error(`refresh_college_prices: ${error.message}`);
+  state.through = through;
+  log(`devy prices: repriced off StatHead's board through ${through}` + (data?.frozen ? ' (prices frozen for the offseason)' : ` — ${data?.priced ?? 0} priced`));
+  return { changed: true, through, priced: data?.priced ?? 0, frozen: !!data?.frozen };
+}
+
+const watchState = { through: null };
+let watchLast = 0;
+let watchInflight = null;
+
+/** The tick's entry point: every few hours, detached, never overlapping. */
+export function sweepDevyBoard(rpc, log = () => {}) {
+  if (watchInflight || Date.now() - watchLast < WATCH_EVERY_MS) return false;
+  watchLast = Date.now();
+  watchInflight = checkDevyBoard(rpc, log, getBoard, watchState)
+    .catch((e) => log('stathead devy watch', e.message))
+    .finally(() => { watchInflight = null; });
+  return true;
+}
