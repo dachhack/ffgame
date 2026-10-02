@@ -48,9 +48,13 @@ begin
   -- ══ ds2. PRICES (0396: a smooth curve, no demand) ═════════════════════════
   perform ds_true(_college_curve(10) = 10 and _college_curve(20) = 8 and _college_curve(40) = 6 and _college_curve(80) = 4
               and _college_curve(160) = 2 and _college_curve(320) = 1 and _college_curve(null) = 1, 'ds2 the curve: 10 at #10, −2 each doubling, floor 1');
-  insert into college_price (espn_id, rank, base, youth) values ('97002', 10, 10, 0), ('97006', 10, 10, 0), ('97007', 150, 2.17, 1)
-    on conflict (espn_id) do update set rank = excluded.rank, base = excluded.base, youth = excluded.youth;
-  perform ds_true(_devy_price(null, 'c-97007') = 2.50 and _devy_price(null, 'c-97001') = 1, 'ds2a a young riser ×1.15; unranked 1');
+  insert into college_price (espn_id, rank, base, mult, youth) values ('97002', 10, 10, 1, 0), ('97006', 10, 10, 1, 0), ('97007', 150, 2.17, 0.92, 1)
+    on conflict (espn_id) do update set rank = excluded.rank, base = excluded.base, mult = excluded.mult, youth = excluded.youth;
+  perform ds_true(_devy_price(null, 'c-97007') = 2.00 and _devy_price(null, 'c-97001') = 1, 'ds2a a sophomore ×0.92 (0413); unranked 1');
+  perform ds_true(_college_curve(1) = 12 and _college_curve(2) = 11.40 and _college_curve(5) = 10.60 and _college_curve(10) = 10
+              and _college_curve(20) = 8 and _college_curve(9) > _college_curve(10), 'ds2b 0413: the top 10 spread, #1 12 → #10 10; the rest unchanged');
+  perform ds_true(_college_class_mult(1) = 0.85 and _college_class_mult(2) = 0.92 and _college_class_mult(3) = 1 and _college_class_mult(null) = 1,
+    'ds2c 0413: freshman ×0.85, sophomore ×0.92, junior and up full price');
 
   -- ══ ds3. BUYING, THE CAP, THE LOCK ════════════════════════════════════════
   perform ds_err(allot_devy_shares(lid, 1, 'c-97001', 20), 'locked', 'ds3 before the league''s first draft is done, the lock holds');

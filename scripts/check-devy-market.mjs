@@ -1,7 +1,7 @@
 // THE DEVY MARKET TABLE (v0.577.0): progress to max, owners, filters, sorting,
 // and two-decimal numbers. Offline.
 import { pickRoundLabel, isDevyPickRound, devyBlockRound, draftRoundLabel, devyBlockLine } from '../packages/core/src/data/devyDraft.ts';
-import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview } from '../packages/core/src/data/devyShares.ts';
+import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview, underclassMult, underclassLabel, marketRowDetail } from '../packages/core/src/data/devyShares.ts';
 
 let fails = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if (!cond) fails++; };
@@ -78,5 +78,8 @@ ok(pickRoundLabel(3) === 'R3' && pickRoundLabel(101) === 'DEVY R1' && isDevyPick
 ok(devyBlockRound(22, 2, 23) === null && devyBlockRound(23, 2, 23) === 1 && devyBlockRound(25, 2, 23) === 2 && devyBlockRound(5, 2, null) === null, 'which devy round a pick falls in');
 ok(draftRoundLabel(11, 2, 23) === 'R11' && draftRoundLabel(12, 2, 23) === 'D1' && draftRoundLabel(13, 2, 23) === 'D2', 'board columns: R… then D…');
 ok(devyBlockLine(23, 2, 23, 2) === 'DEVY ROUND 1 of 2 — college players only' && devyBlockLine(3, 2, 23, 2).includes('pick 23') && devyBlockLine(3, 2, null, 0) === null, 'the room\'s devy line');
+ok(underclassMult(1) === 0.85 && underclassMult(2) === 0.92 && underclassMult(3) === 1 && underclassMult(null) === 1, '0413: freshman ×0.85, sophomore ×0.92, junior up full');
+ok(underclassLabel(1) === 'underclass −15%' && underclassLabel(2) === 'underclass −8%' && underclassLabel(4) === null, 'the discount\'s label');
+ok(marketRowDetail({ slug: 'c-9', name: 'Y', pos: 'WR', school: 'OSU', class_year: 2, rank: 8, sh_rank: 8, youth: true, price: 9.38 }).includes('underclass −8%'), 'the market row names the discount');
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL DEVY-MARKET CHECKS PASS');

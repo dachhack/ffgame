@@ -42,8 +42,8 @@ begin
     jsonb_build_object('espn_id', '98004', 'full_name', 'Lineman Frosh', 'pos', 'DL', 'school_abbr', 'DLU', 'class_year', 1)));
   update college_player set first_seen = timestamptz '2026-01-01' where espn_id = '98001';
   update college_player set first_seen = now() + interval '1 minute' where espn_id in ('98002', '98003', '98004');
-  insert into stathead_devy (espn_id, name, pos, rank_1qb, as_of) values ('98002', 'Star Frosh', 'QB', 20, now())
-    on conflict (espn_id) do update set rank_1qb = 20;
+  insert into stathead_devy (espn_id, name, pos, rank_1qb, as_of) values ('98002', 'Star Frosh', 'QB', 5, now())
+    on conflict (espn_id) do update set rank_1qb = 5;
   delete from college_price where espn_id like '9800%';
 
   -- ══ dl1. A NEW PLAYER LISTS; HE ISN'T BOUGHT ══
@@ -61,20 +61,20 @@ begin
   perform dl_as('01');
   r := commish_devy_launch_now(lid);
   perform dl_ok(r, 'dl2a the commissioner opens a launch'); launch := (r ->> 'launch')::bigint;
-  perform dl_true((select open_price from devy_launch_player where launch_id = launch and slug = 'c-98002') = 9.20
+  perform dl_true((select open_price from devy_launch_player where launch_id = launch and slug = 'c-98002') = 9.01
               and (select open_price from devy_launch_player where launch_id = launch and slug = 'c-98003') = 1,
-    'dl2b opening prices: StatHead #20 on the curve is 8, a freshman riser ×1.15 = 9.20; unranked is the floor');
-  perform dl_true(_devy_price(null, 'c-98002') = 9.20, 'dl2c and that is his market price from now');
+    'dl2b opening prices: StatHead #20 on the curve is 8, a freshman ×0.85 = 9.01 (0413); unranked is the floor');
+  perform dl_true(_devy_price(null, 'c-98002') = 9.01, 'dl2c and that is his market price from now');
   perform dl_true(exists (select 1 from league_message where league_id = lid and txn ->> 'kind' = 'devy_launch'), 'dl2d the league hears about it');
   perform dl_err(commish_devy_launch_now(lid), 'already open', 'dl2e one launch at a time');
   perform dl_err(allot_devy_shares(lid, 1, 'c-98002', 5), 'launch', 'dl2f still no buying — an order');
 
   -- ══ dl3. SEALED ORDERS ══
-  perform dl_err(place_devy_launch_order(lid, 1, 'c-98002', 8), '0 to 7', 'dl3 at 9.20 a share, 7 shares maxes him (60 points)');
+  perform dl_err(place_devy_launch_order(lid, 1, 'c-98002', 8), '0 to 7', 'dl3 at 9.01 a share, 7 shares maxes him (60 points)');
   perform dl_ok(place_devy_launch_order(lid, 1, 'c-98002', 7), 'dl3a team 1 orders a full stake');
   perform dl_err(place_devy_launch_order(lid, 1, 'c-98001', 5), 'isn''t in an open launch', 'dl3b only launch players take orders');
   perform dl_err(place_devy_launch_order(lid, 2, 'c-98002', 8), 'not your team', 'dl3c nobody orders for another team');
-  perform dl_err(place_devy_launch_order(lid, 1, 'c-98003', 20), 'come to', 'dl3d orders can''t pass your cash (64.40 + 20 > 80)');
+  perform dl_err(place_devy_launch_order(lid, 1, 'c-98003', 20), 'come to', 'dl3d orders can''t pass your cash (63.07 + 20 > 80)');
   perform dl_as('02'); perform dl_ok(place_devy_launch_order(lid, 2, 'c-98002', 7), 'dl3e team 2 orders a full stake too');
   perform dl_ok(place_devy_launch_order(lid, 2, 'c-98003', 3), 'dl3f and a small one on the quiet frosh');
   perform dl_ok(place_devy_launch_order(lid, 2, 'c-98003', 0), 'dl3g 0 cancels it');
@@ -97,7 +97,7 @@ begin
   perform dl_true(won = (select roster_id from devy_launch_order where launch_id = launch and slug = 'c-98002' order by draw limit 1),
     'dl4c the right goes to the first maxer in the draw');
   perform dl_true((select filled from devy_launch_order where launch_id = launch and slug = 'c-98003' and roster_id = 2) = 6
-              and _devy_cash(lin, 2) = 100 - 64.40 - 6, 'dl4d smaller orders fill too, cash comes off');
+              and _devy_cash(lin, 2) = 100 - 63.07 - 6, 'dl4d smaller orders fill too, cash comes off');
   perform dl_true(exists (select 1 from league_message where league_id = lid and txn ->> 'kind' = 'devy_launch_filled' and body like '%won the draw of 3%'),
     'dl4e the chat names the winner of the draw');
   perform dl_true(_devy_listing(lin, 'c-98002') is null, 'dl4f launched: an ordinary market player now');
