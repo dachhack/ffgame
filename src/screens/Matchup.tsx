@@ -3813,8 +3813,11 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   if (cards && !kicked) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'start', gap: rowGap }}>
-        <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
-          metricName={yMet?.name} tag={yMet?.tag} bank={null} note={puRow} badge={<><InjuryBadge week={week} slug={slot.you.player.id} />{youTwin && <TwinChip />}</>} />
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
+            metricName={yMet?.name} tag={yMet?.tag} bank={null} badge={<><InjuryBadge week={week} slug={slot.you.player.id} />{youTwin && <TwinChip />}</>} />
+          {puRow}
+        </div>
         <LiveCard side="their" slug={`sealed-${ownKey}`} sealed />
       </div>
     );
@@ -3847,7 +3850,7 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   // nothing about which multiplier it was carrying (founder: "the twin
   // generals bonus doesn't show in the olave card"). `youTwin` is the slot's
   // own badge; `twinWindow` is the window's stack, which is what boosted this.
-  const youCard = <ScoreCard side="you" puRow={puRow} player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} fgBoost={youBoost} twin={youTwin || (twinWindow && youBoost > 0)} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
+  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} fgBoost={youBoost} twin={youTwin || (twinWindow && youBoost > 0)} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
   const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvTheir != null ? slot.theirSub?.name : undefined} subLive={!final && srvTheir != null} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} fgBoost={theirBoost} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
   const centerKids = (
     <>
@@ -3860,7 +3863,8 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'stretch', gap: rowGap }}>
-        {youCard}
+        {/* v0.588.0: power-ups UNDER the card, so the two boxes keep one size. */}
+        {puRow ? <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>{youCard}{puRow}</div> : youCard}
         {theirCard}
       </div>
       {slot.events.length > 0 && (
@@ -3927,9 +3931,7 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
 }
 
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, fgBoost, twin, cards, hot, scorched, puRow }: {
-  /** v0.587.0: the power-ups on this card (yours only). */
-  puRow?: React.ReactNode;
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, fgBoost, twin, cards, hot, scorched }: {
   side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; subLive?: boolean; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number;
   /** Points in this slot's bank that exist only because of a Field General's
    *  multiplier, so far (v0.388.11). Shown on the chip while the multiplier is
@@ -3964,7 +3966,6 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       {chip && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{chip}</span>}
       <InjuryBadge week={week} slug={player.id} />
       {twin && <TwinChip />}
-      {puRow}
       {!isMobile && !cards && <span className="mono" style={{ fontSize: fs(8), color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );

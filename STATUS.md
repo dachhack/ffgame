@@ -22,6 +22,10 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.588.0 — power-up chips sit under the card
+
+> - On locked and live cards, power-up chips like 🗑️ GARBAGE TIME now sit under the card instead of inside it. Your card and your opponent's stay the same size whatever is armed. This applies on web and mobile.
+
 ### v0.587.0 — a live drip waits for its team's ball; power-ups stay on locked and live cards
 
 > - Fixed: a drip card in a live game could run through the whole game before its team ever had the ball. Kaden Wetjen's 15-yard punt return showed 9.4 points at 12:47 of the 1st quarter, which is 0.15 a minute for all 60 minutes plus Garbage Time on the last five. A drip now accrues only on its team's offensive time, and before that team's first drive there is none.
