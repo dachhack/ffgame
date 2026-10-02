@@ -468,7 +468,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
           {(() => {
             const ezAwayX = flip ? W - EZ : 0, ezHomeX = flip ? 0 : W - EZ;
             const label = (x: number, tc: ReturnType<typeof teamColor>, abbr: string) => (
-              <text x={x + EZ / 2} y={midY} fill={ezText(tc)} fontSize={9} fontWeight={700} textAnchor="middle"
+              <text x={x + EZ / 2} y={midY} fill={ezText(tc)} fontSize={13} fontWeight={800} textAnchor="middle"
                 transform={`rotate(${x < W / 2 ? -90 : 90} ${x + EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
             );
             return (
@@ -490,7 +490,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
               stroke={i % 2 ? 'color-mix(in srgb, var(--bd) 55%, transparent)' : 'var(--bd)'} strokeWidth={i === 0 || i === 20 ? 1.6 : 0.7} />
           ))}
           {yardNums.map((n, i) => (
-            <text key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill="var(--faint)" fontSize={6.5} textAnchor="middle" className="mono">{n}</text>
+            <text key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill="var(--dim)" fontSize={10.5} fontWeight={700} textAnchor="middle" className="mono">{n}</text>
           ))}
           {/* first-down line */}
           {!over && fdX != null && <line x1={mx(fdX)} y1={TOP} x2={mx(fdX)} y2={BOT} stroke="var(--warn)" strokeWidth={1.4} opacity={0.9} />}
@@ -548,11 +548,11 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
               <line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
               {/* abbr badge always drawn; the logo (when available) covers it */}
               <circle cx={0} cy={midY} r={10.5} fill={ballCol ? `color-mix(in srgb, ${ballCol.c} 30%, var(--surface))` : 'var(--surface)'} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
-              <text x={0} y={midY + 2.5} fill="var(--text)" fontSize={6} fontWeight={700} textAnchor="middle" className="mono">{ballTm}</text>
+              <text x={0} y={midY + 3.5} fill="var(--text)" fontSize={9} fontWeight={800} textAnchor="middle" className="mono">{ballTm}</text>
               {logo && <image href={logo} x={-10} y={midY - 10} width={20} height={20} style={cur?.sc ? { animation: 'bpulse 1s ease 2' } : undefined} />}
               {/* drive direction in the possession color */}
               {(() => { const right = flip ? !attacksRight : attacksRight; return (
-                <text x={right ? 15 : -15} y={midY + 2.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={8} fontWeight={700} textAnchor="middle">{right ? '▶' : '◀'}</text>
+                <text x={right ? 15 : -15} y={midY + 3.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={10} fontWeight={700} textAnchor="middle">{right ? '▶' : '◀'}</text>
               ); })()}
               {/* the ball carrier, above the spot: headshot in a ring, name under */}
               {carrier && (
@@ -560,8 +560,8 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
                   <defs><clipPath id={`fvc-${feed.key}`}><circle cx={0} cy={TOP + 13} r={11} /></clipPath></defs>
                   <circle cx={0} cy={TOP + 13} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
                   {carrierImg && <image href={carrierImg} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvc-${feed.key})`} />}
-                  <rect x={-26} y={TOP + 27} width={52} height={9} rx={2} fill="rgba(0,0,0,0.55)" />
-                  <text x={0} y={TOP + 34} fill="#fff" fontSize={6.5} fontWeight={700} textAnchor="middle" className="mono">{carrier.name}</text>
+                  <rect x={-38} y={TOP + 27} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
+                  <text x={0} y={TOP + 37} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier.name}</text>
                 </g>
               )}
             </g>

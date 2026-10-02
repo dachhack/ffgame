@@ -278,18 +278,19 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
         {redZone && (
           <Rect x={(flip ? !attacksRight : attacksRight) ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP} fill={alpha(t.fx.nuke, 32)} />
         )}
-        <SvgText x={ezAwayX + EZ / 2} y={MID} fill={ezText(awayCol)} fontSize={9} fontWeight="700" textAnchor="middle"
+        <SvgText x={ezAwayX + EZ / 2} y={MID} fill={ezText(awayCol)} fontSize={13} fontWeight="800" textAnchor="middle"
           transform={`rotate(${ezAwayX < W / 2 ? -90 : 90} ${ezAwayX + EZ / 2} ${MID})`}>{away}</SvgText>
-        <SvgText x={ezHomeX + EZ / 2} y={MID} fill={ezText(homeCol)} fontSize={9} fontWeight="700" textAnchor="middle"
+        <SvgText x={ezHomeX + EZ / 2} y={MID} fill={ezText(homeCol)} fontSize={13} fontWeight="800" textAnchor="middle"
           transform={`rotate(${ezHomeX < W / 2 ? -90 : 90} ${ezHomeX + EZ / 2} ${MID})`}>{home}</SvgText>
 
-        {/* yard lines + numbers */}
+        {/* yard lines + numbers — v0.590.0: every label sized to read on a
+            phone, where the 400-wide drawing renders ~330pt (×0.8). */}
         {Array.from({ length: 21 }, (_, i) => (
           <Line key={i} x1={FX + (i / 20) * FW} y1={TOP} x2={FX + (i / 20) * FW} y2={BOT}
             stroke={i % 2 ? alpha(t.bd, 55) : t.bd} strokeWidth={i === 0 || i === 20 ? 1.6 : 0.7} />
         ))}
         {[10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => (
-          <SvgText key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill={t.faint} fontSize={6.5} textAnchor="middle">{n}</SvgText>
+          <SvgText key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill={t.dim} fontSize={10.5} fontWeight="700" textAnchor="middle">{n}</SvgText>
         ))}
 
         {/* first-down line */}
@@ -330,9 +331,9 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
           <AnimatedG x={bx as unknown as number}>
             <Line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
             <Circle cx={0} cy={MID} r={10.5} fill={ballCol ? mix(ballCol.c, 30, t.surface) : t.surface} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
-            <SvgText x={0} y={MID + 2.5} fill={t.text} fontSize={6} fontWeight="700" textAnchor="middle">{ballTm}</SvgText>
+            <SvgText x={0} y={MID + 3.5} fill={t.text} fontSize={9} fontWeight="800" textAnchor="middle">{ballTm}</SvgText>
             {ballTm && teamLogo(ballTm, { week }) && <SvgImage href={{ uri: teamLogo(ballTm, { week })! }} x={-10} y={MID - 10} width={20} height={20} />}
-            <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 2.5} fill={ballCol?.c ?? t.faint} fontSize={8} fontWeight="700" textAnchor="middle">
+            <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 3.5} fill={ballCol?.c ?? t.faint} fontSize={10} fontWeight="700" textAnchor="middle">
               {(flip ? !attacksRight : attacksRight) ? '▶' : '◀'}
             </SvgText>
             {/* the ball carrier, above the spot: headshot in a ring, name under */}
@@ -340,8 +341,8 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
               <G>
                 <Circle cx={0} cy={TOP + 13} r={12} fill={t.surface} stroke={ballCol?.c ?? t.dimstrong} strokeWidth={1.4} />
                 {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
-                <Rect x={-26} y={TOP + 27} width={52} height={9} rx={2} fill={alpha('#000000', 0.55)} />
-                <SvgText x={0} y={TOP + 34} fill="#FFFFFF" fontSize={6.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
+                <Rect x={-38} y={TOP + 27} width={76} height={13} rx={2} fill={alpha('#000000', 0.6)} />
+                <SvgText x={0} y={TOP + 37} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
               </G>
             )}
           </AnimatedG>
