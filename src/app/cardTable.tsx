@@ -582,13 +582,12 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
   const suit = posVars(pos);
   // The Ghost (v0.527.0): a ghost where the headshot goes.
   const ghost = isGhostSlug(slug);
-  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   return (
     <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : flip ? 'ct-flip' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${selected ? ' ct-sel' : ''}${onClick ? ' ct-tap' : ''}`}
       style={{ animationDelay: `${idx * 90}ms` }} onClick={onClick}>
       <div className="ct-card" style={wobbleVars(slug)}>
         <div className="ct-side ct-face" style={locked ? { filter: 'grayscale(.55) brightness(.75)' } : undefined}>
-          <div className="ct-fill" style={{ height: `${fillPct}%` }} />
+          {/* No score fill (v0.589.0) — the number says it. */}
           <div className="ct-facehead">
             <span className="ct-suit" style={suit}>{ghost ? GHOST_CARD.pos : pos === 'DEF' ? 'DST' : pos}</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -648,12 +647,11 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
   const art = useCardArt(slug, team);
   const suit = posVars(pos);
   const ghost = isGhostSlug(slug);   // v0.527.0: the Ghost's own card
-  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
   const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
   return (
     <div className={`ct-lcard ${side === 'you' ? 'ct-lyou' : 'ct-lopp'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${float ? ' ct-float' : ''}`}
       style={wobbleVars(slug)}>
-      <div className="ct-fill" style={{ height: `${fillPct}%` }} />
+      {/* No score fill (v0.589.0) — the number says it. */}
       <div className="ct-lhead">
         <span className="ct-suit" style={suit}>{ghost ? GHOST_CARD.pos : pos === 'DEF' ? 'DST' : pos}</span>
         {team && (
