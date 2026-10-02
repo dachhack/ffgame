@@ -276,8 +276,11 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
     );
   }
 
-  return (
-    <Pressable onPress={onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
+  // With chips under it, the wrapper takes the duel's flex share and the
+  // panel just fills its width.
+  const under = !!chips?.length;
+  const card = (
+    <Pressable onPress={onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }, under ? { flex: 0, alignSelf: 'stretch' as const } : null]}>
       <MiniCard float side={side} slug={slug ?? ''} name={name ?? ''} pos={pos ?? 'DEF'} team={team} bank={bank} hot={hot} nuked={nuked} idx={idx} />
 
       <View style={{ flex: 1, minWidth: 0, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
@@ -323,17 +326,24 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
         {!!stat && (
           <Text numberOfLines={2} style={{ fontSize: 8.6, lineHeight: 12, color: t.dimstrong, textAlign: mirror ? 'right' : 'left' }}>{stat}</Text>
         )}
-        {!!chips?.length && (
-          <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 3 }}>
-            {chips.map((c, i) => (
-              <View key={`${c.name}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 50), borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
-                <Text style={{ fontSize: 8 }}>{c.icon}</Text>
-                <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: accent }}>{c.name.toUpperCase()}</Text>
-              </View>
-            ))}
-          </View>
-        )}
       </View>
     </Pressable>
+  );
+  // The chips sit UNDER the panel (v0.588.0, founder: "keep the background box
+  // the same size and put the power up under the box") — both halves of a
+  // duel keep one height whatever is armed on either.
+  if (!chips?.length) return card;
+  return (
+    <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+      {card}
+      <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 3, paddingHorizontal: 4 }}>
+        {chips.map((c, i) => (
+          <View key={`${c.name}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 50), borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+            <Text style={{ fontSize: 8 }}>{c.icon}</Text>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: accent }}>{c.name.toUpperCase()}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
