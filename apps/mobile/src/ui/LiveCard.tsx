@@ -13,10 +13,8 @@
 // same dot texture, same position suit — while handing the vertical space to the
 // numbers that are actually moving.
 //
-// The LIQUID BANK FILL is the piece worth not losing: the card fills from the
-// bottom as the score climbs (bank × 3.2%, capped at 92 so the name never
-// drowns). It is the only place on the board where you can read a slot's state
-// without reading a number.
+// No score fill on the card (v0.589.0, founder: "let's not do the color fill
+// on the cards with the score") — the number beside it says it.
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
@@ -77,8 +75,6 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
   // card sitting still next to a breathing one reads as a different kind of
   // object. Nuked cards stop moving, as on the web (`.ct-nuked` kills it).
   const wob = useWobble(idx);
-  // The web's exact curve: 3.2% of the bank, capped at 92%.
-  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
 
   return (
     <View style={float
@@ -95,16 +91,6 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
           <View style={StyleSheet.absoluteFill}>
             <Image source={STOCK_TILE} resizeMode="repeat" style={{ width: '100%', height: '100%' }} />
           </View>
-          {/* Liquid bank fill — anchored to the bottom edge, rising with score. */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute', left: 0, right: 0, bottom: 0, height: `${fillPct}%`,
-              backgroundColor: alpha(side === 'you' ? t.you : t.opp, 30),
-              borderTopWidth: fillPct > 0 ? 1 : 0,
-              borderTopColor: alpha(side === 'you' ? t.you : t.opp, 70),
-            }}
-          />
 
           <View style={{ padding: 5, paddingBottom: 6, gap: 3 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>

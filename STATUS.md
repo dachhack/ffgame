@@ -22,6 +22,10 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.589.0 — no score fill on the cards
+
+> - Player cards no longer fill up with colour as the score climbs. The points shown beside the card say it. This applies on web and mobile, to the full cards and the mini cards on the board.
+
 ### v0.588.0 — power-up chips sit under the card
 
 > - On locked and live cards, power-up chips like 🗑️ GARBAGE TIME now sit under the card instead of inside it. Your card and your opponent's stay the same size whatever is armed. This applies on web and mobile.
