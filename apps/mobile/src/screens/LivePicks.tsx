@@ -40,7 +40,7 @@ import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames, windowFe
 import { AIM_RULES, AIM_SELF_CONSUMING, aimPrompt, aimSpotOk, aimWindowOk, isAimed, type AimPhase } from '@drip/core/data/aimRules';
 import { METRICS } from '@drip/core/data/metrics';
 import { projectedPoints } from '@drip/core/engine/projScoring';
-import { BYE_STEAL_CAP, swapMetricFor } from '@drip/core/engine/matchup';
+import { BYE_STEAL_CAP, swapMetricFor, buffsForWindow } from '@drip/core/engine/matchup';
 import { setLivePlays, liveRowsToPbp, LIVE_SEASON } from '@drip/core/data/realPbp';
 import { statlineAt, metricDriver, realTimeAt, GHOST_POINTS } from '@drip/core/engine/sim';
 import { pickFailureNote } from '@drip/core/data/pickSave';
@@ -1125,7 +1125,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   // payload) PLUS armed team buffs that matter to this spot — the same two
   // sources the web board's chips draw from (v0.375.1; targeted-only missed
   // buffed players entirely).
-  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null, twin = false): { id?: string; icon: string; name: string; blurb: string }[] => {
+  const appliedFor = (win: string, slot: string, pos?: string, metricId?: string | null, twin = false, armed: Set<string> = buffs): { id?: string; icon: string; name: string; blurb: string }[] => {
     const k = `${win}|${slot}`;
     const out: { id?: string; icon: string; name: string; blurb: string }[] = [];
     const add = (id: string) => { const p = powerupById(id); out.push({ id, icon: p?.icon ?? '✦', name: p?.name ?? id, blurb: p?.blurb ?? '' }); };
@@ -1142,7 +1142,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     for (const [id, rec] of maps) if (rec && k in rec) add(id);
     const sw = targeted.swaps?.[k];
     if (sw) add(sw.kind === 'player-swap' ? 'player-swap' : sw.kind === 'mulligan' ? 'mulligan' : 'metric-swap');
-    if (pos) for (const id of buffs) if (buffAppliesToSpot(id, pos, metricId ?? null)) add(id);
+    if (pos) for (const id of armed) if (buffAppliesToSpot(id, pos, metricId ?? null)) add(id);
     // Twin Generals is decided a window at a time (twinGeneralKeys), so the
     // caller passes the verdict in — the ⚡ chip must count it and the list
     // behind the chip must name it, or the card badge would be the only place
@@ -1640,6 +1640,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               // web's slate popup, now on the app too).
               onOpenSlate={(id) => setSlateWin(wins.find((x) => String(x.id) === id) ?? null)}
               slotDetail={slotDetail}
+              // v0.587.0: a locked/live card keeps its chips — the buffs the
+              // engine counts in THIS window (armed after a kick, a buff
+              // only counts later windows: buffsForWindow, the resolver's rule).
+              appliedFor={(win, slot, pos, mid) => appliedFor(win, slot, pos, mid, false, buffsForWindow(buffs, targeted.buffsAt, week, win))}
               // Aimed cards on a locked or live window (v0.515.0).
               slotExtra={(win, slot) => {
                 const a = aimStrips(win, slot); const sp = spyLine(win, slot);

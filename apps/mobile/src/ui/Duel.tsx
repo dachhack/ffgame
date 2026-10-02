@@ -53,9 +53,11 @@ export function Big({ label, value, color, team }: { label: string; value: numbe
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, slotExtra, winExtra, myPhantom, liveExtras, userId, onOpenSlate }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, slotExtra, winExtra, myPhantom, liveExtras, userId, onOpenSlate, appliedFor }: {
   mine: RevealedPick[];
   theirs: RevealedPick[];
+  /** The power-ups on one of MY cards (v0.587.0): chips on locked/live cards. */
+  appliedFor?: (win: string, slot: string, pos: string, metricId: string | null) => { icon: string; name: string }[];
   pool: Record<string, PoolPlayer>;
   scores: WindowScore[];
   youAreHome: boolean;
@@ -212,6 +214,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
         gameLabel={ex?.gameLabel}
         stat={ex?.stat}
         coin={ex?.coin}
+        chips={who === 'you' ? appliedFor?.(win, slot, cPos, p.metric_id ?? null) : undefined}
         onPress={() => openPlayerCard({ slug: cSlug, name: cName, pos: cPos, team: cTeam, week, userId })}
       />
     );

@@ -15,12 +15,12 @@ import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTi
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import { GHOST_CARD, isGhostSlug } from '@drip/core/data/ghostCard';
 import { unopposedCopy } from '@drip/core/data/slotLabels';
-import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow, twinGeneralKeys } from '@drip/core/data/powerups';
+import { POWERUPS, powerupById, isAmplifier, ampCapacity, powerupAvailability, type Powerup, type ShopWindow, twinGeneralKeys, buffAppliesToSpot as buffOnSpot } from '@drip/core/data/powerups';
 import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/data/league';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
 import {
-  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
+  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, buffsForWindow, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
 } from '@drip/core/engine/matchup';
 import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore, fgBoostAt, fgBoostTotal, srvSidePicks } from '@drip/core/engine/liveScore';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
@@ -2955,7 +2955,7 @@ function WindowSectionInner(props: {
   turnoverCoin: number;
   backups: Record<string, string>;
   slotName: Record<string, string>;
-  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; underdog?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number> };
+  aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; underdog?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; buffsAt?: Record<string, number>; surge?: Record<string, number>; bunker?: Record<string, number> };
   onArmClutch: (o: ClutchOffer) => void;
   applyMode: string | null;
   onApplyToSpot: (key: string) => void;
@@ -3250,7 +3250,22 @@ function WindowSectionInner(props: {
           // both sides share it.
           const youClock = wallClock && s.you ? clockAtRealTime(s.you.player, week, clock, s.you.metricId ?? undefined) : clock;
           const theirClock = wallClock && s.their ? clockAtRealTime(s.their.player, week, clock, s.their.metricId ?? undefined) : clock;
-          const row = <ScoreRow key={key} slot={s} week={week} youClock={youClock} theirClock={theirClock} srvYou={srvScore('y', s.slotIndex, s.you?.player.id)} srvTheir={srvScore('t', s.slotIndex, s.their?.player.id)} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} twinWindow={twinLinked.size >= 2} cards={cards} kicked={kicked} />;
+          // v0.587.0: the power-ups on MY card stay on it after the lock —
+          // the buffs the engine counts in this window (buffsForWindow) that
+          // apply to this spot, plus the plays aimed at it.
+          const puChips = (() => {
+            if (!s.you) return [];
+            const on = buffsForWindow(new Set(Object.keys(armed).filter((id) => armed[id])), aw?.buffsAt, week, w.id);
+            const ids = [...[...on].filter((id) => buffOnSpot(id, s.you!.player.pos, s.you!.metricId ?? null)),
+              ...(aw?.doubleOrNothing === key ? ['double-or-nothing'] : []), ...(aw?.byeSteal?.slotKey === key ? ['bye-steal'] : []),
+              ...(aw?.leadChange?.includes(key) ? ['lead-change'] : []), ...(aw?.grudge?.includes(key) ? ['grudge'] : []),
+              ...(aw?.redHerring?.includes(key) ? ['red-herring'] : []), ...(aw?.underdog?.includes(key) ? ['unlock-underdog'] : []),
+              ...(aw?.surge && key in aw.surge ? ['surge'] : []), ...(aw?.bunker && key in aw.bunker ? ['bunker'] : []),
+              ...(aw?.clutchDon?.includes(key) ? ['clutch-don'] : []), ...(aw?.clutchEncore && key in aw.clutchEncore ? ['clutch-encore'] : []),
+              ...(aw?.clutchCounter && key in aw.clutchCounter ? ['clutch-counter'] : [])];
+            return ids.map((id) => ({ icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id }));
+          })();
+          const row = <ScoreRow key={key} puChips={puChips} slot={s} week={week} youClock={youClock} theirClock={theirClock} srvYou={srvScore('y', s.slotIndex, s.you?.player.id)} srvTheir={srvScore('t', s.slotIndex, s.their?.player.id)} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} twinWindow={twinLinked.size >= 2} cards={cards} kicked={kicked} />;
           // CLUTCH offers: a conditional power-up unlocked by this slot's live
           // state (halftime lead / first-half TD / a nuke just landed), owned but
           // not yet armed, with the current clock inside its transient window.
@@ -3540,7 +3555,7 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, twinWindow, cards, kicked = true }: {
+function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, twinWindow, cards, kicked = true, puChips }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number;
   /** The RESOLVER's score for this slot, per side — what the app's card shows
@@ -3556,8 +3571,15 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   twinWindow?: boolean; cards?: boolean;
   /** This window has kicked off — card theme keeps the opponent sealed until then. */
   kicked?: boolean;
+  /** v0.587.0: the power-ups on my card, kept on it once it locks. */
+  puChips?: { icon: string; name: string }[];
 }) {
   const ownKey = slotKey(slot.win, slot.slotIndex);
+  const puRow = puChips?.length ? (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 3 }}>
+      {puChips.map((c, i) => <span key={i} className="mono" style={{ fontSize: 8, fontWeight: 700, color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--you) 40%, transparent)', borderRadius: 3, padding: '1px 5px', whiteSpace: 'nowrap' }}>{c.icon} {c.name}</span>)}
+    </span>
+  ) : null;
   // Collapse on the final whistle (founder's call, 0182.2): a slot log left
   // open through a live window closes itself once the window is DONE — the
   // toggle still reopens it for the post-mortem.
@@ -3792,7 +3814,7 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
     return (
       <div style={{ display: 'grid', gridTemplateColumns: gridCols, alignItems: 'start', gap: rowGap }}>
         <LiveCard side="you" slug={slot.you.player.id} name={slot.you.player.name} pos={slot.you.player.pos} team={slot.you.player.team}
-          metricName={yMet?.name} tag={yMet?.tag} bank={null} badge={<><InjuryBadge week={week} slug={slot.you.player.id} />{youTwin && <TwinChip />}</>} />
+          metricName={yMet?.name} tag={yMet?.tag} bank={null} note={puRow} badge={<><InjuryBadge week={week} slug={slot.you.player.id} />{youTwin && <TwinChip />}</>} />
         <LiveCard side="their" slug={`sealed-${ownKey}`} sealed />
       </div>
     );
@@ -3825,7 +3847,7 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   // nothing about which multiplier it was carrying (founder: "the twin
   // generals bonus doesn't show in the olave card"). `youTwin` is the slot's
   // own badge; `twinWindow` is the window's stack, which is what boosted this.
-  const youCard = <ScoreCard side="you" player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} fgBoost={youBoost} twin={youTwin || (twinWindow && youBoost > 0)} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
+  const youCard = <ScoreCard side="you" puRow={puRow} player={slot.you.player} week={week} clock={youClock} metricId={slot.you.metricId} metricName={yMet?.name ?? ''} tag={yMet?.tag ?? ''} bank={youShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvYou != null ? slot.youSub?.name : undefined} subLive={!final && srvYou != null} suppressSpent={final ? slot.suppressSpentYou : undefined} negated={final ? slot.youNegated : undefined} halvedFrom={final ? slot.youHalvedFrom : undefined} coin={slotCoin(slot, 'you', week, turnoverCoin, youClock)} fgMult={youFg} fgBoost={youBoost} twin={youTwin || (twinWindow && youBoost > 0)} cards={cards} hot={youFlags?.hot} scorched={youFlags?.nuked} />;
   const theirCard = <ScoreCard side="their" player={slot.their.player} week={week} clock={theirClock} metricId={slot.their.metricId} metricName={tMet?.name ?? ''} tag={tMet?.tag ?? ''} bank={theirShown} onClick={onToggle} fx={lastEffect?.type} subName={final || srvTheir != null ? slot.theirSub?.name : undefined} subLive={!final && srvTheir != null} suppressSpent={final ? slot.suppressSpentTheir : undefined} negated={final ? slot.theirNegated : undefined} halvedFrom={final ? slot.theirHalvedFrom : undefined} coin={slotCoin(slot, 'their', week, turnoverCoin, theirClock)} fgMult={theirFg} fgBoost={theirBoost} cards={cards} hot={theirFlags?.hot} scorched={theirFlags?.nuked} />;
   const centerKids = (
     <>
@@ -3905,7 +3927,9 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
 }
 
 
-function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, fgBoost, twin, cards, hot, scorched }: {
+function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank, onClick, fx, subName, subLive, suppressSpent, negated, halvedFrom, chip, coin, fgMult, fgBoost, twin, cards, hot, scorched, puRow }: {
+  /** v0.587.0: the power-ups on this card (yours only). */
+  puRow?: React.ReactNode;
   side: 'you' | 'their'; player: Player; week: number; clock: number; metricId?: string; metricName: string; tag: string; bank: number; onClick: () => void; fx?: string; subName?: string; subLive?: boolean; suppressSpent?: number; negated?: boolean; halvedFrom?: number; chip?: string; coin?: number; fgMult?: number;
   /** Points in this slot's bank that exist only because of a Field General's
    *  multiplier, so far (v0.388.11). Shown on the chip while the multiplier is
@@ -3940,6 +3964,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
       {chip && <span className="mono" style={{ fontSize: fs(7.5), fontWeight: 700, letterSpacing: '0.1em', color: accent, border: `1px solid ${accent}`, borderRadius: 3, padding: '1px 4px', flex: 'none' }}>{chip}</span>}
       <InjuryBadge week={week} slug={player.id} />
       {twin && <TwinChip />}
+      {puRow}
       {!isMobile && !cards && <span className="mono" style={{ fontSize: fs(8), color: 'var(--faint)' }}>{player.team}</span>}
     </div>
   );

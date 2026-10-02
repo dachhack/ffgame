@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.587.0 — a live drip waits for its team's ball; power-ups stay on locked and live cards
+
+> - Fixed: a drip card in a live game could run through the whole game before its team ever had the ball. Kaden Wetjen's 15-yard punt return showed 9.4 points at 12:47 of the 1st quarter, which is 0.15 a minute for all 60 minutes plus Garbage Time on the last five. A drip now accrues only on its team's offensive time, and before that team's first drive there is none.
+> - Live scores are recalculated from the plays on every tick, so the inflated number corrects itself once this is live.
+> - Power-up chips now stay on your cards after the lock and through the game, on web and mobile:
+>   - the amps that count in that window (Garbage Time, Momentum, Overtime);
+>   - other armed buffs that apply to the spot;
+>   - plays aimed at the card, like Double or Nothing, Surge, Bunker and the Clutch cards.
+
+- Engine `sim.ts` `possFor`: when the team's game is on the live feed but the team has had no possession yet, its offensive time is now zero ([[0,0]]). It used to be an empty list, which `offSecs` treats as "unknown, accrue every minute". The engine is shared, so the worker's published score is fixed too.
+- The chips follow the engine's own window rule (`buffsForWindow`, arm stamps from 0259). `myTargeted` now returns `buffsAt`.
+- New check: `check:livedrip`. It reproduces the 9.4 and confirms the fix.
+
 ### v0.586.0 — Return Yards takes every amp
 
 > - Return Yards is a drip, and now every amplifier counts on it: Momentum (3× while hot), Overtime and Garbage Time. Its card shows the amp chips like any other drip.
