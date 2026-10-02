@@ -1,4 +1,4 @@
--- 0403 probes: THE DEVY MARKET PRICES ON STATHEAD'S DEVY COMPOSITE.
+-- 0403/0412 probes: THE DEVY MARKET PRICES ON STATHEAD'S DEVY COMPOSITE (alone, since 0412).
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -41,10 +41,10 @@ begin
   if _college_prices_frozen() then raise notice 'prices frozen today — price checks skipped'; return; end if;
   r := refresh_college_prices();
   perform sh_true(sh_rank('96101') = 1, 'sh3 on the board, no stats: priced from StatHead alone');
+  -- 0412: the composite rank alone — college production no longer moves it
   sb := sh_ord('96102');
-  perform sh_true(sh_rank('96102') = greatest(1, round(exp(0.5 * ln(9) + 0.5 * ln(sb))))::int,
-    'sh4 both: halfway between StatHead 9 and stats ' || sb || ' → ' || sh_rank('96102'));
-  perform sh_true(sh_rank('96103') = sh_ord('96103'), 'sh5 off the board: stats alone');
+  perform sh_true(sh_rank('96102') = 9, 'sh4 on the board with stats: StatHead''s 9, not a blend with stats ' || sb || ' → ' || sh_rank('96102'));
+  perform sh_true(sh_rank('96103') is null and _devy_price(null, 'c-96103') = 1, 'sh5 off the board: no price row, the floor');
   perform sh_true(not exists (select 1 from college_price where espn_id = '970001'), 'sh6 a board row with no college player is not priced');
 
   delete from stathead_devy;

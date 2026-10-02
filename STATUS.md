@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.591.0 — devy prices follow StatHead's composite, not college production
+
+> - Devy prices now come from StatHead's devy composite rank alone. StatHead's audit found our prices tracked raw college fantasy points (correlation 0.69), not its composite (0.19), so production against weak schedules was paid in full. That is the "not calibrated for level of competition" complaint from Reddit.
+> - The price scale is unchanged (the same rank-to-price curve, the young-riser bonus and the floor). What changes is who sits where. Arch Manning (#4), Trinidad Chambliss (#5), Bo Jackson (#6) and Cam Coleman (#3) move to the top. Caleb Hawkins (#50) and Nate Sheppard (#52) drop to about 5.3.
+> - A player StatHead doesn't rank trades at the floor, so every price is a StatHead number.
+> - Prices are shared by every league, so they use the 1QB composite.
+> - The repricing runs right after this merges (ops 022), and then with the weekly sweep as before.
+
+- 0412: `refresh_college_prices` sets each price's rank from `stathead_devy.rank_1qb` alone (`_college_devy_weight` = 1). Probes sh4 and sh5 now check composite-only pricing and the floor.
+
 ### v0.590.0 — the field view's labels are readable on a phone
 
 > - The smallest text on the field view is bigger: yard numbers 6.5 → 10.5 (and darker), end-zone team names 9 → 13, the team on the ball marker 6 → 9, the direction arrow 8 → 10, and the ball carrier's name 6.5 → 9.5 on a wider tag. This applies to the web and the app.
