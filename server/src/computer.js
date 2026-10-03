@@ -9,8 +9,12 @@
 // opens a branch for anything worth changing. Follow-ups are issue comments
 // that say "@computer" again.
 //
-// Only the tagging line itself goes into the issue — never the rest of the
-// chat. Other members' messages are theirs, and the issue tracker is not.
+// v0.595.0 (founder: "look at the rest of the chat … that should be the
+// pipeline"): the issue also carries the chat from the 15 minutes before the
+// ask, so "@computer I thought we fixed this" arrives with the "this". The
+// repo is public, so other members are "Member A", "Member B" (founder's
+// choice: names hidden), their @mentions are masked and their pictures are
+// left out; the asker's own lines and screenshots go in as posted.
 //
 // Once-only: computer_ask (0363) is claimed BEFORE the issue is opened, and the
 // claim is released if GitHub refuses, so a sweep that overlaps the last one,
@@ -33,8 +37,57 @@ export function issueTitle(body) {
   return `@computer: ${t || '(image)'}`;
 }
 
-/** The issue body. `where` names the chat; `image` is a posted picture's URL. */
-export function issueBody({ body, caption, image, where, at }) {
+// ── THE CHAT BEFORE THE ASK (v0.595.0) ─────────────────────────────────────
+export const CONTEXT_MS = 15 * 60_000;
+const CONTEXT_MAX = 25;
+const LINE_MAX = 400;
+const MENTION = /@(?!computer\b)[^\s@,.!?;:]+/gi;
+
+/** The chat before an ask as markdown lines, others' names hidden. Pure.
+ *  `msgs` oldest first: { author_id, body, caption, kind, created_at }. */
+export function contextSection(msgs, askerId) {
+  const names = new Map();
+  const who = (m) => {
+    if (m.author_id === askerId) return 'Asker';
+    if (!m.author_id) return m.kind === 'computer' ? 'Computer' : 'League';
+    if (!names.has(m.author_id)) {
+      const i = names.size;
+      names.set(m.author_id, `Member ${i < 26 ? String.fromCharCode(65 + i) : i + 1}`);
+    }
+    return names.get(m.author_id);
+  };
+  const clip = (s) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > LINE_MAX ? `${t.slice(0, LINE_MAX - 1)}…` : t; };
+  const lines = [];
+  for (const m of msgs ?? []) {
+    const name = who(m);
+    const mine = name === 'Asker';
+    const hide = (s) => (mine ? clip(s) : clip(s).replace(MENTION, '@member'));
+    const isImg = looksLikeUrl(m.body);
+    let text = isImg ? (mine ? `![image](${String(m.body).trim()})` : '(image)') : hide(m.body);
+    if (m.caption) text += ` ${hide(m.caption)}`;
+    if (m.kind === 'poll') text = `(poll) ${text}`;
+    const t = String(m.created_at ?? '').slice(11, 16);
+    lines.push(`> **${name}**${t ? ` · ${t}` : ''} — ${text.trim() || '(empty)'}`);
+  }
+  if (!lines.length) return '';
+  return [`**Chat before the ask** (last ${CONTEXT_MS / 60_000} min, UTC; other members' names hidden)`, '', ...lines.flatMap((l) => [l, '>'] ).slice(0, -1)].join('\n');
+}
+
+/** The messages before an ask in its chat, oldest first. */
+export async function chatBefore(a) {
+  const from = new Date(Date.parse(a.created_at) - CONTEXT_MS).toISOString();
+  const q = a.source === 'league'
+    ? db().from('league_message').select('id, author_id, body, caption, kind, created_at').eq('league_id', a.league_id)
+    : db().from('dm_message').select('id, author_id, body, caption, created_at').eq('thread_id', a.thread_id);
+  const { data, error } = await q.gte('created_at', from).lt('created_at', a.created_at)
+    .order('created_at', { ascending: false }).limit(CONTEXT_MAX);
+  if (error) { log('context read failed', error.message); return []; }
+  return (data ?? []).filter((m) => m.id !== a.id).reverse();
+}
+
+/** The issue body. `where` names the chat; `image` is a posted picture's URL;
+ *  `context` is contextSection's markdown. */
+export function issueBody({ body, caption, image, where, at, context }) {
   const lines = [
     '> Asked from chat · ' + where + ' · ' + at,
     '',
@@ -43,6 +96,7 @@ export function issueBody({ body, caption, image, where, at }) {
   if (!TAG.test(lines[2])) lines[2] = `@computer ${lines[2]}`;   // the workflow's trigger phrase
   if (caption) lines.push('', caption.trim());
   if (image) lines.push('', `![attached](${image})`);
+  if (context) lines.push('', '---', '', context);
   lines.push('', '<!-- ffgame-computer -->');
   return lines.join('\n');
 }
@@ -73,6 +127,40 @@ export const SNARK = [
   'Got your message. I would say "great question," but I am programmed not to lie.',
 ];
 export const snarkFor = (id) => SNARK[Math.abs(Number(id) || 0) % SNARK.length];
+
+/** Post a comment on an issue, as the worker. */
+async function comment(n, body) {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/issues/${n}/comments`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${process.env.GH_ISSUES_TOKEN}`,
+      accept: 'application/vnd.github+json',
+      'content-type': 'application/json',
+      'user-agent': 'ffgame-worker',
+    },
+    body: JSON.stringify({ body }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`${res.status} ${json.message ?? ''}`.trim());
+  return json.id;
+}
+
+/** Backfill: the chat before an already-filed ask, as a comment on its issue
+ *  (ops "computer-context"). The comment says @computer so relayFixes never
+ *  mistakes it for the fix note. */
+export async function postContext(n) {
+  if (!process.env.GH_ISSUES_TOKEN) throw new Error('GH_ISSUES_TOKEN unset');
+  const { data: ask } = await db().from('computer_ask').select('source, message_id').eq('issue', n).maybeSingle();
+  if (!ask) throw new Error(`no chat ask filed as #${n}`);
+  const table = ask.source === 'league' ? 'league_message' : 'dm_message';
+  const cols = ask.source === 'league' ? 'id, league_id, author_id, created_at' : 'id, thread_id, author_id, created_at';
+  const { data: m, error } = await db().from(table).select(cols).eq('id', ask.message_id).maybeSingle();
+  if (error || !m) throw new Error(`the ask's message is gone (${error?.message ?? 'deleted'})`);
+  const ctx = contextSection(await chatBefore({ ...m, source: ask.source }), m.author_id);
+  const body = `Chat context for this @computer ask (backfilled)\n\n${ctx || '_Nothing was said in that chat in the 15 minutes before the ask._'}`;
+  await comment(n, body);
+  return { issue: n, lines: ctx ? ctx.split('\n').filter((l) => l.startsWith('> **')).length : 0 };
+}
 
 const askers = () => (process.env.COMPUTER_USERS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const looksLikeUrl = (s) => typeof s === 'string' && /^https?:\/\/\S+$/.test(s.trim());
@@ -223,9 +311,10 @@ export async function sweepComputer() {
     const image = looksLikeUrl(a.body) ? a.body : null;   // an image post's body is its bare URL (0350)
     const text = image ? (a.caption ?? '') : a.body;
     try {
+      const context = contextSection(await chatBefore(a), a.author_id);
       const n = await openIssue(
         issueTitle(text),
-        issueBody({ body: text, caption: image ? null : a.caption, image, where, at: a.created_at }),
+        issueBody({ body: text, caption: image ? null : a.caption, image, where, at: a.created_at, context }),
       );
       await db().from('computer_ask').update({ issue: n }).eq('source', a.source).eq('message_id', a.id);
       log('filed', `#${n}`, 'from', a.source, a.id);
