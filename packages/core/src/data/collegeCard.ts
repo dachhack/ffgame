@@ -193,8 +193,22 @@ export function statheadEvalRows(card: any, pos: string, fmt: DevyFormat = '1qb'
   const cm = card.careerModel2027;
   if (cm?.tier) out.push({ label: 'NFL TIER', value: `${cm.tier}${cm.projPick ? ` · projected pick ${cm.projPick}` : ''}` });
   const cpct = pick(card.careerPct, fmt);
-  if (card.careerPPG != null) {
-    out.push({ label: 'NFL OUTLOOK', value: `${Number(card.careerPPG).toFixed(1)} PPR/g in his best early NFL seasons${cpct != null ? ` (top ${Math.max(1, 100 - Math.round(Number(cpct)))}%)` : ''}` });
+  // StatHead 1.0.110 (Oct 3): hit % — the chance of a fantasy-starter season
+  // in his first four NFL years, per format — replaced career PPG, and the
+  // draft outlook (round 1 / 2-3 / 4-7 / undrafted) is new. A card stored
+  // before that release still carries careerPPG; it reads as before.
+  const hit = pick(card.hitProb, fmt);
+  const top = cpct != null ? ` (top ${Math.max(1, 100 - Math.round(Number(cpct)))}%)` : '';
+  if (hit != null && Number.isFinite(Number(hit))) {
+    const h = Number(hit);
+    out.push({ label: 'NFL OUTLOOK', value: `${h >= 10 ? Math.round(h) : h.toFixed(1)}% chance of a fantasy-starter season in his first four NFL years${top}` });
+  } else if (card.careerPPG != null) {
+    out.push({ label: 'NFL OUTLOOK', value: `${Number(card.careerPPG).toFixed(1)} PPR/g in his best early NFL seasons${top}` });
+  }
+  const dr = card.draftOutlook;
+  if (dr && typeof dr === 'object' && [dr.day1, dr.day2, dr.day3, dr.undrafted].every((v) => v != null && Number.isFinite(Number(v)))) {
+    const r = (v: unknown) => `${Math.round(Number(v))}%`;
+    out.push({ label: 'DRAFT OUTLOOK', value: `Round 1 ${r(dr.day1)} · Rounds 2–3 ${r(dr.day2)} · Rounds 4–7 ${r(dr.day3)} · Undrafted ${r(dr.undrafted)}` });
   }
   const p = card.profile ?? {};
   const prof = [

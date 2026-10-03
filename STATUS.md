@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.606.0 — the player card reads StatHead's new hit % and draft outlook
+
+> - StatHead 1.0.110 (Oct 3) replaced its career PPG with **hit %**, the chance of a fantasy-starter season in a player's first four NFL years, per format, and added a **draft outlook** (round 1 / 2–3 / 4–7 / undrafted). The college card's NFL OUTLOOK line read the removed field, so it would have gone blank on the next board load.
+> - The card now shows, for example, "NFL OUTLOOK: 81% chance of a fantasy-starter season in his first four NFL years (top 1%)" and "DRAFT OUTLOOK: Round 1 87% · Rounds 2–3 5% · Rounds 4–7 6% · Undrafted 2%". The hit % follows the league's format (superflex or 1QB).
+> - Checked against StatHead's handoff (board generated 2026-10-03T22:01Z): 6,130 players (off-roster players dropped, our report #540); `compositePosRank` matches in both formats (0 mismatches); Manning, Mensah, Moore and Chambliss are QB1–4 in both formats. The handoff asks for a board built at 22:14Z or later; the watcher reprices on its own when StatHead publishes one (it compares `generatedAt`).
+
+- Worker `statheadDevy.js`: the stored card carries `hitProb` and `draftOutlook` in place of `careerScore` / `careerPPG`.
+- Core `collegeCard.ts`: `statheadEvalRows` reads them. A card stored before 1.0.110 still shows its old line, and a null draft outlook (2029 QBs and TEs) is left out. check:collegecard covers all three.
+
 ### v0.605.0 — the devy market keeps loading as you scroll
 
 > - Founder: "Can we lazy load the listings in the devy market so you can keep scrolling?" The market stopped at 80 rows in the app and 100 on the web.

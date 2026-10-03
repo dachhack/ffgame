@@ -19,7 +19,8 @@ const CHUNK = 800;   // 0406: rows carry a ~1 KB card each now
  *  devy list carries him) are left out: third-party facts are inputs, never
  *  shown. */
 const CARD_FIELDS = ['compositeValue', 'compositeRank', 'compositePosRank', 'compositeWeight',
-  'marketValue', 'marketRank', 'marketPosRank', 'careerScore', 'careerPPG', 'careerRank', 'careerPct',
+  // StatHead 1.0.110: hitProb and draftOutlook replace careerScore / careerPPG.
+  'marketValue', 'marketRank', 'marketPosRank', 'hitProb', 'draftOutlook', 'careerRank', 'careerPct',
   'careerVsMarket', 'dynasty', 'profile', 'careerModel2027', 'draftYear', 'school'];
 export function cardOf(p) {
   const out = {};

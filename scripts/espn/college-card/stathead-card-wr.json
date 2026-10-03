@@ -27,11 +27,6 @@
   "sf": 1,
   "oneQB": 1
  },
- "careerScore": {
-  "sf": 6.395,
-  "oneQB": 6.395
- },
- "careerPPG": 16.985,
  "careerRank": {
   "sf": 1,
   "oneQB": 1
@@ -72,5 +67,16 @@
   "projPick": 3
  },
  "draftYear": 2027,
- "school": "Ohio State"
+ "school": "Ohio State",
+ "hitProb": {
+  "sf": 80.7,
+  "oneQB": 80.7
+ },
+ "draftOutlook": {
+  "day1": 87.3,
+  "day2": 4.7,
+  "day3": 6.1,
+  "undrafted": 1.9,
+  "source": "board"
+ }
 }
