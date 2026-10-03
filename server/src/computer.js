@@ -203,32 +203,82 @@ async function gh(path) {
 
 // ── THE FIX, BACK IN THE CHAT (v0.562.0, 0393) ─────────────────────────────
 // Founder: "yes, post fixes to the league chat too." When an ask's issue is
-// closed as COMPLETED, its last comment — the fix note — goes back to where
-// it was asked: a house line in the league's chat, or, for a DM (no house line
-// can go there), a push to the asker. Once per ask (computer_ask.relayed_at).
-// An issue closed as not planned, or closed more than RELAY_MAX_AGE_MS ago
-// (history from before this shipped), is marked and left quiet.
+// closed, the story goes back to where it was asked: a house line in the
+// league's chat (v0.598.0: the closed-issue card below), or, for a DM (no house
+// line can go there), a push to the asker. Once per ask (computer_ask.relayed_at).
+// An issue closed more than RELAY_MAX_AGE_MS ago (history from before this
+// shipped) is marked and left quiet.
 const RELAY_EVERY_MS = 5 * 60_000;
 const RELAY_MAX_AGE_MS = 48 * 3600_000;
 let lastRelay = 0;
 
-/** The chat line for a fixed issue: its note in plain words, one line. Pure. */
-export function fixLine(n, note) {
-  const text = String(note ?? '')
-    .split(/\n-{3,}\n/)[0]                                // the attribution footer
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')                 // images
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')              // links → their words
-    .replace(/[*_`]+/g, '')                               // emphasis, code
-    .split('\n').map((l) => l.replace(/^\s*(?:[-•]|\d+\.)\s+/, '').trim()).filter(Boolean)
-    .join(' ')
-    .replace(/@computer\b/gi, 'computer')                  // never re-trigger anything
-    .replace(/\s+/g, ' ').trim()
-    // The line already says so: drop the note's own "✅ Fixed…" opener.
+// ── THE CLOSED-ISSUE CARD (v0.598.0) ───────────────────────────────────────
+// Founder: "print a header in the chat from the computer when issues are
+// closed: 'Issue xxx closed. (Short 1-2 sentence description). Click to expand
+// a brief report of the issue and solution'". The line is the header; the
+// report rides in league_message.txn.fix and the clients expand it (0415).
+// Source, in order: the issue's last comment that isn't an @computer ask (a
+// fix note), else the pull request that closed it (title → summary, body →
+// report), else the closing commit's message.
+const REPORT_MAX = 1500;
+const SUMMARY_MAX = 220;
+
+/** Markdown → plain lines for the report, attribution and tags gone. Pure. */
+export function fixReport(md) {
+  const lines = String(md ?? '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .split(/\n-{3,}\n/)[0]
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`]+/g, '')
+    .replace(/@computer\b/gi, 'computer')
+    .split('\n')
+    .filter((l) => !/🤖|claude\.ai\/code|^\s*(Co-Authored-By|Claude-Session):/i.test(l))
+    .map((l) => l.replace(/^\s*#+\s*/, '').replace(/^(\s*)(?:[-•*]|\d+\.)\s+/, '$1• ').replace(/\s+$/, ''));
+  const text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return text.length > REPORT_MAX ? `${text.slice(0, REPORT_MAX - 1).trimEnd()}…` : text;
+}
+
+/** The first one or two sentences of a note, one line. Pure. */
+export function fixSummary(md) {
+  const flat = fixReport(md).replace(/^• /gm, '').replace(/\s+/g, ' ').trim()
     .replace(/^✅\s*/, '').replace(/^(?:Fixed|Done)\b.*?[.:](?=\s|$)\s*/i, '');
-  const head = `✅ Fixed (#${n})`;
-  if (!text) return `${head}.`;
-  const room = 480 - head.length - 2;
-  return `${head}: ${text.length > room ? `${text.slice(0, room - 1).trimEnd()}…` : text}`;
+  const s = flat.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+  return s.length > SUMMARY_MAX ? `${s.slice(0, SUMMARY_MAX - 1).trimEnd()}…` : s;
+}
+
+/** A pull request title as a sentence: no version, no PR number. Pure. */
+export function titleSummary(title) {
+  const t = String(title ?? '').replace(/^v\d+\.\d+\.\d+[^:]*:\s*/i, '').replace(/\s*\(#\d+\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  const s = t[0].toUpperCase() + t.slice(1);
+  return /[.!?…]$/.test(s) ? s : `${s}.`;
+}
+
+/** The chat header. Pure. */
+export function closedHeader(n, summary, notPlanned = false) {
+  const s = String(summary ?? '').trim();
+  return `Issue #${n} closed${notPlanned ? ' (not planned)' : ''}.${s ? ` ${/[.!?…]$/.test(s) ? s : `${s}.`}` : ''}`;
+}
+
+/** Summary + report for a closed issue, from its note or what closed it. */
+async function closeStory(n) {
+  const comments = await gh(`/issues/${n}/comments?per_page=100`);
+  const note = [...(Array.isArray(comments) ? comments : [])].reverse().find((c) => c?.body && !/@computer\b/i.test(c.body))?.body;
+  if (note) return { summary: fixSummary(note), report: fixReport(note) };
+  try {
+    const events = await gh(`/issues/${n}/events?per_page=100`);
+    const closed = [...(Array.isArray(events) ? events : [])].reverse().find((e) => e?.event === 'closed' && e.commit_id);
+    if (closed) {
+      const prs = await gh(`/commits/${closed.commit_id}/pulls`).catch(() => []);
+      const pr = Array.isArray(prs) ? prs[0] : null;
+      if (pr) return { summary: titleSummary(pr.title), report: fixReport(pr.body), pr: pr.number };
+      const c = await gh(`/commits/${closed.commit_id}`);
+      const [head, ...rest] = String(c?.commit?.message ?? '').split('\n');
+      return { summary: titleSummary(head), report: fixReport(rest.join('\n')) };
+    }
+  } catch (e) { log('close story', `#${n}`, e.message); }
+  return { summary: '', report: '' };
 }
 
 /** One relay pass. Returns push rows (DM asks) for the caller to enqueue. */
@@ -245,20 +295,22 @@ export async function relayFixes(now = Date.now()) {
     try {
       const iss = await gh(`/issues/${a.issue}`);
       if (iss.state !== 'closed') continue;
-      if (iss.state_reason !== 'completed' || now - Date.parse(iss.closed_at) > RELAY_MAX_AGE_MS) { await mark(a); continue; }
-      const comments = await gh(`/issues/${a.issue}/comments?per_page=100`);
-      const note = [...(Array.isArray(comments) ? comments : [])].reverse().find((c) => c?.body && !/@computer\b/i.test(c.body))?.body;
-      const line = fixLine(a.issue, note);
+      // v0.598.0: every close is announced ("when issues are closed"), not
+      // only completed ones; history older than RELAY_MAX_AGE_MS stays quiet.
+      if (now - Date.parse(iss.closed_at) > RELAY_MAX_AGE_MS) { await mark(a); continue; }
+      const story = await closeStory(a.issue);
+      const line = closedHeader(a.issue, story.summary || titleSummary(String(iss.title ?? '').replace(/^@computer:\s*/i, '')), iss.state_reason === 'not_planned');
+      const fix = { issue: a.issue, url: iss.html_url ?? `https://github.com/${REPO}/issues/${a.issue}`, report: story.report || '', ...(story.pr ? { pr: story.pr } : {}) };
       if (a.source === 'league') {
         const { data: m } = await db().from('league_message').select('league_id').eq('id', a.message_id).maybeSingle();
         if (m?.league_id) {
-          const { error: e } = await db().from('league_message').insert({ league_id: m.league_id, author_id: null, kind: 'computer', body: line, mentions: [] });
+          const { error: e } = await db().from('league_message').insert({ league_id: m.league_id, author_id: null, kind: 'computer', body: line, mentions: [], txn: { fix } });
           if (e) { log('relay failed', a.issue, e.message); continue; }
         }
       } else {
         const { data: m } = await db().from('dm_message').select('author_id').eq('id', a.message_id).maybeSingle();
         if (m?.author_id) receipts.push({
-          app_user_id: m.author_id, kind: 'chat', title: `Fixed · #${a.issue}`, body: line.replace(/^✅ Fixed \(#\d+\):?\s*/, ''),
+          app_user_id: m.author_id, kind: 'chat', title: `Closed · #${a.issue}`, body: line.replace(/^Issue #\d+ closed[^.]*\.\s*/, '') || line,
           data: { url: `https://github.com/${REPO}/issues/${a.issue}` }, dedupe_key: `computer-fixed:dm${a.message_id}`,
         });
       }

@@ -256,3 +256,4 @@ $RUN -f scripts/db/declared-probes.sql | grep -E "PROBE FAIL|ALL DECLARED PROBES
 $RUN -f scripts/db/custom-college-probes.sql | grep -E "PROBE FAIL|ALL CUSTOM-COLLEGE PROBES" || { echo "CUSTOM-COLLEGE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-draft-probes.sql | grep -E "PROBE FAIL|ALL DEVY-DRAFT PROBES" || { echo "DEVY-DRAFT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/rams-kickoff-probes.sql | grep -E "PROBE FAIL|ALL RAMS-KICKOFF PROBES" || { echo "RAMS-KICKOFF PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/computer-fix-probes.sql | grep -E "PROBE FAIL|ALL COMPUTER-FIX PROBES" || { echo "COMPUTER-FIX PROBES FAILED"; exit 1; }

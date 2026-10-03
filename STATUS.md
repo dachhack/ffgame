@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.598.0 — the computer posts a closed-issue card in chat
+
+> - When an @computer issue closes, the league chat gets "💻 Computer: Issue #N closed. <one or two sentences>", with a **READ THE REPORT** button that expands a short write-up of the problem and the fix, plus a link to the issue. Founder: "Issue xxx closed. (Short 1-2 sentence description). Click to expand a brief report of the issue and solution."
+> - Every close is announced now, including "not planned" (shown greyed out with 🗂). Before, only completed issues went back to the chat, as a single "✅ Fixed (#N): …" line.
+> - Where the words come from: the issue's last fix note if there is one. Otherwise the pull request that closed it: its title becomes the summary and its description becomes the report.
+> - DM asks still get a push, now titled "Closed · #N".
+
+- Worker `computer.js`: `closeStory`, `fixReport`, `fixSummary`, `titleSummary` and `closedHeader` replace `fixLine`. The card's report is stored in `league_message.txn.fix`.
+- 0415: `_chat_message_json` v8 serves `fix` on a computer line. `computer-fix-probes.sql` (cf1–cf3).
+- Web `chat.tsx` and app `Chat.tsx`: `FixCard`. Old builds show the header as a plain Computer line.
+- Tests: eleven new cases in `server/test/computer.mjs` (the `fixLine` cases are gone with it).
+
 ### v0.597.0 — Rams players no longer lock at Thursday's kickoff (#1095)
 
 > - Kickoff League chat, Oct 2: "Rams players are glitched again, can I get Stafford out and Shough in? … it's been Stafford and Puka both weeks." The founder's tag: "I thought we fixed this."
