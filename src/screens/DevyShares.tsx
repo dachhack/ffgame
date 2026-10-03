@@ -3,14 +3,14 @@
 // The first team to 20 holds his right; failing that, the only team in does,
 // with 5 or more. A right reserves him in the rookie draft, at any of the
 // holder's picks, once he turns pro.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { draftState, leagueGameMode, setDevyRounds } from '@drip/core/data/liveApi';
 import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomCollege, CUSTOM_COLLEGE_LEVELS, type CustomCollegeRow } from '@drip/core/data/liveApi';
 import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, setLeagueDevyLaunch, commishDevyLaunchNow, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyLaunchCfg, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from '../app/playerCard';
 import { ModalBackdrop } from '../app/ui';
-import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, slotLabel, DOW_LABELS, tradePreview, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
+import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, MARKET_PAGE, MARKET_FIRST_FETCH, marketNext, marketFooter, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, slotLabel, DOW_LABELS, tradePreview, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
   fontFamily: 'var(--mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 9px',
@@ -29,6 +29,9 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   // v0.579.0: the purchase sheet.
   const [trade, setTrade] = useState<{ slug: string; mode: 'buy' | 'sell'; n: number } | null>(null);
   const [market, setMarket] = useState<DevyMarketRow[] | null>(null);
+  // v0.605.0: lazy loading — rows showing, and how many the market fetch asks for.
+  const [shown, setShown] = useState(MARKET_PAGE);
+  const [limit, setLimit] = useState(MARKET_FIRST_FETCH);
   const [q, setQ] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -42,8 +45,8 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   ]);
   useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId]);
   useEffect(() => {
-    if (view === 'add') devyMarket(leagueId, 1000).then((r) => setMarket(Array.isArray(r) ? r : [])).catch(() => setMarket([]));
-  }, [view, leagueId, st]);
+    if (view === 'add') devyMarket(leagueId, limit).then((r) => setMarket(Array.isArray(r) ? r : [])).catch(() => setMarket([]));
+  }, [view, leagueId, st, limit]);
   // 0404: past two letters the search covers every college player.
   const [deep, setDeep] = useState<DevyMarketRow[] | null>(null);
   useEffect(() => {
@@ -60,8 +63,26 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
     const listed = new Set([...(ls?.open?.players ?? []), ...(ls?.pending ?? [])].map((x) => x.slug));
     const rows = (deep ?? (market ?? []).filter((r) => !needle || r.name.toLowerCase().includes(needle) || (r.school ?? '').toLowerCase().includes(needle)))
       .filter((r) => !listed.has(r.slug));
-    return shapeMarket(marketLines(rows, st, myRoster), filter, sort.key, sort.dir).slice(0, 100);
+    return shapeMarket(marketLines(rows, st, myRoster), filter, sort.key, sort.dir);
   }, [market, q, deep, st, myRoster, filter, sort, ls]);
+  // A new filter, sort or search starts back at the first page.
+  useEffect(() => { setShown(MARKET_PAGE); }, [filter, sort, q]);
+  const fetched = deep ? 0 : (market?.length ?? 0);
+  const moreRef = useRef<() => void>(() => {});
+  moreRef.current = () => {
+    const n = marketNext(shown, addList.length, fetched, deep ? Infinity : limit);
+    if (n.shown !== shown) setShown(n.shown);
+    if (n.fetch) setLimit(n.fetch);
+  };
+  // The sentinel under the list: when it scrolls into view, load the next page.
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) moreRef.current(); }, { rootMargin: '600px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  });
   const order = async (slug: string, n: number) => {
     if (myRoster == null || busy) return;
     setBusy(true); setMsg(null);
@@ -261,7 +282,11 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
           </div>
         )}
         {market && addList.length === 0 && !(deep && deep.length === 0) && <div style={small}>Nobody matches that filter.</div>}
-        {addList.map((l) => investRow(l))}
+        {addList.slice(0, shown).map((l) => investRow(l))}
+        {(() => { const f = marketFooter(Math.min(shown, addList.length), addList.length, fetched, deep ? Infinity : limit); return f ? (
+          <div ref={sentinel} style={{ ...small, textAlign: 'center', padding: '8px 0' }}>
+            {f === 'Scroll for more…' ? <button onClick={() => moreRef.current()} style={{ background: 'none', border: 'none', color: 'var(--dim)', cursor: 'pointer', font: 'inherit' }}>{f}</button> : f}
+          </div>) : null; })()}
         </>)}
       </>)}
       {popups()}

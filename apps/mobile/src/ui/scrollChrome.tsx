@@ -35,6 +35,21 @@ const HOME_PX = 40;
  *  finger — ignore it rather than slamming the chrome. */
 const JUMP_PX = 240;
 
+// ── NEAR THE END (v0.605.0) ────────────────────────────────────────────────
+// A list rendered INSIDE a league screen's ScrollView (the devy market on My
+// Team) can't see that ScrollView's scroll events. The shared handler below
+// tells subscribers when the page is within NEAR_END_PX of its bottom, so they
+// can lazy-load another page.
+const NEAR_END_PX = 700;
+const nearEndSubs = new Set<() => void>();
+/** Subscribe to "the league screen scrolled near its end". Returns unsubscribe. */
+export function onNearEnd(fn: () => void): () => void { nearEndSubs.add(fn); return () => { nearEndSubs.delete(fn); }; }
+/** True when a scroll event is within NEAR_END_PX of the content's end. */
+export function isNearEnd(e: NativeSyntheticEvent<NativeScrollEvent>): boolean {
+  const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+  return contentOffset.y + layoutMeasurement.height >= contentSize.height - NEAR_END_PX;
+}
+
 export interface ScrollChromeHandlers {
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
   onScrollEndDrag: () => void;
@@ -79,6 +94,7 @@ export function useScrollChromeDriver(): {
       shift,
       handlers: {
         onScroll: (e) => {
+          if (nearEndSubs.size && isNearEnd(e)) nearEndSubs.forEach((fn) => fn());
           const s = st.current;
           const y = Math.max(0, e.nativeEvent.contentOffset.y);
           const dy = y - s.lastY;

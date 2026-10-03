@@ -2,7 +2,7 @@
 // and two-decimal numbers. Offline.
 import { refreshedLabel, devyValueSub, fmtValue, devyCsvName, STATHEAD_DEVY_URL } from '../packages/core/src/data/devyValues.ts';
 import { pickRoundLabel, isDevyPickRound, devyBlockRound, draftRoundLabel, devyBlockLine } from '../packages/core/src/data/devyDraft.ts';
-import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview, underclassMult, underclassLabel, marketRowDetail } from '../packages/core/src/data/devyShares.ts';
+import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview, marketNext, marketFooter, MARKET_PAGE, MARKET_FIRST_FETCH, MARKET_FULL_FETCH, underclassMult, underclassLabel, marketRowDetail } from '../packages/core/src/data/devyShares.ts';
 
 let fails = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if (!cond) fails++; };
@@ -87,5 +87,13 @@ ok(devyValueSub({ espn_id: '1', name: 'X', pos: 'WR', school: 'OSU', class_year:
 ok(fmtValue(8) === '8.00' && fmtValue(null) === '—', 'values print with two decimals, or a dash');
 ok(devyCsvName('sf', 'ALL', '2026-10-03T00:48:29Z') === 'drip-devy-values-sf-2026-10-03.csv' && devyCsvName('1qb', 'QB', null) === 'drip-devy-values-1qb-qb-latest.csv', 'v0.602.0: the CSV file name');
 ok(STATHEAD_DEVY_URL.startsWith('https://stathead.app'), 'the StatHead link');
+// v0.605.0: lazy loading
+ok(marketNext(60, 900, 1000, 1000).shown === 120 && marketNext(60, 900, 1000, 1000).fetch === null, 'near the end, another page shows');
+ok(marketNext(880, 900, 1000, 1000).shown === 900, '…never past the list');
+ok(marketNext(1000, 1000, 1000, 1000).fetch === MARKET_FULL_FETCH, 'past the first fetch, the rest of the market is fetched once');
+ok(marketNext(4100, 4100, 4100, MARKET_FULL_FETCH).fetch === null && marketNext(4100, 4100, 4100, MARKET_FULL_FETCH).shown === 4100, 'everything loaded: nothing more');
+ok(marketNext(40, 40, 0, Infinity).fetch === null, 'a server search never fetches the market');
+ok(marketFooter(60, 900, 1000, 1000) === 'Scroll for more…' && marketFooter(4100, 4100, 4100, MARKET_FULL_FETCH) === 'All 4,100 players' && marketFooter(0, 0, 0, 1000) === null, 'the footer line');
+ok(MARKET_PAGE === 60 && MARKET_FIRST_FETCH === 1000, 'page and first fetch sizes');
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL DEVY-MARKET CHECKS PASS');
