@@ -15,4 +15,32 @@ begin
   snark := row(2, gen_random_uuid(), null, 'Beep boop. (#7)', now(), false, 'computer', null, '{}'::uuid[], null, null, null, null, null)::league_message;
   perform cf_true(not (_chat_message_json(snark, null) ? 'fix'), 'cf3 a receipt line has no card');
 end $$;
+-- cf4 (0416): the card can actually be stored — 0290's check refused it.
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000000a51', 'cf01@test.dev') on conflict (id) do nothing;
+insert into app_user (id, email) values ('00000000-0000-0000-0000-000000000a51', 'cf01@test.dev') on conflict (id) do nothing;
+update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": true}'::jsonb where id = '00000000-0000-0000-0000-000000000a51';
+begin;
+do $$
+declare r jsonb; lid uuid; ok boolean := false;
+begin
+  perform set_config('app.uid', '00000000-0000-0000-0000-000000000a51', false);
+  r := create_native_league('CardLeague', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  lid := (r ->> 'league_id')::uuid;
+  perform set_config('app.uid', '', false);
+  insert into league_message (league_id, author_id, kind, body, mentions, txn)
+    values (lid, null, 'computer', 'Issue #1 closed. X.', '{}', '{"fix":{"issue":1,"report":"r"}}');
+  perform cf_true(true, 'cf4 a computer line stores its card');
+  begin
+    insert into league_message (league_id, author_id, kind, body, mentions, txn) values (lid, null, 'text', 'x', '{}', '{"a":1}');
+  exception when check_violation then ok := true;
+  end;
+  perform cf_true(ok, 'cf4a a text line still can''t carry a payload');
+  ok := false;
+  begin
+    insert into league_message (league_id, author_id, kind, body, mentions) values (lid, null, 'txn', 'x', '{}');
+  exception when check_violation then ok := true;
+  end;
+  perform cf_true(ok, 'cf4b a txn line still needs one');
+end $$;
+rollback;
 \echo ALL COMPUTER-FIX PROBES PASSED

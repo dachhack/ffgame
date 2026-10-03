@@ -1,0 +1,5 @@
+{
+  "mode": "computer-recard",
+  "issue": "1095",
+  "why": "Retry 027 after 0416: 0290's txn check refused a computer line with a payload."
+}

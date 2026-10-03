@@ -22,6 +22,12 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.599.1 — the closed-issue card can actually be saved
+
+> - The card from v0.598.0 was refused by the database: since 0290 only a transaction line may carry a payload, and the card keeps its report in one. So #1095's rewrite (ops 027) failed, and every card the relay tried to post since v0.598.0 failed too. The relay retries those on its next pass, so they'll go out now.
+
+- 0416: `league_message_txn_check` lets a computer line carry `txn`. A txn line still needs one, and every other kind still refuses one. Probes cf4–cf4b (cf4 fails under 0290's check). Ops 028 retries #1095's rewrite.
+
 ### v0.599.0 — closed-issue cards say what was wrong, then explain it
 
 > - Founder, over Kickoff League's bare "✅ Fixed (#1095).": "say a brief what was wrong and then expand like the waivers report with a brief paragraph of what was the error and how it was fixed. Can you do that for the most recent issue?"
