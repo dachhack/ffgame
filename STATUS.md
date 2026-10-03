@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.603.0 — every player on a big roster, not just the first 100
+
+> - Founder, over the devy values list: "How do we have guys with no schools?" Bryant Wesco Jr., Ryan Wingo, Bryce Underwood and Demond Williams Jr. showed no school or class.
+> - The cause: ESPN's roster endpoint returns 100 players unless asked for more, and a big program carries 120+. Since the college directory shipped (0365), everyone past #100 on a big roster never reached Drip. They had no school or class, sold at the 1-point floor in the devy market, and were missing from leagues' college pools.
+> - The sweep now asks for every player (`?limit=300`). Those players are not new arrivals, so a short-lived trigger (0419, until Oct 5) dates them as already known. That stops every devy market from listing hundreds of them as new launches.
+> - A college sweep follows in the next release (it must run after this migration): it loads the missed players and prices them.
+
+- Worker `poll/college.js`: `ROSTER` asks `?limit=300`. Tested in `test/college-poll.mjs`.
+- 0419: `_college_roster_backfill` trigger on `college_player` inserts until 2026-10-05. Probes dv9–dv9a.
+
 ### v0.602.0 — devy values link to StatHead and download as CSV
 
 > - Founder: "Add a link to stathead for the values. Also add a link to download the values as csv."

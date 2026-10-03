@@ -32,7 +32,11 @@ const CORE_TEAMS = (season, group = 80) =>
 // carry division 'FCS', which keeps them out of pools, projections and the
 // stats ranking (college_directory reads FBS only).
 const FCS_GROUP = 81;
-const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`;
+// v0.603.0: ?limit=300. Without it ESPN returns the first 100 athletes, and a
+// big program carries 120+, so the rest never reached college_player: Bryant
+// Wesco Jr. (Clemson), Ryan Wingo (Texas), Bryce Underwood (Michigan) and
+// Demond Williams Jr. (Washington) had no school, no class and no devy price.
+export const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster?limit=300`;
 // 0382: every FBS conference and its teams, in one request.
 const STANDINGS = (season) => `https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80&season=${season}`;
 

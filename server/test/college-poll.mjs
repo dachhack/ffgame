@@ -2,7 +2,7 @@
 // retirement rule — a sweep with ANY failed roster must not retire anybody.
 // Fixtures are cut from real 2026 ESPN responses (Alabama's roster shape, the
 // core API's $ref list); no network.
-import { fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs, statRows, mergeStatRows, schoolsFromStandings } from '../src/poll/college.js';
+import { ROSTER, fbsTeamIds, rosterRows, runCollegeSweep, sweepEveryMs, statRows, mergeStatRows, schoolsFromStandings } from '../src/poll/college.js';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}`); if (!cond) fails++; };
@@ -175,6 +175,8 @@ const teamsFeed = { items: [
   ok(!by.X && rows.length === 4, 'an unknown conference is skipped, not guessed');
   ok(schoolsFromStandings(null).length === 0, 'no feed, no rows');
 }
+
+ok(ROSTER(228).endsWith('/teams/228/roster?limit=300'), 'v0.603.0: a roster asks for every athlete, not ESPN\'s first 100');
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL COLLEGE POLL CHECKS PASS');
