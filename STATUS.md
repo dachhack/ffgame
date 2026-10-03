@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.599.0 — closed-issue cards say what was wrong, then explain it
+
+> - Founder, over Kickoff League's bare "✅ Fixed (#1095).": "say a brief what was wrong and then expand like the waivers report with a brief paragraph of what was the error and how it was fixed. Can you do that for the most recent issue?"
+> - A fix note (an issue comment, or the closing pull request) can now carry the card's own words in two hidden lines, `<!-- chat-summary: … -->` and `<!-- chat-report: … -->`, written for league members: one sentence on what was wrong, and a short "what was wrong / how it was fixed" report. Without them the card falls back to the note's first sentences, as before.
+> - #1095's line in Kickoff League is rewritten in place as the card: "Issue #1095 closed. Rams players were locking at Thursday's kickoff instead of their own Sunday game.", with the report under READ THE REPORT.
+
+- Worker `computer.js`: `chatStory` reads the tags from the newest note, then from the closing PR. `recard(n)` rewrites an already-posted close line for issue n, or posts one. CLI and ops mode `computer-recard`; ops 027 runs it for #1095. Four new cases in `server/test/computer.mjs`.
+
 ### v0.598.0 — the computer posts a closed-issue card in chat
 
 > - When an @computer issue closes, the league chat gets "💻 Computer: Issue #N closed. <one or two sentences>", with a **READ THE REPORT** button that expands a short write-up of the problem and the fix, plus a link to the issue. Founder: "Issue xxx closed. (Short 1-2 sentence description). Click to expand a brief report of the issue and solution."

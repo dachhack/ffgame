@@ -667,6 +667,9 @@ async function main() {
         // scheduled sweep writes.
         argv.push('college-sweep');
         if (req.season) argv.push(String(req.season));
+      } else if (req.mode === 'computer-recard') {
+        // v0.599.0: rewrite a posted close line as the closed-issue card.
+        argv.push('computer-recard', need('issue'));
       } else if (req.mode === 'computer-context') {
         // v0.595.0: post the chat before an already-filed @computer ask on its issue.
         argv.push('computer-context', need('issue'));
@@ -679,7 +682,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep | computer-context`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep | computer-context | computer-recard`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -749,6 +752,13 @@ async function main() {
       console.log(`college-sweep ${season}: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines`
         + (r.failed ? `, ${r.failed} rosters failed (no retirement)` : `, ${r.retired} retired`) + (r.error ? ` — ${r.error}` : ''));
       if (r.error) process.exitCode = 1;
+      break;
+    }
+    case 'computer-recard': {
+      const { recard } = await import('./computer.js');
+      for (const n of String(args[0] ?? '').split(',').map(Number).filter(Boolean)) {
+        console.log(await recard(n).catch((e) => ({ issue: n, error: e.message })));
+      }
       break;
     }
     case 'computer-context': {

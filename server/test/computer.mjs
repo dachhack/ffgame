@@ -1,5 +1,5 @@
 // @computer (v0.537.0): which chat lines become issues, and what they say.
-import { isComputerAsk, issueTitle, issueBody, SNARK, snarkFor, contextSection, fixReport, fixSummary, titleSummary, closedHeader } from '../src/computer.js';
+import { isComputerAsk, issueTitle, issueBody, SNARK, snarkFor, contextSection, fixReport, fixSummary, titleSummary, closedHeader, chatStory } from '../src/computer.js';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -44,6 +44,16 @@ ok('a PR title becomes a sentence', titleSummary("v0.597.0: Rams players no long
 ok('the header', closedHeader(1095, "Rams players no longer lock at Thursday's kickoff.") === "Issue #1095 closed. Rams players no longer lock at Thursday's kickoff.");
 ok('…punctuates', closedHeader(7, 'Done') === 'Issue #7 closed. Done.');
 ok('…says not planned', closedHeader(8, '', true) === 'Issue #8 closed (not planned).');
+
+// v0.599.0 — the note can carry the card's own words
+{
+  const md = 'Engineer notes here.\n\n<!-- chat-summary: Rams players locked at Thursday\'s kickoff instead of their own game. -->\n<!-- chat-report: What was wrong: the schedule says LA.\n\nHow it was fixed: both sides match now. -->';
+  const st = chatStory(md);
+  ok('the hidden summary is the header', st?.summary === "Rams players locked at Thursday's kickoff instead of their own game.", st);
+  ok('the hidden report keeps its paragraphs', st?.report === 'What was wrong: the schedule says LA.\n\nHow it was fixed: both sides match now.', st);
+  ok('no tags, no story', chatStory('just a note') === null);
+  ok('…and the report text never shows the tags', !fixReport(md).includes('chat-summary'), fixReport(md));
+}
 
 // v0.595.0: the chat before the ask, names hidden
 {

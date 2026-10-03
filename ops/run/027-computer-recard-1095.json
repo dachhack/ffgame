@@ -1,0 +1,5 @@
+{
+  "mode": "computer-recard",
+  "issue": "1095",
+  "why": "Kickoff League's \"✅ Fixed (#1095).\" line predates the card; rewrite it as the closed-issue card from the fix note's chat-summary / chat-report (v0.599.0)."
+}

@@ -261,10 +261,32 @@ export function closedHeader(n, summary, notPlanned = false) {
   return `Issue #${n} closed${notPlanned ? ' (not planned)' : ''}.${s ? ` ${/[.!?…]$/.test(s) ? s : `${s}.`}` : ''}`;
 }
 
+// v0.599.0 (founder: "say a brief what was wrong and then expand … with a
+// brief paragraph of what was the error and how it was fixed"): a fix note or
+// a closing PR can carry the card's words itself, in two hidden comments —
+//   <!-- chat-summary: Rams players locked at Thursday's kickoff. -->
+//   <!-- chat-report: What was wrong … How it was fixed … -->
+// Written for league members, not for the code. Without them the card falls
+// back to the note's first sentences and its text, as before.
+const CHAT_TAG = (k) => new RegExp(`<!--\\s*chat-${k}:\\s*([\\s\\S]*?)\\s*-->`, 'i');
+
+/** The card's own words from a note's hidden chat-summary / chat-report, or null. Pure. */
+export function chatStory(md) {
+  const s = String(md ?? '');
+  const summary = CHAT_TAG('summary').exec(s)?.[1]?.replace(/\s+/g, ' ').trim();
+  const report = CHAT_TAG('report').exec(s)?.[1]?.replace(/[ \t]+\n/g, '\n').trim();
+  if (!summary && !report) return null;
+  const clip = (t, n) => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t);
+  return { summary: clip(summary ?? '', SUMMARY_MAX).replace(/@computer\b/gi, 'computer'), report: clip(report ?? '', REPORT_MAX).replace(/@computer\b/gi, 'computer') };
+}
+
 /** Summary + report for a closed issue, from its note or what closed it. */
 async function closeStory(n) {
   const comments = await gh(`/issues/${n}/comments?per_page=100`);
-  const note = [...(Array.isArray(comments) ? comments : [])].reverse().find((c) => c?.body && !/@computer\b/i.test(c.body))?.body;
+  const notes = [...(Array.isArray(comments) ? comments : [])].reverse().filter((c) => c?.body && !/@computer\b/i.test(c.body)).map((c) => c.body);
+  const told = notes.map(chatStory).find(Boolean);
+  if (told) return told;
+  const note = notes[0];
   if (note) return { summary: fixSummary(note), report: fixReport(note) };
   try {
     const events = await gh(`/issues/${n}/events?per_page=100`);
@@ -272,13 +294,40 @@ async function closeStory(n) {
     if (closed) {
       const prs = await gh(`/commits/${closed.commit_id}/pulls`).catch(() => []);
       const pr = Array.isArray(prs) ? prs[0] : null;
-      if (pr) return { summary: titleSummary(pr.title), report: fixReport(pr.body), pr: pr.number };
+      if (pr) return { ...(chatStory(pr.body) ?? { summary: titleSummary(pr.title), report: fixReport(pr.body) }), pr: pr.number };
       const c = await gh(`/commits/${closed.commit_id}`);
       const [head, ...rest] = String(c?.commit?.message ?? '').split('\n');
       return { summary: titleSummary(head), report: fixReport(rest.join('\n')) };
     }
   } catch (e) { log('close story', `#${n}`, e.message); }
   return { summary: '', report: '' };
+}
+
+/** Rewrite an already-posted close line as the card (ops "computer-recard",
+ *  v0.599.0): the league line the relay posted for issue n — the old
+ *  "✅ Fixed (#n)…" or an earlier card — gets the header and report the
+ *  close story gives now. Posts one if none is found. */
+export async function recard(n) {
+  const iss = await gh(`/issues/${n}`);
+  if (iss.state !== 'closed') throw new Error(`#${n} is not closed`);
+  const { data: ask } = await db().from('computer_ask').select('source, message_id').eq('issue', n).maybeSingle();
+  if (!ask || ask.source !== 'league') throw new Error(`#${n} was not asked in a league chat`);
+  const { data: m } = await db().from('league_message').select('league_id, created_at').eq('id', ask.message_id).maybeSingle();
+  if (!m) throw new Error(`the ask behind #${n} is gone`);
+  const story = await closeStory(n);
+  const body = closedHeader(n, story.summary || titleSummary(String(iss.title ?? '').replace(/^@computer:\s*/i, '')), iss.state_reason === 'not_planned');
+  const fix = { issue: n, url: iss.html_url ?? `https://github.com/${REPO}/issues/${n}`, report: story.report || '', ...(story.pr ? { pr: story.pr } : {}) };
+  const { data: lines } = await db().from('league_message').select('id, body')
+    .eq('league_id', m.league_id).eq('kind', 'computer').gt('created_at', m.created_at).order('created_at', { ascending: false }).limit(50);
+  const old = (lines ?? []).find((l) => l.body.startsWith(`✅ Fixed (#${n})`) || l.body.startsWith(`Issue #${n} closed`));
+  if (old) {
+    const { error } = await db().from('league_message').update({ body, txn: { fix } }).eq('id', old.id);
+    if (error) throw new Error(error.message);
+    return { issue: n, updated: old.id, report_chars: fix.report.length };
+  }
+  const { data: ins, error } = await db().from('league_message').insert({ league_id: m.league_id, author_id: null, kind: 'computer', body, mentions: [], txn: { fix } }).select('id').single();
+  if (error) throw new Error(error.message);
+  return { issue: n, posted: ins.id, report_chars: fix.report.length };
 }
 
 /** One relay pass. Returns push rows (DM asks) for the caller to enqueue. */
