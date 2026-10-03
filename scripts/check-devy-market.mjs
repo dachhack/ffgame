@@ -1,5 +1,6 @@
 // THE DEVY MARKET TABLE (v0.577.0): progress to max, owners, filters, sorting,
 // and two-decimal numbers. Offline.
+import { refreshedLabel, devyValueSub, fmtValue } from '../packages/core/src/data/devyValues.ts';
 import { pickRoundLabel, isDevyPickRound, devyBlockRound, draftRoundLabel, devyBlockLine } from '../packages/core/src/data/devyDraft.ts';
 import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview, underclassMult, underclassLabel, marketRowDetail } from '../packages/core/src/data/devyShares.ts';
 
@@ -81,5 +82,8 @@ ok(devyBlockLine(23, 2, 23, 2) === 'DEVY ROUND 1 of 2 — college players only' 
 ok(underclassMult(1) === 0.85 && underclassMult(2) === 0.92 && underclassMult(3) === 1 && underclassMult(null) === 1, '0413: freshman ×0.85, sophomore ×0.92, junior up full');
 ok(underclassLabel(1) === 'underclass −15%' && underclassLabel(2) === 'underclass −8%' && underclassLabel(4) === null, 'the discount\'s label');
 ok(marketRowDetail({ slug: 'c-9', name: 'Y', pos: 'WR', school: 'OSU', class_year: 2, rank: 8, sh_rank: 8, youth: true, price: 9.38 }).includes('underclass −8%'), 'the market row names the discount');
+ok(refreshedLabel('2026-10-03T00:48:29Z', 'UTC') === 'Refreshed Oct 3, 2026' && refreshedLabel(null) === 'Not loaded yet', 'v0.601.0: the refreshed-on date');
+ok(devyValueSub({ espn_id: '1', name: 'X', pos: 'WR', school: 'OSU', class_year: 2, rank_1qb: 1, rank_sf: 2, value_1qb: 11.04, value_sf: 10.49, underclass: true }) === 'WR · OSU · SO · underclass discount', 'the values row line');
+ok(fmtValue(8) === '8.00' && fmtValue(null) === '—', 'values print with two decimals, or a dash');
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL DEVY-MARKET CHECKS PASS');

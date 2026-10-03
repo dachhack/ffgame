@@ -14,7 +14,7 @@ const src = readFileSync(new URL('../apps/mobile/src/ui/SettingsModal.tsx', impo
 
 ok(/useState<Section \| null>\(null\)/.test(src), 'the sheet opens on the category menu, not on any options');
 ok(/useEffect\(\(\) => \{ if \(visible\) setSection\(null\); \}, \[visible\]\)/.test(src), '…every time it opens');
-for (const id of ['notifications', 'theme', 'cards', 'voice', 'rehearsal']) {
+for (const id of ['notifications', 'theme', 'cards', 'voice', 'devy', 'rehearsal']) {
   ok(new RegExp(`\\{ id: '${id}'`).test(src) && new RegExp(`section === '${id}'`).test(src),
     `category "${id}" is listed AND opens its options`);
 }
