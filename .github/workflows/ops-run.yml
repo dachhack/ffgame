@@ -55,6 +55,7 @@ jobs:
           AFTER: ${{ github.sha }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GH_ISSUES_TOKEN: ${{ secrets.GH_ISSUES_TOKEN }}   # v0.595.0: computer-context comments
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_URL:-}" ] || ! printf '%s' "$SUPABASE_URL" | grep -q '^https://'; then

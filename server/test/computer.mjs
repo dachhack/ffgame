@@ -1,5 +1,5 @@
 // @computer (v0.537.0): which chat lines become issues, and what they say.
-import { isComputerAsk, issueTitle, issueBody, SNARK, snarkFor, fixLine } from '../src/computer.js';
+import { isComputerAsk, issueTitle, issueBody, SNARK, snarkFor, fixLine, contextSection } from '../src/computer.js';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -39,6 +39,27 @@ ok('…never re-tags', !/@computer/i.test(fixLine(1, 'ask @computer again')));
 ok('…fits a chat line', fixLine(1, 'x'.repeat(2000)).length <= 480);
 ok('no note still says fixed', fixLine(9, null) === '✅ Fixed (#9).');
 ok('…and the note\'s own "✅ Fixed in #…" opener is not repeated', fixLine(1047, note).startsWith('✅ Fixed (#1047): Kickoff'), fixLine(1047, note));
+
+// v0.595.0: the chat before the ask, names hidden
+{
+  const me = 'u-me';
+  const ctx = contextSection([
+    { author_id: 'u-dave', body: 'my QB got 9 pts @Dave Jr and @computer', created_at: '2026-10-03T02:30:00Z' },
+    { author_id: me, body: 'https://cdn.example/shot.png', caption: 'look @Dave', created_at: '2026-10-03T02:33:00Z' },
+    { author_id: 'u-amy', body: 'https://cdn.example/hers.png', created_at: '2026-10-03T02:34:00Z' },
+    { author_id: 'u-dave', body: 'same', created_at: '2026-10-03T02:35:00Z' },
+    { author_id: null, kind: 'computer', body: 'Beep boop.', created_at: '2026-10-03T02:35:30Z' },
+  ], me);
+  ok('others become Member A, B in order', ctx.includes('**Member A** · 02:30') && ctx.includes('**Member B** · 02:34') && ctx.split('**Member A**').length === 3, ctx);
+  ok('no member id or handle leaks', !ctx.includes('u-dave') && !ctx.includes('u-amy') && !/@Dave\b(?! )/.test(ctx.split('**Asker**')[0]), ctx);
+  ok('others\' @mentions are masked, @computer kept', ctx.includes('@member Jr and @computer'), ctx);
+  ok('the asker\'s screenshot goes in', ctx.includes('**Asker** · 02:33 — ![image](https://cdn.example/shot.png) look @Dave'), ctx);
+  ok('others\' pictures stay out', !ctx.includes('hers.png') && ctx.includes('**Member B** · 02:34 — (image)'), ctx);
+  ok('house lines are the Computer', ctx.includes('**Computer** · 02:35 — Beep boop.'));
+  ok('no chat, no section', contextSection([], me) === '');
+  const body = issueBody({ body: '@computer I thought we fixed this.', where: 'L', at: 't', context: ctx });
+  ok('the issue carries it, before the marker', body.indexOf('Chat before the ask') > body.indexOf('I thought') && body.trim().endsWith('<!-- ffgame-computer -->'));
+}
 
 if (fails) { console.log(`\n${fails} @COMPUTER ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL @COMPUTER ASSERTIONS PASSED');

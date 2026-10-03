@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.595.0 — @computer issues carry the chat before the ask
+
+> - An @computer ask now files with the chat from the 15 minutes before it, so "@computer I thought we fixed this" arrives with whatever "this" was. Before, only the tagging line went in.
+> - The repo is public, so other members appear as "Member A", "Member B" (founder's choice: names hidden), their @mentions show as "@member", and their pictures stay out. The asker's own lines and screenshots go in as posted.
+> - The two open asks (#1095 and #1038) get their chat posted as an issue comment on merge.
+
+- Worker `computer.js`: `contextSection` (pure; up to 25 lines, each clipped to 400 characters), `chatBefore` (the league chat or DM thread, oldest first) and `issueBody({ context })`. `postContext(n)` backfills a filed ask as a comment that names @computer, so the fix relay never mistakes it for a fix note. CLI and ops mode `computer-context` (issue numbers, comma-separated); ops-run now gets `GH_ISSUES_TOKEN`. Tests: eight new cases in `server/test/computer.mjs`.
+
 ### v0.594.0 — devy prices also follow a rebuilt StatHead board mid-week
 
 > - The devy watcher now reprices when StatHead publishes a rebuilt board, not only when a new week of stats lands. Model fixes like StatHead 1.0.108's (one order within a position in both formats) reach Drip within about 3 hours instead of waiting for Sunday.
