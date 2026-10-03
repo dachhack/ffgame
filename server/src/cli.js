@@ -667,6 +667,11 @@ async function main() {
         // scheduled sweep writes.
         argv.push('college-sweep');
         if (req.season) argv.push(String(req.season));
+      } else if (req.mode === 'seal-audit') {
+        // v0.600.0: read-only — classic picks sealed before their own kickoff.
+        argv.push('seal-audit', need('week'));
+        if (req.season) argv.push(String(req.season));
+        if (req.league) argv.push(`--league=${req.league}`);
       } else if (req.mode === 'computer-recard') {
         // v0.599.0: rewrite a posted close line as the closed-issue card.
         argv.push('computer-recard', need('issue'));
@@ -682,7 +687,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep | computer-context | computer-recard`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -752,6 +757,13 @@ async function main() {
       console.log(`college-sweep ${season}: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines`
         + (r.failed ? `, ${r.failed} rosters failed (no retirement)` : `, ${r.retired} retired`) + (r.error ? ` — ${r.error}` : ''));
       if (r.error) process.exitCode = 1;
+      break;
+    }
+    case 'seal-audit': {
+      const { sealAudit } = await import('./sealAudit.js');
+      const league = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      const pos = args.filter((a) => !a.startsWith('--'));
+      console.log(await sealAudit(Number(pos[0]), pos[1] ?? config.season, league));
       break;
     }
     case 'computer-recard': {

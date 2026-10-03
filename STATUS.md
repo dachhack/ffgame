@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.600.0 — unconfirmed fixes stay open, and a seal audit checks them
+
+> - Founder, on #1095 recurring: keep "fixed but unconfirmed" issues open, with a check-back after the next kickoff. #1028 (Mooney's frozen lineup, week 3) shipped two plausible fixes, was closed while its own note said the cause wasn't confirmed, and the real cause (the Rams' LA/LAR codes) hit again in week 4.
+> - New `CLAUDE.md` tells every session the rules for @computer issues: confirm the cause against what the member saw and against data, keep an unconfirmed fix open (label `unconfirmed`, "Refs #N" not "Fixes #N"), check back after the next game, and write the chat card's summary and report.
+> - New ops mode `seal-audit` (read-only) answers "did lineup spots lock at their own kickoff?" for a week, optionally one league. It prints counts and team codes only, since ops logs are public. Run after Sunday's 1pm games, it confirms #1095.
+
+- Worker `sealAudit.js`: `auditSeals` (pure) and `sealAudit(week, season, league?)`; CLI `seal-audit <week> [season] [--league=]`. Test: `test/seal-audit.mjs`.
+
 ### v0.599.1 — the closed-issue card can actually be saved
 
 > - The card from v0.598.0 was refused by the database: since 0290 only a transaction line may carry a payload, and the card keeps its report in one. So #1095's rewrite (ops 027) failed, and every card the relay tried to post since v0.598.0 failed too. The relay retries those on its next pass, so they'll go out now.
