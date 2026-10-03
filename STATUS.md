@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.601.0 — devy values for everyone, 1QB and SF, in the gear
+
+> - Founder: "put regularly updated devy base value in the options chip so players in any league can see fresh devy values for 1QB and SF" … "a refreshed on date as well".
+> - The gear (app: Settings → 🎓 Devy values; web: ⚙ → Devy values) now lists every college QB/RB/WR/TE StatHead ranks, with two values per player: **1QB** (the devy market's price per share) and **SF** (the same scale on StatHead's superflex rank). Sort by either, filter by position, search a player or school, 100 at a time. Any signed-in player can open it; no devy league needed.
+> - The header says when it was refreshed ("Refreshed Oct 3, 2026"): the last time Drip loaded a StatHead board, which the worker does whenever StatHead publishes one (v0.594.0).
+> - Freshmen and sophomores show their underclass discount (0413), the same as the market.
+
+- 0417: `devy_base_values(sort, pos, q, limit, offset)` for authenticated users, from `stathead_devy` × `college_player` on `_college_curve` × `_college_class_mult`. Probes dv1–dv7.
+- Core `devyValues.ts` (`refreshedLabel`, `devyValueSub`, `fmtValue`) and `liveApi.devyBaseValues`. App `DevyValues.tsx` in `SettingsModal` (section `devy`); web `DevyValuesSheet` from `SiteSettings`. check:devymarket and check:settingsmenu cover them.
+
 ### v0.600.0 — unconfirmed fixes stay open, and a seal audit checks them
 
 > - Founder, on #1095 recurring: keep "fixed but unconfirmed" issues open, with a check-back after the next kickoff. #1028 (Mooney's frozen lineup, week 3) shipped two plausible fixes, was closed while its own note said the cause wasn't confirmed, and the real cause (the Rams' LA/LAR codes) hit again in week 4.

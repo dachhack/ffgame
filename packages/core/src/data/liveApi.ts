@@ -3828,6 +3828,11 @@ export const setDevyRounds = (leagueId: string, rounds: number) =>
   tracked(rpc<{ ok: boolean; error?: string; devy_rounds?: number }>('set_devy_rounds', { p_league_id: leagueId, p_rounds: rounds }),
     Ev.commishAction, { tool: 'devy_rounds', rounds });
 /** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
+/** Devy values for any signed-in player, 1QB and SF (0417, v0.601.0). */
+export const devyBaseValues = (opts: { sort?: 'sf' | '1qb'; pos?: string | null; q?: string | null; limit?: number; offset?: number } = {}) =>
+  rpc<import('./devyValues').DevyValuesPage>('devy_base_values', {
+    p_sort: opts.sort ?? 'sf', p_pos: opts.pos || null, p_q: opts.q?.trim() || null, p_limit: opts.limit ?? 100, p_offset: opts.offset ?? 0,
+  });
 export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
   rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });
 /** 0396: the starting cash for a team with no devy book yet (commissioner). */

@@ -17,6 +17,7 @@ import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { VoicePicker } from './VoicePicker';
+import { DevyValues } from './DevyValues';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
@@ -98,6 +99,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
     { id: 'theme', icon: '🎨', name: 'Color theme', value: themeName },
     { id: 'cards', icon: '🃏', name: 'Cards', value: `${sizeName} · ${skinName}` },
     { id: 'voice', icon: '🔊', name: 'Play-by-play voice', value: 'the voice that reads plays aloud' },
+    // v0.601.0: StatHead-based devy values, 1QB and SF, for every player.
+    { id: 'devy', icon: '🎓', name: 'Devy values', value: '1QB & SF, refreshed with each StatHead board' },
     // A home-screen widget is Android's (react-native-android-widget).
     ...(Platform.OS === 'android' ? [{ id: 'widget' as Section, icon: '📱', name: 'Home-screen widget', value: 'which leagues it shows' }] : []),
     ...(isAdmin ? [{ id: 'rehearsal' as Section, icon: '🧪', name: 'Rehearsal tools', value: 'sim strip on test boards' }] : []),
@@ -209,6 +212,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
               </View>
             )}
             {section === 'voice' && <VoicePicker />}
+            {section === 'devy' && <DevyValues />}
             {section === 'widget' && <WidgetLeaguesPicker />}
             {section === 'rehearsal' && isAdmin && <RehearsalToggle />}
           </>
@@ -242,7 +246,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   );
 }
 
-type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'widget' | 'rehearsal';
+type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'devy' | 'widget' | 'rehearsal';
 
 /** One compact line in the menu's lower half: an action, not a category. */
 function ActionRow({ icon, label, hint, strong, onPress }: {

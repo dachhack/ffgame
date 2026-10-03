@@ -13,6 +13,7 @@ import { APK_ZIP_URL } from '@drip/core/data/changelog';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
+import { DevyValuesSheet } from './DevyValues';
 import { GameIcon, UI_ART, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
@@ -436,6 +437,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
   const [menuAlign, setMenuAlign] = useState<'left' | 'right'>('right');
   const [rules, setRules] = useState(false);
   const [faq, setFaq] = useState(false);
+  const [devy, setDevy] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [admin, setAdmin] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -593,6 +595,16 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
           >
             ❓ FAQ
           </button>
+          {/* v0.601.0: StatHead-based devy values, 1QB and SF — any signed-in player. */}
+          {session && (
+            <button
+              onClick={() => { setOpen(false); setDevy(true); }}
+              className="mono"
+              style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+            >
+              🎓 Devy values · 1QB & SF
+            </button>
+          )}
           {/* The Android playtest build and what shipped (v0.393.0). One link,
               always the newest build — release-apk.yml keeps it current.
               v0.410.0: it is the ZIP. The direct .apk stalls at 100% in a
@@ -664,6 +676,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
       )}
       {rules && <Rulebook onClose={() => setRules(false)} />}
       {faq && <Faq onClose={() => setFaq(false)} onOpenRulebook={() => setRules(true)} />}
+      {devy && <DevyValuesSheet onClose={() => setDevy(false)} />}
     </div>
   );
 }
