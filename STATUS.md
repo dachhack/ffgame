@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.602.0 — devy values link to StatHead and download as CSV
+
+> - Founder: "Add a link to stathead for the values. Also add a link to download the values as csv."
+> - The Devy values page (gear menu) now links to StatHead (stathead.app; the rankings are under Prospects → Devy, which has no direct link).
+> - Web: **⬇ Download CSV** saves the whole list in the current sort and position, for example `drip-devy-values-sf-2026-10-03.csv`. Columns: SF rank, 1QB rank, name, position, school, class, 1QB value, SF value, underclass discount, and the refresh date.
+> - App: **⬆ Share CSV** sends the same file contents through the share sheet (save to Files or Drive, or send). A true file download on the phone needs a native module, and an over-the-air update can't add one without crashing older installs.
+
+- 0418: `devy_base_values_csv(sort, pos)` (authenticated), built on 0417's list; probes dv8–dv8c. Core `devyBaseValuesCsv`, `devyCsvName`, `STATHEAD_DEVY_URL`; check:devymarket covers them.
+
 ### v0.601.0 — devy values for everyone, 1QB and SF, in the gear
 
 > - Founder: "put regularly updated devy base value in the options chip so players in any league can see fresh devy values for 1QB and SF" … "a refreshed on date as well".

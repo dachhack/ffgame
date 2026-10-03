@@ -1,8 +1,8 @@
 // DEVY VALUES in the gear (v0.601.0, 0417) — the web twin of
 // apps/mobile/src/ui/DevyValues.tsx. Any signed-in player, any league.
 import { useEffect, useState, type CSSProperties } from 'react';
-import { devyBaseValues } from '@drip/core/data/liveApi';
-import { DEVY_VALUE_POSITIONS, devyValueSub, fmtValue, refreshedLabel, type DevyValueRow } from '@drip/core/data/devyValues';
+import { devyBaseValues, devyBaseValuesCsv } from '@drip/core/data/liveApi';
+import { DEVY_VALUE_POSITIONS, STATHEAD_DEVY_URL, devyCsvName, devyValueSub, fmtValue, refreshedLabel, type DevyValueRow } from '@drip/core/data/devyValues';
 import { Sheet } from './ui';
 
 const PAGE = 100;
@@ -15,6 +15,19 @@ export function DevyValuesSheet({ onClose }: { onClose: () => void }) {
   const [total, setTotal] = useState(0);
   const [asOf, setAsOf] = useState<string | null>(null);
   const [err, setErr] = useState(false);
+  const [csvBusy, setCsvBusy] = useState(false);
+  // v0.602.0: the whole list (this sort, this position) as a file.
+  const downloadCsv = async () => {
+    setCsvBusy(true);
+    try {
+      const csv = await devyBaseValuesCsv(sort, pos === 'ALL' ? null : pos);
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = devyCsvName(sort, pos, asOf);
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { setErr(true); } finally { setCsvBusy(false); }
+  };
 
   const load = (offset: number) =>
     devyBaseValues({ sort, pos: pos === 'ALL' ? null : pos, q: q.trim().length >= 2 ? q : null, limit: PAGE, offset })
@@ -35,6 +48,13 @@ export function DevyValuesSheet({ onClose }: { onClose: () => void }) {
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--dim)' }}>
           What a devy share is worth, from StatHead's composite rankings. 1QB is the devy market's price; SF is the same scale on the superflex rank.
+        </div>
+        <div className="mono" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+          <a href={STATHEAD_DEVY_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--you)' }}>StatHead devy rankings ↗</a>
+          <button onClick={() => void downloadCsv()} disabled={csvBusy}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: csvBusy ? 'wait' : 'pointer', color: 'var(--you)', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 'inherit' }}>
+            {csvBusy ? 'Preparing CSV…' : `⬇ Download CSV (${pos === 'ALL' ? 'all' : pos})`}
+          </button>
         </div>
         <div className="mono" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {(['sf', '1qb'] as const).map((s) => <button key={s} onClick={() => setSort(s)} style={chip(sort === s)}>SORT {s.toUpperCase()}</button>)}

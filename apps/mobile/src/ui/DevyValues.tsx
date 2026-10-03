@@ -3,9 +3,9 @@
 // players in any league can see fresh devy values for 1QB and SF" … "a
 // refreshed on date as well". The web twin is src/app/DevyValues.tsx.
 import { useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import { devyBaseValues } from '@drip/core/data/liveApi';
-import { DEVY_VALUE_POSITIONS, devyValueSub, fmtValue, refreshedLabel, type DevyValueRow } from '@drip/core/data/devyValues';
+import { Linking, Pressable, Share, Text, TextInput, View } from 'react-native';
+import { devyBaseValues, devyBaseValuesCsv } from '@drip/core/data/liveApi';
+import { DEVY_VALUE_POSITIONS, STATHEAD_DEVY_URL, devyCsvName, devyValueSub, fmtValue, refreshedLabel, type DevyValueRow } from '@drip/core/data/devyValues';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { tap } from './feedback';
@@ -21,6 +21,17 @@ export function DevyValues() {
   const [total, setTotal] = useState(0);
   const [asOf, setAsOf] = useState<string | null>(null);
   const [err, setErr] = useState(false);
+  const [csvBusy, setCsvBusy] = useState(false);
+  // v0.602.0: the list as CSV. No file-sharing module is in the binary (and an
+  // OTA can't add one), so the CSV goes out as text through the share sheet:
+  // save it to Files or Drive, or send it.
+  const shareCsv = async () => {
+    setCsvBusy(true);
+    try {
+      const csv = await devyBaseValuesCsv(sort, pos === 'ALL' ? null : pos);
+      await Share.share({ title: devyCsvName(sort, pos, asOf), message: csv });
+    } catch { setErr(true); } finally { setCsvBusy(false); }
+  };
 
   const load = (offset: number) => {
     let live = true;
@@ -45,6 +56,14 @@ export function DevyValues() {
         What a devy share is worth, from StatHead's composite rankings. 1QB is the devy market's price; SF is the same scale on the superflex rank.
       </Text>
       <Mono size={10} weight="700" tone="dim" track={0.08}>{refreshedLabel(asOf).toUpperCase()}</Mono>
+      <View style={{ flexDirection: 'row', gap: 16, flexWrap: 'wrap' }}>
+        <Pressable onPress={() => { tap(); void Linking.openURL(STATHEAD_DEVY_URL); }} hitSlop={6}>
+          <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: t.you }}>StatHead devy rankings ↗</Text>
+        </Pressable>
+        <Pressable onPress={() => { tap(); void shareCsv(); }} disabled={csvBusy} hitSlop={6}>
+          <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', color: t.you }}>{csvBusy ? 'Preparing CSV…' : `⬆ Share CSV (${pos === 'ALL' ? 'all' : pos})`}</Text>
+        </Pressable>
+      </View>
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         {(['sf', '1qb'] as const).map((s) => (
           <Pressable key={s} onPress={() => { tap(); setSort(s); }} style={chip(sort === s)}>

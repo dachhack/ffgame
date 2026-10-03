@@ -32,6 +32,14 @@ begin
   perform dv_true((devy_base_values('sf', 'qb') ->> 'total')::int = 1 and (devy_base_values('sf', null, 'receiver') ->> 'total')::int = 1,
     'dv6 position and name filters');
   perform dv_true(_devy_price(null, 'c-97702') is not null, 'dv7 (sanity) the market price function still answers');
+  declare csv text := devy_base_values_csv(); lines text[];
+  begin
+    lines := string_to_array(trim(trailing chr(10) from csv), chr(10));
+    perform dv_true(array_length(lines, 1) = 3, 'dv8 the CSV: a header and one line per player — ' || csv);
+    perform dv_true(lines[1] = 'rank_sf,rank_1qb,name,pos,school,class,value_1qb,value_sf,underclass_discount,refreshed', 'dv8a its header');
+    perform dv_true(lines[2] like '2,20,"Value Quarterback",QB,DVU,JR,8.00,11.40,no,____-__-__', 'dv8b the QB line: ' || lines[2]);
+    perform dv_true(lines[3] like '5,1,"Value Receiver",WR,DVU,SO,11.04,%,yes,%', 'dv8c the sophomore line: ' || lines[3]);
+  end;
 end $$;
 rollback;
 \echo ALL DEVY-VALUES PROBES PASSED
