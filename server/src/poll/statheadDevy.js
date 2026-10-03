@@ -76,24 +76,27 @@ export async function loadStatheadDevy(rpc, log = () => {}, fetchBoard = getBoar
 // whenever the worker last booted, so it could land the day before the
 // rescore and price off a week-old board for six days. This watcher reads the
 // board every few hours and reprices the moment profilesThrough moves — the
-// board's own signal that a new week of stats is in. A boot reprices once, off
-// whatever board is current, which is the same answer as before the boot.
+// board's own signal that a new week of stats is in — or generatedAt does
+// (v0.594.0: a mid-week model release, like 1.0.108's within-position fix,
+// keeps the same week; so does the near-daily market snapshot). A boot
+// reprices once, off whatever board is current.
 const WATCH_EVERY_MS = Number(process.env.STATHEAD_WATCH_MS || 3 * 3600 * 1000);
 
-/** One check. `state.through` is the profilesThrough last priced from. */
-export async function checkDevyBoard(rpc, log = () => {}, fetchBoard = getBoard, state = { through: null }) {
+/** One check. `state` holds the profilesThrough and generatedAt last priced from. */
+export async function checkDevyBoard(rpc, log = () => {}, fetchBoard = getBoard, state = { through: null, generated: null }) {
   const board = await fetchBoard();
   const through = board?.profilesThrough ?? null;
-  if (!through || through === state.through) return { changed: false, through };
+  const generated = board?.generatedAt ?? null;
+  if (!through || (through === state.through && generated === (state.generated ?? null))) return { changed: false, through };
   await loadStatheadDevy(rpc, log, async () => board);
   const { data, error } = await rpc('refresh_college_prices', {});
   if (error) throw new Error(`refresh_college_prices: ${error.message}`);
-  state.through = through;
-  log(`devy prices: repriced off StatHead's board through ${through}` + (data?.frozen ? ' (prices frozen for the offseason)' : ` — ${data?.priced ?? 0} priced`));
+  state.through = through; state.generated = generated;
+  log(`devy prices: repriced off StatHead's board through ${through}` + (generated ? ` (built ${generated})` : '') + (data?.frozen ? ' (prices frozen for the offseason)' : ` — ${data?.priced ?? 0} priced`));
   return { changed: true, through, priced: data?.priced ?? 0, frozen: !!data?.frozen };
 }
 
-const watchState = { through: null };
+const watchState = { through: null, generated: null };
 let watchLast = 0;
 let watchInflight = null;
 
