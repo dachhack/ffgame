@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.605.0 — the devy market keeps loading as you scroll
+
+> - Founder: "Can we lazy load the listings in the devy market so you can keep scrolling?" The market stopped at 80 rows in the app and 100 on the web.
+> - It now shows 60 rows and adds 60 more each time you near the bottom. Once you've scrolled past the first 1,000 players (by price), it fetches the rest of the market once (the server returns up to 5,000), so you can scroll the whole board. A new filter, sort or search starts back at the top.
+> - The bottom of the list says "Scroll for more…" while there's more, and "All N players" once everything is loaded. On the web, clicking the line also loads the next page.
+
+- Core `devyShares.ts`: `marketNext` and `marketFooter` (pure), plus `MARKET_PAGE`, `MARKET_FIRST_FETCH` and `MARKET_FULL_FETCH`; check:devymarket covers them.
+- App: `scrollChrome.tsx` gains `onNearEnd`/`isNearEnd`. The league shell's shared scroll handler tells subscribers when the page nears its end, which is how the market inside My Team's DEVY tab hears it. The market's own sheet uses its ScrollView's `onScroll`.
+- Web: an IntersectionObserver sentinel under the list.
+
 ### v0.604.0 — devy values list only players on a roster
 
 > - Follow-up to "How do we have guys with no schools?". After full rosters loaded (v0.603.0), 868 of StatHead's 6,996 still had no Drip player: 749 that ESPN marks inactive this season, 95 at Division II/III/NAIA schools we don't load, 14 ESPN has no record of, and a few ESPN roster gaps. None of them can be bought, so the Devy values list (and its CSV) now shows only players on an FBS or FCS roster this season. StatHead's ranks stay as published, so a gap in the rank column is a player left out.

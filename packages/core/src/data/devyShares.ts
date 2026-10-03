@@ -189,6 +189,30 @@ export function marketRowDetail(r: DevyMarketRow): string {
   ].filter(Boolean).join(' · ');
 }
 
+// ── Lazy loading (v0.605.0, founder: "lazy load the listings in the devy
+// market so you can keep scrolling") ─────────────────────────────────────────
+// The market shows MARKET_PAGE rows and adds a page each time the reader nears
+// the end. The first fetch is MARKET_FIRST_FETCH rows (by price); scrolling
+// past them fetches the rest once, up to the server's cap.
+export const MARKET_PAGE = 60;
+export const MARKET_FIRST_FETCH = 1000;
+export const MARKET_FULL_FETCH = 5000;
+
+/** What reaching the end does: show another page, and/or fetch the rest of
+ *  the market (a bigger limit), or nothing when everything is showing. Pure. */
+export function marketNext(shown: number, lines: number, fetched: number, limit: number): { shown: number; fetch: number | null } {
+  if (shown < lines) return { shown: Math.min(lines, shown + MARKET_PAGE), fetch: null };
+  if (limit < MARKET_FULL_FETCH && fetched >= limit) return { shown: shown + MARKET_PAGE, fetch: MARKET_FULL_FETCH };
+  return { shown, fetch: null };
+}
+
+/** The line under the list: more coming, or the count when it's all here. */
+export function marketFooter(shown: number, lines: number, fetched: number, limit: number): string | null {
+  if (!lines) return null;
+  if (shown < lines || (limit < MARKET_FULL_FETCH && fetched >= limit)) return 'Scroll for more…';
+  return `All ${lines.toLocaleString('en-US')} players`;
+}
+
 /** Typed this much, the search goes to the server and covers every college
  *  player, not just the loaded list. */
 export const DEEP_SEARCH_MIN = 2;
