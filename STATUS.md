@@ -22,6 +22,12 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.596.0 — @computer looks back three chat messages, whatever their age
+
+> - An @computer issue now carries the chat's last 3 messages before the ask, however old they are, in place of the 15-minute window. #1095 ("I thought we fixed this.") had nothing in its 15 minutes. Times now show the date too.
+
+- `chatBefore` takes the last `CONTEXT_N` (3) lines before the ask. Ops 026 backfills #1095 again.
+
 ### v0.595.1 — the chat-context backfill files a new issue when it can't comment
 
 > - The first backfill for #1095 and #1038 failed: the worker's GitHub token can open issues but not comment on them. The context now goes into a new issue that points back at the ask.

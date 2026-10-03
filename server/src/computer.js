@@ -10,8 +10,9 @@
 // that say "@computer" again.
 //
 // v0.595.0 (founder: "look at the rest of the chat … that should be the
-// pipeline"): the issue also carries the chat from the 15 minutes before the
-// ask, so "@computer I thought we fixed this" arrives with the "this". The
+// pipeline"): the issue also carries the chat's last 3 lines before the ask
+// (v0.596.0: by count, not time — "look back three chat entries not time
+// bound"), so "@computer I thought we fixed this" arrives with the "this". The
 // repo is public, so other members are "Member A", "Member B" (founder's
 // choice: names hidden), their @mentions are masked and their pictures are
 // left out; the asker's own lines and screenshots go in as posted.
@@ -38,8 +39,7 @@ export function issueTitle(body) {
 }
 
 // ── THE CHAT BEFORE THE ASK (v0.595.0) ─────────────────────────────────────
-export const CONTEXT_MS = 15 * 60_000;
-const CONTEXT_MAX = 25;
+export const CONTEXT_N = 3;
 const LINE_MAX = 400;
 const MENTION = /@(?!computer\b)[^\s@,.!?;:]+/gi;
 
@@ -66,21 +66,20 @@ export function contextSection(msgs, askerId) {
     let text = isImg ? (mine ? `![image](${String(m.body).trim()})` : '(image)') : hide(m.body);
     if (m.caption) text += ` ${hide(m.caption)}`;
     if (m.kind === 'poll') text = `(poll) ${text}`;
-    const t = String(m.created_at ?? '').slice(11, 16);
+    const t = String(m.created_at ?? '').replace('T', ' ').slice(0, 16);
     lines.push(`> **${name}**${t ? ` · ${t}` : ''} — ${text.trim() || '(empty)'}`);
   }
   if (!lines.length) return '';
-  return [`**Chat before the ask** (last ${CONTEXT_MS / 60_000} min, UTC; other members' names hidden)`, '', ...lines.flatMap((l) => [l, '>'] ).slice(0, -1)].join('\n');
+  return [`**Chat before the ask** (last ${CONTEXT_N} messages, times UTC; other members' names hidden)`, '', ...lines.flatMap((l) => [l, '>'] ).slice(0, -1)].join('\n');
 }
 
 /** The messages before an ask in its chat, oldest first. */
 export async function chatBefore(a) {
-  const from = new Date(Date.parse(a.created_at) - CONTEXT_MS).toISOString();
   const q = a.source === 'league'
     ? db().from('league_message').select('id, author_id, body, caption, kind, created_at').eq('league_id', a.league_id)
     : db().from('dm_message').select('id, author_id, body, caption, created_at').eq('thread_id', a.thread_id);
-  const { data, error } = await q.gte('created_at', from).lt('created_at', a.created_at)
-    .order('created_at', { ascending: false }).limit(CONTEXT_MAX);
+  const { data, error } = await q.lt('created_at', a.created_at)
+    .order('created_at', { ascending: false }).limit(CONTEXT_N);
   if (error) { log('context read failed', error.message); return []; }
   return (data ?? []).filter((m) => m.id !== a.id).reverse();
 }
@@ -159,7 +158,7 @@ export async function postContext(n) {
   const { data: m, error } = await db().from(table).select(cols).eq('id', ask.message_id).maybeSingle();
   if (error || !m) throw new Error(`the ask's message is gone (${error?.message ?? 'deleted'})`);
   const ctx = contextSection(await chatBefore({ ...m, source: ask.source }), m.author_id);
-  const body = `Chat context for this @computer ask (backfilled)\n\n${ctx || '_Nothing was said in that chat in the 15 minutes before the ask._'}`;
+  const body = `Chat context for this @computer ask (backfilled)\n\n${ctx || '_Nothing was said in that chat before the ask._'}`;
   let filed = null;
   try { await comment(n, body); }
   catch (e) {
