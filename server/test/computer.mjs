@@ -50,14 +50,15 @@ ok('…and the note\'s own "✅ Fixed in #…" opener is not repeated', fixLine(
     { author_id: 'u-dave', body: 'same', created_at: '2026-10-03T02:35:00Z' },
     { author_id: null, kind: 'computer', body: 'Beep boop.', created_at: '2026-10-03T02:35:30Z' },
   ], me);
-  ok('others become Member A, B in order', ctx.includes('**Member A** · 02:30') && ctx.includes('**Member B** · 02:34') && ctx.split('**Member A**').length === 3, ctx);
+  ok('others become Member A, B in order', ctx.includes('**Member A** · 2026-10-03 02:30') && ctx.includes('**Member B** · 2026-10-03 02:34') && ctx.split('**Member A**').length === 3, ctx);
   ok('no member id or handle leaks', !ctx.includes('u-dave') && !ctx.includes('u-amy') && !/@Dave\b(?! )/.test(ctx.split('**Asker**')[0]), ctx);
   ok('others\' @mentions are masked, @computer kept', ctx.includes('@member Jr and @computer'), ctx);
-  ok('the asker\'s screenshot goes in', ctx.includes('**Asker** · 02:33 — ![image](https://cdn.example/shot.png) look @Dave'), ctx);
-  ok('others\' pictures stay out', !ctx.includes('hers.png') && ctx.includes('**Member B** · 02:34 — (image)'), ctx);
-  ok('house lines are the Computer', ctx.includes('**Computer** · 02:35 — Beep boop.'));
+  ok('the asker\'s screenshot goes in', ctx.includes('**Asker** · 2026-10-03 02:33 — ![image](https://cdn.example/shot.png) look @Dave'), ctx);
+  ok('others\' pictures stay out', !ctx.includes('hers.png') && ctx.includes('**Member B** · 2026-10-03 02:34 — (image)'), ctx);
+  ok('house lines are the Computer', ctx.includes('**Computer** · 2026-10-03 02:35 — Beep boop.'));
   ok('no chat, no section', contextSection([], me) === '');
   const body = issueBody({ body: '@computer I thought we fixed this.', where: 'L', at: 't', context: ctx });
+  ok('the header counts messages, not minutes', ctx.startsWith('**Chat before the ask** (last 3 messages'), ctx);
   ok('the issue carries it, before the marker', body.indexOf('Chat before the ask') > body.indexOf('I thought') && body.trim().endsWith('<!-- ffgame-computer -->'));
 }
 

@@ -1,0 +1,5 @@
+{
+  "mode": "computer-context",
+  "issue": "1095",
+  "why": "#1095 had nothing in the 15 minutes before it; v0.596.0 looks back 3 messages whatever their age."
+}
