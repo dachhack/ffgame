@@ -147,7 +147,9 @@ async function comment(n, body) {
 
 /** Backfill: the chat before an already-filed ask, as a comment on its issue
  *  (ops "computer-context"). The comment says @computer so relayFixes never
- *  mistakes it for the fix note. */
+ *  mistakes it for the fix note. v0.595.1: the worker's token may open issues
+ *  but not comment (a 403 on the first backfill), so then the context goes in
+ *  a new issue that points back at the ask. */
 export async function postContext(n) {
   if (!process.env.GH_ISSUES_TOKEN) throw new Error('GH_ISSUES_TOKEN unset');
   const { data: ask } = await db().from('computer_ask').select('source, message_id').eq('issue', n).maybeSingle();
@@ -158,8 +160,13 @@ export async function postContext(n) {
   if (error || !m) throw new Error(`the ask's message is gone (${error?.message ?? 'deleted'})`);
   const ctx = contextSection(await chatBefore({ ...m, source: ask.source }), m.author_id);
   const body = `Chat context for this @computer ask (backfilled)\n\n${ctx || '_Nothing was said in that chat in the 15 minutes before the ask._'}`;
-  await comment(n, body);
-  return { issue: n, lines: ctx ? ctx.split('\n').filter((l) => l.startsWith('> **')).length : 0 };
+  let filed = null;
+  try { await comment(n, body); }
+  catch (e) {
+    if (!/^403\b/.test(e.message)) throw e;
+    filed = await openIssue(`@computer: chat context for #${n}`, `${body}\n\nFor #${n}.\n\n<!-- ffgame-computer -->`);
+  }
+  return { issue: n, ...(filed ? { filed_as: filed } : {}), lines: ctx ? ctx.split('\n').filter((l) => l.startsWith('> **')).length : 0 };
 }
 
 const askers = () => (process.env.COMPUTER_USERS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
