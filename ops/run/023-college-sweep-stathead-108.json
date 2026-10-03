@@ -1,0 +1,4 @@
+{
+  "mode": "college-sweep",
+  "why": "Reprice off StatHead 1.0.108's board (generated 2026-10-03T00:48Z): one order within a position across formats. It still reads profilesThrough \"2026 week 4\", so the weekly watcher (v0.592) won't pick it up until Sunday."
+}
