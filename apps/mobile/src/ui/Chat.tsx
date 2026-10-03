@@ -6,7 +6,7 @@
 // message, as the commissioner — is a long-press, the phone idiom for "act on
 // this thing" (the web shows a ✕; a ✕ per bubble on a phone is clutter).
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   chatPost, chatMessages, chatDelete, chatEdit, chatMembers, dmSend, dmThreads, dmMessages, dmEdit,
   chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
@@ -116,6 +116,39 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
 // The sentence is composed server-side (0290) so push and chat read alike;
 // this is the rail and the colour, from the same shared look as the web bubble
 // so the two hosts cannot end up calling a trade different things.
+// ── THE CLOSED-ISSUE CARD (v0.598.0, 0415) — the web twin ──────────────────
+// "Issue xxx closed. (Short 1-2 sentence description). Click to expand a brief
+// report of the issue and solution."
+function FixCard({ m }: { m: ChatMessage }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const f = m.fix!;
+  const shelved = /\(not planned\)/.test(m.body);
+  return (
+    <View style={{ borderLeftWidth: 3, borderLeftColor: shelved ? t.bd : t.you, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: alpha(t.dim, 7), borderRadius: 4 }}>
+      <Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{shelved ? '🗂' : '✅'}  {m.body}</Text>
+      {!!f.report && (
+        <Pressable onPress={() => { tap(); setOpen((o) => !o); }} hitSlop={6} accessibilityRole="button" accessibilityState={{ expanded: open }}
+          style={{ alignSelf: 'flex-start', marginTop: 5, marginBottom: 2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, backgroundColor: t.bg }}>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.8, color: t.you }}>
+            {open ? '▾ HIDE THE REPORT' : '▸ READ THE REPORT'}
+          </Text>
+        </Pressable>
+      )}
+      {open && (
+        <View style={{ marginTop: 4 }}>
+          <Text style={{ fontSize: 12.5, lineHeight: 18, color: t.text }}>{f.report}</Text>
+          {!!f.url && (
+            <Pressable onPress={() => void Linking.openURL(f.url!)} hitSlop={6} style={{ marginTop: 6 }}>
+              <Text style={{ fontSize: 12.5, color: t.you }}>Issue #{f.issue} on GitHub ↗</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function TxnLine({ m, onOpenRun }: { m: ChatMessage; onOpenRun?: () => void }) {
   const t = useTheme();
   const look = txnLook(m.txn);
@@ -826,6 +859,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                     setEditing(null); void load();
                     return null;
                   }} />
+              : m.kind === 'computer' && m.fix
+              ? <FixCard m={m} />
               : m.kind === 'txn'
               ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'

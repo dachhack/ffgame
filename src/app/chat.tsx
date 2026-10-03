@@ -134,6 +134,36 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
 // bubble read alike; this gives it a rail and a colour, so the league's own
 // conversation still reads as the conversation and the moves read as the
 // record rather than as somebody talking.
+// ── THE CLOSED-ISSUE CARD (v0.598.0, 0415) ─────────────────────────────────
+// Founder: "Issue xxx closed. (Short 1-2 sentence description). Click to
+// expand a brief report of the issue and solution". The header is the body;
+// the report opens under it.
+function FixCard({ m }: { m: ChatMessage }) {
+  const [open, setOpen] = useState(false);
+  const f = m.fix!;
+  const shelved = /\(not planned\)/.test(m.body);
+  return (
+    <div style={{ borderLeft: `3px solid ${shelved ? 'var(--bd)' : 'var(--you)'}`, padding: '3px 8px', borderRadius: 4,
+                  background: 'color-mix(in srgb, var(--dim) 7%, transparent)' }}>
+      <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', overflowWrap: 'anywhere' }}>
+        <span style={{ marginRight: 5 }}>{shelved ? '🗂' : '✅'}</span>{m.body}
+      </div>
+      {!!f.report && (
+        <button onClick={() => setOpen((o) => !o)} className="mono" aria-expanded={open}
+          style={{ marginTop: 4, marginBottom: 2, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', borderRadius: 999, padding: '4px 10px', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--you)' }}>
+          {open ? '▾ HIDE THE REPORT' : '▸ READ THE REPORT'}
+        </button>
+      )}
+      {open && (
+        <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.5, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+          {f.report}
+          {!!f.url && <div style={{ marginTop: 6 }}><a href={f.url} target="_blank" rel="noreferrer" style={{ color: 'var(--you)' }}>Issue #{f.issue} on GitHub ↗</a></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TxnLine({ m, onOpenRun }: { m: ChatMessage; onOpenRun?: () => void }) {
   const look = txnLook(m.txn);
   const rail = look.tone === 'you' ? 'var(--you)' : look.tone === 'warn' ? 'var(--warn)' : 'var(--bd)';
@@ -802,6 +832,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                     setEditing(null); await load();
                     return null;
                   }} />
+              : m.kind === 'computer' && m.fix
+              ? <FixCard m={m} />
               : m.kind === 'txn'
               ? <TxnLine m={m} onOpenRun={isWaiverRun(m.txn) ? () => setRunAt(m.at) : undefined} />
               : m.kind === 'report'

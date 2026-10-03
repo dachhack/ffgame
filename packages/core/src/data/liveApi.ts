@@ -3082,7 +3082,7 @@ export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: str
 export interface ChatPoll { options: { text: string; votes: number }[]; total: number; mine: number | null; }
 export interface ChatMessage {
   id: number; body: string; at: string; author: string; author_id: string | null; mine: boolean;
-  kind: 'text' | 'poll' | 'report' | 'txn'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+  kind: 'text' | 'poll' | 'report' | 'txn' | 'computer'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
   /** What the poster wrote under a picture (0350). Null on everything else,
    *  and on every message posted before captions existed. */
   caption?: string | null;
@@ -3095,6 +3095,9 @@ export interface ChatMessage {
   report?: { week: number };
   /** A transaction line (0290): an add, a drop, a waiver run or a trade. */
   txn?: import('./txnChat').TxnPayload;
+  /** A closed-issue card (0415): the body is the header, this is the report
+   *  behind it. Only on the computer's lines. */
+  fix?: { issue: number; url?: string; report: string; pr?: number };
   /** Quick reactions (0210), counted per emoji. Only ones somebody used. */
   reactions?: import('./chatReactions').ChatReactionCount[];
 }
