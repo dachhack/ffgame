@@ -1,6 +1,6 @@
 // THE DEVY MARKET TABLE (v0.577.0): progress to max, owners, filters, sorting,
 // and two-decimal numbers. Offline.
-import { refreshedLabel, devyValueSub, fmtValue } from '../packages/core/src/data/devyValues.ts';
+import { refreshedLabel, devyValueSub, fmtValue, devyCsvName, STATHEAD_DEVY_URL } from '../packages/core/src/data/devyValues.ts';
 import { pickRoundLabel, isDevyPickRound, devyBlockRound, draftRoundLabel, devyBlockLine } from '../packages/core/src/data/devyDraft.ts';
 import { fmtPts, stakeProgress, marketLines, shapeMarket, nextSort, marketSubline, slotLabel, timeLeft, launchBanner, launchOrderMax, tradePreview, underclassMult, underclassLabel, marketRowDetail } from '../packages/core/src/data/devyShares.ts';
 
@@ -85,5 +85,7 @@ ok(marketRowDetail({ slug: 'c-9', name: 'Y', pos: 'WR', school: 'OSU', class_yea
 ok(refreshedLabel('2026-10-03T00:48:29Z', 'UTC') === 'Refreshed Oct 3, 2026' && refreshedLabel(null) === 'Not loaded yet', 'v0.601.0: the refreshed-on date');
 ok(devyValueSub({ espn_id: '1', name: 'X', pos: 'WR', school: 'OSU', class_year: 2, rank_1qb: 1, rank_sf: 2, value_1qb: 11.04, value_sf: 10.49, underclass: true }) === 'WR · OSU · SO · underclass discount', 'the values row line');
 ok(fmtValue(8) === '8.00' && fmtValue(null) === '—', 'values print with two decimals, or a dash');
+ok(devyCsvName('sf', 'ALL', '2026-10-03T00:48:29Z') === 'drip-devy-values-sf-2026-10-03.csv' && devyCsvName('1qb', 'QB', null) === 'drip-devy-values-1qb-qb-latest.csv', 'v0.602.0: the CSV file name');
+ok(STATHEAD_DEVY_URL.startsWith('https://stathead.app'), 'the StatHead link');
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('ALL DEVY-MARKET CHECKS PASS');

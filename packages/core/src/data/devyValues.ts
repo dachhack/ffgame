@@ -13,6 +13,15 @@ export interface DevyValueRow {
 }
 export interface DevyValuesPage { as_of: string | null; total: number; rows: DevyValueRow[] }
 
+/** Where the numbers come from: StatHead's site (Prospects → Devy). */
+export const STATHEAD_DEVY_URL = 'https://stathead.app';
+
+/** "drip-devy-values-sf-2026-10-03.csv" (or …-qb-… for one position). */
+export function devyCsvName(sort: 'sf' | '1qb', pos: string | null | undefined, asOf: string | null | undefined): string {
+  const day = asOf && !Number.isNaN(Date.parse(asOf)) ? new Date(asOf).toISOString().slice(0, 10) : 'latest';
+  return `drip-devy-values-${sort}${pos && pos !== 'ALL' ? `-${pos.toLowerCase()}` : ''}-${day}.csv`;
+}
+
 export const DEVY_VALUE_POSITIONS = ['ALL', 'QB', 'RB', 'WR', 'TE'] as const;
 
 /** "Refreshed Oct 3, 2026" — when Drip last loaded StatHead's board. */
