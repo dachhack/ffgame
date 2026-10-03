@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.597.0 — Rams players no longer lock at Thursday's kickoff (#1095)
+
+> - Kickoff League chat, Oct 2: "Rams players are glitched again, can I get Stafford out and Shough in? … it's been Stafford and Puka both weeks." The founder's tag: "I thought we fixed this."
+> - The cause: the schedule calls the Rams "LA" and each league's player pool (from Sleeper) calls them "LAR". The worker couldn't find a Rams player's game, so it locked his lineup spot at the week's first kickoff (Thursday night) instead of his own (Sunday). The database had the mirror bug: it couldn't find the kickoff either, so it let Rams players be moved after their game started. Washington (WSH vs WAS) had the same exposure.
+> - Both now compare normalized team codes. Rams picks already locked this week reopen until their real kickoff (Sunday 1pm ET at PHI).
+> - The earlier fix covered scoring (resolve.js), not locking. That's why it came back.
+
+- 0414: `_nfl_team` (mirrors core `normTeam`); `classic_kickoff_for` compares normalized codes; `unseal_early_classic_picks()` reopens a classic weekly pick whose player's game is still ahead. It runs in the migration and once at worker boot, so an old worker re-sealing before the deploy lands can't make it stick.
+- Worker `lock.js`: `teamKickoffs` keys by `normTeam`, and `classicSealAt`, `teamOf` and the auto-slot `kickedOff` look up normalized codes.
+- Tests: `test/classic-seal.mjs` (fails on the old code); `rams-kickoff-probes.sql` (rk1–rk4; rk1 fails without 0414).
+- The @computer pipeline found it: #1095 arrived as "I thought we fixed this." with no context; v0.595/0.596 pulled the three chat lines before it.
+
 ### v0.596.0 — @computer looks back three chat messages, whatever their age
 
 > - An @computer issue now carries the chat's last 3 messages before the ask, however old they are, in place of the 15-minute window. #1095 ("I thought we fixed this.") had nothing in its 15 minutes. Times now show the date too.

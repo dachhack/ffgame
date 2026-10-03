@@ -1013,6 +1013,12 @@ async function tick() {
 
 async function main() {
   log('worker starting; season', config.season);
+  // v0.597.0 (0414): reopen classic picks an older worker sealed before their
+  // player's kickoff (the Rams, LAR vs LA, #1095). A no-op once none are left.
+  try {
+    const { data, error } = await db().rpc('unseal_early_classic_picks');
+    if (error) log('unseal early picks', error.message); else if (data) log('reopened', data, 'classic picks sealed before kickoff');
+  } catch (e) { log('unseal early picks', e.message); }
   playerIndex = await buildPlayerIndex();
   log('player index built:', playerIndex.size, 'players');
   // Publish baked-vs-live team drift (0142) whenever the directory is fresh —
