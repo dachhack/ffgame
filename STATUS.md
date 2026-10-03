@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.604.0 — devy values list only players on a roster
+
+> - Follow-up to "How do we have guys with no schools?". After full rosters loaded (v0.603.0), 868 of StatHead's 6,996 still had no Drip player: 749 that ESPN marks inactive this season, 95 at Division II/III/NAIA schools we don't load, 14 ESPN has no record of, and a few ESPN roster gaps. None of them can be bought, so the Devy values list (and its CSV) now shows only players on an FBS or FCS roster this season. StatHead's ranks stay as published, so a gap in the rank column is a player left out.
+> - Reported to StatHead as dachhack/stathead#540: their board ranks about 750 players ESPN marks inactive, including Devonte Ross at #95 (1QB).
+
+- 0420: `devy_base_values` joins `college_player` (active) instead of a left join. Probe dv7a fails on 0417; dv8 checks the CSV follows.
+
 ### v0.603.0 — every player on a big roster, not just the first 100
 
 > - Founder, over the devy values list: "How do we have guys with no schools?" Bryant Wesco Jr., Ryan Wingo, Bryce Underwood and Demond Williams Jr. showed no school or class.
