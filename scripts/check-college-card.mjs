@@ -49,7 +49,14 @@ const by = Object.fromEntries(ev.map((r) => [r.label, r.value]));
 ok(by['DEVY RANK'] === '#1 overall · WR1 · 2027 class', `rank: ${by['DEVY RANK']}`);
 ok(by['PRICES AS'] === 'a 2027 Early 1st rookie pick', `rookie-draft slot: ${by['PRICES AS']}`);
 ok(/^Generational · projected pick 3$/.test(by['NFL TIER'] ?? ''), `NFL tier: ${by['NFL TIER']}`);
-ok(/^17\.0 PPR\/g/.test(by['NFL OUTLOOK'] ?? '') && /top 1%/.test(by['NFL OUTLOOK']), `outlook: ${by['NFL OUTLOOK']}`);
+ok(by['NFL OUTLOOK'] === '81% chance of a fantasy-starter season in his first four NFL years (top 1%)', `outlook (hit %, StatHead 1.0.110): ${by['NFL OUTLOOK']}`);
+ok(by['DRAFT OUTLOOK'] === 'Round 1 87% · Rounds 2–3 5% · Rounds 4–7 6% · Undrafted 2%', `draft outlook: ${by['DRAFT OUTLOOK']}`);
+{
+  const old = Object.fromEntries(statheadEvalRows({ ...card, hitProb: undefined, draftOutlook: undefined, careerPPG: 16.985 }, 'WR', '1qb').map((r) => [r.label, r.value]));
+  ok(/^17\.0 PPR\/g/.test(old['NFL OUTLOOK'] ?? '') && !old['DRAFT OUTLOOK'], `a card stored before 1.0.110 still reads: ${old['NFL OUTLOOK']}`);
+  const nulls = Object.fromEntries(statheadEvalRows({ ...card, draftOutlook: { day1: null, day2: null, day3: null, undrafted: null } }, 'WR', '1qb').map((r) => [r.label, r.value]));
+  ok(!nulls['DRAFT OUTLOOK'], 'a null draft outlook (2029 QBs and TEs) is left out');
+}
 ok(/breakout 18\.9/.test(by.PROFILE ?? '') && /dominator 36%/.test(by.PROFILE) && /★★★★★ recruit/.test(by.PROFILE), `profile: ${by.PROFILE}`);
 ok(/3 college seasons with stats/.test(by.AGE ?? ''), `age: ${by.AGE}`);
 ok(!JSON.stringify(ev).match(/market|ktc|keeptradecut/i), 'nothing on the panel is a third-party number or names one');
