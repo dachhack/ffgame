@@ -41,7 +41,7 @@ ok(card.compositeRank?.oneQB === 3 && card.profile?.stars === 5, 'the card carri
 ok(!('marketListed' in card) && !('pListed' in card), 'and never whether a third-party list carries him');
 ok(rows[0].card && rows[0].card.compositeRank?.oneQB === 1, 'every row brings its card');
 
-// v0.592.0: the weekly reprice — only when profilesThrough moves
+// v0.592.0: the weekly reprice — when profilesThrough (or, v0.594.0, generatedAt) moves
 {
   const st = { through: null };
   const seen = [];
@@ -58,6 +58,16 @@ ok(rows[0].card && rows[0].card.compositeRank?.oneQB === 1, 'every row brings it
   let threw2 = false;
   try { await checkDevyBoard(bad, () => {}, async () => ({ ...big, profilesThrough: '2026 week 6' }), st); } catch { threw2 = true; }
   ok(threw2 && st.through === '2026 week 5', 'a failed reprice is retried next check (the week is not marked done)');
+  // v0.594.0: a rebuilt board in the same week reprices too
+  seen.length = 0;
+  const g1 = { ...big, profilesThrough: '2026 week 5', generatedAt: '2026-10-03T00:48:29Z' };
+  const r4 = await checkDevyBoard(rpc2, () => {}, async () => g1, st);
+  ok(r4.changed && st.generated === '2026-10-03T00:48:29Z' && seen.at(-1) === 'refresh_college_prices', 'same week, new generatedAt: reprices');
+  seen.length = 0;
+  const r5 = await checkDevyBoard(rpc2, () => {}, async () => g1, st);
+  ok(!r5.changed && seen.length === 0, 'the same build does nothing');
+  const r6 = await checkDevyBoard(rpc2, () => {}, async () => ({ ...g1, generatedAt: '2026-10-04T09:00:00Z' }), st);
+  ok(r6.changed && st.through === '2026 week 5', 'the next build reprices again');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }

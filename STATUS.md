@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.594.0 — devy prices also follow a rebuilt StatHead board mid-week
+
+> - The devy watcher now reprices when StatHead publishes a rebuilt board, not only when a new week of stats lands. Model fixes like StatHead 1.0.108's (one order within a position in both formats) reach Drip within about 3 hours instead of waiting for Sunday.
+> - StatHead also rebuilds the board with its near-daily market snapshot, so between Sundays prices can move a little as the market does.
+
+- Worker `poll/statheadDevy.js`: `checkDevyBoard` reprices when `profilesThrough` or `generatedAt` changes, still checking every 3 h (`STATHEAD_WATCH_MS`). Three new cases in `server/test/stathead-devy.mjs`.
+
 ### v0.593.0 — underclassmen price cheaper; the top 10 spread out
 
 > - Freshmen and sophomores now cost less, not more. A freshman prices at 85% of his StatHead rank's price and a sophomore at 92%; juniors and up pay full. A young player who holds his rank gains value as he ages, so scouting early pays. Before, a top-150 freshman or sophomore cost 15% more, so sophomore #8 (11.50) cost more than StatHead's #1 (10.00), and holders lost 13% the day he became a junior.
