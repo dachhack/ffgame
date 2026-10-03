@@ -255,3 +255,4 @@ $RUN -f scripts/db/devy-launch-probes.sql | grep -E "PROBE FAIL|ALL DEVY-LAUNCH 
 $RUN -f scripts/db/declared-probes.sql | grep -E "PROBE FAIL|ALL DECLARED PROBES" || { echo "DECLARED PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/custom-college-probes.sql | grep -E "PROBE FAIL|ALL CUSTOM-COLLEGE PROBES" || { echo "CUSTOM-COLLEGE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-draft-probes.sql | grep -E "PROBE FAIL|ALL DEVY-DRAFT PROBES" || { echo "DEVY-DRAFT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/rams-kickoff-probes.sql | grep -E "PROBE FAIL|ALL RAMS-KICKOFF PROBES" || { echo "RAMS-KICKOFF PROBES FAILED"; exit 1; }
