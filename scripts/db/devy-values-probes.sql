@@ -42,4 +42,16 @@ begin
   end;
 end $$;
 rollback;
+-- 0419: a player the roster sweep missed isn't a new listing (until Oct 5).
+begin;
+do $$
+begin
+  insert into college_player (espn_id, full_name, pos, school_abbr, class_year) values ('97799', 'Missed Receiver', 'WR', 'DVU', 3);
+  perform dv_true((select first_seen from college_player where espn_id = '97799')
+                  = case when now() < timestamptz '2026-10-05 00:00+00' then timestamptz '2026-01-01' else (select first_seen from college_player where espn_id = '97799') end,
+    'dv9 a backfilled player is dated as already known');
+  perform dv_true(now() >= timestamptz '2026-10-05 00:00+00' or (select first_seen from college_player where espn_id = '97799') < now() - interval '30 days',
+    'dv9a …so a market won''t list him as new');
+end $$;
+rollback;
 \echo ALL DEVY-VALUES PROBES PASSED
