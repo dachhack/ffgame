@@ -22,6 +22,12 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.595.1 — the chat-context backfill files a new issue when it can't comment
+
+> - The first backfill for #1095 and #1038 failed: the worker's GitHub token can open issues but not comment on them. The context now goes into a new issue that points back at the ask.
+
+- `postContext` falls back to `openIssue` on a 403. Ops 025 retries the backfill.
+
 ### v0.595.0 — @computer issues carry the chat before the ask
 
 > - An @computer ask now files with the chat from the 15 minutes before it, so "@computer I thought we fixed this" arrives with whatever "this" was. Before, only the tagging line went in.

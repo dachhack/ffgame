@@ -1,0 +1,5 @@
+{
+  "mode": "computer-context",
+  "issue": "1095,1038",
+  "why": "Retry 024: the worker's token can't comment (403), so v0.595.1 files the context as a new issue pointing at each ask."
+}
