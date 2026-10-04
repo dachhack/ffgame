@@ -817,6 +817,7 @@ async function main() {
       //   designation it would write (and the rostered players among them)
       //   and every row it could not match. --dry touches nothing.
       const { pollCollegeAvailability } = await import('./poll/collegeAvailability.js');
+      const { db } = await import('./supabase.js');
       const r = await pollCollegeAvailability({ dryRun: args.includes('--dry'), log: (...a) => console.log(...a) });
       const { upserts, unmatched, ...summary } = r;
       console.log(JSON.stringify(summary, null, 2));
