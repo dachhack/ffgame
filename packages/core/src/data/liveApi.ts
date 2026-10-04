@@ -4017,14 +4017,15 @@ export const sportRotoStandings = (leagueId: string) =>
   rpc<SportRotoRow[]>('sport_roto_standings', { p_league_id: leagueId });
 /** The commissioner's sport settings (0428): scoring any time; format,
  *  categories and the calendar until the season is under way. */
-export const setSportSettings = (leagueId: string, patch: { scoring?: Record<string, number>; format?: 'points' | 'cats' | 'roto'; categories?: string[]; period_start?: string; weeks?: number }) =>
+export const setSportSettings = (leagueId: string, patch: { scoring?: Record<string, number>; format?: 'points' | 'cats' | 'roto' | 'season'; categories?: string[]; period_start?: string; weeks?: number }) =>
   tracked(rpc<{ ok: boolean; error?: string; sport?: Record<string, unknown> }>('set_sport_settings',
     { p_league_id: leagueId, p_patch: patch }),
     Ev.commishAction, { tool: 'sport_settings', count: Object.keys(patch).length });
 /** A sport league's lineup (0431): the same spot spec classic uses, in the
- *  sport's positions; commissioner, before the draft. */
-export const setSportLineup = (leagueId: string, slots: { pos: string[]; label?: string }[]) =>
-  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; label?: string }[]; starters?: number; rounds?: number }>('set_sport_lineup',
+ *  sport's positions; commissioner, before the draft. A spot may carry best
+ *  ball, a team scope and a tenure scope (0436). */
+export const setSportLineup = (leagueId: string, slots: { pos: string[]; label?: string; bb?: boolean; teams?: string[]; min_exp?: number | null; max_exp?: number | null }[]) =>
+  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; label?: string; bb?: boolean; teams?: string[]; min_exp?: number | null; max_exp?: number | null }[]; starters?: number; bestball?: number; rounds?: number }>('set_sport_lineup',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'sport_lineup', count: slots.length });
 /** A sport player's card (0431): the directory row and his last ten games. */

@@ -63,6 +63,16 @@ posture as ESPN today.
   (`server/src/poll/sportGames.js`) gated on `SPORTS=nhl,mlb` so the NFL
   worker is unchanged when unset; CLI `sport-poll <sport> [date] [--force]`.
 
+**v0.629.0**: best ball and scoped spots for a daily sport (0436). A spot
+carries `bb`, `teams` and `min_exp`/`max_exp` with the NFL SlotSpec's keys, so
+the boards read it unchanged; the worker's resolve pass seats each best-ball
+spot nightly from the roster's players who played (`sport_league_day_lines_svc`
+→ `dayCandidates` → `bestBallFill` via the engine's `assignByValue` →
+`sport_bb_write_svc`), recomputing yesterday and today and holding older days.
+Tenure (`sport_player.exp` → `league_pool.exp`) comes from Sleeper (NBA) and
+the MLB debut date. A fourth format, `season` (season points, standings by
+total), rides the roto plumbing.
+
 **v0.625.0 → v0.627.0 (after the first playtest)**: the board reads the
 sport's own slate with the sport's words; 0433 keeps the NFL's controls
 (Drip, golf, guillotine, contracts, the NFL builder, the bracket, the

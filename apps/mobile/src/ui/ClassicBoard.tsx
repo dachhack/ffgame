@@ -1061,7 +1061,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           if (e.state === 'done') return e.live;
           return Math.max(e.live, fillValue(p, d));
         };
-        const fills = bestballFillBy(manualPicks, bestball, ros, slotDefs, locked ? finalValue : fillValue);
+        // A DAILY SPORT (0436) previews its fill by projection all week; the
+        // real fill is the worker's, in the locks the week panel shows.
+        const fills = bestballFillBy(manualPicks, bestball, ros, slotDefs, locked && sport === 'nfl' ? finalValue : fillValue);
         for (const f of fills) out[f.slot] = f.player.id;
       }
       return out;
@@ -1070,7 +1072,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       mine: build(mine, pool.map((p) => p.slug), off(seat)),
       theirs: build(theirs, oppPool.map((p) => p.slug), off(oppRid)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, seat]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, seat, sport]);
 
   const board = useMemo(() => {
     if (!matchup) return null;
@@ -1461,7 +1463,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             and for nobody else. */}
         {matchup && sport !== 'nfl' && sportSettings && (
           <SportWeekPanel leagueId={leagueId} matchupId={matchup.id} week={matchup.week} sport={sport} settings={sportSettings}
-            homeRosterId={matchup.home_roster_id} awayRosterId={matchup.away_roster_id} myRosterId={seat} />
+            homeRosterId={matchup.home_roster_id} awayRosterId={matchup.away_roster_id} myRosterId={seat} bestball={bestball} />
         )}
         {testLive != null && matchup && (
           <SimStrip leagueId={leagueId} week={matchup.week} onChanged={() => void onPullRefresh()} />
@@ -1782,7 +1784,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               onPress={() => { if (canEdit(d.slot)) { tap(); setPickerSlot(pickerSlot === d.slot ? null : d.slot); } }}
               style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
               {auto && !locked ? (
-                <Mono size={9} tone="faint">BEST BALL — fills itself{'\n'}with your top scorer</Mono>
+                <Mono size={9} tone="faint">BEST BALL — fills itself{'\n'}with your top scorer{sport !== 'nfl' ? ' each night' : ''}</Mono>
               ) : my ? (
                 <>
                   <Face slug={my} />

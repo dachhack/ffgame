@@ -17,12 +17,23 @@
 //   period is over and no game in it is still live. Standings then read it
 //   exactly as they read an NFL week.
 //
+//   BEST BALL (0436). A spot flagged `bb` has no sealed pick: every pass,
+//   for each day of a live period up to today, the fill ranks the seat's
+//   rostered players who played that day by their points under the league's
+//   table and seats the most valuable legal arrangement (the NFL engine's
+//   assignByValue — fill every spot you can, then maximize), one player one
+//   spot, writing the result into sport_slot_lock in place of a manager's
+//   lock. The night's fill is provisional (it moves as box scores land) and
+//   the board shows it as it stands; a day older than yesterday is settled
+//   and only filled where it was never filled (the worker was down).
+//
 // Pure functions first (tested in test/sports-league.mjs); the I/O at the
 // bottom is thin.
 import { db, allRows } from './supabase.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
-import { linePoints, normalizeScoring, categoryTotals, compareCategories, rotoStandings } from '../../packages/core/src/sports/score.ts';
-import { sportPeriod, sportWeekOf, sportSettingsOf } from '../../packages/core/src/sports/league.ts';
+import { linePoints, normalizeScoring, categoryTotals, compareCategories, rotoStandings, sumLines } from '../../packages/core/src/sports/score.ts';
+import { sportPeriod, sportWeekOf, sportSettingsOf, addDays } from '../../packages/core/src/sports/league.ts';
+import { assignByValue } from '../../packages/core/src/engine/classic.ts';
 import { easternDate } from './poll/sportGames.js';
 
 const log = (...a) => console.log('[sport-league]', ...a);
@@ -150,17 +161,87 @@ export const leagueNow = (lg, now = Date.now()) => now - (lg.sportSettings?.repl
 
 /** Slot 'S<i>' may hold a player whose eligibility meets roster_slots[i-1].pos.
  *  Unknown slot names and players allow — nothing here may lock a lineup
- *  the platform never shaped. */
-export function slotAllowsFor(rosterSlots, eligibleOf) {
+ *  the platform never shaped. A SCOPED spot (0436) also wants the player's
+ *  team among its `teams` and his tenure inside min_exp..max_exp; `metaOf`
+ *  gives {team, exp} and, as on the NFL board, a scoped spot refuses a
+ *  player whose team or tenure is unknown rather than guess. */
+export function slotAllowsFor(rosterSlots, eligibleOf, metaOf = () => null) {
   const specs = Array.isArray(rosterSlots) ? rosterSlots : [];
   return (slot, slug) => {
     const m = /^S(\d+)$/.exec(String(slot ?? ''));
     const spec = m ? specs[Number(m[1]) - 1] : null;
     if (!spec || !Array.isArray(spec.pos) || !spec.pos.length) return true;
     const elig = eligibleOf(slug);
-    if (!elig || !elig.length) return true;
-    return elig.some((p) => spec.pos.includes(p));
+    if (elig && elig.length && !elig.some((p) => spec.pos.includes(p))) return false;
+    const scoped = (Array.isArray(spec.teams) && spec.teams.length) || spec.min_exp != null || spec.max_exp != null;
+    if (!scoped) return true;
+    const meta = metaOf(slug) ?? {};
+    if (Array.isArray(spec.teams) && spec.teams.length && !spec.teams.some((t) => String(t).toUpperCase() === String(meta.team ?? '').toUpperCase())) return false;
+    if (spec.min_exp != null || spec.max_exp != null) {
+      if (meta.exp == null) return false;
+      if (spec.min_exp != null && meta.exp < spec.min_exp) return false;
+      if (spec.max_exp != null && meta.exp > spec.max_exp) return false;
+    }
+    return true;
   };
+}
+
+/** The best-ball slot names of a spec: 'S<i>' for every spot flagged bb. */
+export const bbSlotsOf = (rosterSlots) =>
+  new Set((Array.isArray(rosterSlots) ? rosterSlots : []).flatMap((s, i) => (s?.bb ? [`S${i + 1}`] : [])));
+
+/** A seat's best-ball candidates for one day from its day-lines rows (0436
+ *  sport_league_day_lines_svc, filtered to the seat and the date): every
+ *  player with a line he PLAYED in — a man on the bench in street clothes
+ *  (played false) and a game yet to post are not candidates — valued at his
+ *  points over the day's games (a doubleheader sums), minus the players
+ *  `taken` elsewhere in the lineup that day. */
+export function dayCandidates(def, scoring, rows, taken = new Set()) {
+  const by = new Map();
+  for (const r of rows) {
+    if (!r.player_slug || taken.has(r.player_slug) || !r.line || r.played === false) continue;
+    const c = by.get(r.player_slug) ?? { slug: r.player_slug, value: 0, games: [] };
+    c.value = Math.round((c.value + linePoints(def, r.line, scoring)) * 100) / 100;
+    if (!c.games.includes(r.game_id)) c.games.push(r.game_id);
+    by.set(r.player_slug, c);
+  }
+  return [...by.values()].sort((a, b) => b.value - a.value || a.slug.localeCompare(b.slug));
+}
+
+/** Seat the candidates into the best-ball spots: the most valuable legal
+ *  arrangement that fills every spot it can (assignByValue, the NFL fill's
+ *  own matching), one player one spot. `bbSlots` are the slot names; `allows`
+ *  is slotAllowsFor's. Returns lock rows, one per game the player had. */
+export function bestBallFill(bbSlots, cands, allows) {
+  const order = [...bbSlots];
+  if (!order.length || !cands.length) return [];
+  const w = order.map((slot) => cands.map((c) => (allows(slot, c.slug) ? c.value : -Infinity)));
+  const held = assignByValue(order.length, cands.length, w);
+  const out = [];
+  held.forEach((ci, si) => {
+    if (ci < 0) return;
+    const c = cands[ci];
+    for (const g of c.games) out.push({ roster_slot: order[si], player_slug: c.slug, game_id: g });
+  });
+  return out;
+}
+
+/** The season-points table (format 'season', 0436): every seat's total over
+ *  its locked slot-days, written to sport_roto with no categories. Seats with
+ *  no line yet still appear, at 0. */
+export function seasonTable(def, settings, rows, rosterIds) {
+  const scoring = normalizeScoring(def, settings?.scoring);
+  const by = new Map(rosterIds.map((id) => [id, []]));
+  for (const r of rows) {
+    if (r.roster_id == null || !r.line) continue;
+    if (!by.has(r.roster_id)) by.set(r.roster_id, []);
+    by.get(r.roster_id).push(r.line);
+  }
+  return [...by.entries()].map(([id, lines]) => ({
+    league_id: null, roster_id: Number(id),
+    points: Math.round(lines.reduce((t, l) => t + linePoints(def, l, scoring), 0) * 100) / 100,
+    totals: sumLines(lines), cats: {},
+  })).sort((a, b) => b.points - a.points || a.roster_id - b.roster_id);
 }
 
 /** Lock the started games' players across every league of the sport.
@@ -187,20 +268,24 @@ export async function lockStartedGames(sport, games, now = Date.now(), offsetDay
     const [{ data: picks }, { data: pool }, { data: existing }] = await Promise.all([
       db().from('sealed_pick').select('matchup_id, app_user_id, game_window, roster_slot, player_slug').in('matchup_id', ids).eq('game_window', 'wk'),
       // A 2000-player pool on a busy night can pass the 1000-row page (v0.627.3).
-      allRows((from, to) => db().from('league_pool').select('slug, team, pos, eligible').eq('league_id', lg.id).in('team', teams).order('slug').range(from, to)).then((rows) => ({ data: rows })),
+      allRows((from, to) => db().from('league_pool').select('slug, team, pos, eligible, exp').eq('league_id', lg.id).in('team', teams).order('slug').range(from, to)).then((rows) => ({ data: rows })),
       db().from('sport_slot_lock').select('matchup_id, app_user_id, game_date, roster_slot, game_id').in('matchup_id', ids).in('game_date', dates),
     ]);
     const teamOf = new Map((pool ?? []).map((p) => [p.slug, p.team]));
     const eligOf = new Map((pool ?? []).map((p) => [p.slug, p.eligible?.length ? p.eligible : (p.pos ? [p.pos] : [])]));
+    const metaOf = new Map((pool ?? []).map((p) => [p.slug, { team: p.team, exp: p.exp ?? null }]));
     const have = new Set((existing ?? []).map((k) => `${k.matchup_id}|${k.app_user_id}|${k.game_date}|${k.roster_slot}|${k.game_id}`));
-    const allows = slotAllowsFor(lg.settings_json?.roster_slots, (slug) => eligOf.get(slug));
+    const allows = slotAllowsFor(lg.settings_json?.roster_slots, (slug) => eligOf.get(slug), (slug) => metaOf.get(slug));
+    // A best-ball spot has no pick to lock: the fill seats it (0436). A pick
+    // left in one (the spot was flagged after it was set) is ignored.
+    const bb = bbSlotsOf(lg.settings_json?.roster_slots);
     const rows = [];
     const toLive = new Set();
     for (const g of started) {
       const week = sportWeekOf(g.gameDate, lg.sportSettings.period_start);
       const weekIds = new Set(matchups.filter((m) => m.week === week).map((m) => m.id));
       if (!weekIds.size) continue;
-      const mine = (picks ?? []).filter((p) => weekIds.has(p.matchup_id));
+      const mine = (picks ?? []).filter((p) => weekIds.has(p.matchup_id) && !bb.has(p.roster_slot));
       for (const r of locksFor(g, mine, (slug) => teamOf.get(slug), have, allows)) { rows.push(r); have.add(`${r.matchup_id}|${r.app_user_id}|${r.game_date}|${r.roster_slot}|${r.game_id}`); }
       // The period is live once any of its games has started.
       for (const m of matchups) if (m.week === week && m.status === 'scheduled') toLive.add(JSON.stringify([m.id, g.startUtc ?? new Date(now).toISOString()]));
@@ -218,6 +303,73 @@ export async function lockStartedGames(sport, games, now = Date.now(), offsetDay
   return locked;
 }
 
+/** Which days of the live periods the fill (re)computes: yesterday and
+ *  today always (the night moves; yesterday's late game may still be
+ *  posting), and any older day of a live period that was never filled. */
+export function bbDaysFor(periods, today, filledDates = new Set()) {
+  const out = new Set();
+  for (const p of periods) {
+    for (let d = p.from; d <= p.to && d <= today; d = addDays(d, 1)) {
+      if (d >= addDays(today, -1) || !filledDates.has(d)) out.add(d);
+    }
+  }
+  return [...out].sort();
+}
+
+/** BEST BALL (0436), one league: for each live matchup, each seat and each
+ *  day to fill, seat the day's candidates into the best-ball spots and write
+ *  the locks — only when they differ from what is held. Returns the number
+ *  of seat-days written. */
+export async function fillBestBall(lg, def, matchups, today) {
+  const specs = lg.settings_json?.roster_slots;
+  const bb = bbSlotsOf(specs);
+  if (!bb.size) return 0;
+  const periods = matchups.map((m) => ({ m, period: sportPeriod(m.week, lg.sportSettings.period_start) })).filter((x) => x.period);
+  if (!periods.length) return 0;
+  const from = periods.map((x) => x.period.from).sort()[0];
+  const to = periods.map((x) => x.period.to).sort().reverse()[0];
+  const upTo = to < today ? to : today;
+  if (from > upTo) return 0;
+  const scoring = normalizeScoring(def, lg.sportSettings?.scoring);
+  const ids = matchups.map((m) => m.id);
+  const [{ data: days, error }, { data: locks }, { data: picks }] = await Promise.all([
+    db().rpc('sport_league_day_lines_svc', { p_league_id: lg.id, p_from: from, p_to: upTo }),
+    db().from('sport_slot_lock').select('matchup_id, app_user_id, game_date, roster_slot, player_slug, game_id').in('matchup_id', ids).gte('game_date', from).lte('game_date', upTo),
+    db().from('sealed_pick').select('matchup_id, app_user_id, roster_slot, player_slug').in('matchup_id', ids).eq('game_window', 'wk'),
+  ]);
+  if (error) throw new Error(`day lines: ${error.message}`);
+  const eligOf = new Map(), metaOf = new Map();
+  for (const r of days ?? []) { eligOf.set(r.player_slug, r.eligible ?? []); metaOf.set(r.player_slug, { team: r.team, exp: r.exp ?? null }); }
+  const allows = slotAllowsFor(specs, (slug) => eligOf.get(slug), (slug) => metaOf.get(slug));
+  let written = 0;
+  for (const { m, period } of periods) {
+    for (const [rid, uid] of [[m.home_roster_id, null], [m.away_roster_id, null]]) {
+      // The seat's manager comes off the day rows (the RPC resolves it); a
+      // seat nobody has claimed has nothing to lock under.
+      const seatRows = (days ?? []).filter((r) => r.roster_id === rid);
+      const user = uid ?? seatRows.find((r) => r.app_user_id)?.app_user_id ?? null;
+      if (!user) continue;
+      const held = (locks ?? []).filter((k) => k.matchup_id === m.id && k.app_user_id === user);
+      const filled = new Set(held.filter((k) => bb.has(k.roster_slot)).map((k) => k.game_date));
+      const manualPicked = new Set((picks ?? []).filter((p) => p.matchup_id === m.id && p.app_user_id === user && !bb.has(p.roster_slot) && p.player_slug).map((p) => p.player_slug));
+      for (const date of bbDaysFor([period], today, filled)) {
+        // One player, one spot a day: a man a manager started (or who locked
+        // in a manual spot today) is not the fill's to take.
+        const taken = new Set([...manualPicked, ...held.filter((k) => k.game_date === date && !bb.has(k.roster_slot)).map((k) => k.player_slug)]);
+        const cands = dayCandidates(def, scoring, seatRows.filter((r) => r.game_date === date), taken);
+        const rows = bestBallFill(bb, cands, allows);
+        const want = rows.map((r) => `${r.roster_slot}|${r.player_slug}|${r.game_id}`).sort().join(';');
+        const have = held.filter((k) => k.game_date === date && bb.has(k.roster_slot)).map((k) => `${k.roster_slot}|${k.player_slug}|${k.game_id}`).sort().join(';');
+        if (want === have) continue;
+        const { error: wErr } = await db().rpc('sport_bb_write_svc', { p_matchup: m.id, p_user: user, p_date: date, p_slots: [...bb], p_rows: rows });
+        if (wErr) { log(`${lg.sport} ${m.id} ${date}: best ball write: ${wErr.message}`); continue; }
+        written++;
+      }
+    }
+  }
+  return written;
+}
+
 /** Resolve every live matchup in every league of the sport; finalize the
  *  ones whose period is over. Returns counts. */
 export async function resolveSportLeagues(sport, now = new Date()) {
@@ -233,6 +385,11 @@ export async function resolveSportLeagues(sport, now = new Date()) {
     const liveDates = (liveGames ?? []).filter((g) => g.season === lg.season).map((g) => g.game_date);
     const { data: matchups } = await db().from('matchup').select('id, week, status, home_roster_id, away_roster_id')
       .eq('league_id', lg.id).eq('status', 'live');
+    // BEST BALL (0436): seat the fills before the lines are read.
+    if (bbSlotsOf(lg.settings_json?.roster_slots).size && matchups?.length) {
+      try { counts.filled = (counts.filled ?? 0) + await fillBestBall(lg, def, matchups, today); }
+      catch (e) { log(`${sport} ${lg.id}: best ball: ${e.message}`); }
+    }
     for (const m of matchups ?? []) {
       const period = sportPeriod(m.week, lg.sportSettings.period_start);
       if (!period) continue;
@@ -251,15 +408,17 @@ export async function resolveSportLeagues(sport, now = new Date()) {
         counts.finals++;
       }
     }
-    // ROTO (0427): the season table, from every locked slot-day so far.
-    if (lg.sportSettings.format === 'roto') {
+    // ROTO (0427) and SEASON POINTS (0436): the season table, from every
+    // locked slot-day so far.
+    if (lg.sportSettings.format === 'roto' || lg.sportSettings.format === 'season') {
       const [{ data: rows, error: rErr }, { data: seats }] = await Promise.all([
         db().rpc('sport_league_lines_svc', { p_league_id: lg.id }),
         db().from('league_membership').select('sleeper_roster_id').eq('league_id', lg.id),
       ]);
-      if (rErr) log(`${sport} ${lg.id}: roto lines: ${rErr.message}`);
+      if (rErr) log(`${sport} ${lg.id}: ${lg.sportSettings.format} lines: ${rErr.message}`);
       else {
-        const table = rotoTable(def, lg.sportSettings, rows ?? [], (seats ?? []).map((m) => m.sleeper_roster_id));
+        const ids = (seats ?? []).map((m) => m.sleeper_roster_id);
+        const table = lg.sportSettings.format === 'season' ? seasonTable(def, lg.sportSettings, rows ?? [], ids) : rotoTable(def, lg.sportSettings, rows ?? [], ids);
         const { error } = await db().from('sport_roto').upsert(table.map((t) => ({ ...t, league_id: lg.id, updated_at: new Date().toISOString() })), { onConflict: 'league_id,roster_id' });
         if (error) log(`${sport} ${lg.id}: roto: ${error.message}`);
         else counts.roto = (counts.roto ?? 0) + table.length;

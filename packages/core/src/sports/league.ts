@@ -19,8 +19,14 @@ export const SPORT_WEEK_BASE = 300;
 
 /** points: weekly totals head-to-head · cats: weekly categories head-to-head ·
  *  roto: no weekly result counts — the season is one ranking per category
- *  over every locked slot-day (sport_roto, computed by the worker). */
-export type SportFormat = 'points' | 'cats' | 'roto';
+ *  over every locked slot-day (sport_roto, computed by the worker) ·
+ *  season (v0.629.0): no weekly result counts — the season is one total of
+ *  points over every locked slot-day (the same table, points only). */
+export type SportFormat = 'points' | 'cats' | 'roto' | 'season';
+export const SPORT_FORMATS: SportFormat[] = ['points', 'cats', 'roto', 'season'];
+export const SPORT_FORMAT_LABEL: Record<SportFormat, string> = { points: 'POINTS', cats: 'H2H CATEGORIES', roto: 'ROTO', season: 'SEASON POINTS' };
+/** A format with no weekly winner: the standings are the season table. */
+export const isSeasonFormat = (f: SportFormat | null | undefined): boolean => f === 'roto' || f === 'season';
 
 export interface SportLeagueSettings {
   format: SportFormat;
@@ -39,7 +45,75 @@ export interface SportLeagueSettings {
   replay?: { season: string; offset_days: number } | null;
 }
 
-export interface SportSlotSpec { pos: string[]; label: string }
+/** One starting spot (0431), with what a football spot may carry (0436):
+ *  `bb` best ball — fills itself nightly with the roster's top eligible
+ *  scorer; `teams` only players on these teams; `min_exp`/`max_exp` tenure
+ *  in seasons (max_exp 0 = rookies only). The keys are the NFL SlotSpec's,
+ *  so classicSlotsFromSpec, slotAllows and leagueBestball read a sport spot
+ *  unchanged. */
+export interface SportSlotSpec { pos: string[]; label: string; bb?: boolean; teams?: string[]; min_exp?: number | null; max_exp?: number | null }
+
+/** Which sports carry a tenure (years of experience) in their directory:
+ *  NBA from Sleeper's years_exp, MLB from the debut date. The NHL and WNBA
+ *  feeds have none, so a tenure-scoped spot there would refuse everyone. */
+export const sportHasTenure = (sport: Sport): boolean => sport === 'nba' || sport === 'mlb';
+
+/** The spot's scope on screen: "BOS/LAL · ROOKIES ONLY", or ''. */
+export function sportSpotScopeLabel(s: Pick<SportSlotSpec, 'teams' | 'min_exp' | 'max_exp'> | null | undefined): string {
+  if (!s) return '';
+  const parts: string[] = [];
+  if (s.teams?.length) parts.push(s.teams.join('/'));
+  if (s.min_exp != null || s.max_exp != null) {
+    parts.push(s.max_exp === 0 ? 'ROOKIES ONLY' : s.min_exp != null && s.max_exp == null ? `${s.min_exp}+ YRS` : `${s.min_exp ?? 0}–${s.max_exp} YRS`);
+  }
+  return parts.join(' · ');
+}
+
+/** The slot type a spot's eligibility set matches, or null for a custom set. */
+export function sportSlotTypeOf(def: SportDef, pos: string[] | null | undefined): SportDef['slotTypes'][number] | null {
+  const set = [...new Set((pos ?? []).map((p) => String(p).toUpperCase()))].sort();
+  return def.slotTypes.find((t) => t.pos.length === set.length && [...t.pos].sort().every((p, i) => p === set[i])) ?? null;
+}
+
+/** Re-label a spot list the way sportRosterSlots labels a fresh one (G, or
+ *  G1 G2 when a type repeats; a custom set keeps its joined codes), keeping
+ *  every spot's flags. The builder calls this after adding or removing a
+ *  spot so the names stay in step. */
+export function sportRelabelSlots(def: SportDef, spots: SportSlotSpec[]): SportSlotSpec[] {
+  const keyOf = (s: SportSlotSpec) => sportSlotTypeOf(def, s.pos)?.type ?? [...new Set(s.pos.map((p) => p.toUpperCase()))].sort().join('/');
+  const total = new Map<string, number>();
+  for (const s of spots) { const k = keyOf(s); total.set(k, (total.get(k) ?? 0) + 1); }
+  const seen = new Map<string, number>();
+  return spots.map((s) => {
+    const k = keyOf(s);
+    const i = (seen.get(k) ?? 0) + 1;
+    seen.set(k, i);
+    return { ...s, pos: [...s.pos], label: (total.get(k) ?? 1) > 1 ? `${k}${i}` : k };
+  });
+}
+
+/** Add one spot of a slot type at the end of its group (or the end). */
+export function sportAddSlot(def: SportDef, spots: SportSlotSpec[], type: string): SportSlotSpec[] {
+  const st = def.slotTypes.find((t) => t.type === type);
+  const pos = st ? [...st.pos] : type.split('/');
+  const keyOf = (s: SportSlotSpec) => sportSlotTypeOf(def, s.pos)?.type ?? [...new Set(s.pos.map((p) => p.toUpperCase()))].sort().join('/');
+  let at = -1;
+  spots.forEach((s, i) => { if (keyOf(s) === type) at = i; });
+  const next = [...spots];
+  next.splice(at < 0 ? next.length : at + 1, 0, { pos, label: type });
+  return sportRelabelSlots(def, next);
+}
+
+/** Remove the last spot of a slot type. */
+export function sportRemoveSlot(def: SportDef, spots: SportSlotSpec[], type: string): SportSlotSpec[] {
+  const keyOf = (s: SportSlotSpec) => sportSlotTypeOf(def, s.pos)?.type ?? [...new Set(s.pos.map((p) => p.toUpperCase()))].sort().join('/');
+  let at = -1;
+  spots.forEach((s, i) => { if (keyOf(s) === type) at = i; });
+  if (at < 0) return spots;
+  const next = [...spots];
+  next.splice(at, 1);
+  return sportRelabelSlots(def, next);
+}
 
 /** Whole days from `a` to `b` (YYYY-MM-DD each); negative when b is earlier. */
 export const daysBetween = (a: string, b: string): number =>
@@ -75,8 +149,7 @@ export function slotCountsOf(def: SportDef, slots: { pos: string[] }[] | null | 
   const out: Record<string, number> = {};
   for (const s of slots ?? []) {
     const set = [...new Set((s.pos ?? []).map((p) => String(p).toUpperCase()))].sort();
-    const st = def.slotTypes.find((t) => t.pos.length === set.length && [...t.pos].sort().every((p, i) => p === set[i]));
-    const key = st?.type ?? set.join('/');
+    const key = sportSlotTypeOf(def, set)?.type ?? set.join('/');
     out[key] = (out[key] ?? 0) + 1;
   }
   return out;
@@ -140,7 +213,7 @@ export function sportSettingsOf(settings: Record<string, unknown> | null | undef
   const s = settings?.sport as Partial<SportLeagueSettings> | undefined;
   if (!s || typeof s !== 'object' || typeof s.period_start !== 'string') return null;
   return {
-    format: s.format === 'cats' ? 'cats' : s.format === 'roto' ? 'roto' : 'points',
+    format: s.format === 'cats' ? 'cats' : s.format === 'roto' ? 'roto' : s.format === 'season' ? 'season' : 'points',
     categories: Array.isArray(s.categories) ? s.categories.filter((c): c is string => typeof c === 'string') : [],
     scoring: s.scoring && typeof s.scoring === 'object' ? (s.scoring as Record<string, number>) : {},
     period_start: s.period_start,

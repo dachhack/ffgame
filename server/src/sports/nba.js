@@ -118,6 +118,8 @@ export function sleeperNbaPlayers(directory) {
       jersey: p.number != null ? String(p.number) : null, headshot: null,
       injury: p.injury_status ? { code: SLEEPER_INJURY[p.injury_status] ?? 'O', note: [p.injury_body_part, p.injury_notes].filter(Boolean).join(' — ') || null } : null,
       searchRank: Number.isFinite(p.search_rank) ? p.search_rank : null,
+      // Tenure (0436): Sleeper's seasons played; 0 = rookie. Null when it has none.
+      exp: Number.isFinite(p.years_exp) ? Number(p.years_exp) : null,
       season: null, seasonId: null, gp: 0,
     });
   }

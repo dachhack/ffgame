@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { normalizeScoring } from '@drip/core/sports/score';
-import { sportSettingsOf, type SportLeagueSettings, type SportFormat } from '@drip/core/sports/league';
+import { sportSettingsOf, SPORT_FORMATS, SPORT_FORMAT_LABEL, type SportLeagueSettings, type SportFormat } from '@drip/core/sports/league';
 import { setSportSettings, friendlyError } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -72,7 +72,7 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
       const r = await setSportSettings(leagueId, { format: f, categories: [...c] });
       if (r.ok) {
         commit(); setSettings(sportSettingsOf({ sport: r.sport })); setFormat(f); setCats(c);
-        setNote(f === 'points' ? '✓ points — weekly totals head-to-head' : f === 'cats' ? `✓ categories — ${c.size} compared each week` : `✓ roto — ${c.size} categories ranked all season`);
+        setNote(f === 'points' ? '✓ points — weekly totals head-to-head' : f === 'cats' ? `✓ categories — ${c.size} compared each week` : f === 'season' ? '✓ season points — one total all season, no weekly winner' : `✓ roto — ${c.size} categories ranked all season`);
       } else { warn(); setNote(friendlyError(r.error ?? 'failed')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
     finally { setBusy(false); }
@@ -88,14 +88,14 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
     <View style={{ gap: 10 }}>
       <View style={box}>
         <LabelInfo label={`${def.league} FORMAT${locked ? ' · LOCKED' : ''}`}
-          info={'POINTS — each week is the sum of every locked starter\'s points, head-to-head.\n\nH2H CATEGORIES — each week is won category by category from both sides\' summed lines; ratios (FG%, ERA…) are made from the totals.\n\nROTO — no weekly winner: every game all season sums into one line per team, each category ranks the league, best of N takes N points.\n\nThe format and the categories lock once the season is under way; points per stat change any time.'} />
+          info={'POINTS — each week is the sum of every locked starter\'s points, head-to-head.\n\nH2H CATEGORIES — each week is won category by category from both sides\' summed lines; ratios (FG%, ERA…) are made from the totals.\n\nROTO — no weekly winner: every game all season sums into one line per team, each category ranks the league, best of N takes N points.\n\nSEASON POINTS — no weekly winner: every locked slot-day all season adds to one points total per team; the standings are that total. Pairs with 🎯 best-ball spots on the LINEUP page.\n\nThe format and the categories lock once the season is under way; points per stat change any time.'} />
         <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
-          {(['points', 'cats', 'roto'] as SportFormat[]).map((f) => (
-            <Chip key={f} label={f === 'points' ? 'POINTS' : f === 'cats' ? 'H2H CATEGORIES' : 'ROTO'} on={format === f} disabled={busy || locked}
+          {SPORT_FORMATS.map((f) => (
+            <Chip key={f} label={SPORT_FORMAT_LABEL[f]} on={format === f} disabled={busy || locked}
               onPress={() => { tap(); void saveFormat(f, cats); }} />
           ))}
         </View>
-        {format !== 'points' && (
+        {format !== 'points' && format !== 'season' && (
           <View style={{ marginTop: 8 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.1}>CATEGORIES · {cats.size} ON</Mono>
             <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>

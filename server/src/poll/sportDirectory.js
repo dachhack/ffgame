@@ -51,6 +51,7 @@ export function directoryRow(sport, p, rank) {
     active: p.active !== false && !p.minors,
     injury_status: p.injury?.code ?? null, injury_note: p.injury?.note ?? null,
     rank, rank_pts: rankPts, season: p.seasonId ?? null, gp: p.gp ?? 0, season_line: line,
+    exp: Number.isFinite(p.exp) ? p.exp : null,
     seen_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   };
 }

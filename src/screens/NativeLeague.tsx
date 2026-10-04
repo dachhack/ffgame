@@ -585,13 +585,16 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
               <Chip on={sportFormat === 'points'} onClick={() => setSportFormat('points')}>POINTS</Chip>
               <Chip on={sportFormat === 'cats'} onClick={() => setSportFormat('cats')}>CATEGORIES</Chip>
               <Chip on={sportFormat === 'roto'} onClick={() => setSportFormat('roto')}>ROTO</Chip>
+              <Chip on={sportFormat === 'season'} onClick={() => setSportFormat('season')}>SEASON POINTS</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
               {sportFormat === 'points'
                 ? `Points: every stat is worth a set number (${Object.entries(sportDef.scoringDefault).slice(0, 4).map(([k, v]) => `${sportDef.stats.find((st) => st.id === k)?.short ?? k} ${v}`).join(', ')}…), tunable on the SCORING tab.`
                 : sportFormat === 'cats'
                   ? `Head-to-head categories: each week is won category by category — ${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}.`
-                  : `Rotisserie: no weekly winner. Every game all season counts toward one ranking per category (${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}); best of ${teams} takes ${teams} points, the standings are the sum.`}
+                  : sportFormat === 'season'
+                    ? 'Season points: no weekly winner. Every locked slot-day all season adds to one total per team; the standings are that total. Flag spots 🎯 best ball on the LINEUP page and the lineup sets itself every night.'
+                    : `Rotisserie: no weekly winner. Every game all season counts toward one ranking per category (${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}); best of ${teams} takes ${teams} points, the standings are the sum.`}
             </div>
             <div style={{ height: 14 }} />
             {/* REPLAY (v0.626.0): last season, day by day, on a clock that runs a

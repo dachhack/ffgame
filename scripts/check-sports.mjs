@@ -124,6 +124,41 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
   ok(/sportsOn && <LabelInfo label="WHICH SPORT\?"/.test(app) && /f\.sports === true/.test(app), 'the app create flow shows WHICH SPORT to flag holders and admins only');
 }
 
+// ── v0.629.0: best ball and scoped spots for a daily sport ───────────────────
+{
+  const { SPORT_FORMATS, SPORT_FORMAT_LABEL, isSeasonFormat, sportSettingsOf, sportRosterSlots, sportRelabelSlots, sportAddSlot, sportRemoveSlot, sportSlotTypeOf, sportSpotScopeLabel, sportHasTenure } = await import('../packages/core/src/sports/league.ts');
+  const { leagueBestball, classicSlotsFromSpec, slotAllows, assignByValue } = await import('../packages/core/src/engine/classic.ts');
+  ok(SPORT_FORMATS.join() === 'points,cats,roto,season' && SPORT_FORMAT_LABEL.season === 'SEASON POINTS' && isSeasonFormat('roto') && isSeasonFormat('season') && !isSeasonFormat('points'), 'four formats; roto and season are the schedule-less ones');
+  ok(sportSettingsOf({ sport: { period_start: '2026-10-19', format: 'season' } }).format === 'season' && sportSettingsOf({ sport: { period_start: '2026-10-19', format: 'bogus' } }).format === 'points', 'the season format reads back; an unknown one is points');
+  // the spot spec is the NFL SlotSpec's keys, so the board's own helpers read it
+  const spec = [{ pos: ['PG', 'SG'], label: 'G', bb: true }, { pos: ['C'], label: 'C', teams: ['BOS', 'LAL'] }, { pos: ['PG', 'SG', 'SF', 'PF', 'C'], label: 'UTIL', max_exp: 0 }];
+  ok(leagueBestball({ slots: spec }).join() === 'S1', 'leagueBestball sees a sport spot\'s bb flag');
+  const defs = classicSlotsFromSpec(spec);
+  ok(defs[1].flt?.teams?.join() === 'BOS,LAL' && defs[2].flt?.max_exp === 0 && !defs[0].flt, 'classicSlotsFromSpec carries the team and tenure scope');
+  ok(slotAllows(defs[1], { pos: 'C', team: 'BOS' }) && !slotAllows(defs[1], { pos: 'C', team: 'MIA' }) && slotAllows(defs[2], { pos: 'SF', team: 'MIA', exp: 0 }) && !slotAllows(defs[2], { pos: 'SF', team: 'MIA', exp: 3 }) && !slotAllows(defs[2], { pos: 'SF', team: 'MIA', exp: null }), 'the board\'s slotAllows applies the scope to a sport player (unknown tenure refused)');
+  ok(sportSpotScopeLabel(spec[1]) === 'BOS/LAL' && sportSpotScopeLabel(spec[2]) === 'ROOKIES ONLY' && sportSpotScopeLabel({ min_exp: 5 }) === '5+ YRS' && sportSpotScopeLabel({ min_exp: 1, max_exp: 3 }) === '1–3 YRS' && sportSpotScopeLabel(spec[0]) === '', 'scope labels');
+  ok(sportHasTenure('nba') && sportHasTenure('mlb') && !sportHasTenure('nhl') && !sportHasTenure('wnba'), 'tenure is known for the NBA and MLB only');
+  // the builder's spot list
+  const nba = SPORTS.nba;
+  ok(sportSlotTypeOf(nba, ['SG', 'PG'])?.type === 'G' && sportSlotTypeOf(nba, ['PG', 'C']) === null, 'a spot\'s slot type by its eligibility set');
+  const base = sportRosterSlots(nba);
+  const plus = sportAddSlot(nba, base, 'G');
+  ok(plus.length === base.length + 1 && plus.filter((s) => s.label.startsWith('G')).map((s) => s.label).join() === 'G1,G2' && plus.indexOf(plus.find((s) => s.label === 'G2')) === base.findIndex((s) => s.label === 'G') + 1, `adding a G puts G2 after G1: ${plus.map((s) => s.label).join(' ')}`);
+  const minus = sportRemoveSlot(nba, plus, 'G');
+  ok(minus.length === base.length && minus.map((s) => s.label).join() === base.map((s) => s.label).join(), 'removing it restores the labels');
+  const flagged = sportRelabelSlots(nba, [{ pos: ['C'], label: 'x', bb: true, teams: ['BOS'] }, { pos: ['C'], label: 'y' }]);
+  ok(flagged.map((s) => s.label).join() === 'C1,C2' && flagged[0].bb === true && flagged[0].teams.join() === 'BOS' && flagged[1].bb === undefined, 'relabelling keeps every spot\'s flags');
+  ok(sportRelabelSlots(nba, [{ pos: ['PG', 'C'], label: '' }])[0].label === 'C/PG' && sportRemoveSlot(nba, base, 'ZZ') === base, 'a custom set keeps its joined codes; removing a type the lineup lacks is a no-op');
+  // the fill's matching: fill every spot you can, then maximize
+  const held = assignByValue(2, 3, [[10, -Infinity, 8], [9, -Infinity, 7]]);
+  ok(held.join() === '0,2' || held.join() === '2,0', `assignByValue seats two of three (${held.join(',')})`);
+  // the database accepts exactly these keys
+  const sql = readFileSync(new URL('../supabase/migrations/0436_sport_bestball_and_scope.sql', import.meta.url), 'utf8');
+  ok(/spot -> 'bb'/.test(sql) && /spot -> 'teams'/.test(sql) && /spot -> 'min_exp'/.test(sql) && /spot -> 'max_exp'/.test(sql), 'set_sport_lineup reads bb, teams, min_exp and max_exp');
+  ok(/'points', 'cats', 'roto', 'season'/.test(sql), 'set_sport_settings accepts the season format');
+  ok(/coalesce\(nr\.spot, 'active'\) = 'active'/.test(sql) && /s\.played/.test(sql), 'the day-lines RPC reads active roster spots and the played flag');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall sport checks passed');
 process.exit(fails ? 1 : 0);
 

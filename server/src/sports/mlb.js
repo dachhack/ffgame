@@ -144,6 +144,14 @@ export function mlbDirectoryPlayers(payload) {
   }));
 }
 
+/** Tenure (0436) from the debut date: seasons since the debut year, so a man
+ *  who debuted this season is 0 (a rookie) all season. Null without a debut. */
+export function mlbExp(debutDate, season) {
+  const y = /^(\d{4})/.exec(String(debutDate ?? ''));
+  if (!y) return null;
+  return Math.max(0, Number(season) - Number(y[1]));
+}
+
 // ── The directory (phase 2) ───────────────────────────────────────────────────
 // The players list (one call), the teams (one), the season hitting /
 // pitching / fielding leaderboards (three per season — every player in each,
@@ -254,7 +262,7 @@ export function mlbBuildDirectory({ players, teams, cur, prior, fielding, roster
       extId: id, name: p.fullName ?? '', team: teamAbbr.get(p.currentTeam.id) ?? String(p.currentTeam.id),
       pos: primary, feedCodes: mlbEligibility(primary, games.get(id), use ?? c ?? pr),
       jersey: st?.jersey ?? p.primaryNumber ?? null, headshot: null,
-      injury: st?.injury ?? null, minors: st?.minors ?? false,
+      injury: st?.injury ?? null, minors: st?.minors ?? false, exp: mlbExp(p.mlbDebutDate, season),
       season: use, seasonId: use && use === c ? season : pr ? String(Number(season) - 1) : season, gp: played(use),
     });
   }
@@ -295,7 +303,7 @@ export const fetchMlbFielding = (season) => leaderboard('fielding', season);
 export const fetchMlbRoster40 = (teamId) => getJson(`${BASE}/v1/teams/${teamId}/roster?rosterType=40Man`);
 export const fetchMlbLive = (gamePk) => getJson(`${BASE}/v1.1/game/${gamePk}/feed/live`);
 export const fetchMlbPlayers = (season) =>
-  getJson(`${BASE}/v1/sports/1/players?season=${season}&fields=people,id,fullName,active,currentTeam,id,primaryPosition,abbreviation,primaryNumber`, { timeoutMs: 60000 });
+  getJson(`${BASE}/v1/sports/1/players?season=${season}&fields=people,id,fullName,active,currentTeam,id,primaryPosition,abbreviation,primaryNumber,mlbDebutDate`, { timeoutMs: 60000 });
 
 export const mlb = {
   id: 'mlb',
