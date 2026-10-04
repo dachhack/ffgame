@@ -54,9 +54,10 @@ export interface SportLeagueSettings {
 export interface SportSlotSpec { pos: string[]; label: string; bb?: boolean; teams?: string[]; min_exp?: number | null; max_exp?: number | null }
 
 /** Which sports carry a tenure (years of experience) in their directory:
- *  NBA from Sleeper's years_exp, MLB from the debut date. The NHL and WNBA
- *  feeds have none, so a tenure-scoped spot there would refuse everyone. */
-export const sportHasTenure = (sport: Sport): boolean => sport === 'nba' || sport === 'mlb';
+ *  NBA from Sleeper's years_exp, MLB from the debut date, NHL from the stats
+ *  bios' first season (v0.629.1). The WNBA feed has none, so a tenure-scoped
+ *  spot there would refuse everyone. */
+export const sportHasTenure = (sport: Sport): boolean => sport === 'nba' || sport === 'mlb' || sport === 'nhl';
 
 /** The spot's scope on screen: "BOS/LAL · ROOKIES ONLY", or ''. */
 export function sportSpotScopeLabel(s: Pick<SportSlotSpec, 'teams' | 'min_exp' | 'max_exp'> | null | undefined): string {

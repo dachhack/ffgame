@@ -22,6 +22,36 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.629.1 — NHL tenure, so ROOKIES spots work for hockey
+
+> - A hockey league's lineup spots can now be scoped to ROOKIES, like the NBA's and MLB's: the directory learns each player's first NHL season.
+
+Founder: "let's scout around for a source for NHL tenure … Build it and merge."
+
+- **The source.** The NHL stats REST service the directory sweep already calls
+  for its season summaries has `skater/bios` and `goalie/bios` reports whose
+  rows carry `firstSeasonForGameType` under the same player id the directory
+  keys on. Asked with no season filter (`gameTypeId=2 and seasonId>=20102011`,
+  `limit=-1`) each returns one row per player who has played since 2010-11:
+  about 3,100 rows across the two calls. Scouted against all 32 current
+  rosters (766 players): 759 resolve directly; the 7 without a row are
+  pre-debut prospects, and a rostered player with no row has by definition
+  never played an NHL regular-season game, so he is in his first season. A
+  two-season window would have mis-read two returning veterans (Formenton,
+  Dube) as rookies; the all-seasons call does not. The per-player landing page
+  (900 requests a day) and ESPN's `experience.years` (a different id space)
+  were considered and passed over.
+- **The code.** `nhl.js`: `fetchNhlBios` (two requests), `nhlFirstSeasons`
+  (id → first season id), `nhlExp(first, season, rostered)` = season − first
+  season's starting year, 0 for a rostered player with no row, null for an
+  off-roster one; the directory carries `exp` on every row (a bios failure
+  costs the tenure, not the directory). `sportHasTenure('nhl')` is true, so
+  the ROOKIES chip shows on hockey builders. Tests: fixtures cut from the
+  live bios for the Bruins roster (one skater dropped to stand for a
+  never-played man); check-sports pin updated. Dry run of the live calls
+  through the adapter: the bios landed in about a second and every Bruin got a
+  tenure.
+
 ### v0.629.0 — best ball and scoped spots for a daily sport
 
 > - A daily-sport league's lineup spots can now be 🎯 BEST BALL: nobody sets them — each night the spot takes your top scorer among the rostered players who played and fit it, and the board shows the fill as the night goes.
