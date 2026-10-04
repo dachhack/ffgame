@@ -152,7 +152,7 @@ $$;
 
 /** The sweep's worklist: every account it may remove, inactive this long,
  *  with its notice if one stands. Service role only. */
-create or replace function offboard_candidates(p_season text, p_inactive_days int default 60)
+create or replace function offboard_candidates(p_season text, p_inactive_days int default 30)
   returns table (app_user_id uuid, email text, last_active_at timestamptz, noticed_at timestamptz, delete_after timestamptz)
   language sql stable security definer set search_path = public as $$
   select u.id, u.email, _user_last_active(u.id), n.noticed_at, n.delete_after

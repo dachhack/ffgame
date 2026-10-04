@@ -29,7 +29,7 @@ import { config } from './config.js';
 import { db } from './supabase.js';
 import { mailConfigured, sendMail, brandedHtml, escapeHtml } from './mail.js';
 
-export const INACTIVE_DAYS = Number(process.env.OFFBOARD_INACTIVE_DAYS || 60);
+export const INACTIVE_DAYS = Number(process.env.OFFBOARD_INACTIVE_DAYS || 30); // founder: "Inactive is 30 days with the 14 day grace period"
 export const GRACE_DAYS = Number(process.env.OFFBOARD_GRACE_DAYS || 14);
 const EVERY_MS = Number(process.env.OFFBOARD_SWEEP_MS || 86400000);
 const MAX_NOTICES_PER_RUN = Number(process.env.OFFBOARD_MAX_NOTICES || 200); // Workspace allows ~2,000 mails a day

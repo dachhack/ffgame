@@ -3160,7 +3160,7 @@ function UserCap() {
     <div style={card}>
       <div style={h}>ACCOUNT CAP</div>
       <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
-        Sign-up is open to anyone until the cap; past it the database refuses the account and the form shows the waitlist. Seat agents don’t count. The daily sweep retires accounts quiet for 60 days (told 14 days ahead), which is how spots come back.
+        Sign-up is open to anyone until the cap; past it the database refuses the account and the form shows the waitlist. Seat agents don’t count. The daily sweep retires accounts quiet for 30 days (told 14 days ahead), which is how spots come back.
       </div>
       <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--text)', marginBottom: 8 }}>
         {door ? <>{door.count.toLocaleString()} of {door.cap.toLocaleString()} spots taken · {door.open ? 'OPEN' : 'FULL'}</> : '…'}
