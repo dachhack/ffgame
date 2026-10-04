@@ -20,7 +20,7 @@ import { getTeam, getPlayer, gameForTeam, getActiveLeague } from '@drip/core/dat
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
 import { consumeShopOnBoard, openHeroBoard } from './LeagueHubPage';
 import {
-  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, buffsForWindow, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, type ClutchOffer,
+  windowPools, defaultLineup, aiLineup, slotKey, buildMatchup, buffsForWindow, banksAtClock, weekEarnings, metricCoin, coinRisk, slotCoin, swapMetricFor, WEEKLY_STIPEND, UNOPPOSED_COIN, WINDOW_WIN_BONUS, BYE_STEAL_CAP, slotsFor, totalSlotsWith, byePlayers, clutchOffers, clutchArmClock, type ClutchOffer,
 } from '@drip/core/engine/matchup';
 import { encodeSrvSlots, decodeSrvSlots, srvSlotScore, srvBoardTotals, shownScore, fgBoostAt, fgBoostTotal, srvSidePicks } from '@drip/core/engine/liveScore';
 import { fmtClock, statlineAt, realTimeAt, clockAtRealTime, projectedPoints, fmtStat, metricDriver, GAME_SECONDS } from '@drip/core/engine/sim';
@@ -497,7 +497,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // Arm a clutch offer: Counter-Wipe negates the nuke at its own clock; Encore/
   // Halftime Gamble arm from the current live clock.
   const onArmClutch = (o: ClutchOffer) => {
-    const clock = o.id === 'clutch-counter' ? o.armFrom : effWinClock(o.slotKey.split('#')[0]);
+    const clock = clutchArmClock(o, effWinClock(o.slotKey.split('#')[0]));
     if (armClutch(o.id, week, o.slotKey, clock)) liveTargeted(o.id, { ...keyParts(o.slotKey), clock }); // mirror into the live scoring record (0085)
   };
   // Rosters expand in setup (you need them to set lineups), collapse otherwise.
