@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.627.2 — the injured are in the directory
+
+> - Injured NHL and MLB players (Larkin, Barzal, Westburg…) are back in the player pool and the ADP match; the Ohtani batter/pitcher rows are one man.
+
+The first production market sweep: NHL 262/269 ADP matched, MLB 519/597.
+The misses were not the matcher's — the players were not in the directory.
+The NHL's current-roster endpoint drops a man on injured reserve, and MLB's
+season player list is the 40-man rosters, which a 60-day IL player is not
+on. Both directories now add anyone with an established season line this
+season or last (20 skater / 10 goalie games; 40 hit / 10 pitched) who is on
+no roster, off the season report, with the team it last names (a trade's
+"NYI,NJD" is the last code). `nhlOffRoster`; the extras block in
+`mlbBuildDirectory`. Live after the change: NHL 885 players and 269/269
+matched; MLB 1662 and 581/597 — the rest are prospects without a big-league
+line and a suspension. The MLB page's "(Batter)" / "(Pitcher)" suffix is
+dropped from the name, so both Ohtani rows land on him and the earlier ADP
+wins.
+
 ### v0.627.1 — the ADP pages' team codes, read live
 
 > - Every NBA, NHL and MLB player on the ADP pages now lands on his real team in the draft room.

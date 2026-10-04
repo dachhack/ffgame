@@ -171,11 +171,19 @@ export function mlbPitcherSeasonLine(st) {
 /** Season lines by player id: a hitter's, a pitcher's, or both on one line. */
 export function mlbSeasonLines(hitting, pitching) {
   const out = new Map();
-  for (const s of hitting?.stats?.[0]?.splits ?? []) out.set(String(s.player.id), mlbHitterSeasonLine(s.stat));
+  // WHO each line belongs to (v0.627.2): name, team id, position — for the
+  // players the season's player list leaves out (the 60-day IL).
+  const who = new Map();
+  for (const s of hitting?.stats?.[0]?.splits ?? []) {
+    out.set(String(s.player.id), mlbHitterSeasonLine(s.stat));
+    who.set(String(s.player.id), { name: s.player?.fullName ?? '', teamId: s.team?.id ?? null, pos: s.position?.abbreviation ?? '' });
+  }
   for (const s of pitching?.stats?.[0]?.splits ?? []) {
     const id = String(s.player.id);
     out.set(id, { ...(out.get(id) ?? {}), ...mlbPitcherSeasonLine(s.stat) });
+    if (!who.has(id)) who.set(id, { name: s.player?.fullName ?? '', teamId: s.team?.id ?? null, pos: s.position?.abbreviation ?? 'P' });
   }
+  out.who = who;
   return out;
 }
 
@@ -249,6 +257,31 @@ export function mlbBuildDirectory({ players, teams, cur, prior, fielding, roster
       injury: st?.injury ?? null, minors: st?.minors ?? false,
       season: use, seasonId: use && use === c ? season : pr ? String(Number(season) - 1) : season, gp: played(use),
     });
+  }
+  // OFF THE LIST, IN THE DIRECTORY (v0.627.2). The season's player list is
+  // the 40-man rosters, and a man on the 60-day IL is not on one — Westburg,
+  // Steele and Santander vanished from the directory (and the ADP match) the
+  // week they were hurt. Anyone with an established line this season or last
+  // (40 games hit or 10 pitched) who is on no list comes in off the
+  // leaderboard, with the team it names. Retirees ride along; rank sinks them.
+  const listed = new Set(out.map((p) => p.extId));
+  const played = (l) => (l?.hgp ?? 0) + (l?.pgp ?? 0);
+  for (const [lines, sid] of [[curLines, season], [priorLines, String(Number(season) - 1)]]) {
+    for (const [id, w] of lines.who ?? []) {
+      if (listed.has(id) || !w.name || !w.teamId) continue;
+      const l = lines.get(id);
+      if (!l || ((l.hgp ?? 0) < 40 && (l.pgp ?? 0) < 10)) continue;
+      const c = curLines.get(id), pr = priorLines.get(id);
+      const use = played(c) >= 40 ? c : (pr ?? c ?? null);
+      listed.add(id);
+      const primary = w.pos || 'P';
+      out.push({
+        extId: id, name: w.name, team: teamAbbr.get(w.teamId) ?? String(w.teamId),
+        pos: primary, feedCodes: mlbEligibility(primary, games.get(id), use ?? c ?? pr),
+        jersey: null, headshot: null, injury: null, minors: false, offRoster: true,
+        season: use, seasonId: use && use === c ? season : pr ? String(Number(season) - 1) : sid, gp: played(use),
+      });
+    }
   }
   return out;
 }

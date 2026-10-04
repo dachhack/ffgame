@@ -63,6 +63,9 @@ export function parseFantasyProsAdp(html, sport) {
     if (cells.length < 3) continue;
     const label = cells.find((c) => /player-name/.test(c)) ?? cells[1];
     const name = (/fp-player-name="([^"]+)"/.exec(label)?.[1] ?? /class="player-name[^"]*"[^>]*>([^<]+)</.exec(label)?.[1] ?? '').trim();
+    // "Shohei Ohtani (Batter)" / "(Pitcher)": one man, two rows; the suffix is
+    // the page's, not his name's. The earlier (better) ADP row wins downstream.
+    const cleanName = name.replace(/\s*\((?:batter|pitcher|hitter|p|b)\)\s*$/i, '').trim();
     if (!name) continue;
     const small = /<small[^>]*>([\s\S]*?)<\/small>/.exec(label)?.[1] ?? '';
     const smallText = small.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/[()]/g, ' ').trim();
@@ -85,7 +88,7 @@ export function parseFantasyProsAdp(html, sport) {
     const adp = nums.length ? Number(nums[nums.length - 1]) : null;
     const rank = nums.length ? Number(nums[0]) : null;
     if (adp == null || !Number.isFinite(adp)) continue;
-    out.push({ name, team, pos, adp, rank });
+    out.push({ name: cleanName, team, pos, adp, rank });
   }
   return out;
 }

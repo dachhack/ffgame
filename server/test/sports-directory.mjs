@@ -3,7 +3,7 @@
 // directory + season stats), WNBA (ESPN rosters); the rank; the basketball
 // crosswalk. Run: `npx tsx test/sports-directory.mjs` from server/.
 import { readFileSync } from 'node:fs';
-import { nhlSeasonLines, nhlStandingsTeams, nhlSeasonId, nhlRosterPlayers } from '../src/sports/nhl.js';
+import { nhlSeasonLines, nhlStandingsTeams, nhlSeasonId, nhlRosterPlayers, nhlOffRoster } from '../src/sports/nhl.js';
 import { mlbSeasonLines, mlbFieldingGames, mlbEligibility, mlbRosterStatus, mlbBuildDirectory } from '../src/sports/mlb.js';
 import { sleeperNbaPlayers, sleeperNbaSeasonLines, espnWnbaRoster, wnbaTeam } from '../src/sports/nba.js';
 import { directoryRow, rankDirectory, buildXref, resolveXref, normName, injuryRows, boardInjury } from '../src/poll/sportDirectory.js';
@@ -33,6 +33,13 @@ const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).
   const roster = nhlRosterPlayers(fx('nhl-roster-bos.json'), 'BOS');
   const rows = roster.map((p, i) => directoryRow('nhl', { ...p, season: lines.get(p.extId) ?? null, gp: 0 }, i + 1));
   ok(rows.every((r) => r && r.player_key.startsWith('nhl-') && r.eligible.length === 1), `roster → rows: ${rows.map((r) => r.pos).join(',')}`);
+  // OFF THE ROSTER (v0.627.2): the report's stars who are on no roster come in with their last team.
+  const extra = nhlOffRoster(roster.map((p) => p.extId), lines, new Map(), '2025');
+  ok(extra.length > 0 && extra.every((p) => p.offRoster && p.team && p.name && p.season && !roster.some((r) => r.extId === p.extId)), `${extra.length} off-roster players off the report (e.g. ${extra[0]?.name} ${extra[0]?.team} ${extra[0]?.pos})`);
+  ok(extra.some((p) => p.name === 'Connor McDavid' && p.team === 'EDM'), 'McDavid, not a Bruin, stands in the directory off his season line');
+  ok(nhlOffRoster(roster.map((p) => p.extId), nhlSeasonLines({ data: [{ playerId: 1, skaterFullName: 'Cup O. Coffee', teamAbbrevs: 'BOS', positionCode: 'C', gamesPlayed: 3 }] }, { data: [] }), new Map(), '2025').length === 0, 'three games is not an established line');
+  const traded = nhlSeasonLines({ data: [{ playerId: 2, skaterFullName: 'Moved Midseason', teamAbbrevs: 'NYI,NJD', positionCode: 'L', gamesPlayed: 60 }] }, { data: [] });
+  ok(nhlOffRoster([], traded, new Map(), '2025')[0]?.team === 'NJD', 'a traded player lands on the team he ended with');
 }
 
 // ── MLB ──────────────────────────────────────────────────────────────────────
@@ -61,6 +68,17 @@ const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).
   ok(dir.length >= 25 && dir.every((p) => /^[A-Z]{2,3}$/.test(p.team) && p.feedCodes.length > 0), `${dir.length} directory rows with team codes and eligibility`);
   const yank = dir.find((p) => p.team === 'NYY');
   ok(!!yank, `a Yankee resolved through the 40-man: ${yank?.name} (${yank?.feedCodes})`);
+  // OFF THE LIST (v0.627.2): a leaderboard player the season's player list leaves out comes in off his line.
+  const people = fx('mlb-players-2026-sample.json').people;
+  const dropped = people.find((p) => { const l = lines.get(String(p.id)); return l && ((l.hgp ?? 0) >= 40 || (l.pgp ?? 0) >= 10); });
+  const dir2 = mlbBuildDirectory({
+    players: { people: people.filter((p) => p.id !== dropped.id) }, teams: fx('mlb-teams-2026.json'),
+    cur: { hitting, pitching }, prior: { hitting: { stats: [{ splits: [] }] }, pitching: { stats: [{ splits: [] }] } },
+    fielding, rosters: [fx('mlb-roster-40man-147.json')], season: '2026',
+  });
+  const back = dir2.find((p) => p.extId === String(dropped.id));
+  ok(!!back && back.offRoster && /^[A-Z]{2,3}$/.test(back.team) && back.feedCodes.length > 0, `${dropped.fullName}, off the list, is back off the leaderboard as ${back?.team} ${back?.feedCodes}`);
+  ok(dir2.length === dir.length, 'and the directory is the same size as with him listed');
   const rows = rankDirectory('mlb', dir).map((p, i) => directoryRow('mlb', p, i + 1));
   ok(rows[0].rank === 1 && rows[0].rank_pts >= rows[1].rank_pts && rows.every((r) => r.eligible.every((e) => SPORTS.mlb.positions.includes(e))), `ranked: #1 ${rows[0].full_name} ${rows[0].rank_pts} pts`);
 }

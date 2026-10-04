@@ -50,5 +50,15 @@ ok(m.rows.find((r) => r.key === 'nhl-6')?.adp === 3.5, 'a unique name matches ev
 ok(m.rows.find((r) => r.key === 'nhl-4')?.adp === 40 && !m.rows.find((r) => r.key === 'nhl-5'), 'a shared name needs the team; the second Aho on a third team is dropped');
 ok(m.unmatched.length === 2, `the rest are reported (${m.unmatched.map((u) => u.name).join(', ')})`);
 
+
+// one man, two rows (v0.627.2): the page's "(Batter)" / "(Pitcher)" suffix is dropped
+{
+  const html = '<table id="data"><tbody><tr><td>1</td><td class="player-label"><a class="player-name" fp-player-name="Shohei Ohtani (Batter)">Shohei Ohtani (Batter)</a><small> (<a>LAD</a> - DH)</small></td><td>1</td><td>1.0</td><tr><td>2</td><td class="player-label"><a class="player-name" fp-player-name="Shohei Ohtani (Pitcher)">Shohei Ohtani (Pitcher)</a><small> (<a>LAD</a> - SP)</small></td><td>9</td><td>9.0</td></tbody></table>';
+  const rows = parseFantasyProsAdp(html, 'mlb');
+  ok(rows.length === 2 && rows.every((r) => r.name === 'Shohei Ohtani'), 'the (Batter)/(Pitcher) suffix is not part of the name');
+  const m2 = matchAdp(rows, [{ player_key: 'mlb-660271', full_name: 'Shohei Ohtani', team: 'LAD', alt_ids: null }]);
+  ok(m2.rows.length === 1 && m2.rows[0].adp === 1 && m2.unmatched.length === 0, 'both rows land on him; the earlier ADP wins');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall sport market checks passed');
 if (fails) process.exit(1);

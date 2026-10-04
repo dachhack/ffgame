@@ -213,8 +213,47 @@ export function nhlGoalieSeasonLine(g) {
 export function nhlSeasonLines(skaters, goalies, realtime = null) {
   const rt = new Map((realtime?.data ?? []).map((r) => [String(r.playerId), r]));
   const out = new Map();
-  for (const s of skaters?.data ?? []) out.set(String(s.playerId), nhlSkaterSeasonLine(s, rt.get(String(s.playerId))));
-  for (const g of goalies?.data ?? []) out.set(String(g.playerId), nhlGoalieSeasonLine(g));
+  // WHO each line belongs to (v0.627.2): name, last team of the season
+  // ("NYI,NJD" is a trade; the last code is where he ended up), position —
+  // so a player the rosters do not list (injured reserve, a healthy scratch)
+  // can still stand in the directory off his season report.
+  const who = new Map();
+  const lastTeam = (abbrevs) => String(abbrevs ?? '').split(',').map((x) => x.trim()).filter(Boolean).pop() ?? '';
+  for (const s of skaters?.data ?? []) {
+    out.set(String(s.playerId), nhlSkaterSeasonLine(s, rt.get(String(s.playerId))));
+    who.set(String(s.playerId), { name: s.skaterFullName ?? '', team: lastTeam(s.teamAbbrevs), pos: s.positionCode ?? '' });
+  }
+  for (const g of goalies?.data ?? []) {
+    out.set(String(g.playerId), nhlGoalieSeasonLine(g));
+    who.set(String(g.playerId), { name: g.goalieFullName ?? '', team: lastTeam(g.teamAbbrevs), pos: 'G' });
+  }
+  out.who = who;
+  return out;
+}
+
+/** OFF THE ROSTER, IN THE DIRECTORY (v0.627.2). The current-roster endpoint
+ *  drops a player on injured reserve, so Larkin, Barzal and Jarvis vanished
+ *  from the directory (and the ADP match) the week they were hurt. Anyone
+ *  with an established season line — 20 skater games or 10 goalie games in
+ *  this season or last — who is on no roster comes in off the report, with
+ *  the team he last played for. A retiree with a big final season rides
+ *  along; the production rank sinks the rest. */
+export function nhlOffRoster(rosterIds, cur, prior, season) {
+  const out = [];
+  const seen = new Set(rosterIds);
+  const played = (l) => (l?.gp ?? 0) + (l?.gapp ?? 0);
+  const enough = (l) => l && (l.gapp != null ? l.gapp >= 10 : (l.gp ?? 0) >= 20);
+  for (const [lines, who, sid] of [[cur, cur?.who, season], [prior, prior?.who, String(Number(season) - 1)]]) {
+    for (const [id, w] of who ?? []) {
+      if (seen.has(id) || !w.team || !w.name) continue;
+      const c = cur?.get(id), pr = prior?.get(id);
+      const use = played(c) >= 20 ? c : (pr ?? c ?? null);
+      if (!enough(lines.get(id))) continue;
+      seen.add(id);
+      out.push({ extId: id, name: w.name, team: w.team, pos: w.pos, jersey: null, headshot: null, injury: null, offRoster: true,
+        season: use, seasonId: use === c && c ? season : pr ? String(Number(season) - 1) : sid, gp: played(use) });
+    }
+  }
   return out;
 }
 
@@ -257,6 +296,8 @@ export const nhl = {
         out.push({ ...p, injury: null, season: use, seasonId: use === c && c ? season : pr ? String(Number(season) - 1) : season, gp: played(use) });
       }
     }
+    // The injured and the scratched (v0.627.2): off the season reports.
+    out.push(...nhlOffRoster(out.map((p) => p.extId), cur, prior, season));
     return out;
   },
 };
