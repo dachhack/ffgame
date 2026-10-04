@@ -1,4 +1,4 @@
-// A SPORT LEAGUE'S LINEUP (0403) — the commissioner's builder for a daily
+// A SPORT LEAGUE'S LINEUP (0431) — the commissioner's builder for a daily
 // sport, in counts per slot type (2 C, 1 G, 2 UTIL…) plus the bench and IR
 // shelves, until the draft starts. One SAVE writes the whole spec through
 // set_sport_lineup; the draft's rounds follow (starters + bench + IR).

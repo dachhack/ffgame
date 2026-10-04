@@ -1,4 +1,4 @@
--- 0396 — THE SPORT SPINE (v0.564.0): a league has a sport, and non-NFL games
+-- 0424 — THE SPORT SPINE (v0.616.0): a league has a sport, and non-NFL games
 -- are stored as per-player STAT LINES rather than plays.
 --
 -- Founder: "What would it take for us to do hockey, NBA, MLB, WNBA fantasy …
@@ -18,7 +18,7 @@ alter table league add column if not exists sport text not null default 'nfl'
   check (sport in ('nfl', 'nba', 'wnba', 'nhl', 'mlb'));
 create index if not exists league_sport on league(sport) where sport <> 'nfl';
 
-comment on column league.sport is 'nfl | nba | wnba | nhl | mlb — which SportDef shapes the league (0396). NFL leagues score through live_play; the others through game_stat_line.';
+comment on column league.sport is 'nfl | nba | wnba | nhl | mlb — which SportDef shapes the league (0424). NFL leagues score through live_play; the others through game_stat_line.';
 
 -- ── sport_game: one row per real game, per sport and season ──────────────────
 -- The slate for the daily sports. `season` is the starting year as text

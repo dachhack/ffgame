@@ -1,4 +1,4 @@
--- 0401 — A SPORT LEAGUE PLAYS NO BRACKET YET (v0.568.0).
+-- 0429 — A SPORT LEAGUE PLAYS NO BRACKET YET (v0.620.0).
 --
 -- The playoff rules read NFL weeks: league_playoff_start defaults to 15 and
 -- "the regular season is final" is judged over weeks up to

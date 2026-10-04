@@ -13,6 +13,7 @@
 //   node src/cli.js leagues                    list leagues (id + sleeper id) + matchup weeks
 //   node src/cli.js seed-preseason-pool [lg] [wk=101]  deep slate-team pick pool for a preseason week
 //   node src/cli.js restamp <wk> [season] [--league=<uuid>]  ⚠ re-resolve a CLOSED week's stored finals
+//   node src/cli.js college-sweep [season]      the college sweep now (rosters, stats, KTC, devy prices)
 //   node src/cli.js diff-week <wk> [season] [--league=<uuid>] [--seat=<n>]  read-only per-slot scoring
 import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek, seedPreseasonPool } from './sync.js';
@@ -689,12 +690,41 @@ async function main() {
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.dry === true) argv.push('--dry');
+      } else if (req.mode === 'college-sweep') {
+        // v0.570.1: the worker's college sweep, now — rosters, stats, KTC's
+        // devy board and the devy market prices. Writes only what the
+        // scheduled sweep writes.
+        argv.push('college-sweep');
+        if (req.season) argv.push(String(req.season));
+      } else if (req.mode === 'seal-audit') {
+        // v0.600.0: read-only — classic picks sealed before their own kickoff.
+        argv.push('seal-audit', need('week'));
+        if (req.season) argv.push(String(req.season));
+        if (req.league) argv.push(`--league=${req.league}`);
+      } else if (req.mode === 'offboard-sweep') {
+        // v0.612.0: one pass of the daily offboarding sweep; `dry` reports only.
+        argv.push('offboard-sweep');
+        if (req.dry) argv.push('--dry');
+      } else if (req.mode === 'computer-recard') {
+        // v0.599.0: rewrite a posted close line as the closed-issue card.
+        argv.push('computer-recard', need('issue'));
+      } else if (req.mode === 'computer-context') {
+        // v0.595.0: post the chat before an already-filed @computer ask on its issue.
+        argv.push('computer-context', need('issue'));
+      } else if (req.mode === 'declared-sweep') {
+        // v0.581.0: one pass of the NFL draft prospect pool (0409).
+        argv.push('declared-sweep');
+        if (req.year) argv.push(String(req.year));
+      } else if (req.mode === 'college-availability') {
+        // v0.615.0: one read of the conference availability reports; `dry` plans only.
+        argv.push('college-avail');
+        if (req.dry) argv.push('--dry');
       } else if (req.mode === 'college-report') {
         // v0.550.1: read-only — plays stored for rostered college players.
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | offboard-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -752,6 +782,53 @@ async function main() {
       console.log(`refinalize-week: ${dry ? 'nothing written' : `${n} matchup(s) set final`}. Scores untouched.`);
       break;
     }
+    case 'college-sweep': {
+      // ▶ THE COLLEGE SWEEP, ON DEMAND (v0.570.1).
+      //   node src/cli.js college-sweep [season]
+      //   Exactly what the worker runs weekly: every FBS roster, last and this
+      //   season's stats, StatHead's devy board, then refresh_college_prices.
+      const { runCollegeSweep } = await import('./poll/college.js');
+      const { loadStatheadDevy } = await import('./poll/statheadDevy.js');
+      const season = args[0] ?? config.season;
+      const r = await runCollegeSweep(season, (...a) => console.log(...a), undefined, undefined, loadStatheadDevy);
+      console.log(`college-sweep ${season}: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines`
+        + (r.failed ? `, ${r.failed} rosters failed (no retirement)` : `, ${r.retired} retired`) + (r.error ? ` — ${r.error}` : ''));
+      if (r.error) process.exitCode = 1;
+      break;
+    }
+    case 'seal-audit': {
+      const { sealAudit } = await import('./sealAudit.js');
+      const league = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      const pos = args.filter((a) => !a.startsWith('--'));
+      console.log(await sealAudit(Number(pos[0]), pos[1] ?? config.season, league));
+      break;
+    }
+    case 'computer-recard': {
+      const { recard } = await import('./computer.js');
+      for (const n of String(args[0] ?? '').split(',').map(Number).filter(Boolean)) {
+        console.log(await recard(n).catch((e) => ({ issue: n, error: e.message })));
+      }
+      break;
+    }
+    case 'computer-context': {
+      const { postContext } = await import('./computer.js');
+      for (const n of String(args[0] ?? '').split(',').map(Number).filter(Boolean)) {
+        console.log(await postContext(n).catch((e) => ({ issue: n, error: e.message })));
+      }
+      break;
+    }
+    case 'declared-sweep': {
+      // ▶ THE NFL DRAFT PROSPECT POOL, ON DEMAND (v0.581.0, 0409).
+      //   node src/cli.js declared-sweep [year]
+      //   One pass of what the worker does daily Jan 10 – May 15: list the
+      //   year's draft athletes and record each new one's college ESPN id.
+      const { runDeclared } = await import('./poll/declared.js');
+      const year = Number(args[0] ?? new Date().getUTCFullYear());
+      const r = await runDeclared(year, (...a) => console.log(...a));
+      console.log(`declared-sweep ${year}: ${r.added} new of ${r.listed} listed` + (r.error ? ` — ${r.error}` : ''));
+      if (r.error) process.exitCode = 1;
+      break;
+    }
     case 'college-report': {
       // ▶ WHAT THE WORKER STORED FOR COLLEGE PLAYERS (v0.550.1), read-only.
       //   node src/cli.js college-report <weeks, e.g. 205,4> [--league=<uuid>]
@@ -760,6 +837,45 @@ async function main() {
       const weeks = String(args[0] ?? '').split(',').map(Number).filter(Number.isFinite).filter(Boolean);
       const league = args.find((a) => a.startsWith('--league='))?.slice(9);
       await collegeReport({ weeks, leagues: league ? [league] : null });
+      break;
+    }
+    case 'college-avail': {
+      // ▶ THE CONFERENCE AVAILABILITY REPORTS, NOW (v0.615.0).
+      //   node src/cli.js college-avail [--dry]
+      //   Reads the SEC / Big Ten / ACC / Big 12 reports, prints every
+      //   designation it would write (and the rostered players among them)
+      //   and every row it could not match. --dry touches nothing.
+      const { pollCollegeAvailability } = await import('./poll/collegeAvailability.js');
+      const { db } = await import('./supabase.js');
+      const r = await pollCollegeAvailability({ dryRun: args.includes('--dry'), log: (...a) => console.log(...a) });
+      const { upserts, unmatched, ...summary } = r;
+      console.log(JSON.stringify(summary, null, 2));
+      const { data: rostered } = await db().from('native_roster').select('slug, league_id').like('slug', 'c-%').limit(5000);
+      const inLeague = new Set((rostered ?? []).map((x) => x.slug));
+      const ids = upserts.map((u) => u.player_slug.slice(2));
+      const names = new Map();
+      for (let i = 0; i < ids.length; i += 500) {
+        const { data } = await db().from('college_player').select('espn_id, full_name, pos, school_abbr').in('espn_id', ids.slice(i, i + 500));
+        for (const x of data ?? []) names.set(`c-${x.espn_id}`, `${x.full_name} (${x.pos}, ${x.school_abbr})`);
+      }
+      console.log(`\n${upserts.length} designation(s):`);
+      for (const u of upserts) console.log(`  ${inLeague.has(u.player_slug) ? '★' : ' '} ${u.status.padEnd(2)} ${u.player_slug.padEnd(11)} ${(names.get(u.player_slug) ?? '?').padEnd(36)} ${u.comment}`);
+      console.log(`\n★ = rostered in a league. ${unmatched.length} unmatched row(s):`);
+      for (const u of unmatched) console.log(`  ${u.why.padEnd(6)} ${u.conf} ${u.team} — ${u.pos} #${u.jersey} ${u.name} (${u.raw})`);
+      break;
+    }
+    case 'offboard-sweep': {
+      // ▶ THE OFFBOARDING SWEEP, ON DEMAND (v0.612.0, 0422).
+      //   node src/cli.js offboard-sweep [--dry] [--days=60] [--grace=14]
+      //   --dry prints who would be told and who would be removed, touching
+      //   nothing. Without mail credentials the live run tells and removes
+      //   nobody either (see src/offboard.js). A dry run prints emails — run
+      //   it where the log is private.
+      const { sweepOffboard } = await import('./offboard.js');
+      const num = (k, d) => { const a = args.find((x) => x.startsWith(`--${k}=`)); return a ? Number(a.slice(k.length + 3)) : d; };
+      const r = await sweepOffboard({ dryRun: args.includes('--dry'), inactiveDays: num('days', undefined), graceDays: num('grace', undefined), log: (...a) => console.log(...a) });
+      console.log(JSON.stringify(r, null, 2));
+      if (r.errors.length) process.exitCode = 1;
       break;
     }
     case 'seed-test-users': {

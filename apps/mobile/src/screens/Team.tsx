@@ -28,8 +28,8 @@ import {
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
-import { teamBook, fmtPts } from '@drip/core/data/devyShares';
-import { DevySharesSheet } from '../ui/DevyShares';
+import { teamBook, fmtPts, stakesOf } from '@drip/core/data/devyShares';
+import { DevyMarketTab } from '../ui/DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
@@ -307,7 +307,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
-  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts'>('roster');
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts' | 'devy'>('roster');
   // KEEPERS is a fourth tab (v0.296.5, founder) instead of a card under the
   // roster, and only in a league that keeps anyone: no count, no tab. The card
   // hides itself the same way, but a tab that opens onto nothing is worse than
@@ -406,11 +406,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [gm, setGm] = useState<GameModeInfo | null>(null);
   // DEVY SHARES (0387): read once COLLEGE is on; `on` says whether this league plays them.
   const [shares, setShares] = useState<DevySharesState | null>(null);
-  const [sharesOpen, setSharesOpen] = useState(false);
   useEffect(() => {
     if (!(gm?.positions ?? []).includes('COLLEGE')) { setShares(null); return; }
     devySharesState(leagueId).then(setShares).catch(() => {});
-  }, [gm, leagueId, sharesOpen]);
+  }, [gm, leagueId, tab]);   // re-read on tab moves, so the roster's market line is current
   const skew = useRef(0);
 
   // ── CONTRACTS ON THE ROSTER (v0.352.0, founder: "Rosters also don't show
@@ -824,6 +823,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           // inside the league page's Standings overlay, where nobody looks.
           ...(deals ? [['contracts', 'CONTRACTS'] as const] : []),
           ...(keeperCount > 0 ? [['keepers', 'KEEPERS'] as const] : []),
+          // v0.575.0 (founder: "make it one of the top tabs on the my team
+          // page"): a devy-market league's market is a tab, not a row at the
+          // bottom of the roster.
+          ...(shares?.on ? [['devy', 'DEVY'] as const] : []),
         ] as const).map(([id, label]) => {
           const on = tab === id;
           return (
@@ -970,7 +973,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             const grad = !isCollegeSlug(p.slug);
             return (
               <RosterRow key={p.slug} badge="DV" tone="you" p={p} busy={busy} t={t}
-                sub={grad ? `${p.team} · drafted — tap DV to activate` : [c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
+                sub={grad ? `${p.team} · drafted — tap DV to activate` : [c?.declared ? 'DECLARED' : null, c?.custom ? c.level : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
                 onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
             );
           })}
@@ -980,18 +983,35 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           ))}
         </>)}
 
-        {/* ── DEVY SHARES (0387) — a shares league's devy: stakes, not a shelf. */}
-        {shares?.on && (
-          <Pressable onPress={() => { tap(); setSharesOpen(true); }} style={{ marginTop: 14 }}>
-            <Mono size={9} tone="faint" track={0.12}>DEVY MARKET</Mono>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-              <Text style={{ flex: 1, fontSize: 13, color: t.text }}>
-                {`cash ${fmtPts(teamBook(shares, myRoster).cash)} · stakes worth ${fmtPts(teamBook(shares, myRoster).value)} · ${(shares.players ?? []).filter((p) => p.right?.roster_id === myRoster).length} rights held`}
-              </Text>
-              <Mono size={10} tone="you" weight="700">OPEN ›</Mono>
+        {/* ── DEVY STAKES (0387; v0.576.0, founder: "have the league owned
+            devy shares in the other team roster views") — whichever team the
+            card shows, the college players it holds shares in sit under its
+            roster, ★ for a right it holds. Yours link to the DEVY tab. */}
+        {shares?.on && (() => {
+          const stakes = stakesOf(shares, shownRid);
+          const book = teamBook(shares, shownRid);
+          return (
+            <View style={{ marginTop: 14 }}>
+              <Pressable disabled={!viewingMine} onPress={() => { tap(); setTab('devy'); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Mono size={9} tone="faint" track={0.12} style={{ flex: 1 }}>{`DEVY STAKES (${stakes.length}) · ${fmtPts(book.value)} WORTH${viewingMine ? ` · ${fmtPts(book.cash)} CASH` : ''}`}</Mono>
+                {viewingMine && <Mono size={9.5} tone="you" weight="700">INVEST ›</Mono>}
+              </Pressable>
+              {stakes.length === 0 && <Mono size={9.5} tone="faint" style={{ marginTop: 6 }}>{viewingMine ? 'No shares yet — tap INVEST to scout college players.' : 'No devy shares.'}</Mono>}
+              {stakes.map((x) => (
+                <View key={x.p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
+                  {!!x.p.pos && <PosPill pos={x.p.pos} />}
+                  <Pressable hitSlop={6} style={{ flex: 1, minWidth: 0 }} onPress={() => { tap(); openPlayerCard({ slug: x.p.slug, name: x.p.name ?? x.p.slug, pos: x.p.pos ?? '', team: x.p.school ?? '', leagueId }); }}>
+                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: t.text }}>
+                      {x.p.name ?? x.p.slug} <Text style={{ fontSize: 10, fontWeight: '400', color: t.faint }}>{x.p.school ?? ''} ⓘ</Text>
+                    </Text>
+                  </Pressable>
+                  {x.right && <Mono size={9.5} tone="you" weight="700">★ RIGHT</Mono>}
+                  <Mono size={10} weight="700" tone="dim">{x.shares} sh</Mono>
+                </View>
+              ))}
             </View>
-          </Pressable>
-        )}
+          );
+        })()}
 
       </Card>
 
@@ -1000,6 +1020,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       {/* KEEPERS (0182) — its own tab (v0.296.5, founder). It was a card under
           the roster, which is where you look for it in the two weeks a year it
           matters and where it is noise for the other fifty. */}
+      {tab === 'devy' && shares?.on && (
+        <Card><DevyMarketTab leagueId={leagueId} myRoster={myRoster} /></Card>
+      )}
+
       {tab === 'keepers' && myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
 
       {tab === 'waivers' && (<>
@@ -1296,7 +1320,6 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       )}
 
       {/* FAAB claim → collect the blind bid */}
-      <DevySharesSheet visible={sharesOpen} leagueId={leagueId} myRoster={myRoster} onClose={() => setSharesOpen(false)} />
       <Overlay visible={!!claimFor} title={claimFor ? `Claim ${claimFor.p.full_name}` : ''} onClose={() => setClaimFor(null)}>
         {claimFor?.drop && (
           <Mono size={9.5} style={{ marginBottom: 8 }}>dropping {poolBySlug.get(claimFor.drop)?.full_name ?? claimFor.drop}</Mono>

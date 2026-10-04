@@ -83,7 +83,13 @@ export function friendlyError(x: unknown): string {
   if (m.includes('unable to validate email') || m.includes('invalid format') || m.includes('invalid email'))
     return 'That doesn’t look like a valid email address.';
   if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups disabled'))
-    return 'Sign-ups are closed right now. Reach out to your commissioner.';
+    return 'Sign-ups are closed right now.';
+  // THE CAP (0422). The database refuses the account that would pass it, and
+  // Supabase Auth reports any refused insert as this one line — the reason
+  // never reaches the client. The sign-up form asks signup_open() first, so
+  // this is the rare race (or a magic link / Google sign-up from a full house).
+  if (m.includes('database error saving new user') || m.includes('drip is full'))
+    return 'Drip is full right now — every spot is taken. Join the waitlist from the demo page and we’ll email you when one opens.';
   if (m.includes('not a manager'))
     return 'That Sleeper account isn’t a manager in this league. Double-check your handle — or ask your commissioner to confirm you’re in the Sleeper league.';
   if (m.includes('already linked to another login'))
@@ -515,6 +521,53 @@ export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: 
 // ── Feature gates + commissioner DFS leagues (migration 0094) ───────────────
 /** The caller's per-account feature flags ({} when none). Known keys:
  *  solo (standalone pods/showdowns) · dfs_commish (may create DFS leagues). */
+/** THE DOOR (0422): is there a spot? {open, count, cap}. Signed out or in.
+ *  A failed read answers "open" — the database still refuses past the cap,
+ *  and a form that locks itself over a hiccup turns nobody away correctly. */
+export async function signupOpen(): Promise<{ open: boolean; count: number; cap: number }> {
+  try {
+    const { data } = await (await client()).rpc('signup_open');
+    const d = data as { open?: boolean; count?: number; cap?: number } | null;
+    return { open: d?.open !== false, count: d?.count ?? 0, cap: d?.cap ?? 0 };
+  } catch { return { open: true, count: 0, cap: 0 }; }
+}
+/** Admin: the cap itself (0422). */
+export const adminSetUserCap = (cap: number) =>
+  rpc<{ ok: boolean; error?: string; cap?: number; count?: number }>('admin_set_user_cap', { p_cap: cap });
+
+/** LEAVE (0422): remove your own account. The email typed back is the
+ *  confirmation. A commissioner of a league with other members is refused
+ *  until the league has another commissioner or is deleted. */
+export const deleteMyAccount = (confirmEmail: string) =>
+  rpc<{ ok: boolean; error?: string }>('delete_my_account', { p_confirm: confirmEmail });
+
+/** DRIP ON AN EXISTING LEAGUE (0422): the persisting half of
+ *  sleeperAdmin.importMyLeague — a member brings their Sleeper league in and
+ *  becomes its commissioner here. */
+export const importMyLeagueRpc = (input: {
+  sleeperId: string; season: string; name: string; settings: unknown; avatar: string | null;
+  members: MemberRow[]; sleeperUserId: string; sleeperUsername: string;
+}) => rpc<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; seats?: number; roster_id?: number | null }>('import_my_league', {
+  p_sleeper_id: input.sleeperId, p_season: input.season, p_name: input.name, p_settings: input.settings, p_avatar: input.avatar,
+  p_members: input.members, p_sleeper_user_id: input.sleeperUserId, p_sleeper_username: input.sleeperUsername,
+});
+
+/** EVERY PLATFORM, SELF-SERVE (0423): the persisting half of
+ *  providerAdmin.importMyProviderLeague. The caller picks their own team. */
+export const importProviderLeagueRpc = (input: {
+  provider: 'espn' | 'yahoo' | 'mfl' | 'fleaflicker'; ref: string; season: string; name: string; settings: unknown;
+  members: MemberRow[]; myRosterId: number;
+}) => rpc<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; seats?: number; roster_id?: number }>('import_provider_league', {
+  p_provider: input.provider, p_ref: input.ref, p_season: input.season, p_name: input.name, p_settings: input.settings,
+  p_members: input.members, p_my_roster_id: input.myRosterId,
+});
+/** The teams behind an invite code on a platform league (0423). */
+export interface InviteSeat { roster_id: number; team_name: string; taken: boolean; mine: boolean }
+export const inviteSeats = (code: string) =>
+  rpc<{ ok: boolean; error?: string; league?: string; provider?: string; seats?: InviteSeat[] }>('invite_seats', { p_code: code });
+export const claimPlatformSeat = (code: string, rosterId: number) =>
+  rpc<{ ok: boolean; error?: string; league?: string; league_id?: string; roster_id?: number; team?: string; status?: string }>('claim_platform_seat', { p_code: code, p_roster_id: rosterId });
+
 export async function myFeatures(): Promise<Record<string, boolean>> {
   const { data } = await (await client()).rpc('my_features');
   return (data as Record<string, boolean>) ?? {};
@@ -729,7 +782,34 @@ export interface Enrollment {
     game_mode?: 'drip' | 'classic';
     format?: LeagueFormat;
     golf?: boolean;
+    /** 0421: the card's second line (leagueDetailLine). Absent on rows from
+     *  builds older than the migration. */
+    details?: LeagueDetails | null;
   } | null;
+}
+
+/** What else the league card can say about a league (0421) — the settings
+ *  behind the type line. Native leagues fill the first group; an imported
+ *  league fills the second from its platform's own settings as stored at
+ *  import. Every field is optional: the printer drops what it doesn't know. */
+export interface LeagueDetails {
+  /** Classic only on native (a drip lineup has no fixed QB count). */
+  superflex?: boolean | null;
+  /** Reception scoring, classic only on native: 0, 0.5, 1 … */
+  ppr?: number | null;
+  bestball?: boolean | null;
+  devy?: boolean;
+  devy_mode?: 'spots' | 'shares' | null;
+  college_calendar?: boolean;
+  contracts?: boolean;
+  salary_cap?: number | null;
+  keepers?: number | null;
+  dues?: number | null;
+  scoring_custom?: boolean;
+  /** Imported only: what the platform's league type says. */
+  continuity?: 'dynasty' | 'keeper' | null;
+  /** Imported only: starting lineup size. */
+  starters?: number | null;
 }
 
 /** Every seat the caller can act for — owned AND co-managed (0125's my_teams).
@@ -1996,7 +2076,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
 export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean;
-  /** 0398: which sport the league plays ('nfl' for every league before it) and its sport block. */
+  /** 0426: which sport the league plays ('nfl' for every league before it) and its sport block. */
   sport?: Sport; sport_settings?: Record<string, unknown> | null }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
@@ -2099,6 +2179,9 @@ export const clearTargeted = (matchupId: string, powerupId: string, payload?: Re
 export const useSpy = (matchupId: string, win: string, slot: string, reveal: 'player' | 'metric') =>
   rpc<{ ok: boolean; error?: string; reveal?: string | null; present?: boolean }>('use_spy', { p_matchup_id: matchupId, p_win: win, p_slot: slot, p_reveal: reveal });
 export interface TargetedState {
+  /** 0259 arm stamps: a buff armed after the week's first kickoff counts only
+   *  in windows kicking after it (buffsForWindow). Read for the card chips. */
+  buffsAt?: Record<string, number>;
   don?: { win: string; slot: string };
   byeSteal?: { win: string; slot: string; slug: string; pts: number };
   emp?: Record<string, number>;
@@ -2151,6 +2234,8 @@ export async function myTargeted(matchupId: string, userId: string): Promise<Tar
   const pj = data?.payload_json as { targeted?: TargetedState; extraSlots?: Record<string, number> } | null;
   const t: TargetedState = { ...(pj?.targeted ?? {}) };
   if (pj?.extraSlots && typeof pj.extraSlots === 'object') t.extraSlots = pj.extraSlots;
+  const at = (data?.payload_json as { buffsAt?: Record<string, number> } | null)?.buffsAt;
+  if (at && typeof at === 'object') t.buffsAt = at;
   return t;
 }
 /** Play one owned Extra Slot card on a window (0305): before the week's first
@@ -2241,6 +2326,43 @@ export function leagueTypeLine(e: Enrollment): string {
   return parts.join(' ');
 }
 
+/** THE CARD'S SECOND LINE (0421, founder: "More descriptive league
+ *  descriptions on my leagues page. (Devy, Drip, other league settings?)").
+ *  The type line above says what kind of league it is; this one says how it
+ *  is set up — devy, superflex, reception scoring, best ball, the cap,
+ *  keepers, dues — and for an imported league, the platform's own type,
+ *  superflex, scoring and starters, which the type line's one word
+ *  ("Sleeper") never carried. Only what is NEWS is printed: "Superflex" but
+ *  not "1QB", "Best Ball" but not "lineups", a cap and dues only when set.
+ *  Empty string when there is nothing to add, so the card can leave the line
+ *  out entirely. */
+export function leagueDetailLine(e: Enrollment): string {
+  const lg = e.league;
+  const d = lg?.details;
+  if (!lg || !d) return '';
+  const parts: string[] = [];
+  const imported = !!lg.provider && lg.provider !== 'native';
+  if (imported) {
+    if (d.continuity === 'dynasty') parts.push('Dynasty');
+    else if (d.continuity === 'keeper') parts.push('Keeper');
+  }
+  if (d.college_calendar) parts.push('College');
+  if (d.devy) parts.push(d.devy_mode === 'shares' ? 'Devy Shares' : 'Devy');
+  if (d.superflex) parts.push('Superflex');
+  if (d.ppr != null) parts.push(pprWord(d.ppr));
+  if (d.bestball) parts.push('Best Ball');
+  if (d.contracts && d.salary_cap) parts.push(`$${d.salary_cap} cap`);
+  if (d.keepers) parts.push(`${d.keepers} keeper${d.keepers === 1 ? '' : 's'}`);
+  if (imported && d.starters) parts.push(`${d.starters} starters`);
+  if (d.dues) parts.push(`$${d.dues} dues`);
+  if (d.scoring_custom) parts.push('Custom scoring');
+  return parts.join(' · ');
+}
+
+/** Reception scoring in the words managers use. */
+const pprWord = (ppr: number): string =>
+  ppr === 0 ? 'Standard scoring' : ppr === 0.5 ? 'Half PPR' : ppr === 1 ? 'Full PPR' : `${ppr} PPR`;
+
 /** WHICH GAME this league plays (0242, founder: "let's have drip or classic
  *  vampire, golf etc on the chips in my leagues") — the continuity word above
  *  says what CARRIES OVER, which is a different question from what you play on
@@ -2292,11 +2414,21 @@ const titleWord = (s: string) =>
  *  ours to open. */
 export type LandingRoom = 'matchup' | 'draft' | 'home';
 export function leagueLandingRoom(e: Enrollment): LandingRoom {
-  const st = e.league?.draft_status;
+  const lg = e.league;
+  const st = lg?.draft_status;
   if (st === 'live') return 'draft';
   // No seat, no lineup: the matchup room cannot render for a commissioner who
   // does not play, so the hub is the only honest landing.
-  if (st === 'complete') return e.sleeper_roster_id != null ? 'matchup' : 'home';
+  const seated = e.sleeper_roster_id != null;
+  if (st === 'complete') return seated ? 'matchup' : 'home';
+  // AN IMPORTED LEAGUE IS POST-DRAFT FROM THE DAY IT ARRIVES (v0.609.0,
+  // founder: "League opens to match view post draft"). It has no draft row of
+  // ours — NULL here, not 'pending' — because it drafted on its own platform
+  // before anyone brought it here, so the rule above never saw it as drafted
+  // and every Sleeper league opened on the hub. With a seat it lands on the
+  // matchup like any drafted league; a pod, showdown or DFS league is native
+  // and keeps the hub.
+  if (st == null && seated && !!lg?.provider && lg.provider !== 'native') return 'matchup';
   return 'home';
 }
 /** Contract leagues preset a DEEP roster (v0.352.0, founder: "auto set the
@@ -2338,7 +2470,7 @@ export const createNativeLeague = (
    *  Editable later in 🎮 MODE & SEASON (set_league_continuity). */
   continuity: LeagueContinuity = 'redraft',
   continuityN: number | null = null,
-  /** A daily sport (0398): the league is classic by construction, plays
+  /** A daily sport (0426): the league is classic by construction, plays
    *  periods from board week 301, and draws its pool from sport_player.
    *  `sportSettings` is core's sportLeagueSettings() output. */
   sport: Sport = 'nfl',
@@ -2944,6 +3076,9 @@ export interface TradeLeg {
   send_picks: { season: string; round: number; orig: number; to: number }[];
   send_faab: { to: number; amount: number }[];
   send_cap: { to: number; amount: number }[];
+  /** 0397: devy shares (with the college player's name) and devy cash. */
+  send_shares?: { slug: string; shares: number; to: number; name?: string | null }[];
+  send_devy_cash?: { to: number; amount: number }[];
   accepted: boolean;
 }
 export const leagueTrades = (leagueId: string, limit = 30) =>
@@ -3002,6 +3137,9 @@ export const proposeMultiTrade = (
     send_picks?: { season?: string; round: number; orig: number; to: number }[];
     send_faab?: { to: number; amount: number }[];
     send_cap?: { to: number; amount: number }[];
+    /** 0397: devy shares and devy cash — with them, two teams file here too. */
+    send_shares?: { slug: string; shares: number; to: number }[];
+    send_devy_cash?: { to: number; amount: number }[];
   }[],
   note?: string, expiresHours?: number,
 ) =>
@@ -3081,7 +3219,7 @@ export const setPlayerFlagsBulk = (leagueId: string, slugs: string[], label: str
 export interface ChatPoll { options: { text: string; votes: number }[]; total: number; mine: number | null; }
 export interface ChatMessage {
   id: number; body: string; at: string; author: string; author_id: string | null; mine: boolean;
-  kind: 'text' | 'poll' | 'report' | 'txn'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
+  kind: 'text' | 'poll' | 'report' | 'txn' | 'computer'; pinned: boolean; mentions_me: boolean; poll?: ChatPoll;
   /** What the poster wrote under a picture (0350). Null on everything else,
    *  and on every message posted before captions existed. */
   caption?: string | null;
@@ -3094,6 +3232,9 @@ export interface ChatMessage {
   report?: { week: number };
   /** A transaction line (0290): an add, a drop, a waiver run or a trade. */
   txn?: import('./txnChat').TxnPayload;
+  /** A closed-issue card (0415): the body is the header, this is the report
+   *  behind it. Only on the computer's lines. */
+  fix?: { issue: number; url?: string; report: string; pr?: number };
   /** Quick reactions (0210), counted per emoji. Only ones somebody used. */
   reactions?: import('./chatReactions').ChatReactionCount[];
 }
@@ -3666,6 +3807,8 @@ export type CollegePoolMeta = {
   espn_id: string; school: string | null; school_abbr: string | null;
   class_label: string | null; class_year: number | null; active: boolean | null;
   /** 0382 */ conference?: string | null; tier?: string | null;
+  /** 0409: in this year's NFL draft class (Jan 16 – Aug 1). */ declared?: boolean;
+  /** 0410: the commissioner typed him in; `level` is D2 / JUCO / HS … */ custom?: boolean; level?: string | null;
 };
 export const leaguePoolCollege = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; players?: Record<string, CollegePoolMeta> }>('league_pool_college', { p_league_id: leagueId });
@@ -3729,23 +3872,72 @@ export async function installCollegePoolProjections(leagueId: string): Promise<n
 // he's theirs to draft, with any pick, once he turns pro.
 export interface DevyShareHolder { roster_id: number; team: string; shares: number; maxed_at: string | null;
   /** 0388: what the stake cost, and what selling it all would pay today. */
-  cost?: number; value?: number }
+  cost?: number; value?: number;
+  /** 0396: maxed (20 shares or 60 spent) and qualified (5+ shares, 15+ spent). */
+  maxed?: boolean; qualified?: boolean }
 export interface DevySharePlayer {
   slug: string; name: string | null; pos: string | null; school: string | null; class_year: number | null;
   graduated_to: string | null; holders: DevyShareHolder[];
   right: { roster_id: number; via: 'max' | 'sole' } | null;
   /** 0388: today's price a share in this league, and his college rank. */
   price?: number; rank?: number | null;
+  /** 0396: false once he's left college (sellable at his last price). */
+  active?: boolean;
 }
 export interface DevySharesState {
   ok: boolean; error?: string; on?: boolean; locked?: boolean; lock_at?: string;
-  rules?: { budget: number; max: number; floor: number; cash_cap?: number; payout_cap?: number };
+  rules?: { budget: number; max: number; floor: number; cash_cap?: number; payout_cap?: number;
+    max_spend?: number; min_spend?: number; refund?: number; quiet_days?: number; round_price?: Record<string, number> };
+  /** 0396 */ current?: boolean; frozen?: boolean; start_cash?: number;
+  /** 0399: the commissioner opened the market at creation; has the league drafted yet? */ open_now?: boolean; drafted?: boolean;
+  /** 0397: every seat, for the share-trade screen. */ teams?: { roster_id: number; team: string }[];
   used?: Record<string, number>;
   /** 0388: each team's cash, and what its stakes would pay today. */
   cash?: Record<string, number>; value?: Record<string, number>; prices_as_of?: string | null;
   players?: DevySharePlayer[];
   reserved?: { slug: string; roster_id: number; college_slug: string }[];
 }
+/** 0406: what the devy player card needs from us — identity, the devy market
+ *  price, StatHead's devy profile (`stathead.card`, StatHead numbers only) and
+ *  our stored season lines (the fallback when ESPN can't be reached). */
+export interface CollegePlayerCard {
+  ok: boolean; error?: string;
+  espn_id?: string; slug?: string; name?: string; pos?: string; school?: string | null; school_abbr?: string | null;
+  class_year?: number | null; class_label?: string | null; jersey?: string | null; active?: boolean;
+  division?: 'FBS' | 'FCS'; conference?: string | null; tier?: string | null; graduated_to?: string | null;
+  /** 0409 */ declared?: boolean;
+  /** 0410 */ custom?: boolean; level?: string | null;
+  market?: { price: number; rank: number | null; youth?: boolean; as_of?: string; frozen?: boolean };
+  stathead?: { rank_1qb: number; rank_sf: number | null; value_1qb: number | null; value_sf: number | null;
+    draft_year: number | null; as_of: string; card: Record<string, unknown> | null } | null;
+  seasons?: { season: number; gp: number | null; pass_yds: number | null; pass_td: number | null; ints: number | null;
+    rush_yds: number | null; rush_td: number | null; rec: number | null; rec_yds: number | null; rec_td: number | null }[];
+}
+export const collegePlayerCard = (espnId: string) =>
+  rpc<CollegePlayerCard>('college_player_card', { p_espn_id: espnId });
+/** 0407: a league's new-player launches. */
+export interface DevyLaunchCfg { on: boolean; dow: number; hour: number; window_h: number; catchup_h: number; cap: number; since?: string }
+export interface DevyLaunchPlayer { slug: string; name: string; pos: string; school: string | null; class_year: number | null;
+  fcs?: boolean; sh_rank: number | null; price?: number; my_order?: number | null }
+export interface DevyLaunchState {
+  ok: boolean; error?: string; cfg?: DevyLaunchCfg; can_edit?: boolean; locked?: boolean; catchup_next?: boolean;
+  next_at?: string | null;
+  open?: { id: number; kind: 'weekly' | 'catchup' | 'commish'; opens_at: string; closes_at: string; players: DevyLaunchPlayer[] } | null;
+  pending?: DevyLaunchPlayer[]; pending_count?: number;
+  last?: { id: number; kind: string; filled_at: string; summary: { players: number; orders: number;
+    rights: { slug: string; name: string; team: string; roster_id: number; maxed: number }[] } } | null;
+}
+export const devyLaunchState = (leagueId: string, rosterId?: number | null) =>
+  rpc<DevyLaunchState>('devy_launch_state', { p_league_id: leagueId, p_roster_id: rosterId ?? null });
+export const placeDevyLaunchOrder = (leagueId: string, rosterId: number, slug: string, shares: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; shares?: number; committed?: number }>('place_devy_launch_order',
+    { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_shares: shares }), Ev.commishAction, { tool: 'devy_launch_order' });
+export const setLeagueDevyLaunch = (leagueId: string, cfg: Partial<DevyLaunchCfg>) =>
+  tracked(rpc<{ ok: boolean; error?: string; cfg?: DevyLaunchCfg }>('set_league_devy_launch', { p_league_id: leagueId, p_cfg: cfg }),
+    Ev.commishAction, { tool: 'devy_launch_cfg' });
+export const commishDevyLaunchNow = (leagueId: string) =>
+  tracked(rpc<{ ok: boolean; error?: string; launch?: number }>('commish_devy_launch_now', { p_league_id: leagueId }),
+    Ev.commishAction, { tool: 'devy_launch_now' });
 export const devySharesState = (leagueId: string) =>
   rpc<DevySharesState>('devy_shares_state', { p_league_id: leagueId });
 export const allotDevyShares = (leagueId: string, rosterId: number, slug: string, shares: number) =>
@@ -3753,16 +3945,59 @@ export const allotDevyShares = (leagueId: string, rosterId: number, slug: string
     right?: { slug: string; roster_id: number; via: 'max' | 'sole' } | null }>('allot_devy_shares',
     { p_league_id: leagueId, p_roster_id: rosterId, p_slug: slug, p_shares: shares }), Ev.commishAction, { tool: 'allot_devy_shares' });
 /** 0388: the market — ranked college players and their price a share here. */
-export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number; youth: boolean; price: number }
-export const devyMarket = (leagueId: string, limit = 1000) =>
-  rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit });
+/** 0404: rank is null for an unpriced player (he costs the floor); sh_rank is
+ *  StatHead's 1QB devy composite rank where its board has him. */
+export interface DevyMarketRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; rank: number | null; sh_rank?: number | null; youth: boolean; price: number; /** 0405 */ fcs?: boolean; /** 0409 */ declared?: boolean }
+// ── Custom college players (0410), commissioner ─────────────────────────────
+export interface CustomCollegeRow { slug: string; name: string; pos: string; school: string | null; class_year: number | null; level: string; roster_id: number | null }
+export const CUSTOM_COLLEGE_LEVELS = ['D2', 'D3', 'NAIA', 'JUCO', 'HS', 'FCS', 'FBS'] as const;
+export const leagueCustomCollege = (leagueId: string) =>
+  rpc<CustomCollegeRow[]>('league_custom_college', { p_league_id: leagueId });
+export const commishAddCustomCollege = (leagueId: string, p: { name: string; pos: string; school?: string | null; cls?: number | null; level: string }) =>
+  tracked(rpc<{ ok: boolean; error?: string; slug?: string; name?: string }>('commish_add_custom_college',
+    { p_league_id: leagueId, p_name: p.name, p_pos: p.pos, p_school: p.school ?? null, p_class: p.cls ?? null, p_level: p.level }),
+    Ev.commishAction, { tool: 'custom_college' });
+export const commishRemoveCustomCollege = (leagueId: string, slug: string) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('commish_remove_custom_college', { p_league_id: leagueId, p_slug: slug }),
+    Ev.commishAction, { tool: 'custom_college_remove' });
+/** 0411: how many devy rounds end the draft (commissioner; 0 = none). */
+export const setDevyRounds = (leagueId: string, rounds: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; devy_rounds?: number }>('set_devy_rounds', { p_league_id: leagueId, p_rounds: rounds }),
+    Ev.commishAction, { tool: 'devy_rounds', rounds });
+/** 0404: with a query, searches every active college QB/RB/WR/TE by name or school. */
+/** Devy values for any signed-in player, 1QB and SF (0417, v0.601.0). */
+export const devyBaseValues = (opts: { sort?: 'sf' | '1qb'; pos?: string | null; q?: string | null; limit?: number; offset?: number } = {}) =>
+  rpc<import('./devyValues').DevyValuesPage>('devy_base_values', {
+    p_sort: opts.sort ?? 'sf', p_pos: opts.pos || null, p_q: opts.q?.trim() || null, p_limit: opts.limit ?? 100, p_offset: opts.offset ?? 0,
+  });
+/** The same list as a CSV (0418): every player, or one position. */
+export const devyBaseValuesCsv = (sort: 'sf' | '1qb' = 'sf', pos?: string | null) =>
+  rpc<string>('devy_base_values_csv', { p_sort: sort, p_pos: pos || null });
+export const devyMarket = (leagueId: string, limit = 1000, query?: string | null) =>
+  rpc<DevyMarketRow[]>('devy_market', { p_league_id: leagueId, p_limit: limit, p_query: query?.trim() || null });
+/** 0396: the starting cash for a team with no devy book yet (commissioner). */
+export const setLeagueDevyStartCash = (leagueId: string, cash: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; start_cash?: number }>('set_league_devy_start_cash',
+    { p_league_id: leagueId, p_cash: cash }), Ev.commishAction, { tool: 'devy_start_cash' });
+/** 0399: when a new league's market opens — 'now', or 'after_draft' (the
+ *  default). Only before the league's first completed draft. */
+export const setLeagueDevyOpen = (leagueId: string, open: 'now' | 'after_draft') =>
+  tracked(rpc<{ ok: boolean; error?: string; open?: string; locked?: boolean }>('set_league_devy_open',
+    { p_league_id: leagueId, p_open: open }), Ev.commishAction, { tool: 'devy_open' });
 export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_devy_mode',
     { p_league_id: leagueId, p_mode: mode }), Ev.commishAction, { tool: 'devy_mode' });
 
+/** 0398: make a league devy while it is being created (commissioner, before
+ *  the draft, classic on the NFL calendar) — college players on, plus devy
+ *  roster spots ('spots') or the devy market ('shares'). */
+export const setupLeagueDevy = (leagueId: string, mode: 'spots' | 'shares', spots = 3) =>
+  tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('commish_setup_devy',
+    { p_league_id: leagueId, p_mode: mode, p_spots: spots }), Ev.commishAction, { tool: 'devy_setup' });
+
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });
-// ── SPORT LEAGUES (0398) ──────────────────────────────────────────────────────
+// ── SPORT LEAGUES (0426) ──────────────────────────────────────────────────────
 /** A matchup's locked slot-days with each player's line for the day — the
  *  rows a sport league's board scores (core sports/score.ts). */
 export interface SportMatchupLine { app_user_id: string; roster_id: number; game_date: string; roster_slot: string; player_slug: string; game_id: string; status: string | null; line: Record<string, number> | null; full_name: string | null; team: string | null; pos: string | null }
@@ -3771,24 +4006,24 @@ export const sportMatchupLines = (matchupId: string) =>
 export interface SportGameRow { game_id: string; game_date: string; start_utc: string | null; status: string; away: string; home: string; away_score: number | null; home_score: number | null; clock: string | null }
 export const sportLeagueGames = (leagueId: string, from: string, to: string) =>
   rpc<SportGameRow[]>('sport_league_games', { p_league_id: leagueId, p_from: from, p_to: to });
-/** ROTO (0399): the worker's season ranking per seat — total points and the
+/** ROTO (0427): the worker's season ranking per seat — total points and the
  *  per-category value + place points. */
 export interface SportRotoRow { roster_id: number; points: number; totals: Record<string, number>; cats: Record<string, { value: number | null; points: number }>; updated_at: string }
 export const sportRotoStandings = (leagueId: string) =>
   rpc<SportRotoRow[]>('sport_roto_standings', { p_league_id: leagueId });
-/** The commissioner's sport settings (0400): scoring any time; format,
+/** The commissioner's sport settings (0428): scoring any time; format,
  *  categories and the calendar until the season is under way. */
 export const setSportSettings = (leagueId: string, patch: { scoring?: Record<string, number>; format?: 'points' | 'cats' | 'roto'; categories?: string[]; period_start?: string; weeks?: number }) =>
   tracked(rpc<{ ok: boolean; error?: string; sport?: Record<string, unknown> }>('set_sport_settings',
     { p_league_id: leagueId, p_patch: patch }),
     Ev.commishAction, { tool: 'sport_settings', count: Object.keys(patch).length });
-/** A sport league's lineup (0403): the same spot spec classic uses, in the
+/** A sport league's lineup (0431): the same spot spec classic uses, in the
  *  sport's positions; commissioner, before the draft. */
 export const setSportLineup = (leagueId: string, slots: { pos: string[]; label?: string }[]) =>
   tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; label?: string }[]; starters?: number; rounds?: number }>('set_sport_lineup',
     { p_league_id: leagueId, p_slots: slots }),
     Ev.commishAction, { tool: 'sport_lineup', count: slots.length });
-/** A sport player's card (0403): the directory row and his last ten games. */
+/** A sport player's card (0431): the directory row and his last ten games. */
 export interface SportCardGame { game_id: string; game_date: string; status: string; team: string; opp: string; home: boolean; away_score: number | null; home_score: number | null; played: boolean; line: Record<string, number> | null }
 export interface SportCard {
   player: { player_key: string; full_name: string; team: string; pos: string; eligible: string[]; feed_pos: string | null; jersey: string | null; headshot: string | null; injury_status: string | null; injury_note: string | null; rank: number | null; rank_pts: number | null; season: string | null; gp: number; season_line: Record<string, number> | null } | null;
@@ -3968,6 +4203,9 @@ export interface DraftState {
   my_autodraft: boolean;
   /** Practice room vs the AI — no schedule/season behind it, deletable. */
   is_mock?: boolean;
+  /** THE DEVY BLOCK (0411): the overall pick it starts at (live) and how many
+   *  devy rounds it runs (a pending draft previews the count). */
+  devy_from?: number | null; devy_rounds?: number | null;
   /** Per-position roster limits (null value = uncapped). */
   pos_caps?: PosCaps;
   /** Dynasty (0182): `rounds` is the rounds actually DRAFTED. keeper_slots

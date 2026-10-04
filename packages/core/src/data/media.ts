@@ -51,6 +51,12 @@ export function espnHeadshot(espnId?: string | null): string | null {
   return `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`;
 }
 
+/** 0406: a college player's ESPN headshot (suppressed when mark-free). */
+export function collegeHeadshot(espnId?: string | null): string | null {
+  if (!espnId || isMarkFree()) return null;
+  return `https://a.espncdn.com/i/headshots/college-football/players/full/${espnId}.png`;
+}
+
 // Runtime headshots, keyed by engine player id, for a loaded Sleeper league —
 // built from the Sleeper directory's espn_id so roster players outside the baked
 // crosswalk still get a real photo. Baked HEADSHOTS win; this fills the gaps.

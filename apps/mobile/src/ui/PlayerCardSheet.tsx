@@ -27,6 +27,8 @@ import { Mono } from './prims';
 import { Ev, track } from '@drip/core/analytics';
 import { Overlay } from './Overlay';
 import { InjuryBadge } from './rosterGroup';
+import { CollegeCardSheet } from './CollegeCardSheet';
+import { isCollegeSlug } from '@drip/core/data/college';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -64,6 +66,9 @@ export function PlayerCardHost() {
   const [req, setReq] = useState<PlayerCardReq | null>(null);
   useEffect(() => { listener = setReq; return () => { listener = null; }; }, []);
   if (!req) return null;
+  // 0406: a college player gets the devy card — its own component, so moving
+  // between an NFL card and a college one never shares a hook's state.
+  if (isCollegeSlug(req.slug)) return <CollegeCardSheet req={req} onClose={() => setReq(null)} />;
   return <PlayerCardSheet req={req} onClose={() => setReq(null)} />;
 }
 
@@ -109,10 +114,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       // 0330: the row, not the scalar — with a multiplier in hand the sheet
       // shows the week in THIS league's scoring rather than the source's PPR.
       leagueWeekProjections(leagueId, week)
-        .then((r) => { if (!dead) setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug]
-          ?? (r.projections?.[slug] != null
-            ? { pts: r.projections[slug], mult: null, opp: null, home: null, status: null, source: 'espn' }
-            : null))); })
+        .then((r) => { if (!dead) setWkProj(weekPointsFor({ slug, pos, team }, r.rows?.[slug] ?? null)); })
         .catch(() => { if (!dead) setWkProj(null); });
     }
     // Asked through the league rather than by ESPN id: the league's pool is
@@ -217,7 +219,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
               <Mono size={9.5} weight="700">{pos}</Mono>
               {!!logo && <Image source={{ uri: logo }} style={{ width: 13, height: 13 }} resizeMode="contain" />}
-              <Mono size={9.5} tone="dim">{showTeam || 'FA'}{bio?.num != null ? ` · #${bio.num}` : ''}</Mono>
+              <Mono size={9.5} tone="dim">{showTeam || '—'}{bio?.num != null ? ` · #${bio.num}` : ''}</Mono>
             </View>
           </View>
           {userId && starred != null && (

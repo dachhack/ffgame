@@ -370,7 +370,7 @@ export const collegeWeekNum = (week: number): number => week - COLLEGE_BASE;
 export const BOWL_BASE = 215;
 export const isBowlWeek = (week: number): boolean => week > BOWL_BASE;
 /** A board week as a heading: "PRESEASON WK 2", "CFB WK 3", "WEEK 5". */
-// SPORT PERIODS (0398): board weeks 301+ belong to a daily-sport league
+// SPORT PERIODS (0426): board weeks 301+ belong to a daily-sport league
 // (core sports/league.ts SPORT_WEEK_BASE; check-sports pins the two) and
 // read as WEEK 1, 2… of that league's own season.
 export const SPORT_WEEK_BASE_LOCAL = 300;

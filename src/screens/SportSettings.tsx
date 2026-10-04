@@ -1,4 +1,4 @@
-// A SPORT LEAGUE'S SCORING (0400) — the commissioner's page for a daily
+// A SPORT LEAGUE'S SCORING (0428) — the commissioner's page for a daily
 // sport, in place of the football catalog: the format (points, categories,
 // roto) and the categories while the season has not started; the points
 // per stat any time. One SAVE per section; the worker rescores every live

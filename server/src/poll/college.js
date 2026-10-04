@@ -24,10 +24,19 @@
 // requests, so it runs detached from the tick and never delays live scoring.
 import { db } from '../supabase.js';
 import { collegePos } from '../../../packages/core/src/data/college.ts';
+import { loadStatheadDevy } from './statheadDevy.js';
 
-const CORE_TEAMS = (season) =>
-  `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/80/teams?limit=300`;
-const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster`;
+const CORE_TEAMS = (season, group = 80) =>
+  `https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/seasons/${season}/types/2/groups/${group}/teams?limit=300`;
+// 0405: FCS (group 81) rosters too — for the devy market only. Their players
+// carry division 'FCS', which keeps them out of pools, projections and the
+// stats ranking (college_directory reads FBS only).
+const FCS_GROUP = 81;
+// v0.603.0: ?limit=300. Without it ESPN returns the first 100 athletes, and a
+// big program carries 120+, so the rest never reached college_player: Bryant
+// Wesco Jr. (Clemson), Ryan Wingo (Texas), Bryce Underwood (Michigan) and
+// Demond Williams Jr. (Washington) had no school, no class and no devy price.
+export const ROSTER = (id) => `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/${id}/roster?limit=300`;
 // 0382: every FBS conference and its teams, in one request.
 const STANDINGS = (season) => `https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80&season=${season}`;
 
@@ -198,18 +207,25 @@ async function getJson(url, tries = 3) {
 }
 
 /** Fetch every roster, write the rows, and retire the unseen if nothing failed. */
-export async function runCollegeSweep(season, log = () => {}, fetchJson = getJson, rpc = (fn, args) => db().rpc(fn, args)) {
+export async function runCollegeSweep(season, log = () => {}, fetchJson = getJson, rpc = (fn, args) => db().rpc(fn, args), devyBoard = null) {
   const started = new Date().toISOString();
   const ids = fbsTeamIds(await fetchJson(CORE_TEAMS(season)));
   if (!ids.length) return { schools: 0, rows: 0, failed: 0, retired: 0, error: 'no FBS teams' };
 
-  const rows = [];
   let failed = 0;
+  // 0405: the FCS list. If it can't be read, the sweep still writes FBS but
+  // counts a failure — so it retires nobody, rather than every FCS player.
+  let fcs = [];
+  try { fcs = fbsTeamIds(await fetchJson(CORE_TEAMS(season, FCS_GROUP))).filter((id) => !ids.includes(id)); }
+  catch (e) { failed++; log('college FCS list', e.message); }
+  const schools = [...ids.map((id) => [id, 'FBS']), ...fcs.map((id) => [id, 'FCS'])];
+
+  const rows = [];
   let next = 0;
   const worker = async () => {
-    while (next < ids.length) {
-      const id = ids[next++];
-      try { rows.push(...rosterRows(await fetchJson(ROSTER(id)))); }
+    while (next < schools.length) {
+      const [id, division] = schools[next++];
+      try { rows.push(...rosterRows(await fetchJson(ROSTER(id))).map((r) => ({ ...r, division }))); }
       catch (e) { failed++; log('college roster', id, e.message); }
     }
   };
@@ -218,7 +234,7 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
   let wrote = 0;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const { data, error } = await rpc('upsert_college_players', { p_rows: rows.slice(i, i + CHUNK) });
-    if (error) return { schools: ids.length, rows: wrote, failed, retired: 0, error: error.message };
+    if (error) return { schools: schools.length, rows: wrote, failed, retired: 0, error: error.message };
     wrote += Number(data?.rows ?? 0);
   }
 
@@ -246,13 +262,18 @@ export async function runCollegeSweep(season, log = () => {}, fetchJson = getJso
   }
   // 0388: the devy market's prices follow the ranking these lines just moved.
   if (stats > 0) {
+    // 0403: StatHead's devy board first — half of every devy price.
+    if (devyBoard) {
+      try { await devyBoard(rpc, log); }
+      catch (e) { log('stathead devy', e.message); }
+    }
     try {
       const { data, error } = await rpc('refresh_college_prices', {});
       if (error) log('college prices', error.message);
       else log(`college prices: ${data?.priced ?? 0} priced`);
     } catch (e) { log('college prices', e.message); }
   }
-  return { schools: ids.length, rows: wrote, failed, retired, stats };
+  return { schools: schools.length, fcs: fcs.length, rows: wrote, failed, retired, stats };
 }
 
 let last = 0;
@@ -262,7 +283,7 @@ let inflight = null;
 export function sweepCollege(season, log = () => {}) {
   if (inflight || Date.now() - last < sweepEveryMs()) return false;
   last = Date.now();
-  inflight = runCollegeSweep(season, log)
+  inflight = runCollegeSweep(season, log, undefined, undefined, loadStatheadDevy)
     .then((r) => log(`college: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines` +
       (r.failed ? `, ${r.failed} rosters failed (no retirement this sweep)` : `, ${r.retired} retired`) +
       (r.error ? ` — ${r.error}` : '')))

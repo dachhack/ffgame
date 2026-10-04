@@ -9,7 +9,7 @@ primary_region = "iad"
 
 [env]
   PILOT_SEASON = "2026"
-  # Daily sports the worker polls, sweeps and scores (v0.571.2). Unset, it is
+  # Daily sports the worker polls, sweeps and scores (v0.623.2, on main as v0.624.0). Unset, it is
   # the NFL worker byte for byte; sport leagues are behind has_sports() anyway.
   SPORTS = "nhl,mlb"
   # PILOT_SEASON_TYPE is deliberately UNSET. The scheduler runs every week context

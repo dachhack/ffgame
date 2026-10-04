@@ -13,10 +13,8 @@
 // same dot texture, same position suit — while handing the vertical space to the
 // numbers that are actually moving.
 //
-// The LIQUID BANK FILL is the piece worth not losing: the card fills from the
-// bottom as the score climbs (bank × 3.2%, capped at 92 so the name never
-// drowns). It is the only place on the board where you can read a slot's state
-// without reading a number.
+// No score fill on the card (v0.589.0, founder: "let's not do the color fill
+// on the cards with the score") — the number beside it says it.
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
@@ -77,8 +75,6 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
   // card sitting still next to a breathing one reads as a different kind of
   // object. Nuked cards stop moving, as on the web (`.ct-nuked` kills it).
   const wob = useWobble(idx);
-  // The web's exact curve: 3.2% of the bank, capped at 92%.
-  const fillPct = bank != null ? Math.max(0, Math.min(92, bank * 3.2)) : 0;
 
   return (
     <View style={float
@@ -95,16 +91,6 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
           <View style={StyleSheet.absoluteFill}>
             <Image source={STOCK_TILE} resizeMode="repeat" style={{ width: '100%', height: '100%' }} />
           </View>
-          {/* Liquid bank fill — anchored to the bottom edge, rising with score. */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute', left: 0, right: 0, bottom: 0, height: `${fillPct}%`,
-              backgroundColor: alpha(side === 'you' ? t.you : t.opp, 30),
-              borderTopWidth: fillPct > 0 ? 1 : 0,
-              borderTopColor: alpha(side === 'you' ? t.you : t.opp, 70),
-            }}
-          />
 
           <View style={{ padding: 5, paddingBottom: 6, gap: 3 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>
@@ -163,7 +149,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
 }
 
 /** One side of a live duel: the mini card plus everything that changes. */
-export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, windowEmpty = false, phantom, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress }: {
+export function LiveCard({ side, slug, name, pos, team, sealed = false, unopposed = false, windowEmpty = false, phantom, gameLabel, metricName, stat, bank, hot = false, nuked = false, coin, idx = 0, onPress, chips }: {
   side: 'you' | 'their';
   slug?: string; name?: string; pos?: string; team?: string | null;
   /** Face-down: the deck's back at the mini footprint, no identity leaked. */
@@ -188,6 +174,10 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
   coin?: number | null;
   idx?: number;
   onPress?: () => void;
+  /** The power-ups on this card (v0.587.0, founder: "show amp and any power
+   *  up chips on locked and live cards") — what the setup card wore, kept on
+   *  it after the lock. */
+  chips?: { icon: string; name: string }[];
 }) {
   const t = useTheme();
   const accent = side === 'you' ? t.you : t.opp;
@@ -272,8 +262,11 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
     );
   }
 
-  return (
-    <Pressable onPress={onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }]}>
+  // With chips under it, the wrapper takes the duel's flex share and the
+  // panel just fills its width.
+  const under = !!chips?.length;
+  const card = (
+    <Pressable onPress={onPress} style={[PANEL, { flexDirection: mirror ? 'row-reverse' : 'row' }, under ? { flex: 0, alignSelf: 'stretch' as const } : null]}>
       <MiniCard float side={side} slug={slug ?? ''} name={name ?? ''} pos={pos ?? 'DEF'} team={team} bank={bank} hot={hot} nuked={nuked} idx={idx} />
 
       <View style={{ flex: 1, minWidth: 0, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
@@ -321,5 +314,22 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
         )}
       </View>
     </Pressable>
+  );
+  // The chips sit UNDER the panel (v0.588.0, founder: "keep the background box
+  // the same size and put the power up under the box") — both halves of a
+  // duel keep one height whatever is armed on either.
+  if (!chips?.length) return card;
+  return (
+    <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+      {card}
+      <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 3, paddingHorizontal: 4 }}>
+        {chips.map((c, i) => (
+          <View key={`${c.name}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 50), borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
+            <Text style={{ fontSize: 8 }}>{c.icon}</Text>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: accent }}>{c.name.toUpperCase()}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }

@@ -22,7 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.571.2 — the worker's config names its sports
+### v0.624.0 — daily-sport leagues meet main
+
+> - NBA, NHL, MLB and WNBA leagues skip the devy question — college football players have no place in their pools.
+
+The sport branch (v0.564.0 → v0.571.2 when it was cut) lands on a main
+that had moved 61 commits and taken the same numbers: its migrations are
+now **0424 → 0432** (0396 → 0404 before) and its entries v0.616.0 →
+v0.623.2 below. Merged, not rebased; main's devy market, the open door
+(0422) and the platform imports (0423) are all in. Conflicts were the
+injury prune (both the college `c-` rows and the sport directories' rows
+stay out of it), the player card (the college card first, then the sport
+card), the worker's sync block (the sports loop sits ahead of 0422's
+database-driven Sleeper list), the parity list, the app's Recruit (main
+dropped the `native` flag read; the `sports` flag read stays), and
+STATUS.md. Verified on a local Postgres carrying every migration through
+0423 and then these nine; typecheck, build, the app's tsc and
+`check:parity` are green.
+
+### v0.623.2 — the worker's config names its sports
 
 > - `fly.toml` sets `SPORTS = "nhl,mlb"`, so the deployed worker sweeps the NHL and MLB directories and scores their games; NFL is untouched and sport leagues stay behind the flag.
 
@@ -33,9 +51,9 @@ branch ships the worker with this env. Neither can be dispatched by the
 integration that writes the repo (a 403, as `ops-run.yml` records), so
 both are a click in the Actions tab.
 
-### v0.571.1 — one script applies the sport migrations
+### v0.623.1 — one script applies the sport migrations
 
-> - `scripts/apply-sport-migrations.sh` runs 0396 → 0404 in order against a project's connection string, stopping at the first error; safe to re-run.
+> - `scripts/apply-sport-migrations.sh` runs 0424 → 0432 in order against a project's connection string, stopping at the first error; safe to re-run.
 
 Founder: "You can do 1-3 and I'll playtest from there." The three steps
 (migrations, the flag, the worker with `SPORTS=`) need the real project's
@@ -43,13 +61,13 @@ credentials, which the build container does not hold; this script is the
 first step as one command, proven idempotent by re-running it on the
 local Postgres that already carried all nine.
 
-### v0.571.0 — the sports flag: daily-sport leagues for the founder to test
+### v0.623.0 — the sports flag: daily-sport leagues for the founder to test
 
 > - NBA / NHL / MLB / WNBA leagues are behind a per-account feature flag, the same way in-app leagues were.
 
 Founder: "Can we feature flag all of this to me so I can test?"
 
-**has_sports() (0404)** — `is_admin()` or `app_user.features ? 'sports'`,
+**has_sports() (0432)** — `is_admin()` or `app_user.features ? 'sports'`,
 granted with the existing `admin_set_feature(email, 'sports', true)`.
 `create_native_league` is the one door into a sport league and now refuses
 a non-NFL sport without it; every downstream surface (draft chips, the
@@ -66,11 +84,11 @@ Verified on the local Postgres: refused without the flag, NFL creation
 still fine, allowed once granted. `check:sports` pins the gate in the SQL
 and both forms.
 
-### v0.570.1 — the second review: the card's season numbers, the builder's rounds
+### v0.622.1 — the second review: the card's season numbers, the builder's rounds
 
 > - Fixes to the sport player card and the lineup builder from a second review pass.
 
-Ten findings on v0.570.0, all fixed:
+Ten findings on v0.622.0, all fixed:
 
 - **A season is a sum, not one big game.** The card re-derived
   double-doubles and quality starts from season totals (a 20-QS pitcher
@@ -89,16 +107,16 @@ Ten findings on v0.570.0, all fixed:
   bench), not the roster size; its copy says IR is stashed into, not
   drafted; and it renders frozen once the draft has started
   (`draft_state`), rather than letting a save discover it.
-- **roster_shape at creation** was edited into 0398 after it had run on
-  the local database; 0403 backfills any sport league without one.
+- **roster_shape at creation** was edited into 0426 after it had run on
+  the local database; 0431 backfills any sport league without one.
 - The dead decimals ternary and the inconsistent per-game list are gone.
 
-### v0.570.0 — a sport league shapes its own lineup, and a sport player has a card
+### v0.622.0 — a sport league shapes its own lineup, and a sport player has a card
 
 > - Commissioners of NBA / NHL / MLB / WNBA leagues build their own lineup before the draft.
 > - Clicking a sport player opens a card with his season and last games.
 
-**The lineup builder (0403 `set_sport_lineup`, `src/screens/SportLineup.tsx`).**
+**The lineup builder (0431 `set_sport_lineup`, `src/screens/SportLineup.tsx`).**
 Counts per slot type (2 C, 1 G, 2 UTIL…) plus the bench and IR shelves, on
 the LINEUP tab in place of the football builder; one SAVE writes the spec
 in the sport's positions (`sport_positions`, pinned to the SportDef by
@@ -107,7 +125,7 @@ check-sports) and the draft's rounds follow — creation now stores
 add. Frozen once the draft starts, like the NFL builder; filters, best
 ball and per-spot rules stay football-only.
 
-**The card (0403 `sport_player_card`, `src/app/sportCard.tsx`).** The
+**The card (0431 `sport_player_card`, `src/app/sportCard.tsx`).** The
 player card host branches on a sport key: the directory's facts (every
 eligibility as a pill, team, jersey, injury with its note, rank), the
 season as per-game numbers and ratios (core `sports/card.ts`: PTS/G and
@@ -115,7 +133,7 @@ FG% for basketball, GAA and SV% for a goalie, ERA and WHIP for a pitcher,
 per population), and his last ten games with the points each scores under
 the league the card was opened from. The NFL card is untouched.
 
-### v0.569.0 — what the review found: the sweep that retired everyone, and nine more
+### v0.621.0 — what the review found: the sweep that retired everyone, and nine more
 
 > - Fixes from a code review of the sport-league branch before anyone plays on it.
 
@@ -127,19 +145,19 @@ fixed, tested, and re-verified on the local Postgres.
    as unseen and went inactive — and create_native_league would then say
    "no NHL players in the directory". The sweep's start is taken first now.
 2. **A traded player never scored again.** The locks and the DB lock read
-   `league_pool.team`, written once at seeding. `sport_pool_refresh` (0402)
+   `league_pool.team`, written once at seeding. `sport_pool_refresh` (0430)
    moves every sport league's pool rows to the directory's team,
    eligibility and position after each sweep.
 3. **WNBA team codes.** ESPN's abbreviations (NY, CONN, PHX…) never matched
    the box scores' tricodes (NYL, CON, PHO…); `wnbaTeam` maps them.
 4. **A postponement is not a start.** `startedGames` and
-   `sport_slug_started` (0402) ignore postponed and cancelled games,
+   `sport_slug_started` (0430) ignore postponed and cancelled games,
    whatever their clock says.
 5. **A league mid-draft went live by the calendar** and could have been
    stamped 0–0 with its schedule frozen. The worker only touches leagues
    whose draft is complete.
 6. **Doubleheaders.** `sport_slot_lock` is keyed per game as well as per
-   slot-day (0402), so a second game the same day locks and scores.
+   slot-day (0430), so a second game the same day locks and scores.
 7. **A stuck live game held every later period.** `periodDone` counts only
    games from inside the period, for two days; `repollStaleLive` keeps
    re-reading any game the table still calls live from before yesterday.
@@ -150,7 +168,7 @@ fixed, tested, and re-verified on the local Postgres.
 10. **Position pills got raw feed codes** ('L', 'G-F'); both panels map
     through `eligibleFor` first.
 
-### v0.568.0 — the NBA schedule by date, no brackets for sport leagues yet, the review note
+### v0.620.0 — the NBA schedule by date, no brackets for sport leagues yet, the review note
 
 > - Basketball leagues know tomorrow's and yesterday's games, not just today's.
 > - Daily-sport leagues are kept out of the playoff machinery until it understands their weeks.
@@ -162,7 +180,7 @@ scoreboard that has not rolled to the asked date falls back to it. Parsed
 from the file's documented shape — the CDN refuses the build container —
 with a test on a documented-shape sample.
 
-**No bracket yet (0401).** The playoff rules read NFL weeks, and a sport
+**No bracket yet (0429).** The playoff rules read NFL weeks, and a sport
 league's 301+ matchups satisfied "the regular season is final" vacuously,
 so generate_playoffs would have booked a bracket over a season that had
 not begun. The wrapper refuses for a sport league (quietly for the auto
@@ -173,15 +191,15 @@ local Postgres against the QA league.
 
 **The review note.** `docs/multi-sport-review.md`: what is on the branch,
 what to look at first on the web and in the app, what it takes to run
-(migrations 0396–0401, `SPORTS=` on the worker), what was verified and
+(migrations 0424–0429, `SPORTS=` on the worker), what was verified and
 how, the known gaps, and suggested next steps.
 
-### v0.567.0 — the commissioner's sport scoring, and injuries on the boards
+### v0.619.0 — the commissioner's sport scoring, and injuries on the boards
 
 > - A sport league's commissioner sets its scoring, format and categories on the SCORING tab.
 > - Injured NBA / NHL / MLB / WNBA players show their status on every board.
 
-**set_sport_settings (0400).** Patches `settings_json.sport`: points per
+**set_sport_settings (0428).** Patches `settings_json.sport`: points per
 stat any time (the worker rescores every live matchup on its next pass);
 format and categories, and the first week's Monday and the week count,
 until the season is under way. Values are sanitised (finite numbers within
@@ -201,12 +219,12 @@ that shows an injury tag shows theirs.
 `check-blueprint` learns the two defaulted sport arguments on
 create_native_league; `check:parity` is green.
 
-### v0.566.0 — roto, the mobile sport league, and lineups that lock only where they may
+### v0.618.0 — roto, the mobile sport league, and lineups that lock only where they may
 
 > - Sport leagues can be ROTO: one season-long ranking per category instead of weekly winners.
 > - The app can create NBA / NHL / MLB / WNBA leagues and shows the week's locked lines on the classic board.
 
-**Roto (0399, phase 4).** `settings_json.sport.format = 'roto'`: the worker
+**Roto (0427, phase 4).** `settings_json.sport.format = 'roto'`: the worker
 sums every locked slot-day of the season per seat (derived per game first,
 so a double-double counts per night), ranks the league in each category
 (core `rotoStandings`: best of N takes N, ties split places, a seat with no
@@ -237,14 +255,14 @@ its panel the roto table.
 `npm run typecheck` and the app's `tsc --noEmit` both clean; `check:sports`
 gains the roto table test.
 
-### v0.565.0 — sport leagues: the directory, creation, daily locks and the week's score
+### v0.617.0 — sport leagues: the directory, creation, daily locks and the week's score
 
 > - Native NBA, NHL, MLB and WNBA leagues can be created: a ranked player pool, weekly head-to-head periods, and lineups that lock player by player at tip-off.
 > - Nothing changes for NFL leagues.
 
-Phases 2 and 3 of `docs/multi-sport-plan.md`, on the v0.564.0 spine.
+Phases 2 and 3 of `docs/multi-sport-plan.md`, on the v0.616.0 spine.
 
-**The directory (0397, `server/src/poll/sportDirectory.js`).** `sport_player`:
+**The directory (0425, `server/src/poll/sportDirectory.js`).** `sport_player`:
 every rostered player per sport with eligibility in core's vocabulary
 (NBA "G-F" → SG/SF; MLB fielding games at 10+ → 2B/SS, starts → SP/RP, a
 two-way player DH+SP), an injury status (MLB's IL from the 40-man rosters,
@@ -261,7 +279,7 @@ directory. Basketball box scores carry nba.com ids and the directories
 don't, so `xrefKey` crosswalks a line by name + team and remembers the
 match in `sport_player.alt_ids`.
 
-**Sport leagues (0398, core `sports/league.ts`, `server/src/sportLeague.js`).**
+**Sport leagues (0426, core `sports/league.ts`, `server/src/sportLeague.js`).**
 `create_native_league` gains `p_sport` and `p_sport_settings` (the old
 15-argument door is dropped, not overloaded — PostgREST would find two
 candidates); a sport league is classic by construction, keeps `roster_slots`
@@ -290,7 +308,7 @@ Draft and wire position chips are the sport's own. The classic board draws
 with each line's points (or the category grid), today's slate. Position
 pills borrow a football colour family per code. Mobile: not yet.
 
-**QA.** Every migration through 0398 applied on a local Postgres 16 with
+**QA.** Every migration through 0426 applied on a local Postgres 16 with
 Supabase shims; a SQL scenario created an NBA league from fixture players,
 generated a 301+ schedule, set both lineups, saw the tip-off lock refuse a
 started player's swap and drop while an idle one moved, read lines for both
@@ -298,7 +316,7 @@ seats, and counted the final in standings. `server/test/sports-directory.mjs`,
 `sports-league.mjs` (pure) and `sports-league-io.mjs` (a chainable fake
 Supabase: lock → score → final) join `check:sports`.
 
-### v0.564.0 — the sport spine: NBA, WNBA, NHL and MLB as data
+### v0.616.0 — the sport spine: NBA, WNBA, NHL and MLB as data
 
 > - Groundwork for hockey, basketball and baseball leagues: nothing changes for NFL leagues yet.
 
@@ -318,7 +336,7 @@ scoring through `engine/classic.ts`. `sports/score.ts` scores a line
 summed makes and attempts; a ratio nobody registered is a tie) and ranks a
 league roto-style (best of N takes N, ties split places).
 
-**Stat lines, not plays (0396).** A classic league needs each player's line
+**Stat lines, not plays (0424).** A classic league needs each player's line
 per game, and every other league's official feed publishes exactly that, live.
 `league.sport` (default `nfl`), `sport_game` (the daily slate, keyed sport +
 season + feed game id) and `game_stat_line` (one cumulative line per player
@@ -340,6 +358,828 @@ wrote 9 games and 249 lines.
 `npm run check:sports` (in `check:parity`) pins the definitions, the scorer,
 the adapters on their fixtures, the poller's date and re-read rules, and that
 `league.sport`'s check list is core's `SPORT_IDS`.
+### v0.615.1 — the availability read-back prints its list
+
+> - Ops 031's first live read of the conference reports worked — all four conferences answered, 318 players designated across 52 schools — and then the read-back crashed before printing them (the CLI case had no database handle for the name lookup). Fixed; ops 032 is the same dry read again.
+
+- `server/src/cli.js` `college-avail`: imports `db` like the other cases. `ops/run/032-college-availability-dry.json`.
+
+### v0.615.0 — college availability before kickoff: the conferences' own reports, on the player
+
+> - Founder: "We need to know status BEFORE the game so people can make roster changes." College football has no league-wide injury report, but since 2025 the **SEC, Big Ten, ACC and Big 12 each publish a player availability report** for conference games — three days, two days and one day before kickoff (Probable / Questionable / Doubtful / Out) and a final one about ninety minutes before (Available / Game Time Decision / Out / Out 1st half). The worker now reads all four and puts them on the player: the **O / D / Q badge** on the board and lineup, the detail on the player card in the conference's own words ("SEC availability report · Game Day (Saturday 9:30 CT) · Out · Sat Oct 3 vs Mississippi State"), the projection discount, and the classic auto-slot's ruled-out set — the same places an NFL designation already shows.
+> - **Conference games only** — that is the conferences' rule. LSU–McNeese, the game T. Green sat out, had no report; what the reports did say was that he was **Out the Saturday before** (vs Texas A&M). So a player Out on his school's last report, whose school files nothing for this week's game, is carried as **Q** for ten days with a note that says exactly that — "Out on his school's last availability report (Sat Sep 26 vs Texas A&M) · no report filed for this game — check before kickoff".
+
+- All four conferences publish through one vendor, HD Intelligence (`app.hdintelligence.com`), whose public report page reads an unauthenticated JSON endpoint (`POST /api/get-publish-public`, `{sport, organization, conference}`); the SEC's own page is that app in an iframe. The payload is one object per published report: `ReportType`, `publishDate`/`postedTime`/`conferenceTimeZone`, `footer.date` (the game), and per team `rows` of `"POS #N Name"` + `status`. Rows are names, not ids: matched per school (the report's `teamDisplayName` is ESPN's location name → `SCHOOLS`, 67 Power Four ids) by folded full name, then jersey + surname, then surname + initial when unique — 601 of 604 rows across six real rosters, the three misses walk-ons ESPN does not list. Unmatched rows are logged, never guessed.
+- `server/src/poll/collegeAvailability.js` (pure `reportRows` / `planAvailability` + IO), scheduled in `index.js` on its own clock (`COLLEGE_AVAIL_MS` 30m, `_GAMEDAY` 10m with a college context's game near, `_IDLE` 3h with no college-calendar league). Writes `injury_status` under `c-<espn_id>` with `source: 'conf'` (`'conf-carry'` for the hedge); prunes its own rows only when every conference answered. **`poll/injuries.js` now spares `c-` slugs** from the NFL prune — before, every college row would have been deleted within hours. Status map: Out → O, Doubtful → D, Questionable / Game Time Decision → Q, Out (1st Half) → Q (he plays the second), Probable / Available clear, Exempt is no statement; Q/D about a game more than 36h over are dropped, Out stands until the next report. CLI `college-avail [--dry]`; ops mode `college-availability` (`ops/run/031`, dry — the first live read, rostered players starred). Tests: `server/test/college-availability.mjs` (fixture cut from the SEC's real Oct 3 Alabama–Mississippi State Game Day report).
+- **Unconfirmed against live data until the next reports post** (Wednesday evening for the Oct 10 games): ops 031 prints the plan against the live `college_player` table; the first scheduled poll writes it. No migration, no app build — the badge and card already read this table.
+
+### v0.614.2 — "Final · In progress" on the app's classic board, and a read-back for two quiet college players
+
+> - Founder's screenshot (Devy Test 1): T. Green (TE, LSU) and J. Dwyer (WR, TCU) read **"Final · In progress"** at 0.00. The two words contradict each other: the app printed "In progress" whenever a player had no counted play, even after his game went final. The web board already printed a dash there; the app does too now.
+> - **Confirmed: the zeros were right.** Ops 030 (`college-report`, read-only) showed the worker stored plays from both games for other rostered players (LSU 63–14 McNeese, event 401856706; TCU 10–17 BYU, 401856818), and ESPN's own box scores list neither Green nor Dwyer, nor does any play's text name them — both sat out. So nothing was missing from the feed; the app's label was the whole bug.
+
+- App `ui/ClassicBoard.tsx`: a final game with no statline prints `—`, as the web does. `ops/run/030-college-report-wk205.json` is the read-back. Cause confirmed against ESPN's box scores.
+
+### v0.614.1 — pictures from the site on the front door
+
+> - Founder: "Include pictures from the site." The landing now shows four real screens under the features — **Sealed picks** (the opponent's card backs before kickoff), **Live duels** (a Thursday-night duel dripping points), the **Classic board** (two lineups with live totals), and **Every game on a field** (a live field with the ball spot) — each a tap into the demo or the classic simulator. The demo card's picture is the Drip board live (the window battle bar, three duels, a nuke caption) instead of the setup screen.
+> - All shot from the running app with headless Chromium; team logos and headshots are hidden in them because the shots were taken offline.
+
+- Web `Landing.tsx`: `SITE_SHOTS` gallery; `public/brand/shot-*.{png,jpg}` (the earlier `demo-board.png` is gone). Web only.
+
+### v0.614.0 — the front door: get an account, the feature board, the demo as a picture
+
+> - Founder's revamp of the web flow. Signed out: **Get account** (or **Get on the waiting list** when the 1,000 spots are taken — the button reads the live count), then **Features** in five groups — League types (Redraft · Dynasty · Keeper · Contract · Devy), Competitive modes (Vampire · Guillotine · Golf), Positions (QB/RB/WR/TE · K/D/ST · DL/DE/LB/DB · RET/FB/PUNT/HC · scoped positions), Scoring options (single-spot best ball · scoped bonuses · others), Matchup style (Drip · Classic) — each chip opening one line; then the **Drip demo as a picture** that clicks into the demo.
+> - Signed in: My Leagues as before; with no leagues it now says **"Open a league or join one above"** under the ＋ ADD A LEAGUE and 🔎 FIND A LEAGUE chips, instead of dropping you into the role chooser.
+> - The demo keeps its own route and explainer, one click from the landing ("demo" in the header, the picture, the ▶ button). GET ACCOUNT opens the sign-in page on the create-account form.
+
+- Web `Landing.tsx` (route `landing`, the boot default for a stranger; `#/landing`); `#/live/signup` opens AuthForm in sign-up mode. Core `LANDING_FEATURES` in `leagueTagline.ts`, reusing the continuity / format / game notes where they exist (Devy, positions and scoring lines are new). `public/brand/demo-board.png` is a headless-Chromium shot of the real demo board. `LeagueHome` empty state. Web only.
+
+### v0.613.0 — Drip on your ESPN, Fleaflicker, MFL or Yahoo league, self-serve
+
+> - Founder, after Sleeper went self-serve: "Any player works for the sleeper import. Let's do the same for the other league providers (ESPN, Yahoo, etc). Current season inputs only."
+> - ＋ ADD A LEAGUE now has **Add Drip to my ESPN, Fleaflicker, MFL or Yahoo league**: pick the platform, paste the league id (a private ESPN league takes your SWID and espn_s2 cookies, used once in your browser), read the league, **pick your team from its list**, and it's on Drip with you as its commissioner and every published week scheduled. Yahoo asks you to sign in with Yahoo first. This season only.
+> - Why you pick: Sleeper is the one platform that gives us a user id to match a seat with. On the others, the person bringing the league in picks their team, and so does everyone who follows: the invite form shows the league's teams and you take yours. A taken team can't be taken twice; the commissioner reassigns from the desk if someone picked wrong.
+> - The commissioner's **⟳ sync season** now works for all four platforms (it was ESPN-only). Lineups and pairings on these platforms are a snapshot until it's pressed — the worker mirrors Sleeper leagues on its own, not these yet.
+> - The app's league board has the same branch (Yahoo points at the website, where the sign-in lives), and a platform invite code entered in the app shows the teams to pick from instead of failing.
+
+- 0423: `import_provider_league(provider, ref, season, name, settings, members, my_roster_id)` — provider-keyed row (`'<provider>-<ref>'`, as the admin import keys it), caller as commissioner, seats via `_upsert_membership_rows`, caller seated on the team they picked unless another member holds it. `invite_seats(code)` and `claim_platform_seat(code, roster_id)` for the invite form on non-native, non-Sleeper leagues. Season = current year.
+- Core `providerAdmin.ts`: `IMPORT_PROVIDERS`, `normalizeProviderLeague` (ESPN / Fleaflicker / MFL via the proxies, Yahoo via its client), `providerMembers`, `importMyProviderLeague` (RPC, then `syncNormalizedWeek` per week, a week with no pairings yet tolerated), `syncProviderSeason`. `liveApi`: `importProviderLeagueRpc`, `inviteSeats`, `claimPlatformSeat`.
+- Web: `ProviderImport.tsx` (view `provider`), RoleChooser item, `RedeemForm` pick-your-team branch for platform leagues, AdminPage/CommishDash sync for every platform, `PlatformTeam` names MFL and Yahoo. App: Recruit `provider` branch; join-by-code falls through to the team list for a platform code.
+- Still open: a worker sync for non-Sleeper leagues (lineups go stale between the commissioner's syncs); Yahoo's Fantasy API is gated behind Yahoo's app approval (docs/multi-league-integration-research.md), so that path depends on it.
+
+### v0.612.0 — the door is open: any account creates, 1,000 spots, a daily sweep, and Drip on your Sleeper league
+
+> - Founder: "Let's drop the requirement for me to approve user accounts. Just set a cap of 1000 users and do a daily sweep for inactive users and make an off boarding process. Any account can add a native league or add drip to an existing league." Then: "Inactive is 30 days with the 14 day grace period."
+> - **Anyone can create.** Start a fresh league from ＋ ADD A LEAGUE on the web or the app's league board — no flag, no approval. The pilot copy ("invite-only", "how are you joining the pilot?") is gone from the sign-in page, the add flow, the demo, the FAQ and the request form.
+> - **Add Drip to your Sleeper league yourself.** New on both: type your Sleeper username, pick one of your leagues this season, and it's on Drip with you as its commissioner. The database checks with Sleeper that you're really in it. Everyone else joins with the invite code it hands you, and the schedule and rosters mirror from Sleeper on their own from then on (before, only leagues named in the worker's config synced). ESPN, Yahoo, MFL and Fleaflicker still come in by request.
+> - **1,000 spots.** The database refuses the account that would pass the cap, however it signs up; the sign-up form asks first and shows the waitlist line when the house is full. The admin console shows the count and sets the cap.
+> - **The daily sweep.** An account that is not an admin, not a seat agent, not a commissioner, has no seat in this season, and has shown no sign of life for 30 days (no sign-in, no league opened, no app check-in, no chat) is emailed: "your account will be removed on <date> — sign in to keep it". Fourteen days later, if still silent, it is removed and told so. Any sign-in in between cancels the notice. Nothing is removed that wasn't told first, so a worker without mail credentials removes nobody.
+> - **Leave on your own.** Settings → Delete my account (web gear; app Settings → Account): type your email back to confirm. A commissioner of a league with other members hands it off or deletes it first. Leagues keep their results with the seat shown by team name, as the privacy page says.
+
+- 0422: `has_native()` → any signed-in user. `site_pref.user_cap` (1000), `account_count()`, `signup_open()` (anon), trigger `cap_new_account` on `auth.users`, `admin_set_user_cap`. Offboarding: `offboard_notice`, `offboard_log`, `_user_last_active`, `_offboard_blockers`, `offboard_candidates` / `offboard_notice_set` / `offboard_cancel_revived` / `offboard_delete` (service role), `_offboard_prep` (clears `solo_pass.claimed_by` and `league_listing.created_by`, the two FKs that would block), `delete_my_account(p_confirm)`. Import: `import_my_league(…)` (member check via `_sleeper_users`, caller becomes commissioner, `_upsert_membership_rows`), `sleeper_leagues_for_sync(season)`.
+- Worker: `mail.js` (Gmail API via the send-invite service account; `GOOGLE_SA_EMAIL`, `GOOGLE_SA_PRIVATE_KEY`, `GMAIL_SENDER`, optional `GMAIL_FROM`/`GMAIL_FROM_NAME`), `offboard.js` (`planOffboard` pure; `sweepOffboard`; daily `sweepOffboardDaily` from the tick; `OFFBOARD_INACTIVE_DAYS`, `OFFBOARD_GRACE_DAYS`, `OFFBOARD_MAX_NOTICES`, `OFFBOARD_DRY_RUN`). CLI `offboard-sweep [--dry]`, ops-run mode `offboard-sweep`. `syncTick` reads the league list from the database each pass (plus `PILOT_LEAGUE_IDS`) and the sync and pod loops run regardless of that env. Test `server/test/offboard.mjs`.
+- **Not done here (needs the founder):** staging the Gmail secrets on Fly — add `GOOGLE_SA_EMAIL`, `GOOGLE_SA_PRIVATE_KEY`, `GMAIL_SENDER` (and `GMAIL_FROM`) as repo secrets and a "stage offboarding mail credentials" step in `deploy-worker.yml` on the FCM pattern, plus the same lines in `server/.env.example`. Until then the sweep logs what it would tell and removes nobody.
+- Core: `signupOpen`, `adminSetUserCap`, `deleteMyAccount`, `importMyLeagueRpc`; `sleeperAdmin.myLeaguesOnSleeper` / `importMyLeague` / `importSeason`; friendlyError maps Supabase's "Database error saving new user" (how a refused insert reaches the client) to the full-house line.
+- Web: `SleeperImport.tsx` (view `sleeper`), RoleChooser (create + Sleeper for everyone, copy), AuthForm door check, `DeleteAccount.tsx` from the gear, AdminPage `UserCap`. App: Recruit `sleeper` branch and ungated create, SignIn door check, Settings → Account → delete. check:settingsmenu covers the new section.
+
+### v0.611.0 — win probability on the league card, classic leagues
+
+> - Founder: "Add win probability to the league cards for classic leagues." The card's glance already carried the classic board's own win probability (v0.501.0, for the home-screen widget) and never printed it.
+> - A classic league's card now shows a thin two-colour bar under the two score lines with "62% WIN" on your side and "38%" on the opponent's, on the web and in the app. It uses the same number as the matchup board, so the two never disagree. It shows while the week is open (before lock too, like the widget, since the card's projected finals already show then) and goes away once the week is final.
+> - Nothing changes on a drip league's card (there is no model yet), or when the opponent's lineup can't be read (no number).
+
+- Core `widgetExtras.ts`: `cardWinBar(snap)` — the one rule for both clients; check:leagueline covers it. Web `SlateStrip` and the app's `MatchupStrip` draw it.
+
+### v0.610.0 — the league card says how the league is set up
+
+> - Founder's list: "More descriptive league descriptions on my leagues page. (Devy, Drip, other league settings?)" The card's one line said season, size, continuity and the game ("2026 12-Team Dynasty Drip") and nothing else; an imported league's line was the one word "Sleeper".
+> - Each card now carries a second line with the settings behind it, printing only what is news: **Devy** or **Devy Shares**, **College** (college calendar), **Superflex**, reception scoring (**Full PPR**, **Half PPR**, **Standard scoring**; classic leagues), **Best Ball**, the salary cap (**$200 cap**), keepers (**3 keepers**), dues (**$50 dues**) and **Custom scoring**. Nothing extra is printed for a plain drip league, so most cards look unchanged.
+> - An imported league reads its own platform's settings as they were stored at import: **Dynasty** or **Keeper**, **Superflex**, scoring, **Best Ball** and the starter count ("Dynasty · Superflex · Full PPR · 10 starters").
+
+- 0421: `_league_details(league_id)` gathers the block (native: `league_is_superflex` and `ppr` for classic only, `bestball`, `_league_has_college` + `devy_mode`, `league_is_college_calendar`, `contracts_on` + `league_salary_cap`, `keeper_count`, `dues_amount`, custom scoring; imported: Sleeper's `settings.type`, `settings.best_ball`, `scoring.rec`, `roster_positions`), and `my_teams` serves it as `league.details`. Respun from 0242's body with the one added key.
+- Core `liveApi.ts`: `LeagueDetails`, `leagueDetailLine(e)` (empty when there is nothing to add, so the card leaves the line out). Web `LeagueCard` and the app's `Leagues` card print it under the type line. check:leagueline covers it.
+
+### v0.609.0 — an imported league opens on the matchup too
+
+> - Founder's list: "League opens to match view post draft." The rule (v0.356.16) opened the matchup once a league's draft was complete — but an imported Sleeper league has no draft of ours at all (it drafted on Sleeper before it got here), so the rule never saw it as drafted and every imported league opened on the hub.
+> - An imported league with a seat now opens on the matchup, like any drafted league. A native league still opens the draft room while its draft runs and the hub before it; a seatless commissioner still lands on the hub.
+> - Not confirmed against a live league: if a NATIVE league of yours still opens on the hub after its draft, say which one — on the web, a board that fails to build silently leaves you on the hub, and that would be a different cause.
+
+- Core `leagueLandingRoom`: `draft_status == null` + a seat + `provider !== 'native'` → `'matchup'`. Both clients read it. check:leagueline covers the cases.
+
+### v0.608.0 — the room bar at every width, and on the matchup board
+
+> - Founder's list: "No icons on desktop web nav.. keep the nav bar up like on app and mobile web. Disappears on match up screen currently."
+> - Desktop web now has the same words-only room bar the app and phone web have (LEAGUE · MATCHUP · DRAFT · MY TEAM · CHAT), fixed to the foot of the page in a centred band. The old chip row with icons under the league name is gone. On a phone the bar still ducks as you scroll down; on a wide screen it stays up.
+> - The matchup board carries the bar at every width now. It was phones-only there because above 720px the strip drew the chip row, which the board didn't want stacked over it; the phone-only parts of the board (the brand top rail in place of the header's chips) stay phone-only.
+
+- Web `LeagueStrip.tsx`: the chip row, `railIcon` and `themeIsLight` are gone; the `<nav>` renders at every width, body padding always reserved, the scroll duck only below 720px. `Matchup.tsx`: `barOn` (the bar exists) split from `railed` (the phone layout); `BoardRoomBar` and the board's bottom padding follow `barOn`. Web only.
+
+### v0.607.0 — bigger team names, score and clock on the fields
+
+> - Founder: "A lot larger team names, score and time on the fields view." The line over each field — away team, score, clock, score, home team — was 9px whatever the size of the tile, the smallest text on the card for the three things you glance for.
+> - It is now 14px team codes with 20px logos, 17px scores and a 12px clock, on the web and in the app. The enlarged game view's line (tap a field) grows the same way: 15px teams, a 22px score, a 12px clock.
+
+- Web `FieldView.tsx` (`Field` strip, `GameView` line); app `ui/FieldView.tsx` (strip, `GameViewBody` line). Sizes only.
+
+### v0.606.0 — the player card reads StatHead's new hit % and draft outlook
+
+> - StatHead 1.0.110 (Oct 3) replaced its career PPG with **hit %**, the chance of a fantasy-starter season in a player's first four NFL years, per format, and added a **draft outlook** (round 1 / 2–3 / 4–7 / undrafted). The college card's NFL OUTLOOK line read the removed field, so it would have gone blank on the next board load.
+> - The card now shows, for example, "NFL OUTLOOK: 81% chance of a fantasy-starter season in his first four NFL years (top 1%)" and "DRAFT OUTLOOK: Round 1 87% · Rounds 2–3 5% · Rounds 4–7 6% · Undrafted 2%". The hit % follows the league's format (superflex or 1QB).
+> - Checked against StatHead's handoff (board generated 2026-10-03T22:01Z): 6,130 players (off-roster players dropped, our report #540); `compositePosRank` matches in both formats (0 mismatches); Manning, Mensah, Moore and Chambliss are QB1–4 in both formats. The handoff asks for a board built at 22:14Z or later; the watcher reprices on its own when StatHead publishes one (it compares `generatedAt`).
+
+- Worker `statheadDevy.js`: the stored card carries `hitProb` and `draftOutlook` in place of `careerScore` / `careerPPG`.
+- Core `collegeCard.ts`: `statheadEvalRows` reads them. A card stored before 1.0.110 still shows its old line, and a null draft outlook (2029 QBs and TEs) is left out. check:collegecard covers all three.
+
+### v0.605.0 — the devy market keeps loading as you scroll
+
+> - Founder: "Can we lazy load the listings in the devy market so you can keep scrolling?" The market stopped at 80 rows in the app and 100 on the web.
+> - It now shows 60 rows and adds 60 more each time you near the bottom. Once you've scrolled past the first 1,000 players (by price), it fetches the rest of the market once (the server returns up to 5,000), so you can scroll the whole board. A new filter, sort or search starts back at the top.
+> - The bottom of the list says "Scroll for more…" while there's more, and "All N players" once everything is loaded. On the web, clicking the line also loads the next page.
+
+- Core `devyShares.ts`: `marketNext` and `marketFooter` (pure), plus `MARKET_PAGE`, `MARKET_FIRST_FETCH` and `MARKET_FULL_FETCH`; check:devymarket covers them.
+- App: `scrollChrome.tsx` gains `onNearEnd`/`isNearEnd`. The league shell's shared scroll handler tells subscribers when the page nears its end, which is how the market inside My Team's DEVY tab hears it. The market's own sheet uses its ScrollView's `onScroll`.
+- Web: an IntersectionObserver sentinel under the list.
+
+### v0.604.0 — devy values list only players on a roster
+
+> - Follow-up to "How do we have guys with no schools?". After full rosters loaded (v0.603.0), 868 of StatHead's 6,996 still had no Drip player: 749 that ESPN marks inactive this season, 95 at Division II/III/NAIA schools we don't load, 14 ESPN has no record of, and a few ESPN roster gaps. None of them can be bought, so the Devy values list (and its CSV) now shows only players on an FBS or FCS roster this season. StatHead's ranks stay as published, so a gap in the rank column is a player left out.
+> - Reported to StatHead as dachhack/stathead#540: their board ranks about 750 players ESPN marks inactive, including Devonte Ross at #95 (1QB).
+
+- 0420: `devy_base_values` joins `college_player` (active) instead of a left join. Probe dv7a fails on 0417; dv8 checks the CSV follows.
+
+### v0.603.0 — every player on a big roster, not just the first 100
+
+> - Founder, over the devy values list: "How do we have guys with no schools?" Bryant Wesco Jr., Ryan Wingo, Bryce Underwood and Demond Williams Jr. showed no school or class.
+> - The cause: ESPN's roster endpoint returns 100 players unless asked for more, and a big program carries 120+. Since the college directory shipped (0365), everyone past #100 on a big roster never reached Drip. They had no school or class, sold at the 1-point floor in the devy market, and were missing from leagues' college pools.
+> - The sweep now asks for every player (`?limit=300`). Those players are not new arrivals, so a short-lived trigger (0419, until Oct 5) dates them as already known. That stops every devy market from listing hundreds of them as new launches.
+> - A college sweep follows in the next release (it must run after this migration): it loads the missed players and prices them.
+
+- Worker `poll/college.js`: `ROSTER` asks `?limit=300`. Tested in `test/college-poll.mjs`.
+- 0419: `_college_roster_backfill` trigger on `college_player` inserts until 2026-10-05. Probes dv9–dv9a.
+
+### v0.602.0 — devy values link to StatHead and download as CSV
+
+> - Founder: "Add a link to stathead for the values. Also add a link to download the values as csv."
+> - The Devy values page (gear menu) now links to StatHead (stathead.app; the rankings are under Prospects → Devy, which has no direct link).
+> - Web: **⬇ Download CSV** saves the whole list in the current sort and position, for example `drip-devy-values-sf-2026-10-03.csv`. Columns: SF rank, 1QB rank, name, position, school, class, 1QB value, SF value, underclass discount, and the refresh date.
+> - App: **⬆ Share CSV** sends the same file contents through the share sheet (save to Files or Drive, or send). A true file download on the phone needs a native module, and an over-the-air update can't add one without crashing older installs.
+
+- 0418: `devy_base_values_csv(sort, pos)` (authenticated), built on 0417's list; probes dv8–dv8c. Core `devyBaseValuesCsv`, `devyCsvName`, `STATHEAD_DEVY_URL`; check:devymarket covers them.
+
+### v0.601.0 — devy values for everyone, 1QB and SF, in the gear
+
+> - Founder: "put regularly updated devy base value in the options chip so players in any league can see fresh devy values for 1QB and SF" … "a refreshed on date as well".
+> - The gear (app: Settings → 🎓 Devy values; web: ⚙ → Devy values) now lists every college QB/RB/WR/TE StatHead ranks, with two values per player: **1QB** (the devy market's price per share) and **SF** (the same scale on StatHead's superflex rank). Sort by either, filter by position, search a player or school, 100 at a time. Any signed-in player can open it; no devy league needed.
+> - The header says when it was refreshed ("Refreshed Oct 3, 2026"): the last time Drip loaded a StatHead board, which the worker does whenever StatHead publishes one (v0.594.0).
+> - Freshmen and sophomores show their underclass discount (0413), the same as the market.
+
+- 0417: `devy_base_values(sort, pos, q, limit, offset)` for authenticated users, from `stathead_devy` × `college_player` on `_college_curve` × `_college_class_mult`. Probes dv1–dv7.
+- Core `devyValues.ts` (`refreshedLabel`, `devyValueSub`, `fmtValue`) and `liveApi.devyBaseValues`. App `DevyValues.tsx` in `SettingsModal` (section `devy`); web `DevyValuesSheet` from `SiteSettings`. check:devymarket and check:settingsmenu cover them.
+
+### v0.600.0 — unconfirmed fixes stay open, and a seal audit checks them
+
+> - Founder, on #1095 recurring: keep "fixed but unconfirmed" issues open, with a check-back after the next kickoff. #1028 (Mooney's frozen lineup, week 3) shipped two plausible fixes, was closed while its own note said the cause wasn't confirmed, and the real cause (the Rams' LA/LAR codes) hit again in week 4.
+> - New `CLAUDE.md` tells every session the rules for @computer issues: confirm the cause against what the member saw and against data, keep an unconfirmed fix open (label `unconfirmed`, "Refs #N" not "Fixes #N"), check back after the next game, and write the chat card's summary and report.
+> - New ops mode `seal-audit` (read-only) answers "did lineup spots lock at their own kickoff?" for a week, optionally one league. It prints counts and team codes only, since ops logs are public. Run after Sunday's 1pm games, it confirms #1095.
+
+- Worker `sealAudit.js`: `auditSeals` (pure) and `sealAudit(week, season, league?)`; CLI `seal-audit <week> [season] [--league=]`. Test: `test/seal-audit.mjs`.
+
+### v0.599.1 — the closed-issue card can actually be saved
+
+> - The card from v0.598.0 was refused by the database: since 0290 only a transaction line may carry a payload, and the card keeps its report in one. So #1095's rewrite (ops 027) failed, and every card the relay tried to post since v0.598.0 failed too. The relay retries those on its next pass, so they'll go out now.
+
+- 0416: `league_message_txn_check` lets a computer line carry `txn`. A txn line still needs one, and every other kind still refuses one. Probes cf4–cf4b (cf4 fails under 0290's check). Ops 028 retries #1095's rewrite.
+
+### v0.599.0 — closed-issue cards say what was wrong, then explain it
+
+> - Founder, over Kickoff League's bare "✅ Fixed (#1095).": "say a brief what was wrong and then expand like the waivers report with a brief paragraph of what was the error and how it was fixed. Can you do that for the most recent issue?"
+> - A fix note (an issue comment, or the closing pull request) can now carry the card's own words in two hidden lines, `<!-- chat-summary: … -->` and `<!-- chat-report: … -->`, written for league members: one sentence on what was wrong, and a short "what was wrong / how it was fixed" report. Without them the card falls back to the note's first sentences, as before.
+> - #1095's line in Kickoff League is rewritten in place as the card: "Issue #1095 closed. Rams players were locking at Thursday's kickoff instead of their own Sunday game.", with the report under READ THE REPORT.
+
+- Worker `computer.js`: `chatStory` reads the tags from the newest note, then from the closing PR. `recard(n)` rewrites an already-posted close line for issue n, or posts one. CLI and ops mode `computer-recard`; ops 027 runs it for #1095. Four new cases in `server/test/computer.mjs`.
+
+### v0.598.0 — the computer posts a closed-issue card in chat
+
+> - When an @computer issue closes, the league chat gets "💻 Computer: Issue #N closed. <one or two sentences>", with a **READ THE REPORT** button that expands a short write-up of the problem and the fix, plus a link to the issue. Founder: "Issue xxx closed. (Short 1-2 sentence description). Click to expand a brief report of the issue and solution."
+> - Every close is announced now, including "not planned" (shown greyed out with 🗂). Before, only completed issues went back to the chat, as a single "✅ Fixed (#N): …" line.
+> - Where the words come from: the issue's last fix note if there is one. Otherwise the pull request that closed it: its title becomes the summary and its description becomes the report.
+> - DM asks still get a push, now titled "Closed · #N".
+
+- Worker `computer.js`: `closeStory`, `fixReport`, `fixSummary`, `titleSummary` and `closedHeader` replace `fixLine`. The card's report is stored in `league_message.txn.fix`.
+- 0415: `_chat_message_json` v8 serves `fix` on a computer line. `computer-fix-probes.sql` (cf1–cf3).
+- Web `chat.tsx` and app `Chat.tsx`: `FixCard`. Old builds show the header as a plain Computer line.
+- Tests: eleven new cases in `server/test/computer.mjs` (the `fixLine` cases are gone with it).
+
+### v0.597.0 — Rams players no longer lock at Thursday's kickoff (#1095)
+
+> - Kickoff League chat, Oct 2: "Rams players are glitched again, can I get Stafford out and Shough in? … it's been Stafford and Puka both weeks." The founder's tag: "I thought we fixed this."
+> - The cause: the schedule calls the Rams "LA" and each league's player pool (from Sleeper) calls them "LAR". The worker couldn't find a Rams player's game, so it locked his lineup spot at the week's first kickoff (Thursday night) instead of his own (Sunday). The database had the mirror bug: it couldn't find the kickoff either, so it let Rams players be moved after their game started. Washington (WSH vs WAS) had the same exposure.
+> - Both now compare normalized team codes. Rams picks already locked this week reopen until their real kickoff (Sunday 1pm ET at PHI).
+> - The earlier fix covered scoring (resolve.js), not locking. That's why it came back.
+
+- 0414: `_nfl_team` (mirrors core `normTeam`); `classic_kickoff_for` compares normalized codes; `unseal_early_classic_picks()` reopens a classic weekly pick whose player's game is still ahead. It runs in the migration and once at worker boot, so an old worker re-sealing before the deploy lands can't make it stick.
+- Worker `lock.js`: `teamKickoffs` keys by `normTeam`, and `classicSealAt`, `teamOf` and the auto-slot `kickedOff` look up normalized codes.
+- Tests: `test/classic-seal.mjs` (fails on the old code); `rams-kickoff-probes.sql` (rk1–rk4; rk1 fails without 0414).
+- The @computer pipeline found it: #1095 arrived as "I thought we fixed this." with no context; v0.595/0.596 pulled the three chat lines before it.
+
+### v0.596.0 — @computer looks back three chat messages, whatever their age
+
+> - An @computer issue now carries the chat's last 3 messages before the ask, however old they are, in place of the 15-minute window. #1095 ("I thought we fixed this.") had nothing in its 15 minutes. Times now show the date too.
+
+- `chatBefore` takes the last `CONTEXT_N` (3) lines before the ask. Ops 026 backfills #1095 again.
+
+### v0.595.1 — the chat-context backfill files a new issue when it can't comment
+
+> - The first backfill for #1095 and #1038 failed: the worker's GitHub token can open issues but not comment on them. The context now goes into a new issue that points back at the ask.
+
+- `postContext` falls back to `openIssue` on a 403. Ops 025 retries the backfill.
+
+### v0.595.0 — @computer issues carry the chat before the ask
+
+> - An @computer ask now files with the chat from the 15 minutes before it, so "@computer I thought we fixed this" arrives with whatever "this" was. Before, only the tagging line went in.
+> - The repo is public, so other members appear as "Member A", "Member B" (founder's choice: names hidden), their @mentions show as "@member", and their pictures stay out. The asker's own lines and screenshots go in as posted.
+> - The two open asks (#1095 and #1038) get their chat posted as an issue comment on merge.
+
+- Worker `computer.js`: `contextSection` (pure; up to 25 lines, each clipped to 400 characters), `chatBefore` (the league chat or DM thread, oldest first) and `issueBody({ context })`. `postContext(n)` backfills a filed ask as a comment that names @computer, so the fix relay never mistakes it for a fix note. CLI and ops mode `computer-context` (issue numbers, comma-separated); ops-run now gets `GH_ISSUES_TOKEN`. Tests: eight new cases in `server/test/computer.mjs`.
+
+### v0.594.0 — devy prices also follow a rebuilt StatHead board mid-week
+
+> - The devy watcher now reprices when StatHead publishes a rebuilt board, not only when a new week of stats lands. Model fixes like StatHead 1.0.108's (one order within a position in both formats) reach Drip within about 3 hours instead of waiting for Sunday.
+> - StatHead also rebuilds the board with its near-daily market snapshot, so between Sundays prices can move a little as the market does.
+
+- Worker `poll/statheadDevy.js`: `checkDevyBoard` reprices when `profilesThrough` or `generatedAt` changes, still checking every 3 h (`STATHEAD_WATCH_MS`). Three new cases in `server/test/stathead-devy.mjs`.
+
+### v0.593.0 — underclassmen price cheaper; the top 10 spread out
+
+> - Freshmen and sophomores now cost less, not more. A freshman prices at 85% of his StatHead rank's price and a sophomore at 92%; juniors and up pay full. A young player who holds his rank gains value as he ages, so scouting early pays. Before, a top-150 freshman or sophomore cost 15% more, so sophomore #8 (11.50) cost more than StatHead's #1 (10.00), and holders lost 13% the day he became a junior.
+> - The top 10 no longer price the same. StatHead's #1 is 12.00, #2 11.40, #5 10.60 and #10 10.00. From #10 down nothing changes.
+> - The market row and the college card say "underclass −15%" (or −8%) where the discount applies.
+> - Today's prices moved over at deploy. Stakes keep what they cost; anyone who bought a freshman or sophomore at the old ×1.15 sees that stake's value drop to the new price.
+
+- 0413: `college_price.mult` (stored, so the offseason freeze holds it too), `_college_class_mult`, the spread `_college_curve`, and `_devy_price` = max(1, base × mult). `refresh_college_prices` and `_devy_open_price` write `mult`; `youth` now means "a discount applies". Probes ds2a–c; the launch probe's freshman moved to StatHead #5 so the order math still holds. Core `underclassMult` and `underclassLabel`, checked in check:devymarket.
+
+### v0.592.0 — devy prices reprice when StatHead's weekly rescore lands
+
+> - The devy market now reprices as soon as StatHead's board has a new week of stats, following StatHead's handoff ("pull devy-rankings.json after the Sunday run, check profilesThrough"). Before, the college sweep ran every seven days from whenever the worker last started, so prices could sit a week behind.
+> - The worker checks the board every 3 hours and reprices only when `profilesThrough` moves (for example "2026 week 4" to "week 5"). Between Sundays prices hold still.
+> - Deploying this reprices right away off StatHead's in-season board from Oct 2 (MCP 1.0.106). That board scales this season's stats to a full season and calibrates for competition. For example, KJ Duff moves from #51 to #35 (1QB) and Sam Leavitt from #22 to #80.
+
+- Worker `poll/statheadDevy.js`: `checkDevyBoard` and `sweepDevyBoard`, run every 3 h (`STATHEAD_WATCH_MS`). A failed reprice leaves the week marked unpriced, so the next check tries again. The weekly college sweep still runs as before. Tests: four new cases in `server/test/stathead-devy.mjs`.
+
+### v0.591.0 — devy prices follow StatHead's composite, not college production
+
+> - Devy prices now come from StatHead's devy composite rank alone. StatHead's audit found our prices tracked raw college fantasy points (correlation 0.69), not its composite (0.19), so production against weak schedules was paid in full. That is the "not calibrated for level of competition" complaint from Reddit.
+> - The price scale is unchanged (the same rank-to-price curve, the young-riser bonus and the floor). What changes is who sits where. Arch Manning (#4), Trinidad Chambliss (#5), Bo Jackson (#6) and Cam Coleman (#3) move to the top. Caleb Hawkins (#50) and Nate Sheppard (#52) drop to about 5.3.
+> - A player StatHead doesn't rank trades at the floor, so every price is a StatHead number.
+> - Prices are shared by every league, so they use the 1QB composite.
+> - The repricing runs right after this merges (ops 022), and then with the weekly sweep as before.
+
+- 0412: `refresh_college_prices` sets each price's rank from `stathead_devy.rank_1qb` alone (`_college_devy_weight` = 1). Probes sh4 and sh5 now check composite-only pricing and the floor.
+
+### v0.590.0 — the field view's labels are readable on a phone
+
+> - The smallest text on the field view is bigger: yard numbers 6.5 → 10.5 (and darker), end-zone team names 9 → 13, the team on the ball marker 6 → 9, the direction arrow 8 → 10, and the ball carrier's name 6.5 → 9.5 on a wider tag. This applies to the web and the app.
+> - The field is drawn 400 units wide and shown about 330 points wide on a phone, so the old yard numbers came out around 5pt.
+
+### v0.589.0 — no score fill on the cards
+
+> - Player cards no longer fill up with colour as the score climbs. The points shown beside the card say it. This applies on web and mobile, to the full cards and the mini cards on the board.
+
+### v0.588.0 — power-up chips sit under the card
+
+> - On locked and live cards, power-up chips like 🗑️ GARBAGE TIME now sit under the card instead of inside it. Your card and your opponent's stay the same size whatever is armed. This applies on web and mobile.
+
+### v0.587.0 — a live drip waits for its team's ball; power-ups stay on locked and live cards
+
+> - Fixed: a drip card in a live game could run through the whole game before its team ever had the ball. Kaden Wetjen's 15-yard punt return showed 9.4 points at 12:47 of the 1st quarter, which is 0.15 a minute for all 60 minutes plus Garbage Time on the last five. A drip now accrues only on its team's offensive time, and before that team's first drive there is none.
+> - Live scores are recalculated from the plays on every tick, so the inflated number corrects itself once this is live.
+> - Power-up chips now stay on your cards after the lock and through the game, on web and mobile:
+>   - the amps that count in that window (Garbage Time, Momentum, Overtime);
+>   - other armed buffs that apply to the spot;
+>   - plays aimed at the card, like Double or Nothing, Surge, Bunker and the Clutch cards.
+
+- Engine `sim.ts` `possFor`: when the team's game is on the live feed but the team has had no possession yet, its offensive time is now zero ([[0,0]]). It used to be an empty list, which `offSecs` treats as "unknown, accrue every minute". The engine is shared, so the worker's published score is fixed too.
+- The chips follow the engine's own window rule (`buffsForWindow`, arm stamps from 0259). `myTargeted` now returns `buffsAt`.
+- New check: `check:livedrip`. It reproduces the 9.4 and confirms the fix.
+
+### v0.586.0 — Return Yards takes every amp
+
+> - Return Yards is a drip, and now every amplifier counts on it: Momentum (3× while hot), Overtime and Garbage Time. Its card shows the amp chips like any other drip.
+> - The scoring engine already amped its drip. What was missing was the eligibility list behind the card chips, the "eligible" count and the refund when no starter qualifies; it named Rush, Receiving and Combo Drip but not Return Yards.
+
+- Core `buffAppliesToSpot`: `retyd` is a drip. Check: `check-draft-spots` case.
+
+### v0.585.0 — player cards show a dash, never a filled-in number
+
+> - Player cards no longer fill in missing data. Where a number isn't known, the card shows —.
+> - Devy cards:
+>   - a stat ESPN doesn't give is — instead of 0, and a line with no scoring stats has — for points instead of 0.0;
+>   - superflex leagues no longer borrow the 1QB devy rank;
+>   - an unpriced player's PRICE and DEVY PRICE are — instead of the floor price.
+> - NFL cards:
+>   - a game-log week with no plays reads — instead of "did not play";
+>   - a player with no team reads — instead of "FA";
+>   - this week's projection is — when the league's projection row is missing, instead of falling back to a raw source number.
+
+- Core `collegeCard.ts`: `statMap` drops missing values (ESPN's "-" and blanks), `collegeStatLine` prints — for a missing number, `collegePprPoints` returns null with no scoring stats, `storedSeasonRows` keeps nulls, and `collegeFactStrip` uses the format's own rank and shows a price only when priced. Checks: `check:collegecard` cases.
+
+### v0.584.0 — read the whole offer back before you send it
+
+> - Proposing a trade now has a confirm step. REVIEW THE OFFER shows the whole deal before it goes: what you get and what each other team gets, each item saying who it comes from.
+> - The summary covers players (with contract terms and any salary someone keeps paying), picks (including devy picks), FAAB, cap room, devy shares and devy cash.
+> - It also shows the trade grade, how long the offer stands, what happens when it's accepted (it goes through, the commissioner rules, or the league votes) and your note.
+> - SEND THE OFFER files it. "← edit the offer" goes back with everything as you left it. The same applies to counters and multi-team trades, on web and mobile.
+
+- Core `tradeConfirm.ts`: `tradeConfirm` (legs → each team's gets), `expiryLine`, `reviewLine`. Two-team offers read back through `twoSeatDevyLegs`, and multi-team offers through the same legs builder that files them. Checks: `check:tradegrade` cases.
+
+### v0.583.0 — the devy draft: devy rounds and devy picks that trade
+
+> - Devy leagues get a devy draft. The commissioner sets DEVY ROUNDS (off or 1–5, at most the number of devy spots) under DEVY in Commissioner tools.
+> - The draft ends with that many devy rounds. Every pick in them must be a college player, and nobody can take a college player before them. The draft room says when the devy rounds start and switches its list to college players when they do.
+> - In the startup draft, the devy rounds fill the devy spots (pick 8.01 can be Devy 1.01). Every year after, they're how teams restock after players turn pro. A team whose devy spots are already full can still pick, then drops one, the same rule as drafting with extra traded picks.
+> - In dynasty leagues with rookie picks, devy picks are picks too: "2027 DEVY R1" trades like any rookie pick, and whoever holds it makes that pick. Trade grades count a devy 1st like a rookie 3rd.
+> - Draft-room fix: in a draft with devy rounds, college players no longer count against NFL position limits there; devy spots never had position caps.
+
+- 0411 adds `draft.devy_from` and `draft.devy_rounds`, `_devy_rounds`, `_draft_plan` and `set_devy_rounds`.
+- Devy pick assets are rounds 101–105, so they never collide with rookie rounds (1–10) or startup slots (≤ 99). The `pick_asset` round check was widened to allow them.
+- `_provision_pick_assets` now touches rookie rounds only and keeps devy picks in step. `_start_draft_now` builds the devy block and `native_exec_pick` enforces it. The queue, autopick, `draft_state`, `rollover_league` and `_pick_overall` know the block (a mid-draft trade locks a used devy pick).
+- Core `devyDraft.ts`: `pickRoundLabel`, `devyBlockRound`, `draftRoundLabel`, `devyBlockLine`.
+- Probes: `devy-draft-probes.sql` (dd1–dd6). Checks: `check:devymarket` and `check:tradegrade` cases.
+
+### v0.582.0 — commissioners can add custom college players
+
+> - A commissioner can now add a college player our directory doesn't have, such as a D2 star, a JUCO transfer or a signed recruit. Give a name, position, school, class and level (D2, D3, NAIA, JUCO, HS, FCS or FBS).
+> - He goes into this league's pool only. Teams claim him from the wire or draft him like anyone else, and he lands in a devy spot.
+> - ESPN has no stats feed on these players, so they score nothing. They're a devy stash until they reach FBS. His player card says he was added by the commissioner.
+> - Find it in Commissioner tools under DEVY, as CUSTOM PLAYERS. It's for devy-spot leagues only; a devy market league prices only players it has stats for.
+> - The commissioner can remove a custom player nobody has rostered. A pre-draft pool re-seed keeps them.
+
+- 0410 adds the `college_custom` table. Ids come from a reserved range (990000001 and up), so `c-<id>` is a college slug everywhere.
+- New functions: `commish_add_custom_college`, `commish_remove_custom_college`, `league_custom_college`.
+- `seed_league_pool` keeps custom players. `league_pool_college`, `college_meta_for` and `college_player_card` include them; the devy market and `college_directory` never see them.
+- Core `isCustomCollegeId`: the player card skips ESPN for custom players.
+- Probes: `custom-college-probes.sql` (cc1–cc8).
+
+### v0.581.0 — DECLARED: who's in this year's NFL draft class
+
+> - College players headed to this year's NFL draft now say DECLARED. It shows on your devy roster, in the devy market, and on their player card.
+> - It appears after the NFL's early-entry deadline (Jan 16) and lasts until the summer. Before the deadline, ESPN's prospect list is a big board that includes underclassmen who may go back to school, so we don't show it then.
+> - Nothing about the roster changes: a declared player stays in his devy spot and moves to his NFL identity when he's drafted or signs.
+
+- 0409 adds `nfl_prospect` (draft year, ESPN draft-athlete id, college ESPN id) and `_college_declared` (Jan 16 to Aug 1 of the draft year). `devy_market`, `college_player_card` and `league_pool_college` now return `declared`.
+- Worker `poll/declared.js` runs daily from Jan 10 to May 15. It reads ESPN's season draft prospect pool and fetches only entries it doesn't already hold; the 2026 pool was 689 entries, 682 with a college id, in about 7 s. Run it on demand with `node src/cli.js declared-sweep [year]` or the ops mode `declared-sweep`.
+- Tests: server `test/declared.mjs`; probes `declared-probes.sql` (dc1–dc3).
+
+### v0.580.0 — score college players by school tier
+
+> - A scoped scoring rule can now name a college tier (P4, G5, IND) or a conference. "G5 ×0.8" pays Group of Five players 80% of their points. It only ever matches college players.
+> - Find it in ⚖ SCORING under SCOPED BONUSES, in the new 🎓 SCHOOL row. It shows in leagues with college players.
+> - Fixed: saving a scoped rule from the KIT's bulk-flag panel no longer strips the spot and flag scopes from the league's existing rules.
+
+- 0408 `sanitize_scoped_rules` keeps `conf` (letters, digits, spaces and hyphens, at most 16 chars, at most 12 per rule).
+- Core: `ScopedBonus.conf` matched through `collegeRuleAllows`; the shared `scopedRuleToWire` helper; the worker installs college facts when a school rule exists.
+- FCS players aren't in roster leagues' pools, and the college slate follows FBS games only, so there's no FCS tier yet.
+
+### v0.579.0 — buy devy shares from a purchase sheet
+
+> - Market rows now show your shares (YOU), an owners chip with how many teams hold him, and a BUY button. The OWN column and the +1 / +5 buttons are gone.
+> - The owners chip opens a list of who holds him: shares, points in, and how close each stake is to maxing.
+> - BUY opens a purchase sheet with his price, your holding, your cash and the leader's progress. Pick an amount with − / + or the 1, 5, 10 and MAX chips.
+> - Before you confirm, it previews the cost, your cash after, your stake after, and whether this buy maxes you. If you hold him, switch to SELL to see what you'd get back, including the payout cap.
+> - Sort the market by YOU to bring your holdings to the top.
+
+### v0.578.0 — fair launches for new devy players
+
+> - New college players no longer go on sale the moment they appear. They show as NEW LISTINGS you can scout, then open together in a weekly launch (Tuesday noon ET by default).
+> - During a launch (72 hours by default) every team places sealed orders at the player's opening price. Nobody sees anyone else's, and you can change yours until the close.
+> - At the close all orders fill together. If more than one team maxes a player, they draw lots for his right, and the league chat posts the results.
+> - Players who arrive while the market is locked (Jan 15 to the rookie draft) open together in a 7-day catch-up launch when it reopens.
+> - Commissioners control it all: on/off, the day and hour, both window lengths, the order cap, and LAUNCH NOW.
+
+The founder: "We need a way to launch new players into the market in a way
+that is fair for users." Then: "build it with a sim first and do an off
+season version that does a catch up. This should all be commish
+controllable."
+- scripts/sim-devy-launch.mjs (400 seasons, 12 teams: 2 hourly, 4
+  twice-daily, 6 every-3-days managers). RACE (before this): grinders won
+  15× a casual's share of new players' rights. A 10-share sealed window
+  barely helped (12×: the race restarts at the close). A sealed window with
+  full orders and a lottery among simultaneous maxers is near-fair; 72h
+  brings casuals to 0.88× (96h 0.93×), so 72h is the default.
+- 0407: college_player.first_seen (existing rows backfilled to Jan 1, so
+  nothing current lists); devy_launch, devy_launch_player (opening price),
+  devy_launch_order (sealed), devy_launch_lock (catch-up memory).
+  _devy_pending / _devy_listing; allot_devy_shares refuses a listing.
+  devy_launch_tick (worker, 5 min): fills due windows in random draw order
+  (clock_timestamp maxed_at, so the first maxer in the draw holds the
+  right), marks locked lineages, opens a catch-up on reopen, else the weekly
+  slot. A window that would run into Jan 15 is cut there, or deferred to
+  the catch-up if under 12h. Opening price: market price, else StatHead rank
+  on the curve (written as his market price), else the floor.
+  set_league_devy_launch (validated; switching back on counts from then),
+  commish_devy_launch_now, place_devy_launch_order (cap, 60-point stake
+  cap, cash across open orders), devy_launch_state (own orders only).
+- Core devyShares: launchBanner, launchOrderMax, launchRulesText, slotLabel,
+  timeLeft, DOW_LABELS (check:devymarket). App and web: launch banner over
+  INVEST with ORDER / PREVIEW, sealed order rows (− n + MAX), listings kept
+  out of the buy table; COMMISH launch controls on the devy card.
+- Probes: devy-launch-probes dl1–dl8 (listing, opening prices, sealed
+  orders, the draw, settings, off/on, catch-up, the weekly slot).
+  graduation-probes classify the launch tables; round-audit-probes date
+  relative to now (pinned Sep 21, stale on Oct 1).
+
+### v0.577.0 — the devy market table
+
+> - The DEVY tab now opens on the market. INVEST sits on the left, and MINE and LEAGUE on the right.
+> - Market rows show more: school, class and devy rank under the name, the price, a TO MAX bar for how close the leading stake is to owning the player (yours in green), and an owners button that opens who holds shares and how many.
+> - Columns have headers you can tap to sort (player, price, to max, owners), plus quick filters: ALL, QB, RB, WR, TE and NO RIGHT YET.
+> - Points always show two decimals (10.38, 1.00, 28.10).
+
+The founder: "We can have more in the devy market rows. Maybe a chart to
+show how far away before the player is fully owned. Also a button to click
+to see owners and shares. Let's make the numbers always have the same
+decimal places. Let's have headers on the columns and sorting. Also simple
+filter buttons … Let's have the devy tab open on the market. Let's put the
+invest chip all the way on the left and the mine and league chip all the
+way on the right."
+- Core devyShares: fmtPts is always two decimals; stakeProgress (toward 20
+  shares or 60 points), marketLines (owners ordered by progress, the
+  leading stake, mine, the right), shapeMarket (filters, sorts), nextSort
+  (useful first direction, flip, then back to market order), marketSubline,
+  MARKET_FILTERS. check:devymarket covers them.
+- App and web market: table header row, bar, owners expansion (team,
+  shares, points in, % to max, ★ right), filters; view defaults to INVEST;
+  chips reordered. Rendered in Chromium against a sample book.
+
+### v0.576.0 — a tighter devy market, and every team's stakes on its roster
+
+> - The devy market header is one line (cash, stakes and shares) with an ⓘ for the rules, instead of a paragraph.
+> - BUY is now INVEST, and its listings are one compact row each: position, name, school, price, +1 and +5. Tap a name for his devy card.
+> - The separate TRADE chip is gone. Devy shares and cash trade in the normal trade builder, alongside players and picks.
+> - Every team's roster, yours or anyone else's, now ends with its DEVY STAKES: the college players it holds shares in, with ★ for a right.
+
+The founder, from the DEVY tab: "Lets make the team header less tall. No
+wall of text, just a small info chip. Let's have an invest chip instead of
+buy. Remove the trade chip and incorporate trades into the normal flow.
+Let's also have the league owned devy shares in the other team roster
+views. Let's make the listings in the invest view single row and compact.
+Fold extra info into the info chip."
+- Core devyShares: stakesOf(state, roster) and devyRulesText (the rules
+  paragraph, now behind the ⓘ, with where share trades live).
+- App DevyShares: header with InfoChip; MINE / LEAGUE / INVEST; investRow
+  single-line with +1 / +5; the share-trade composer is removed (0397's legs
+  stay in TradeCenter's 🎓 DEVY SHARES section). Team: DEVY STAKES under the
+  shown roster (viewRid), INVEST › to the DEVY tab on your own.
+- Web DevyShares: the same header, INVEST and compact rows;
+  DevyStakesList under the shown roster in NativeLeague.
+
+### v0.575.0 — the devy market is a My Team tab
+
+> - In a devy market league, My Team now has a DEVY tab next to Roster, Waivers and Trades. It holds the whole market: your stakes, the league's, buying and share trades.
+> - The devy market line under your roster now jumps straight to that tab.
+
+The founder: "Let's make it more prominent. Let's make it one of the top
+tabs on the my team page." Until now the market was a row at the bottom of
+the roster that opened a sheet (app), or a panel under the roster (web).
+- App: DevyShares.tsx renders the market either as the sheet or inline
+  (DevyMarketTab); Team.tsx adds DEVY to the tab bar when the league plays
+  devy shares, and the roster row switches to it. The sheet is no longer
+  opened from Team.
+- Web: NativeLeague's team view adds a DEVY tab (devy_shares_state on), with
+  DevySharesPanel moved into it and a link from the roster tab.
+
+### v0.574.1 — every card you own is in your hand (app)
+
+> - Air Raid, Combo Drip and Return Yards cards now show in the app's hand after you buy them, with a tip that says where each one plays.
+> - A 🃏 count beside the coin says how many cards you hold; tap it to list them.
+> - Pull to refresh re-reads your hand and your coin, so a card bought on the web shows up on the phone.
+
+app only (no migration). Founder's Android screenshot, Gridiron Gang week 4,
+SETUP, SHOP showing ◆ 160: "I don't see my power ups that I purchased or the
+power up card hand at the bottom of the screen."
+- **Cause (the one the code can show):** LivePicks' hand filtered out every
+  `kind: 'metric'` card — the three metric unlocks play through a spot's
+  ↻ METRIC picker (pickMetricWithCard), so the hand had no action for them
+  and dealt none. A player whose purchases were all unlocks held an empty
+  hand: PowerupHand renders nothing for an empty list, the controls row
+  showed no trace of them, and the shop's OWNED ×1 was the only receipt.
+  The web deals every owned card (Matchup's `appliable` has a 'hint' action
+  for exactly these); the app now matches.
+- **Fix:** metric unlock cards are dealt with a new `hint` action: shown
+  dimmed, the tip reads "Plays from a spot: tap the spot, ↻ METRIC, then pick
+  Air Raid. That uses the card." and its footer says PLAYS FROM A SPOT'S
+  ↻ METRIC instead of a disabled ARM. Nothing about USING them changed —
+  the picker still confirms and consumes the card.
+- **🃏 N** in the controls row (beside ◆ coin): the number of cards in the
+  hand, tapping it opens the hand's full list (`listSignal` on PowerupHand).
+  One number that says a purchase landed, whatever the fan below is doing.
+- **Refresh re-reads the hand:** `refreshLive` (pull-to-refresh and every
+  realtime push) now re-reads `my_inventory` and the wallet. The inventory
+  was read once on mount, so a card bought on the web — or on the phone
+  behind a failed read — needed a relaunch to appear.
+- **Android backstop:** the hand's rise tween is already on the JS driver
+  (v0.559.2), but a 400 ms `setValue` now settles it at its target whatever
+  became of the tween — a lost animation costs the rise, never the cards.
+- Not reproduced on a device here; if the 🃏 count reads 0 after a purchase
+  while the shop says OWNED, the gap is server-side (my_inventory /
+  caller_roster for that seat), not the hand.
+
+### v0.574.0 — player cards for devy players
+
+> - Tap any college player (draft room, rosters, the devy market) for a full devy card: bio, height and weight, hometown and next game.
+> - SEASONS shows every college season with PPR totals, and GAME LOG shows this season game by game with each game's PPR points.
+> - The card adds StatHead's evaluation: devy rank, the rookie-draft pick he prices as, NFL outlook, breakout age, dominator and recruiting stars. It also shows his devy market price and his latest news.
+
+The founder: "Let's make player cards for the devy players with previous
+season stats and game logs for current season and any other eval info or
+news."
+- 0406: stathead_devy.card holds StatHead's devy profile per player (its
+  composite and model ranks, NFL career projection, profile, rookie-pick
+  equivalent; the third-party list fields are not stored).
+  upsert_stathead_devy carries it. college_player_card(espn_id) returns
+  identity, conference or FCS, the devy market price and rank, StatHead's
+  card, and our stored season lines as a fallback.
+- Core collegeCard.ts: ESPN's core athlete record (bio), athlete overview
+  (seasons, news, next game) and season game log, all browser-callable and
+  read when the card opens (the game log only when its tab opens). Pure
+  parsers; PPR on the college_directory line; statheadEvalRows in the
+  league's format (superflex leagues read the SF ranks).
+- Web src/app/collegeCard.tsx and native CollegeCardSheet.tsx; the card hosts
+  route any c-<espn_id> slug to them. Devy market names open the card.
+- Worker: the StatHead board loader sends each player's card (chunks of
+  800).
+- Tests: check:collegecard against trimmed real ESPN responses and a real
+  StatHead row (Jeremiah Smith 12 rec 217 yd 4 TD = 57.7 PPR, a QB line,
+  eval rows, no third-party text), stathead-devy card tests, and
+  devy-deep-probes dd6. Rendered in Chromium against real ESPN data.
+
+### v0.573.0 — FCS players in the devy market
+
+> - The devy market now includes players from FCS schools (130 of them, like Samford and Montana), not just FBS.
+> - FCS players are marked FCS and priced from StatHead's devy board, or 1 point a share if unranked.
+> - Devy-spot leagues and draft pools are unchanged: FCS players are only in the devy market.
+
+The founder: "yes add FCS rosters". StatHead's devy board ranks ~3,800 FCS
+players we never held; the sweep read FBS rosters only (ESPN group 80).
+- 0405 college_player.division ('FBS' default | 'FCS');
+  upsert_college_players carries it (a transfer updates it).
+  college_directory keeps to FBS, so pools, college projections and the
+  stats half of a devy price are unchanged. devy_market rows carry fcs.
+- Worker: the college sweep also reads ESPN group 81 (130 schools), tags
+  rows FCS, and a school on both lists is read once. If the FCS list can't
+  be read, FBS still lands and the sweep retires nobody.
+- Client: marketRowDetail shows "FCS".
+- Tests: devy-deep-probes dd5–dd5d, college-poll FCS cases.
+  adp-board-probes now date their pulls relative to now (pinned to Sep
+  21/22, stale by Oct 1).
+
+### v0.572.0 — the devy market goes all the way down
+
+> - Search the devy market for any college QB, RB, WR or TE on an FBS roster (thousands of players), not just the top 1,000.
+> - Deep sleepers with no price yet cost 1 point a share, so an early find is cheap.
+> - Each player shows StatHead's devy rank, so you can see where the board has him even before he has a price.
+
+The founder: "Can we go super deep with devy players for shares?"
+allot_devy_shares already accepted any active college player (unpriced at the
+_devy_price floor of 1); what stopped it was the list: devy_market returned the
+top 1,000 priced players and both apps searched only that.
+- 0404 devy_market(league, limit, query): every active college QB/RB/WR/TE,
+  ordered by price rank, then StatHead's devy rank for the unpriced, then
+  name; p_query searches name, school name and abbreviation; each row
+  carries sh_rank (StatHead 1QB composite). Limit up to 5,000.
+- App and web + BUY: past two letters the search goes to the server
+  (debounced) and covers the whole pool. Rows use core marketRowDetail
+  ("unpriced (1-pt floor)", "StatHead devy #N").
+- Probes: devy-deep-probes.sql (order, unpriced floor, StatHead rank,
+  school search, limit, members only).
+
+### v0.571.0 — devy prices run on StatHead's devy board
+
+> - Devy market prices now blend StatHead's devy composite with each player's college production, in place of KeepTradeCut's top-100 list.
+> - StatHead's board covers 6,441 college players, so nearly every devy prospect now gets a scouting-based price, not just the top 100.
+> - Every number you see in the devy market is a StatHead or game number.
+
+StatHead's Oct 1 data handoff: "Anything you show players must be a
+StatHead number, never a raw third-party one." 0400–0402 priced from KTC's
+board, and a KTC-ranked player with no stats was priced on KTC's order
+alone.
+- 0403 stathead_devy (espn_id = StatHead's cfbdId, which is ESPN's athlete
+  id, spot-checked against ESPN; 1QB and superflex composite rank and
+  value; draft year), upsert_stathead_devy in chunks under one as_of, and
+  finish_stathead_devy, which swaps the batch in or refuses one under 1,000
+  rows. refresh_college_prices does the same 50/50 geometric blend with
+  StatHead's 1QB composite rank where KTC's was. college_ktc,
+  set_college_ktc and _college_ktc_weight are dropped.
+- Worker: server/src/poll/statheadDevy.js reads
+  dachhack.github.io/stathead/data/devy-rankings.json (5.7 MB, once per
+  college sweep). ktcDevy.js, its KTC page scraper and the stathead KTC-file
+  read are gone.
+- Probes: stathead-devy-probes.sql (short board refused, swap and prune,
+  join by id, StatHead-only, blended, stats-only, unmatched not priced).
+  server/test/stathead-devy.mjs (mapping, chunking, a failed chunk keeps
+  the old board). board-refresh-probes now dates its pulls relative to now
+  (it was pinned to Sep 21/28 and went stale on Oct 1).
+
+### v0.570.0 — KTC is blended into devy prices all season
+
+> - Devy market prices are now a standing 50/50 blend of KeepTradeCut's devy rankings and how the player is producing, all season long.
+> - Players KTC doesn't rank are still priced from their stats; KTC-ranked players with no stats yet are priced from KTC.
+
+The founder, after v0.569.0's early-season seed: "Let's do 2 instead".
+- 0401 _college_ktc_weight() = 0.5 and refresh_college_prices with a
+  fixed weight in place of 0400's fade over the first four games.
+  0400's table, matcher and worker read are unchanged.
+- Probes: kt4 (five games in, still blended) and kt6 (name twins get no
+  KTC price).
+
+### v0.569.0 — KTC's devy rankings seed early-season market prices
+
+> - Devy market prices now start from KeepTradeCut's devy rankings early in the season, so a top prospect is priced like one before he has played.
+> - Each player's KTC influence fades over his first four games; after that his price comes from how he plays.
+> - A player KTC ranks with no stats yet is priced from KTC alone.
+
+The founder picked option 3 of three: "Just 3" (seed from KTC early, let
+on-field play take over; no KTC column, no permanent blend).
+- 0400 college_ktc (espn_id, ktc_rank, value) and set_college_ktc(rows),
+  which replaces the board, matching name + position with the school
+  breaking a name tie; fewer than 20 rows is refused, so a bad read
+  never wipes it. refresh_college_prices blends ranks geometrically:
+  w = max(0, 1 − games this season / 4),
+  rank = exp(w·ln ktc + (1−w)·ln stats). Frozen-season rules unchanged.
+- Worker: server/src/poll/ktcDevy.js reads keeptradecut.com/devy-rankings
+  (1QB, QB/RB/WR/TE, pages until empty, about 100 players). The college
+  sweep calls it just before refresh_college_prices; best-effort.
+- Tests: server/test/ktc-devy.mjs (parsing, paging) and
+  scripts/db/ktc-devy-probes.sql (matching, twins, short reads, KTC-only
+  price, the fade at 2 and 5 games).
+- Known, not this change: server/test/h2h-verify.mjs "coin totals are
+  positive" fails on main as well.
+
+### v0.568.0 — the commissioner decides when the devy market opens
+
+> - Commissioners now choose when a new league's devy market opens: RIGHT AWAY, so teams can scout before the startup draft, or AFTER THE DRAFT.
+> - The choice is on the DEVY step when you make a league, and in COMMISH until the first draft is done.
+> - The market pauses while a draft is running, and the Jan 15 to rookie-draft lock still applies every year.
+
+The founder: "Lets make market open a commish decision".
+- 0399 settings_json.devy_open ('after_draft' default | 'now') and
+  set_league_devy_open (commissioner, before the lineage's first completed
+  draft, not mid-draft). _devy_shares_locked: a 'now' league that has
+  never drafted is open unless a draft is live; after its first draft the
+  usual rule applies. devy_shares_state adds open_now and drafted.
+- Core: setLeagueDevyOpen; lockLine says "opens when the first draft is
+  done", "open now" or "paused while the draft runs"; devyChoiceLine
+  names the opening; DEVY_CHOICE_INFO explains the choice.
+- App: MARKET OPENS chips on the Recruit DEVY step and in the
+  CommishTools DevyModeCard. Web: the same on the create form and
+  DevyModeRow.
+- Probes: devy-setup-probes do1–do6.
+
+### v0.567.0 — devy is a step when you make a league
+
+> - Making a classic league now asks whether it is a devy league: NO DEVY, DEVY SPOTS or DEVY MARKET.
+> - DEVY SPOTS lets you pick how many college roster spots each team gets; DEVY MARKET gives every team 100 points for shares.
+> - The market option explains itself when it can't be used (auction or contract leagues), and the review screen shows your choice.
+
+The founder: "It's not clear that you are creating a devy league in the
+league creation. That should be a step."
+- 0398 commish_setup_devy(league, mode, spots): college players were an
+  ADMIN switch (set_league_position_access), so a commissioner could not
+  make their own league devy. The new RPC lets the commissioner do it
+  before the draft, in a classic league on the NFL calendar: COLLEGE on,
+  plus devy roster spots added on top of the existing bench ('spots'), or
+  the devy market via set_league_devy_mode ('shares', which still refuses
+  auction drafts).
+- App (Recruit.tsx): a DEVY step after NAME & SIZE, classic leagues only.
+  Web (NativeLeague create form): the same question under DRAFT TYPE.
+  Both run the setup before the pool is seeded, and seed college players
+  into the pool for DEVY SPOTS. A refusal lands in the "some settings
+  didn't take" note rather than failing a league that already exists.
+- Core devyShares: DevyChoice, devyChoiceBlocked, devyChoiceLine,
+  DEVY_CHOICE_INFO. Client liveApi.setupLeagueDevy.
+- Probes: scripts/db/devy-setup-probes.sql (commissioner can, member
+  can't, not after the draft, not drip, market not with auction, spots
+  add rounds).
+
+### v0.566.0 — one trade: players, picks and devy shares together
+
+> - Trade offers can now mix players, draft picks, FAAB and devy shares or devy cash in a single deal.
+> - Look for the new DEVY SHARES section when you build a two-team trade.
+
+The founder: "yes, combine shares with players and picks".
+- No migration. 0397's legs already carry send, send_picks, send_faab,
+  send_cap, send_shares and send_devy_cash, and a two-seat deal with devy
+  items files through propose_multi_trade. So the two-team builders (app
+  TradeCenter, web NativeLeague TradeCenter) grow a 🎓 DEVY SHARES
+  section: shares each way and devy cash (I send / I ask). Any of those
+  switches the filing to propose_multi_trade with two legs built by core
+  twoSeatDevyLegs; players, picks, FAAB and cap ride along on the right
+  legs.
+- Salary retention can't ride with shares (a two-seat term). Counters
+  hide the section (a counter is a two-seat call).
+- Probes: devy-trade-probes dt4x–dt4z (a player one way, shares and cash
+  the other, one summary). check-college §11 covers twoSeatDevyLegs and
+  offersDevy.
+
+### v0.565.0 — devy shares trade; rounds 4–7 pay 2 (0397)
+
+> - Trade devy shares and devy cash with another team from the Devy market's new TRADE tab.
+> - A whole maxed stake keeps its place in line for the player's right, and shares still trade during the January lock.
+> - Players drafted in rounds 4–7 now pay out 2 points a share.
+
+The founder: "Let's do the tweak and get trading in."
+- The tweak: _devy_share_rules round_price R4–7 goes from 3 to 2 (the
+  validation rerun's optional tune: it trims the sniper's price-1 lottery
+  and leaves the scout untouched).
+- Trading: trade_leg.send_shares [{slug, shares, to}] and send_devy_cash
+  [{amount, to}]. propose_multi_trade accepts TWO seats when a deal moves
+  either of them, so a share trade gets the same clock, commissioner
+  ruling and league vote as any trade.
+  - Refused: when shares mode is off, on last season's row, during a live
+    draft, or on a graduate's shares. The sender must hold the shares/cash.
+  - Shares trade during the Jan 15 lock.
+  - _execute_multi_trade re-reads holdings and cash under the market lock,
+    and refuses a stake past 20 shares or cash past 200.
+  - _devy_move_shares carries cost basis. A whole stake keeps
+    maxed_at/qual_at (its place in line); a partial one starts fresh for
+    the receiver and drops the seller out of line.
+  - _trade_summary and league_trades (legs, with player names) show them.
+- devy_shares_state adds `teams`.
+- App/web: a ⇄ TRADE tab in the Devy market (pick a team, shares both
+  ways, devy cash both ways, PROPOSE). The trade center, league page and
+  admin trade lists show share legs (core devyLegParts).
+- Probes: devy-trade-probes.sql (the tweak; filing refusals; execution
+  moves stake, cost and cash; partial maxed stake drops out of line; a
+  stake past 20 refused; a whole maxed stake carries maxed_at and the
+  right; graduates and live drafts refused; legs in league_trades).
+  check-college §11 covers devyLegParts.
+
+### v0.564.0 — the devy market, after the simulation (0396)
+
+> - Devy market fixes: shares leagues now pay out when a player is drafted, with a bonus for high draft rounds.
+> - Prices follow a smooth curve by college rank; a stake maxes at 20 shares or 60 points, and players who leave college undrafted refund half.
+> - Commissioners can set a new team's starting cash, and several loopholes are closed.
+
+A 60-league replay of the 2023 college season and the 2024 NFL draft
+(multi-agent: data, a faithful simulator, loophole, economy and UX
+questioners, researchers, an evaluator) found the market paid tricks, not
+scouting, and found real holes. The founder: "fix the bugs and go with your
+recommendations for 1-5. For 6, new team would fresh 100 but make it
+adjustable for the commish. Taken over team, just gets what the taken over
+team already has. 7 your recommendation. Yes, cap players."
+- Bugs:
+  - Graduation now reaches players held only in shares
+    (graduation_candidates + alias written with no pool), with the NFL
+    draft round (worker reads ESPN's draft feed).
+  - The money pump is gone: the demand bonus is removed.
+  - Last season's league row can't move shares or flip the mode
+    (_devy_is_current).
+  - No mode change mid-draft, or mid-cycle with stakes. Leaving shares
+    cashes every stake out, and the draft's payout runs whatever the mode.
+  - Stakes on players who left college can be sold at their last price;
+    undrafted leavers refund 50% at the draft.
+  - A sole right needs 5+ shares AND 15+ spent, only a qualified stake
+    breaks one, and a stake that qualifies in the 7 days before the lock
+    can't.
+  - Reservations release when the holder has no picks left or hits a
+    position cap.
+  - The payout takes the market lock and adds to cash atomically, and is
+    not capped at 200. A sale past 200 is refused, not shaved.
+  - Shares mode is refused in auction leagues.
+  - A reserved graduate can't be picked up as FA or off waivers.
+  - The lock ends when a lineage draft completes after Jan 15.
+  - A college sweep that would retire more than 10% of 200+ active players
+    retires nobody.
+- Economics:
+  - Price = 10 − 2·log2(rank/10), clamped to 1–10, ×1.15 youth
+    (FR/SO, top 150); unranked 1.
+  - Prices freeze Jan 15–Aug 24.
+  - A stake maxes at 20 shares or 60 points spent.
+  - Payout = max(college price, NFL round price R1 8 / R2 6 / R3 5 /
+    R4–7 3) × shares, capped at 3× cost.
+  - New-team cash is set by the commissioner (set_league_devy_start_cash,
+    default 100); a taken-over seat keeps its book.
+- Validation rerun of the shipped rules: the sizing scout leads out of
+  sample; pump 0; spoiler kills 0; bandwagon, lock-timer and flipper lose;
+  league wealth steady (1190 → 1236 over 5 seasons). Optional tune not
+  taken: R4–7 3 → 2 trims a sniper replay artifact.
+- UI (app + web): new rules text, MAX buttons respect the 60 cap, a
+  confirmation before selling out of a maxed stake, a LEFT COLLEGE label,
+  last-season and frozen notes, a mode-switch confirmation, and a
+  new-team cash control.
+- Probes: devy-shares-probes rewritten (ds2–ds9, exact payouts and
+  refund). graduation-probes updated for the 7-arg signature. Worker
+  graduate-poll covers the draft-round feed. check-college §11 covers
+  maxBuy and the new rightLine.
+
+### v0.563.1 — the illegal-roster warning sits in the best-ball spot
+
+> - A best-ball spot that is empty because the roster isn't legal now says so in the spot itself, with the reason.
+> - Fixing the roster takes effect on the matchup board as soon as you pull to refresh or come back to it.
+
+The founder, on a Wednesday: "It's not auto filling my bestball spots for
+projected score." The spots were empty by rule — 0360 keeps an illegal
+roster's best-ball spots off, on the board as in the worker — and the banner
+at the top of the board said why, but the spot itself read "nobody eligible
+yet" (web) or a bare "🎯 BEST BALL" (app), and the banner scrolls away. The
+founder: "let's have a warning in the bestball spots."
+
+**In the spot (both boards).** An empty best-ball cell on a side whose roster
+is flagged reads `🎯 BEST BALL — OFF` in the warning colour with the reason
+beneath it (`Your roster isn't legal — the active roster holds 21 (room for
+20) — drop or stash 1`). Either side: the opponent's spot says "Their roster".
+`BoardCell` takes an `empty` node for it; nothing else about the row moves.
+
+**Re-asked on demand.** "Can we have that fix on a legal roster when you pull
+to refresh or revisit the matchup view?" The board asked
+`league_roster_issues` on mount and every 60s. Both boards remount on a
+revisit, so that half already held; a pull-to-refresh now re-asks too (web:
+the issues effect rides `simVer`; app: `issuesRef` joins the pull's
+`Promise.all`), and so does coming back to the app (`visibilitychange` on the
+web, `AppState` 'active' in the app). The fill itself is unchanged — the
+moment the check clears, the same `effective` memo fills the spots.
 
 ### v0.563.0 — mark-free switches in super admin: just me, and everyone
 

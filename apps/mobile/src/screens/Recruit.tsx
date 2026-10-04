@@ -18,8 +18,8 @@ import { crestInitial } from '@drip/core/data/crest';
 import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, leagueListingState,
   type BoardPreview, type LeagueIdentity,
-  postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
-  setLeagueFormat, type LeagueFormat,
+  postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
+  setLeagueFormat, type LeagueFormat, setupLeagueDevy, setLeagueDevyOpen,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
@@ -32,6 +32,11 @@ import { sportLeagueSettings, currentSeason, mondayOnOrBefore, addDays, type Spo
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
+import { devyChoiceBlocked, devyChoiceLine, DEVY_CHOICE_INFO, type DevyChoice } from '@drip/core/data/devyShares';
+import { myLeaguesOnSleeper, importMyLeague, importSeason } from '@drip/core/data/sleeperAdmin';
+import { sleeperAvatarUrl, type SleeperLeague, type SleeperUser } from '@drip/core/data/sleeper';
+import { IMPORT_PROVIDERS, normalizeProviderLeague, importMyProviderLeague, providerImportSeason, type ImportProvider } from '@drip/core/data/providerAdmin';
+import type { NormalizedLeague } from '@drip/core/data/normalized';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -57,25 +62,28 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
 const MAX_TEAMS = 32;
 
 /** The board's branches. 'root' is the menu; the rest are one question each. */
-type Node = 'root' | 'browse' | 'create' | 'join' | 'post' | 'commish';
+type Node = 'root' | 'browse' | 'create' | 'sleeper' | 'provider' | 'join' | 'post' | 'commish';
 const NODE_TITLE: Record<Node, string> = {
-  root: 'League board', browse: 'Open leagues', create: 'Start a league',
+  root: 'League board', browse: 'Open leagues', create: 'Start a league', sleeper: 'Add Drip to my Sleeper league',
+  provider: 'Add Drip to my ESPN / Fleaflicker / MFL league',
   join: 'Join with a code', post: 'Post & recruit', commish: 'Commissioner code',
 };
 const NODE_SUB: Record<Node, string> = {
-  root: 'Find one, start one, or join with a code.',
+  root: 'Find one, start one, bring one in, or join with a code.',
   browse: 'Open leagues looking for managers.',
   create: 'Six or seven questions, one at a time.',
+  sleeper: 'Your league stays on Sleeper; Drip runs the game on top.',
+  provider: 'Paste the league id, pick your team. This season only.',
   join: "Paste the code a friend sent you.",
   post: 'List a league you run, or share its code.',
   commish: 'Run a league without holding a seat.',
 };
 
 /** The create branch's steps, in the order the old form asked them. */
-type Step = 'copy' | 'game' | 'season' | 'format' | 'name' | 'draft' | 'review';
+type Step = 'copy' | 'game' | 'season' | 'format' | 'name' | 'devy' | 'draft' | 'review';
 const STEP_TITLE: Record<Step, string> = {
   copy: 'COPY SETTINGS', game: 'WHICH GAME', season: 'NEXT SEASON', format: 'FORMAT',
-  name: 'NAME & SIZE', draft: 'THE DRAFT', review: 'REVIEW',
+  name: 'NAME & SIZE', devy: 'DEVY', draft: 'THE DRAFT', review: 'REVIEW',
 };
 
 /** One row of the root menu — a destination, not a control. */
@@ -136,7 +144,23 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // only what has NO setter after creation gets asked here — game type, name,
   // teams, draft type, pace, clock. Roster size and position limits are
   // defaults the game type picks, adjustable from COMMISH until the draft.
-  const [canCreate, setCanCreate] = useState(false);
+  // EVERY ACCOUNT MAY CREATE (0422, v0.612.0) — the 'native' flag this used
+  // to wait on is read by nothing now. The Sleeper branch's own state:
+  const [slUser, setSlUser] = useState('');
+  const [slMe, setSlMe] = useState<SleeperUser | null>(null);
+  const [slLeagues, setSlLeagues] = useState<SleeperLeague[] | null>(null);
+  const [slBusy, setSlBusy] = useState<string | null>(null); // 'find' | a league id
+  // The other platforms (0423): platform, league id, the read league, my pick.
+  const [pvProvider, setPvProvider] = useState<ImportProvider>('espn');
+  const [pvRef, setPvRef] = useState('');
+  const [pvSwid, setPvSwid] = useState('');
+  const [pvS2, setPvS2] = useState('');
+  const [pvNorm, setPvNorm] = useState<NormalizedLeague | null>(null);
+  const [pvMine, setPvMine] = useState<number | null>(null);
+  const [pvBusy, setPvBusy] = useState<string | null>(null);
+  // A platform invite code (0423): the teams to pick from after native_join
+  // says "not a native league".
+  const [codeSeats, setCodeSeats] = useState<{ league: string; seats: InviteSeat[] } | null>(null);
   // WHERE IN THE TREE. The collapse-and-scroll this replaced was the old
   // shape's apology for a screen that answered five questions at once: open
   // the right card, then jump the scroll to it. A branch you can navigate to
@@ -153,11 +177,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // with a normie name; the choice freezes at the draft, so the mistake is
   // permanent. The form refuses to submit until the game is chosen.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
-  // THE SPORT (0398) — the web's twin. A daily sport is CLASSIC by
+  // THE SPORT (0426) — the web's twin. A daily sport is CLASSIC by
   // construction, plays Mon–Sun periods from a start date, and skips the
   // football-only formats and continuities.
   const [sport, setSport] = useState<Sport>('nfl');
-  // THE SPORTS FLAG (0404) — holders and admins see the chips; the RPC gates.
+  // THE SPORTS FLAG (0432) — holders and admins see the chips; the RPC gates.
   const [sportsOn, setSportsOn] = useState(false);
   const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
   const [sportFormat, setSportFormat] = useState<SportFormat>('points');
@@ -178,6 +202,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const [nameDraft, setNameDraft] = useState('');
   const [teamCount, setTeamCount] = useState(8);
   const [draftMode, setDraftMode] = useState<'snake' | 'auction'>('snake');
+  // 0398: devy is a question at creation, not an admin switch found later.
+  const [devy, setDevy] = useState<DevyChoice>('none');
+  const [devySpots, setDevySpots] = useState(3);
+  // 0399: the commissioner decides when the market opens.
+  const [devyOpen, setDevyOpen] = useState<'now' | 'after_draft'>('after_draft');
   // Contract types (0218) preset the room: bids become salaries, so the
   // startup can only be an auction — picking one forces the mode.
   const contractType = continuity === 'contract' || continuity === 'contract_dynasty';
@@ -237,13 +266,40 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     } catch (e) { setErr(friendlyError(e)); setRows([]); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  // Same entitlement the web's create button checks — admins always qualify
-  // (has_native() is `is_admin() or the flag`), so both are asked here rather
-  // than advertising a door the server would shut.
+  // THE SPORTS FLAG (0432): the web’s twin — holders and admins see the
+  // WHICH SPORT chips; the RPC gates either way.
   useEffect(() => {
     Promise.all([myFeatures().catch(() => ({} as Record<string, boolean>)), isAdmin().catch(() => false)])
-      .then(([f, a]) => { setCanCreate(!!a || f.native === true); setSportsOn(!!a || f.sports === true); });
+      .then(([f, a]) => setSportsOn(!!a || f.sports === true));
   }, []);
+  // DRIP ON AN EXISTING LEAGUE (0422): find your Sleeper account, pick a
+  // league of this season, bring it in. The server checks you're in it and
+  // makes you its commissioner; the invite code is for the rest of the league.
+  const slFind = async () => {
+    const u = slUser.trim().replace(/^@/, '');
+    if (!u || slBusy) return;
+    setSlBusy('find'); setErr(null); setSlLeagues(null); setSlMe(null);
+    try {
+      const r = await myLeaguesOnSleeper(u, importSeason());
+      if (!r) { warn(); setErr(`No Sleeper account called “${u}”. It's the username, not the display name.`); return; }
+      setSlMe(r.me); setSlLeagues(r.leagues);
+      if (!r.leagues.length) setErr(`${r.me.displayName} isn't in any ${importSeason()} NFL league on Sleeper.`);
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setSlBusy(null); }
+  };
+  const slBring = async (lg: SleeperLeague) => {
+    if (!slMe || slBusy) return;
+    setSlBusy(lg.leagueId); setErr(null);
+    try {
+      const r = await importMyLeague(lg.leagueId, slMe, importSeason());
+      if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not bring that league in')); return; }
+      commit();
+      setJoined(`${r.name ?? lg.name} — it's on Drip and you're its commissioner. Invite code ${r.invite_code ?? '—'}: your league-mates type their Sleeper username and land on their own team.`);
+      onJoined();
+      onCreated?.(r.league_id, r.name ?? lg.name, r.roster_id ?? null);
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setSlBusy(null); await load(); }
+  };
   const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const listedIds = new Set((rows ?? []).filter((r) => r.commish).map((r) => r.league_id));
@@ -329,7 +385,49 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           ? `the waiting room for ${r.league ?? 'that league'} — it's full, so the commissioner deals you in from there`
           : (r.league ?? 'your league'));
         onJoined();
+      } else if (/not a native league/i.test(r.error ?? '')) {
+        // A PLATFORM LEAGUE'S CODE (0423): ESPN / Fleaflicker / MFL / Yahoo
+        // seats are picked, not matched. Sleeper's are matched by username,
+        // which lives on the website for now.
+        const s = await inviteSeats(code).catch(() => null);
+        if (s?.ok && s.seats) setCodeSeats({ league: s.league ?? 'this league', seats: s.seats });
+        else { warn(); setErr(s?.error === 'use the join flow' ? 'That is a Sleeper league — join it on the website with your Sleeper username.' : friendlyError(s?.error ?? 'that code did not work')); }
       } else { warn(); setErr(friendlyError(r.error ?? 'that code did not work')); }
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setBusy(false); await load(); }
+  };
+
+  // ESPN / Fleaflicker / MFL (0423): read the league, pick my team, bring it in.
+  const pvRead = async () => {
+    if (!pvRef.trim() || pvBusy) return;
+    setPvBusy('read'); setErr(null); setPvNorm(null); setPvMine(null);
+    try {
+      const n = await normalizeProviderLeague(pvProvider, pvRef, providerImportSeason(), pvProvider === 'espn' ? { swid: pvSwid.trim() || undefined, s2: pvS2.trim() || undefined } : undefined);
+      if (!n.teams.length) { warn(); setErr('That league came back with no teams. Check the id — and for a private ESPN league, the two cookies.'); return; }
+      setPvNorm(n);
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setPvBusy(null); }
+  };
+  const pvBring = async () => {
+    if (!pvNorm || pvMine == null || pvBusy) return;
+    setPvBusy('import'); setErr(null);
+    try {
+      const r = await importMyProviderLeague(pvProvider, pvRef, providerImportSeason(), pvNorm, pvMine);
+      if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not bring that league in')); return; }
+      commit();
+      setJoined(`${r.name ?? pvNorm.name} — it's on Drip and you're its commissioner. Invite code ${r.invite_code ?? '—'}: your league-mates enter it and pick their team.`);
+      onJoined();
+      onCreated?.(r.league_id, r.name ?? pvNorm.name, r.roster_id ?? null);
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setPvBusy(null); await load(); }
+  };
+  const claimCodeSeat = async (rosterId: number) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await claimPlatformSeat(inviteDraft.trim(), rosterId);
+      if (r.ok) { commit(); setCodeSeats(null); setInviteDraft(''); setJoined(r.league ?? 'your league'); onJoined(); }
+      else { warn(); setErr(friendlyError(r.error ?? 'could not take that team')); }
     } catch (e) { warn(); setErr(friendlyError(e)); }
     finally { setBusy(false); await load(); }
   };
@@ -384,7 +482,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     try {
       const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
       if (isSport) {
-        // A DAILY SPORT (0398): the server seeds the pool from its directory
+        // A DAILY SPORT (0426): the server seeds the pool from its directory
         // and the schedule is periods from the start date.
         const starters = Object.values(sportDef.defaultRoster).reduce((a, b) => a + b, 0);
         const weeks = sportDef.regularSeasonWeeks;
@@ -444,8 +542,21 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         });
         setCopyReport(steps.filter((s) => !s.ok).map((s) => `${s.step} — ${friendlyError(s.error ?? 'refused')}`));
       }
+      // DEVY before the pool: devy spots need college players IN the pool;
+      // the market keeps them out of it (they are bought, not drafted).
+      const devyNow = game === 'classic' && !isSport && !devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? devy : 'none';
+      if (devyNow !== 'none') {
+        setMakeNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
+        const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
+        if (!dr.ok) setCopyReport((cur) => [...(cur ?? []), `devy — ${friendlyError(dr.error ?? 'refused')}`]);
+        else if (devyNow === 'shares' && devyOpen === 'now') {
+          const or = await setLeagueDevyOpen(r.league_id, 'now');
+          if (!or.ok) setCopyReport((cur) => [...(cur ?? []), `devy market opening — ${friendlyError(or.error ?? 'refused')}`]);
+        }
+      }
       setMakeNote('Building the 2026 player pool…');
-      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote));
+      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote,
+        devyNow === 'spots' ? { positions: ['COLLEGE'] } : undefined));
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
       setMakeNote('Generating the season schedule…');
       const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
@@ -480,7 +591,9 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
 
   // The step list is COMPUTED: no copy step when there is nothing to copy
   // from, so a first league is never asked a question with one answer.
-  const STEPS: Step[] = [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'season', 'format', 'name', 'draft', 'review'];
+  const STEPS: Step[] = [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'season', 'format', 'name',
+    // No devy step for a daily sport (0426): college players have no place in an NBA or NHL pool.
+    ...(game === 'classic' && !isSport ? (['devy'] as Step[]) : []), 'draft', 'review'];
   const step: Step = STEPS[Math.min(stepIx, STEPS.length - 1)];
   // The two steps that can be WRONG rather than merely unfinished. Everything
   // else has a default that is a real answer, so NEXT is always allowed.
@@ -530,7 +643,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           silent partial copy would be found in week 1, from a score. */}
       {copyReport !== null && copyReport.length > 0 && (
         <Notice tone="warn">
-          <Mono size={10} tone="warn">⚠ The league was created, but some settings didn't copy:</Mono>
+          <Mono size={10} tone="warn">⚠ The league was created, but some settings didn't take:</Mono>
           {copyReport.map((line, i) => (
             <Mono key={`cr-${i}`} size={9.5} tone="warn" style={{ marginTop: 3, lineHeight: 13 }}>· {line}</Mono>
           ))}
@@ -549,11 +662,15 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           <MenuRow title="Browse open leagues"
             sub={rows.length ? `${rows.length} looking for managers` : 'nothing listed right now'}
             onPress={() => { tap(); setNode('browse'); }} />
-          {canCreate && (
           <MenuRow title="Start a league"
               sub="name · game · season · format · draft"
               onPress={() => { tap(); setNode('create'); setStepIx(0); }} />
-          )}
+          <MenuRow title="Add Drip to my Sleeper league"
+              sub="your Sleeper username · pick the league · you're its commissioner here"
+              onPress={() => { tap(); setNode('sleeper'); }} />
+          <MenuRow title="Add Drip to my ESPN, Fleaflicker or MFL league"
+              sub="league id · pick your team · you're its commissioner here"
+              onPress={() => { tap(); setNode('provider'); }} />
           <MenuRow title="Join with an invite code"
             sub="invite code · team name" onPress={() => { tap(); setNode('join'); }} />
           {myLeagues.length > 0 && (
@@ -630,7 +747,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           league is not asked a question with one possible answer. That is why
           the step list is computed rather than constant — and why the counter
           says "of 6" for that founder and "of 7" for this one. */}
-      {node === 'create' && canCreate && (
+      {node === 'create' && (
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
             <Mono size={9} tone="faint" track={0.12}>STEP {stepIx + 1} OF {STEPS.length} · {STEP_TITLE[step]}</Mono>
@@ -811,6 +928,58 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
               </View>
               </View>
             )}
+            {/* DEVY (0398) — its own step, because a devy league is a
+                different game and nothing else on these screens says so. */}
+            {step === 'devy' && (() => {
+              const blk = (c: DevyChoice) => devyChoiceBlocked(c, { classic: game === 'classic', auction: draftMode === 'auction', contract: contractType });
+              const pick = (c: DevyChoice) => { if (blk(c)) { warn(); return; } tap(); setDevy(c); };
+              return (
+                <View style={{ gap: 10 }}>
+                  <LabelInfo label="COLLEGE PLAYERS" info={DEVY_CHOICE_INFO} />
+                  <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                    <Chip label="NO DEVY" on={devy === 'none'} onPress={() => pick('none')} />
+                    <Chip label="DEVY SPOTS" on={devy === 'spots'} onPress={() => pick('spots')} />
+                    <Chip label="DEVY MARKET" on={devy === 'shares'} dim={!!blk('shares')} onPress={() => pick('shares')} />
+                  </View>
+                  <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
+                    {devy === 'none' ? 'An NFL-only league. Pick DEVY SPOTS or DEVY MARKET to make it a devy league.'
+                      : devy === 'spots' ? 'College players are in the draft pool, and every team gets roster spots that hold only college players.'
+                      : 'College players stay out of the draft. Every team gets 100 points to buy shares; a big enough stake reserves the right to draft that player as a rookie.'}
+                  </Mono>
+                  {devy === 'spots' && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Mono size={8.5} tone="faint" track={0.1}>DEVY SPOTS PER TEAM</Mono>
+                      <Pressable hitSlop={6} onPress={() => { tap(); setDevySpots((n) => Math.max(1, n - 1)); }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
+                      </Pressable>
+                      <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 22, textAlign: 'center' }}>{devySpots}</Text>
+                      <Pressable hitSlop={6} onPress={() => { tap(); setDevySpots((n) => Math.min(10, n + 1)); }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                  {devy === 'shares' && !blk('shares') && (
+                    <View style={{ gap: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Mono size={8.5} tone="faint" track={0.1}>MARKET OPENS</Mono>
+                        <Chip label="AFTER THE DRAFT" on={devyOpen === 'after_draft'} onPress={() => { tap(); setDevyOpen('after_draft'); }} />
+                        <Chip label="RIGHT AWAY" on={devyOpen === 'now'} onPress={() => { tap(); setDevyOpen('now'); }} />
+                      </View>
+                      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+                        {devyOpen === 'now'
+                          ? 'Teams can buy shares as soon as they join — scouting starts before the startup draft (paused while it runs).'
+                          : 'Shares open once the startup draft is done, so everyone starts buying at the same moment.'}
+                        {' '}You can change this in COMMISH until the draft.
+                      </Mono>
+                    </View>
+                  )}
+                  {blk(devy) && <Mono size={9} tone="warn" style={{ lineHeight: 13 }}>⚠ {blk(devy)} — it won't be set up.</Mono>}
+                  {!blk(devy) && blk('shares') && devy !== 'shares' && (
+                    <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>DEVY MARKET: {blk('shares')}</Mono>
+                  )}
+                </View>
+              );
+            })()}
             {step === 'draft' && (
               <View style={{ gap: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -839,6 +1008,12 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
                   {draftMode === 'auction' ? 'AUCTION' : 'SNAKE'} draft · {pace === 'live' ? `${clockDraft || '90'}s a pick` : `${clockDraft || '12'}h a pick`}
                 </Mono>
+                {game === 'classic' && (
+                  <Mono size={10} tone={devy !== 'none' && !devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? 'you' : 'dim'} style={{ lineHeight: 15 }}>
+                    {devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType })
+                      ? devyChoiceLine('none', 0) : devyChoiceLine(devy, devySpots, devyOpen === 'now')}
+                  </Mono>
+                )}
                 {copyBp && (
                   <Mono size={9} tone="you" style={{ lineHeight: 14 }}>
                     copying {copyFrom?.league?.name ?? 'a league'} — scoring, waivers and the rest are applied right after it is made
@@ -900,9 +1075,109 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         <TextInput value={inviteTeam} maxLength={24} placeholder="team name (optional)" placeholderTextColor={t.faint}
           onChangeText={setInviteTeam}
           style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+        {/* A platform league's code (0423): pick your team. */}
+        {codeSeats && (
+          <View style={{ marginTop: 12, gap: 6 }}>
+            <Mono size={9} tone="faint" track={0.12}>{`${codeSeats.league.toUpperCase()} — WHICH TEAM IS YOURS?`}</Mono>
+            {codeSeats.seats.map((s) => (
+              <Pressable key={s.roster_id} onPress={() => void claimCodeSeat(s.roster_id)} disabled={busy || (s.taken && !s.mine)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: s.mine ? t.you : t.bd, backgroundColor: t.bg, opacity: s.taken && !s.mine ? 0.5 : 1 }}>
+                <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>{s.team_name}</Text>
+                <Mono size={9} tone={s.taken && !s.mine ? 'faint' : 'you'} weight="700">{s.mine ? 'YOURS' : s.taken ? 'TAKEN' : 'THIS IS ME →'}</Mono>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </Card>
 
         </>
+      )}
+
+      {/* ── ADD DRIP TO MY SLEEPER LEAGUE (0422) ───────────────────────── */}
+      {node === 'sleeper' && (
+        <Card>
+          <LabelInfo label="YOUR SLEEPER USERNAME"
+            info={'Your league keeps living on Sleeper — rosters, waivers, trades. Drip reads it and runs the game on top. You become the league\'s commissioner here; your league-mates join with the invite code. Only leagues you\'re a manager in, and only this season\'s.'} />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <TextInput value={slUser} autoCapitalize="none" autoCorrect={false} maxLength={40}
+              placeholder="the name you log in with" placeholderTextColor={t.faint}
+              onChangeText={(v) => { setSlUser(v); setErr(null); }} onSubmitEditing={() => void slFind()}
+              style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+            <Chip label={slBusy === 'find' ? '…' : 'FIND'} on disabled={!!slBusy || !slUser.trim()} onPress={() => void slFind()} />
+          </View>
+          {slMe && slLeagues && slLeagues.length > 0 && (
+            <View style={{ marginTop: 12, gap: 6 }}>
+              <Mono size={9} tone="faint" track={0.12}>{slMe.displayName.toUpperCase()}'S {importSeason()} LEAGUES — PICK ONE</Mono>
+              {slLeagues.map((lg) => {
+                const la = sleeperAvatarUrl(lg.avatar);
+                const on = slBusy === lg.leagueId;
+                return (
+                  <Pressable key={lg.leagueId} onPress={() => void slBring(lg)} disabled={!!slBusy}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, opacity: slBusy && !on ? 0.6 : 1 }}>
+                    {la
+                      ? <Image source={{ uri: la }} style={{ width: 32, height: 32, borderRadius: 6 }} />
+                      : <View style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: alpha(t.you, 14), alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontWeight: '700', color: t.you }}>{lg.name.slice(0, 1).toUpperCase()}</Text></View>}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{lg.name}</Text>
+                      <Mono size={8.5} tone="faint">{`${lg.totalRosters}-TEAM · ${lg.format.toUpperCase()} · ${lg.scoring.toUpperCase()} · ${lg.starters} STARTERS`}</Mono>
+                    </View>
+                    <Mono size={9} tone="you" weight="700">{on ? '…' : 'BRING IT IN →'}</Mono>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </Card>
+      )}
+
+      {/* ── ADD DRIP TO MY ESPN / FLEAFLICKER / MFL LEAGUE (0423) ──────── */}
+      {node === 'provider' && (
+        <Card>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {IMPORT_PROVIDERS.filter((p) => p.id !== 'yahoo').map((p) => (
+              <Chip key={p.id} label={p.name.toUpperCase()} on={p.id === pvProvider} onPress={() => { tap(); setPvProvider(p.id); setPvNorm(null); setPvMine(null); setErr(null); }} />
+            ))}
+          </View>
+          <LabelInfo label={IMPORT_PROVIDERS.find((p) => p.id === pvProvider)!.refLabel}
+            info={'Your league keeps living on its platform. Drip reads it and runs the game on top. You become its commissioner here and pick your team; your league-mates enter the invite code and pick theirs. This season only. Yahoo leagues come in on the website, where the Yahoo sign-in lives.'} />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <TextInput value={pvRef} autoCapitalize="none" autoCorrect={false} maxLength={64}
+              placeholder={IMPORT_PROVIDERS.find((p) => p.id === pvProvider)!.refHint} placeholderTextColor={t.faint}
+              onChangeText={(v) => { setPvRef(v); setErr(null); setPvNorm(null); setPvMine(null); }} onSubmitEditing={() => void pvRead()}
+              style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+            <Chip label={pvBusy === 'read' ? '…' : 'READ'} on disabled={!!pvBusy || !pvRef.trim()} onPress={() => void pvRead()} />
+          </View>
+          {pvProvider === 'espn' && (
+            <View style={{ marginTop: 8, gap: 6 }}>
+              <Mono size={8.5} tone="faint">Private ESPN league? Paste your SWID and espn_s2 cookies (public leagues need neither). Used once, not stored.</Mono>
+              <TextInput value={pvSwid} onChangeText={setPvSwid} placeholder="SWID {…}" placeholderTextColor={t.faint} autoCapitalize="none" autoCorrect={false}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontFamily: MONO, fontSize: 12, color: t.text, backgroundColor: t.bg }} />
+              <TextInput value={pvS2} onChangeText={setPvS2} placeholder="espn_s2" placeholderTextColor={t.faint} autoCapitalize="none" autoCorrect={false}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontFamily: MONO, fontSize: 12, color: t.text, backgroundColor: t.bg }} />
+            </View>
+          )}
+          {pvNorm && (
+            <View style={{ marginTop: 12, gap: 6 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{pvNorm.name}</Text>
+              <Mono size={8.5} tone="faint">{`${pvNorm.teams.length}-TEAM · ${pvNorm.format.toUpperCase()} · ${pvNorm.weeks} WEEKS SCHEDULED`}</Mono>
+              <Mono size={9} tone="faint" track={0.12}>WHICH TEAM IS YOURS?</Mono>
+              {pvNorm.teams.map((tm) => {
+                const on = pvMine === tm.rosterId;
+                return (
+                  <Pressable key={tm.rosterId} onPress={() => { tap(); setPvMine(tm.rosterId); setErr(null); }} disabled={!!pvBusy}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? alpha(t.you, 10) : t.bg }}>
+                    <Mono size={11} tone={on ? 'you' : 'faint'} weight="700">{on ? '●' : '○'}</Mono>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{tm.teamName}</Text>
+                      {!!tm.owner && <Mono size={8.5} tone="faint">{tm.owner}</Mono>}
+                    </View>
+                  </Pressable>
+                );
+              })}
+              <PrimaryButton label={pvBusy === 'import' ? 'BRINGING IT IN…' : 'BRING IT IN →'} disabled={pvMine == null || !!pvBusy} onPress={() => void pvBring()} />
+            </View>
+          )}
+        </Card>
       )}
 
       {/* ── POST & RECRUIT ─────────────────────────────────────────────── */}

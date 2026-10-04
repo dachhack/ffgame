@@ -15,8 +15,9 @@ import {
   friendlyError, leagueGameMode, type PlayerFlagRow, type FlagRulesRaw,
 } from '@drip/core/data/liveApi';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel } from '@drip/core/engine/classic';
+import { COLLEGE_TIERS, COLLEGE_CONFERENCES } from '@drip/core/data/college';
 import {
-  SCORING_BOUNDS, DEFAULT_SCORING, setLeagueScoring, parseScoring, scoringIsDefault, scoringLabel, scopedRuleLabel,
+  SCORING_BOUNDS, DEFAULT_SCORING, setLeagueScoring, parseScoring, scoringIsDefault, scoringLabel, scopedRuleLabel, scopedRuleToWire,
   type LeagueScoring, type ScopedBonus,
 } from '@drip/core/engine/leagueScoring';
 import { setLeagueFlags } from '@drip/core/data/commish';
@@ -69,6 +70,8 @@ const FILTER_POS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
  *  "+2 to any HC" means exactly what it says in a league that rosters them.
  *  A rule stores at most 8 positions (0145), so the picker stops at 8. */
 const SCOPE_POS = [...FILTER_POS, 'DL', 'LB', 'DB', 'HC', 'P'] as const;
+/** 🎓 school scopes (v0.580.0): the tiers first, then the conferences. */
+const SCOPE_SCHOOLS: string[] = [...COLLEGE_TIERS.filter((x) => x !== 'FBS'), ...COLLEGE_CONFERENCES];
 const TENURES = [
   { id: 'rookie', label: 'ROOKIES' },
   { id: 'y2_3', label: '2ND–3RD YR' },
@@ -167,6 +170,7 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
   const [dTd, setDTd] = useState(0);
   const [dSlot, setDSlot] = useState<Set<string>>(new Set());
   const [dFlag, setDFlag] = useState<Set<string>>(new Set());
+  const [dConf, setDConf] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // The league's lineup + flag vocabulary (v0.300.0) — a scoped rule may name a
@@ -174,12 +178,13 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [spots, setSpots] = useState<{ id: string; name: string }[]>([]);
   const [flagLabels, setFlagLabels] = useState<string[]>([]);
+  const [hasCollege, setHasCollege] = useState(false);
   useEffect(() => {
     if (visible) {
       setTd(initial.tdBonus); setYd(initial.ydMult); setTo(initial.toPenalty);
       setScoped(initial.scoped ?? []);
       setDPos(new Set()); setDTeam('ALL'); setDTen('ALL'); setDMult(1); setDPts(0); setDTd(0);
-      setDSlot(new Set()); setDFlag(new Set());
+      setDSlot(new Set()); setDFlag(new Set()); setDConf(new Set());
       setErr(null);
     }
   }, [visible, initial]);
@@ -191,6 +196,7 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
         const gm = await leagueGameMode(leagueId);
         if (dead || !gm?.ok) return;
         setMode(gm.mode === 'classic' ? 'classic' : 'drip');
+        setHasCollege(!!gm.positions?.includes('COLLEGE'));
         const defs = leagueSlotDefs(gm);
         const names = slotDisplayNames(defs);
         setSpots(defs.map((d, i) => ({ id: d.slot, name: slotBadgeLabel(names[i] ?? d.slot) })));
@@ -206,16 +212,7 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
     return () => { dead = true; };
   }, [visible, leagueId]);
   const spotNames = useMemo(() => Object.fromEntries(spots.map((sp) => [sp.id, sp.name])), [spots]);
-  const toWire = (r: ScopedBonus) => ({
-    ...(r.pos?.length ? { pos: r.pos } : {}),
-    ...(r.team?.length ? { team: r.team } : {}),
-    ...(r.tenure ? { tenure: r.tenure } : {}),
-    ...(r.slot?.length ? { slot: r.slot } : {}),
-    ...(r.flag?.length ? { flag: r.flag } : {}),
-    ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
-    ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
-    ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
-  });
+  const toWire = scopedRuleToWire;
   const addRule = () => {
     if (dMult === 1 && dPts === 0 && dTd === 0) { warn(); setErr('Give the rule a value — a multiplier, flat points, or a TD bonus.'); return; }
     if (scoped.length >= 12) { warn(); setErr('At most 12 scoped rules.'); return; }
@@ -226,12 +223,13 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
       ...(dTen !== 'ALL' ? { tenure: dTen as ScopedBonus['tenure'] } : {}),
       ...(dSlot.size ? { slot: [...dSlot] } : {}),
       ...(dFlag.size ? { flag: [...dFlag] } : {}),
+      ...(dConf.size ? { conf: [...dConf] } : {}),
       ...(dMult !== 1 ? { bonusMult: dMult } : {}),
       ...(dPts !== 0 ? { bonusPts: dPts } : {}),
       ...(dTd !== 0 ? { tdBonus: dTd } : {}),
     }]);
     setDPos(new Set()); setDTeam('ALL'); setDTen('ALL'); setDMult(1); setDPts(0); setDTd(0);
-    setDSlot(new Set()); setDFlag(new Set());
+    setDSlot(new Set()); setDFlag(new Set()); setDConf(new Set());
   };
   const save = async (tdV: number, ydV: number, toV: number, scopedV: ScopedBonus[] = scoped) => {
     if (busy) return;
@@ -349,6 +347,16 @@ function ScoringEditor({ visible, leagueId, initial, onDone, onClose }: {
             {flagLabels.map((fl) => (
               <FilterChip key={fl} label={`⚑ ${fl}`} on={dFlag.has(fl)} tone={FLAG_PURPLE}
                 onPress={() => setDFlag((cur) => { const n = new Set(cur); if (n.has(fl)) n.delete(fl); else n.add(fl); return n; })} />
+            ))}
+          </View>
+        )}
+        {/* THE SCHOOL (v0.580.0): "G5 ×0.8" pays a Group of Five player 80%. */}
+        {(hasCollege || scoped.some((r) => r.conf?.length)) && (
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+            <Mono size={8} tone="faint">🎓 SCHOOL</Mono>
+            {SCOPE_SCHOOLS.map((c) => (
+              <FilterChip key={c} label={c} on={dConf.has(c)} tone={t.you}
+                onPress={() => setDConf((cur) => { const n = new Set(cur); if (n.has(c)) n.delete(c); else if (n.size < 12) n.add(c); return n; })} />
             ))}
           </View>
         )}
@@ -577,14 +585,7 @@ function FlagsEditor({ visible, leagueId, onChanged, onClose }: {
         ...(mult !== 1 ? { bonus_mult: mult } : {}),
         ...(pts !== 0 ? { bonus_pts: pts } : {}),
       };
-      const wire = now.scoped.map((r) => ({
-        ...(r.pos?.length ? { pos: r.pos } : {}),
-        ...(r.team?.length ? { team: r.team } : {}),
-        ...(r.tenure ? { tenure: r.tenure } : {}),
-        ...(r.bonusMult != null ? { bonus_mult: r.bonusMult } : {}),
-        ...(r.bonusPts != null ? { bonus_pts: r.bonusPts } : {}),
-        ...(r.tdBonus != null ? { td_bonus: r.tdBonus } : {}),
-      }));
+      const wire = now.scoped.map(scopedRuleToWire);
       const r = await leagueScoringSet(leagueId, now.tdBonus, now.ydMult, now.toPenalty, [...wire, rule]);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not save the rule.')); return; }
       commit();

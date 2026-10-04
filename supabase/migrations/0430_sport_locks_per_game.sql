@@ -1,4 +1,4 @@
--- 0402 — WHAT THE REVIEW FOUND (v0.569.0): a lock per game, a start that is
+-- 0430 — WHAT THE REVIEW FOUND (v0.621.0): a lock per game, a start that is
 -- a start, and pools that follow the directory.
 --
 --   • sport_slot_lock is keyed per GAME as well as per slot-day: a
@@ -11,7 +11,7 @@
 --     it after each sweep. The locks and the DB lock read the pool's team;
 --     a traded player with a stale one never locked and never scored.
 --
--- Undo: drop function if exists sport_pool_refresh(text); restore 0398's
+-- Undo: drop function if exists sport_pool_refresh(text); restore 0426's
 -- sport_slug_started and sport_slot_lock's four-column key.
 
 alter table sport_slot_lock drop constraint if exists sport_slot_lock_pkey;

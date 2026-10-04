@@ -1,0 +1,118 @@
+{
+ "2941": {
+  "ReportType": "Game Day",
+  "conferenceTimeZone": "CT",
+  "publishDate": "2026-10-03",
+  "postedTime": "9:30:00",
+  "publishDayOfWeek": "Saturday",
+  "footer": {
+   "date": "2026-10-03",
+   "time": "11:00:00",
+   "location": "Starkville, MS"
+  },
+  "games": [
+   {
+    "teamName": "Alabama",
+    "teamDisplayName": "Alabama",
+    "rows": [
+     {
+      "exemptStatus": "NonExempt",
+      "name": "LB #8 Justin Hill",
+      "status": "Out"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "LB #9 Desmond Umeozulu",
+      "status": "Out"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "DB #12 Zavier Mincey",
+      "status": "Game Time Decision"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "DB #16 Jorden Edmonds",
+      "status": "Out"
+     },
+     {
+      "exemptStatus": "Exempt",
+      "name": "QB #19 John Cooper",
+      "status": "Exempt"
+     },
+     {
+      "exemptStatus": "Out",
+      "name": "LB #23 Cayden Jones",
+      "status": "Out"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "RB #0 AK Dear",
+      "status": "Available"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "LB #0 Yhonzae Pierre",
+      "status": "Available"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "DL #1 Devan Thompkins",
+      "status": "Available"
+     }
+    ]
+   },
+   {
+    "teamName": "Mississippi St.",
+    "teamDisplayName": "Mississippi State",
+    "rows": [
+     {
+      "exemptStatus": "Exempt",
+      "name": "TE #4 Zayion Cotton",
+      "status": "Exempt"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "LB #7 Zakari Tillman",
+      "status": "Out"
+     },
+     {
+      "exemptStatus": "Exempt",
+      "name": "QB #8 Jaden Rashada",
+      "status": "Exempt"
+     },
+     {
+      "exemptStatus": "Exempt",
+      "name": "WR #10 Bull Mitchell",
+      "status": "Exempt"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "WR #11 Ayden Williams",
+      "status": "Out"
+     },
+     {
+      "exemptStatus": "Exempt",
+      "name": "QB #14 Brodie McWhorter",
+      "status": "Exempt"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "LB #0 Fatt Forrest",
+      "status": "Available"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "WR #0 Gracen Harris",
+      "status": "Available"
+     },
+     {
+      "exemptStatus": "NonExempt",
+      "name": "CB #1 Kelley Jones",
+      "status": "Available"
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,4 +1,4 @@
--- 0399 — ROTO (phase 4, v0.566.0): a sport league scored by season-long
+-- 0427 — ROTO (phase 4, v0.618.0): a sport league scored by season-long
 -- category rankings rather than weekly results.
 --
 -- Rotisserie has no weekly winner: every locked slot-day all season sums

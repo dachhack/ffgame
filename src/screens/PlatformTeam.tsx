@@ -33,7 +33,7 @@ const GROUPS: { id: PoolPlayer['grp']; label: string }[] = [
   { id: 'ir', label: 'INJURED RESERVE' },
   { id: 'taxi', label: 'TAXI SQUAD' },
 ];
-const PROVIDER_NAME: Record<string, string> = { sleeper: 'Sleeper', espn: 'ESPN', fleaflicker: 'Fleaflicker' };
+const PROVIDER_NAME: Record<string, string> = { sleeper: 'Sleeper', espn: 'ESPN', fleaflicker: 'Fleaflicker', mfl: 'MFL', yahoo: 'Yahoo' };
 
 export function PlatformTeam({ leagueId, rosterId, userId }: {
   leagueId: string; rosterId: number;

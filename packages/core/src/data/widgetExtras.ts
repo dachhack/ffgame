@@ -58,6 +58,20 @@ export function alertCount(snap: WidgetSnapshot): number {
 export interface LineupReport { total: number; set: number; unset: number; none: number; noMetric: number; missed: number; lockMs: number | null;
   /** Of `set`, the slots a Ghost / Bye Steal holds (v0.520.0) — filled, and noted. */
   ghost: number }
+/** THE WIN BAR ON THE SHELF (v0.611.0, founder: "Add win probability to the
+ *  league cards for classic leagues"). The glance snapshot has carried the
+ *  classic board's own winProbability since v0.501.0 (the widget's WinBar);
+ *  the league card received it and never printed it. One rule for both
+ *  clients: a bar while the week is open — before lock too, as the widget
+ *  does, since the card's projected finals already show then — and nothing
+ *  once it is final (the verdict word says it), nothing for a drip league
+ *  (no model), nothing when the opponent's lineup could not be read (no
+ *  number). `fill` keeps a sliver of the other colour at 99%. */
+export function cardWinBar(snap: WidgetSnapshot | undefined | null): { me: number; them: number; fill: number } | null {
+  if (!snap || !snap.projected || snap.winPct == null || snap.phase === 'final') return null;
+  const me = Math.round(Math.max(0, Math.min(1, snap.winPct)) * 100);
+  return { me, them: 100 - me, fill: Math.max(2, Math.min(98, me)) };
+}
 export function lineupReport(snap: WidgetSnapshot): LineupReport | null {
   const cards = snap.cards ?? [];
   if (!snap.assessable || !cards.length || snap.projected) return null;

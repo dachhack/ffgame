@@ -174,6 +174,15 @@ interface PickCtx {
 
 /** A pick's value, in this league's projected points over replacement. */
 function pickValue(pick: GradePick, ctx: PickCtx): number {
+  // A DEVY PICK (0411, round 100 + k): a college player who may be years from
+  // an NFL snap, and no market prices the pick. Graded on the blunt share two
+  // rounds down — devy round 1 like a rookie 3rd — so it counts for something
+  // without pretending to a precision nobody has.
+  if (pick.round > 100) {
+    const k = Math.round(pick.round) - 100;
+    const share = PICK_SHARE[Math.min(k + 2, PICK_SHARE.length - 1)] ?? 0.02;
+    return Math.round(ctx.replacementStarter * share * 10) / 10;
+  }
   const round = Math.max(1, Math.round(pick.round));
   // A STARTUP SLOT: the man still sitting there when it comes round. The
   // middle of the round, because the slot within it is not passed here —

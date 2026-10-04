@@ -13,6 +13,8 @@
 // One deliberate merge vs the web: the commissioner's APPROVE/VETO lives on
 // the same card as everyone's trade list, not in a separate roster-tools
 // panel. Two cards listing the same trades on one phone screen is noise.
+import { pickRoundLabel } from '@drip/core/data/devyDraft';
+import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook } from '@drip/core/data/devyShares';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
@@ -21,9 +23,11 @@ import {
   type GameModeInfo,
   tradeSignals, setTradeSignal, pickAssets, leagueContracts,
   type LeaguePoolPlayer, type TradeRow, type TradeSignalRow, type PickAssetRow, type LeagueContracts,
+  devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
 import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
+import { tradeConfirm, expiryLine, reviewLine, type ConfirmLeg } from '@drip/core/data/tradeConfirm';
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
@@ -86,12 +90,22 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   // 0328: the league's lineup spec and scoring — what the trade grade reads
   // the replacement line off.
   const [mode, setMode] = useState<GameModeInfo | null>(null);
+  // 0398: DEVY SHARES in a two-team offer — shares either way and devy cash
+  // (+ = I send). Any of them files the offer as a two-leg trade.
+  const [shares, setShares] = useState<DevySharesState | null>(null);
+  const [giveShares, setGiveShares] = useState<Record<string, number>>({});
+  const [getShares, setGetShares] = useState<Record<string, number>>({});
+  const [devyCashDraft, setDevyCashDraft] = useState('');
+  const [devyCashDir, setDevyCashDir] = useState<1 | -1>(1);
+  // v0.584.0: the offer is read back, in full, before it goes.
+  const [confirming, setConfirming] = useState(false);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((x) => { if (Array.isArray(x)) setTrades(x); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     leagueContracts(leagueId).then((c) => setContracts(c.contracts ? c : null)).catch(() => {}),
     leagueGameMode(leagueId).then((m) => { if (m.ok) setMode(m); }).catch(() => {}),
+    devySharesState(leagueId).then((r) => setShares(r.ok && r.on && r.current !== false ? r : null)).catch(() => {}),
     pickAssets(leagueId).then((a) => {
       if (!a.ok) return;
       setPickTradingOn(a.pick_trading !== false);
@@ -137,7 +151,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
    *  reads as two future picks when one of them is a slot in the draft running
    *  right now. */
   const pickAssetLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
-    `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+    `${p.kind === 'startup' ? 'DRAFT' : p.season} ${pickRoundLabel(p.round)}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   /** One seat's side of a multi-team deal (0322): every asset with the seat
    *  it is addressed to, since that is the only thing that says what the
    *  trade actually is. */
@@ -146,6 +160,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     ...l.send_picks.map((p) => `${pickAssetLabel(p, l.roster_id)} → ${teamName(p.to)}`),
     ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
     ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+    ...devyLegParts(l, (rid) => String(teamName(rid))),
   ].join(', ') || 'nothing';
   const tradeLine = (x: TradeRow, side: 'give' | 'get') => {
     const slugs = (side === 'give' ? x.give : x.get)
@@ -193,13 +208,17 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
 
   const capDollars = (parseInt(capDraft, 10) || 0) * capDir;
   const faabDollars = (parseInt(faabDraft, 10) || 0) * faabDir;
+  const devyCash = (Number(devyCashDraft) || 0) * devyCashDir;
+  const hasDevy = offersDevy(giveShares, getShares, devyCash);
   const nothingOffered = give.length + get.length + givePicks.length + getPicks.length
-    + Math.abs(capDollars) + Math.abs(faabDollars) === 0;
+    + Math.abs(capDollars) + Math.abs(faabDollars) === 0 && !hasDevy;
   const closeSheet = () => {
+    setConfirming(false);
     setOpen(false); setCounterOf(null); setPartner(null); setGive([]); setGet([]);
     setGivePicks([]); setGetPicks([]); setNote('');
     setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setExpiryHours(null);
     setExtraTeams([]); setDest({}); setPickDest({}); setFaabTarget(null);
+    setGiveShares({}); setGetShares({}); setDevyCashDraft(''); setDevyCashDir(1);
   };
   // An offer answered with an offer (0321): the same sheet, filed by a
   // different RPC, with the two seats already decided.
@@ -242,18 +261,37 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       scoring: mode?.scoring,
     })
     : null;
+  /** A three-plus-team offer as legs: each seat and what it sends where. */
+  const multiLegs = () => teamsIn.map((rid) => ({
+    roster: rid,
+    send: Object.entries(dest).filter(([slug]) => holderOf(slug) === rid).map(([slug, to]) => ({ slug, to })),
+    send_picks: assets.filter((p) => p.owner === rid && pickDest[pickKey(p)] != null)
+      .map((p) => ({ season: p.season, round: p.round, orig: p.orig, to: pickDest[pickKey(p)] })),
+    ...(rid === myRoster && (parseInt(faabDraft, 10) || 0) > 0 && faabTarget != null
+      ? { send_faab: [{ to: faabTarget, amount: parseInt(faabDraft, 10) }] } : {}),
+  }));
+  /** THE READ-BACK (v0.584.0): what every team gets. */
+  const confirmTeams = () => {
+    if (myRoster == null || partner == null) return [];
+    const kindOf = (p: { season: string; round: number; orig: number }) =>
+      [...givePicks, ...getPicks, ...assets].find((x) => x.season === p.season && x.round === p.round && x.orig === p.orig)?.kind;
+    const legs: ConfirmLeg[] = (isMulti ? multiLegs() : twoSeatDevyLegs({
+      me: myRoster, partner, give, get, givePicks, getPicks,
+      faab: faabDollars, cap: capDollars, giveShares, getShares, devyCash,
+    })).map((l) => ({ ...l, send_picks: (l.send_picks ?? []).map((p) => ({ ...p, kind: kindOf(p) })) }));
+    return tradeConfirm(legs, {
+      me: myRoster, teamName: (rid) => String(teamName(rid) ?? `Team ${rid}`),
+      player: (s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); },
+      pick: (p, holder) => pickAssetLabel(p, holder),
+      shareName: (s) => shares?.players?.find((x) => x.slug === s)?.name ?? s,
+      retain,
+    });
+  };
   const proposeMulti = async () => {
     if (busy || myRoster == null || multiAssets === 0) return;
     setBusy(true); setErr(null);
     try {
-      const legs = teamsIn.map((rid) => ({
-        roster: rid,
-        send: Object.entries(dest).filter(([slug]) => holderOf(slug) === rid).map(([slug, to]) => ({ slug, to })),
-        send_picks: assets.filter((p) => p.owner === rid && pickDest[pickKey(p)] != null)
-          .map((p) => ({ season: p.season, round: p.round, orig: p.orig, to: pickDest[pickKey(p)] })),
-        ...(rid === myRoster && (parseInt(faabDraft, 10) || 0) > 0 && faabTarget != null
-          ? { send_faab: [{ to: faabTarget, amount: parseInt(faabDraft, 10) }] } : {}),
-      }));
+      const legs = multiLegs();
       const r = await proposeMultiTrade(leagueId, legs, note.trim() || undefined, expiryHours ?? undefined);
       if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       commit(); closeSheet(); await load();
@@ -265,6 +303,16 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     if (busy || myRoster == null || partner == null || nothingOffered) return;
     setBusy(true); setErr(null);
     try {
+      // 0398: shares in the deal → a two-leg trade, everything else riding along.
+      if (hasDevy) {
+        if (Object.values(retain).some((v) => v > 0)) { warn(); setErr('Salary retention can\u2019t ride with devy shares — take one out.'); return; }
+        const r = await proposeMultiTrade(leagueId, twoSeatDevyLegs({
+          me: myRoster, partner, give, get, givePicks, getPicks,
+          faab: faabDollars, cap: capDollars, giveShares, getShares, devyCash,
+        }), note.trim() || undefined, expiryHours ?? undefined);
+        if (!r.ok) { warn(); setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
+        commit(); closeSheet(); await load(); return;
+      }
       const retainTerms = [...give, ...get]
         .filter((s) => (retain[s] ?? 0) > 0)
         .map((s) => ({ slug: s, amount: retain[s] }));
@@ -604,7 +652,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
 
       {/* propose: partner → two checklists → note → send */}
       <Overlay visible={open && myRoster != null}
-        title={counterOf ? 'Counter the offer' : isMulti ? `${teamsIn.length}-team trade` : 'Propose a trade'}
+        title={confirming ? (counterOf ? 'Confirm your counter' : 'Confirm your offer')
+          : counterOf ? 'Counter the offer' : isMulti ? `${teamsIn.length}-team trade` : 'Propose a trade'}
         subtitle={tradeReview === 'commish' ? 'Accepted trades go to the commissioner for a ruling.'
           : tradeReview === 'league' ? `Accepted trades go to the league — ${vetoNeed ?? 2} vetoes in ${reviewHours ?? 24}h kill one.`
           : 'Accepted trades execute immediately.'}
@@ -616,13 +665,44 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           // bottom — a manager could build the deal and never file it.
           <>
             {!!err && <Mono size={9.5} tone="opp" style={{ marginBottom: 6 }}>{err}</Mono>}
-            <PrimaryButton label={busy ? '…' : counterOf ? '⇄ SEND THE COUNTER'
-              : isMulti ? `⇄ SEND THE ${teamsIn.length}-TEAM OFFER` : '⇄ SEND THE OFFER'}
-              disabled={busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered)}
-              onPress={() => void propose()} />
+            {confirming ? (
+              <>
+                <PrimaryButton label={busy ? 'SENDING…' : counterOf ? '⇄ SEND THE COUNTER' : '⇄ SEND THE OFFER'}
+                  disabled={busy} onPress={() => void propose()} />
+                <View style={{ alignItems: 'center', marginTop: 8 }}>
+                  <Chip label="← EDIT THE OFFER" onPress={() => { tap(); setConfirming(false); }} />
+                </View>
+              </>
+            ) : (
+              <PrimaryButton label={counterOf ? 'REVIEW THE COUNTER →'
+                : isMulti ? `REVIEW THE ${teamsIn.length}-TEAM OFFER →` : 'REVIEW THE OFFER →'}
+                disabled={busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered)}
+                onPress={() => { tap(); setErr(null); setConfirming(true); }} />
+            )}
           </>
         }>
-        <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 14 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        {/* THE READ-BACK (v0.584.0): the whole offer, one last look, then send. */}
+        {confirming && myRoster != null && partner != null && (
+          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 14, gap: 10 }}>
+            <Mono size={9.5} tone="dim">
+              {isMulti ? `${teamsIn.length}-team trade with ${teamsIn.filter((r) => r !== myRoster).map((r) => teamName(r)).join(', ')}` : `Trade with ${teamName(partner)}`}
+            </Mono>
+            {confirmTeams().map((x) => (
+              <View key={x.roster} style={{ borderWidth: 1, borderColor: x.mine ? t.you : t.bd, borderRadius: 7, padding: 9 }}>
+                <Mono size={9} weight="700" tone={x.mine ? 'you' : 'dim'} track={0.1}>{x.title}</Mono>
+                {x.gets.length === 0 && <Mono size={10} tone="faint" style={{ marginTop: 4 }}>nothing</Mono>}
+                {x.gets.map((g, i) => <Text key={i} style={{ fontSize: fs(12.5), color: t.text, marginTop: 4, lineHeight: fs(17) }}>• {g}</Text>)}
+              </View>
+            ))}
+            {grade && (
+              <Mono size={10} tone={grade.verdict === 'for' ? 'you' : grade.verdict === 'against' ? 'opp' : 'warn'} style={{ lineHeight: 15 }}>⚖ {grade.summary}</Mono>
+            )}
+            <Mono size={9.5} tone="dim" style={{ lineHeight: 15 }}>⏱ {expiryLine(expiryHours, offerDays)}</Mono>
+            <Mono size={9.5} tone="dim" style={{ lineHeight: 15 }}>⚑ {reviewLine(tradeReview)}</Mono>
+            {!!note.trim() && <Mono size={9.5} tone="dim" style={{ lineHeight: 15 }}>✎ “{note.trim()}”</Mono>}
+          </ScrollView>
+        )}
+        <ScrollView style={{ flexGrow: 0, ...(confirming ? { display: 'none' } : {}) }} contentContainerStyle={{ padding: 14 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
         <Mono size={9} tone="faint" track={0.1}>TRADE WITH</Mono>
         {/* A counter answers ONE offer, so its seats are already decided —
             changing them here would quietly make it a different proposal. */}
@@ -657,6 +737,46 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               {pickList(partner, get, setGet, true)}
               {pickAssetList(partner, getPicks, setGetPicks)}
             </View>
+          </View>
+        )}
+        {/* DEVY SHARES (0398): shares and devy cash ride a two-team offer. */}
+        {partner != null && !isMulti && !counterOf && shares && (
+          <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 7 }}>
+            <Mono size={7.5} tone="faint" track={0.1}>🎓 DEVY SHARES</Mono>
+            {([[myRoster, giveShares, setGiveShares, 'YOU SEND'], [partner, getShares, setGetShares, 'YOU GET']] as const).map(([rid, val, setVal, label]) => {
+              const stakes = (shares.players ?? []).filter((p) => !p.graduated_to)
+                .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) })).filter((x) => !!x.h);
+              return (
+                <View key={label} style={{ marginTop: 6 }}>
+                  <Mono size={8} tone="dim">{label}</Mono>
+                  {stakes.length === 0 && <Mono size={8.5} tone="faint">no shares</Mono>}
+                  {stakes.map(({ p, h }) => {
+                    const n = val[p.slug] ?? 0;
+                    return (
+                      <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 }}>
+                        <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11), color: n > 0 ? t.you : t.text }}>{p.name ?? p.slug} <Text style={{ color: t.faint }}>{`${h!.shares} held`}</Text></Text>
+                        <Chip label="−" disabled={n <= 0} onPress={() => { tap(); setVal({ ...val, [p.slug]: Math.max(0, n - 1) }); }} />
+                        <Mono size={10} weight="700" tone={n > 0 ? 'you' : 'faint'} style={{ minWidth: 18, textAlign: 'center' }}>{n}</Mono>
+                        <Chip label="+" disabled={n >= h!.shares} onPress={() => { tap(); setVal({ ...val, [p.slug]: Math.min(h!.shares, n + 1) }); }} />
+                        <Chip label="ALL" dim disabled={n >= h!.shares} onPress={() => { tap(); setVal({ ...val, [p.slug]: h!.shares }); }} />
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              <Mono size={8} tone="dim">DEVY CASH</Mono>
+              <Chip label="I SEND" on={devyCashDir === 1} onPress={() => { tap(); setDevyCashDir(1); }} />
+              <Chip label="I ASK" on={devyCashDir === -1} onPress={() => { tap(); setDevyCashDir(-1); }} />
+              <TextInput value={devyCashDraft} keyboardType="decimal-pad" maxLength={7} placeholder="0" placeholderTextColor={t.faint}
+                onChangeText={(v) => setDevyCashDraft(v.replace(/[^0-9.]/g, ''))}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 64 }} />
+              <Mono size={8.5} tone="faint">{`you have ${fmtPts(teamBook(shares, myRoster).cash)}`}</Mono>
+            </View>
+            <Mono size={8} tone="faint" style={{ marginTop: 4, lineHeight: fs(12) }}>
+              Shares carry what they cost, and a whole maxed stake keeps its place in line for the player{'\u2019'}s right.
+            </Mono>
           </View>
         )}
         {/* THE MULTI-TEAM BUILDER (0322): one block per seat, each asset

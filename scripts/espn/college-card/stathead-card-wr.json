@@ -1,0 +1,82 @@
+{
+ "compositeValue": {
+  "sf": 9990,
+  "oneQB": 9990
+ },
+ "compositeRank": {
+  "sf": 1,
+  "oneQB": 1
+ },
+ "compositePosRank": {
+  "sf": 1,
+  "oneQB": 1
+ },
+ "compositeWeight": {
+  "sf": 0.313,
+  "oneQB": 0.313
+ },
+ "marketValue": {
+  "sf": 8910,
+  "oneQB": 4590
+ },
+ "marketRank": {
+  "sf": 1,
+  "oneQB": 1
+ },
+ "marketPosRank": {
+  "sf": 1,
+  "oneQB": 1
+ },
+ "careerRank": {
+  "sf": 1,
+  "oneQB": 1
+ },
+ "careerPct": {
+  "sf": 100,
+  "oneQB": 100
+ },
+ "careerVsMarket": {
+  "sf": 0,
+  "oneQB": 0
+ },
+ "dynasty": {
+  "sf": {
+   "value": 7500,
+   "classRank": 1,
+   "pickEquiv": "2027 Early 1st"
+  },
+  "oneQB": {
+   "value": 7620,
+   "classRank": 1,
+   "pickEquiv": "2027 Early 1st"
+  }
+ },
+ "profile": {
+  "est_age": 20.9,
+  "est_draft_age": 21.3,
+  "breakout_age": 18.9,
+  "best_dominator": 0.36,
+  "last_usage": 0.13,
+  "sp_last": 30.1,
+  "stars": 5.0,
+  "n_seasons": 3.0
+ },
+ "careerModel2027": {
+  "ppg": 14.7,
+  "tier": "Generational",
+  "projPick": 3
+ },
+ "draftYear": 2027,
+ "school": "Ohio State",
+ "hitProb": {
+  "sf": 80.7,
+  "oneQB": 80.7
+ },
+ "draftOutlook": {
+  "day1": 87.3,
+  "day2": 4.7,
+  "day3": 6.1,
+  "undrafted": 1.9,
+  "source": "board"
+ }
+}

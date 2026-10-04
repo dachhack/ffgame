@@ -5,7 +5,7 @@
 // week's first kickoff (matchup.lock_at), scored by core's classicPoints off
 // the same live play stream, refreshed every 60s.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
+import { ActivityIndicator, AppState, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
 import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
@@ -239,16 +239,19 @@ function Face({ slug, size = 26 }: { slug: string; size?: number }) {
 /** A player on one side of a row, mirrored so both read outward from the pill.
  *  `onGame` makes the game line its own tap target — into the live field +
  *  play log for that NFL game — without stealing the row's picker tap. */
-function BoardCell({ e, align, onGame, onName }: {
+function BoardCell({ e, align, onGame, onName, empty }: {
   e: BoardEntry | null; align: 'left' | 'right'; onGame?: () => void;
   /** The NAME opens the player card (v0.283.0, founder). It is its own target
    *  so the row can stop being one big button: reading about a player and
    *  changing the spot he sits in are different intentions. */
   onName?: () => void;
+  /** What an EMPTY cell shows (v0.563.1): a best-ball spot switched off by an
+   *  illegal roster (0360) says so in the spot, not just in the banner. */
+  empty?: React.ReactNode;
 }) {
   const t = useTheme();
   const right = align === 'right';
-  if (!e) return <View style={{ flex: 1 }}><Mono size={10} tone="faint" style={{ textAlign: right ? 'right' : 'left' }}>Empty</Mono></View>;
+  if (!e) return <View style={{ flex: 1 }}>{empty ?? <Mono size={10} tone="faint" style={{ textAlign: right ? 'right' : 'left' }}>Empty</Mono>}</View>;
   // NO PORTRAIT HERE, deliberately (founder, v0.241.0): a phone's board is a
   // dense mirrored list, and a face per side costs height for identity the name
   // already carries. The PICKER keeps its faces — that sheet exists to pick a
@@ -266,7 +269,11 @@ function BoardCell({ e, align, onGame, onName }: {
   const bye = e.opponent === 'BYE';
   const started = !bye && e.state !== 'pre';
   const line = bye ? 'BYE'
-    : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? 'In progress'}`
+    // "Final · In progress" (v0.614.2, founder's screenshot of two college
+    // players): the statline is null while a man has no counted play, and
+    // once his game is final that is "no stats", not "in progress". The web
+    // board already prints the dash; the app said both words at once.
+    : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
     : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
@@ -324,7 +331,7 @@ const prettySlug = (slug: string): string => {
   // A college slug is an ESPN id — its name comes from the league's pool.
   const cn = collegeNameFor(slug);
   if (cn) return shortName(cn.full);
-  // A sport key (0398) is a feed id — its name comes from the league's pool.
+  // A sport key (0426) is a feed id — its name comes from the league's pool.
   const sn = sportNameFor(slug);
   if (sn) return shortName(sn.full);
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
@@ -507,7 +514,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           // GOLF (v0.303.0) rides the same load: a league setting the engine
           // reads at scoring time, installed like the scoring adjustments.
           if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm)); setGolf(gm.golf === true); }
-          // A SPORT LEAGUE (0398) draws its week from locked slot-days.
+          // A SPORT LEAGUE (0426) draws its week from locked slot-days.
           if (gm.ok) { setSport(gm.sport ?? 'nfl'); setSportSettings(gm.sport && gm.sport !== 'nfl' ? sportSettingsOf({ sport: gm.sport_settings }) : null); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
@@ -663,10 +670,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // numbers. Reaches the CURRENT load via ref so a pull refreshes in place
   // instead of remounting the board; a failed pull keeps what's on screen.
   const loadRef = useRef<(() => Promise<void>) | null>(null);
+  // The roster-legality check rides the same pull (v0.563.1) — see issuesRef.
+  const issuesRef = useRef<(() => Promise<void>) | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const onPullRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await loadRef.current?.(); } catch { /* keep prior */ }
+    try { await Promise.all([loadRef.current?.(), issuesRef.current?.()]); } catch { /* keep prior */ }
     setRefreshing(false);
   }, []);
 
@@ -789,12 +798,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // THE ROSTER HAS TO BE LEGAL (0360) — the web twin's comment applies: which
   // teams are illegal right now, refreshed every minute.
   const [issues, setIssues] = useState<Record<string, string>>({});
+  // RE-ASKED ON DEMAND (v0.563.1, founder: "have that fix on a legal roster
+  // when you pull to refresh or revisit the matchup view"). The matchup view
+  // remounts on a revisit, so it asks on mount; a pull-to-refresh asks again
+  // (issuesRef), and so does the app coming back to the foreground — a
+  // manager who just fixed the roster on MY TEAM shouldn't wait out the minute.
   useEffect(() => {
     let alive = true;
     const get = () => leagueRosterIssues(leagueId).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); }).catch(() => {});
     void get();
+    issuesRef.current = get;
     const id = setInterval(get, 60_000);
-    return () => { alive = false; clearInterval(id); };
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void get(); });
+    return () => { alive = false; clearInterval(id); sub.remove(); if (issuesRef.current === get) issuesRef.current = null; };
   }, [leagueId]);
   // Cleared on leaving the league, not on changing week (keyed by week).
   useEffect(() => () => clearLeagueAdjustments(), [leagueId]);
@@ -1575,6 +1591,20 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               const settable = canEdit(row.slot);
               const d = slotDefs.find((x) => x.slot === row.slot);
               const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
+              // THE WARNING IN THE SPOT (v0.563.1, founder: "let's have a
+              // warning in the bestball spots"). An illegal roster (0360)
+              // keeps its best-ball spots empty; the banner says why, but the
+              // spot itself just read "🎯 BEST BALL". Either side.
+              const homeWhy = auto && !row.home ? issues[String(board.home.rosterId)] : undefined;
+              const awayWhy = auto && !row.away ? issues[String(board.away.rosterId)] : undefined;
+              const offNote = (why: string, alignRight: boolean) => (
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Mono size={10} tone="warn" weight="700" style={{ textAlign: alignRight ? 'right' : 'left' }}>🎯 BEST BALL — OFF</Mono>
+                  <Mono size={8} tone="dim" numberOfLines={3} style={{ textAlign: alignRight ? 'right' : 'left', lineHeight: 11 }}>
+                    {`${alignRight ? 'Their' : 'Your'} roster isn’t legal — ${why}`}
+                  </Mono>
+                </View>
+              );
               return (
                 <View key={row.slot}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
@@ -1587,7 +1617,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                           left no way to simply READ about the player standing
                           in it. */}
                     </>
-                  ) : (
+                  ) : homeWhy ? offNote(homeWhy, false) : (
                     <Pressable onPress={() => { if (settable) { tap(); setPickerSlot(pickerSlot === row.slot ? null : row.slot); } }} style={{ flex: 1 }}>
                       <Mono size={10} tone={settable ? 'you' : 'faint'}>{auto ? '🎯 BEST BALL' : settable ? `+ SET ${row.label}` : 'Empty'}</Mono>
                       {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
@@ -1626,6 +1656,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                     {scoreOf(row.away)}
                   </Mono>
                   <BoardCell e={row.away} align="right" onGame={gameOpener(row.away)}
+                    empty={awayWhy ? offNote(awayWhy, true) : undefined}
                     onName={row.away ? () => openPlayerCard({ slug: row.away!.slug, name: row.away!.name, pos: row.away!.pos, team: row.away!.team ?? '', week: matchup?.week, userId }) : undefined} />
                 </View>
               );

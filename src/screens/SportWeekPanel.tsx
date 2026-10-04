@@ -1,4 +1,4 @@
-// THE SPORT WEEK (0398) — what a daily-sport league's classic board shows
+// THE SPORT WEEK (0426) — what a daily-sport league's classic board shows
 // above its lineup: the period's dates, both seats' locked slot-days with
 // the line each player posted, the running totals (or the category verdict),
 // and the slate for today.

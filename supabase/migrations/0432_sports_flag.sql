@@ -1,4 +1,4 @@
--- 0404 — THE SPORTS FLAG (v0.571.0): daily-sport leagues are the founder's
+-- 0432 — THE SPORTS FLAG (v0.623.0): daily-sport leagues are the founder's
 -- to test before anyone else sees them.
 --
 -- Founder: "Can we feature flag all of this to me so I can test?"
@@ -14,7 +14,7 @@
 -- Grant:  select admin_set_feature('you@example.com', 'sports', true);
 -- Revoke: select admin_set_feature('you@example.com', 'sports', false);
 --
--- Undo: restore 0398's create_native_league; drop function if exists has_sports();
+-- Undo: restore 0426's create_native_league; drop function if exists has_sports();
 
 create or replace function has_sports() returns boolean
   language sql stable security definer set search_path = public as $$
@@ -22,7 +22,7 @@ create or replace function has_sports() returns boolean
 $$;
 grant execute on function has_sports() to authenticated;
 
--- 0398's door, with the gate. Re-issued whole rather than patched: a wrapper
+-- 0426's door, with the gate. Re-issued whole rather than patched: a wrapper
 -- cannot sit in front of the function the clients name.
 create or replace function create_native_league(
   p_name text, p_season text, p_teams int,
@@ -47,7 +47,7 @@ begin
   if sp not in ('nfl', 'nba', 'wnba', 'nhl', 'mlb') then
     return jsonb_build_object('ok', false, 'error', 'unknown sport ' || sp);
   end if;
-  -- THE SPORTS FLAG (0404): a daily sport is behind has_sports() until the
+  -- THE SPORTS FLAG (0432): a daily sport is behind has_sports() until the
   -- founder opens it, the way 'native' gated in-app leagues.
   if sp <> 'nfl' and not has_sports() then
     return jsonb_build_object('ok', false, 'error', 'daily-sport leagues are in testing — ask the pilot owner for access');

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { pickRoundLabel } from '@drip/core/data/devyDraft';
+import { devyLegParts } from '@drip/core/data/devyShares';
 import { activityGrade, GRADE_LABEL, SOURCE_LABEL, SOURCE_ORDER, SEAT_LABEL, sourcesLine, humanShare, leagueLine, auditHeadline, type WeekAudit, type AuditTeam, type AuditLeague, type AuditSource } from '@drip/core/data/weekAudit';
 import {
   adminOverview, adminMatchups, adminSetMatchup, adminOverrides, adminSetOverride, adminAudit,
@@ -7,7 +9,7 @@ import {
   adminMatchupPicks, adminPickReadiness, leagueFaabWallets, commishGrantFaab, type FaabWallets, adminHealth, adminMetriclessPicks, type MetriclessAudit, adminWeekAudit, adminMarketReport, type MarketReport, adminSetPicks, adminClearPicks, sendMagicLink, sendInvite, adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminDeleteLeague, commishClaimRoster, commishSeedCoin, adminLeagueWallets, leaguePracticeWeek, commishSetWeeklyBudget, commishGrantWeeklyBudget, adminSetTestLive, adminStampWeek, adminWeekReportState, adminRequestWeekReport, type WeekReportState, setPreseasonPractice, enablePreseasonPractice, seedPreseasonPool, preseasonWindow, friendlyError, lockHolds, adminSetWeekLock, type PreseasonWindow, type LeagueJoiner,
   setTeamController, setLineupPolicy, leagueCardTheme, adminSetCardTheme, demoCardTheme, adminSetDemoCardTheme,
   adminSetPot, adminClosePots,
-  leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin,
+  leagueKdst, setKdstMode, setTeamKdst, adminSetFeature, adminSoloPasses, adminSetSoloQuota, type SoloPassAdmin, adminSetUserCap, signupOpen,
   rosterRules, setRosterRules, POS_CAP_KEYS, type PosCaps,
   setTransactionRules, commishMovePlayer, commishRemovePlayer, commishRuleTrade, setLeagueAvatar,
   setPickTrading,
@@ -31,7 +33,7 @@ import { DAY_LABEL, DEFAULT_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
   holdLine, waiverConflicts, etTime, type WaiverDayMode } from '@drip/core/data/waiverDays';
 import { PRESEASON_BOARD_WEEKS } from '@drip/core/data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmin';
-import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
+import { importEspnSeason, syncProviderSeason, stripProvider, type ImportProvider } from '@drip/core/data/providerAdmin';
 import { buildDraftPool, diagnosePoolGhosts } from '@drip/core/data/nativeLeague';
 import { loadPlayerDirectory } from '@drip/core/data/sleeperPlayers';
 import { forceResolve } from '@drip/core/data/forceResolve';
@@ -290,6 +292,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 
       {tab === 'users' && (
         <>
+          <UserCap />
           <FeatureFlags />
           <SoloPasses />
           <Users onLeaveAdmin={onBack} />
@@ -935,9 +938,10 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
                   <b>{t.status === 'pending' ? (l.accepted ? '✓ ' : '· ') : ''}{teamName(l.roster_id)}</b>
                   {' '}sends {[
                     ...l.send.map((x) => `${playerName(x.slug)} → ${teamName(x.to)}`),
-                    ...l.send_picks.map((p) => `${p.season} R${p.round} → ${teamName(p.to)}`),
+                    ...l.send_picks.map((p) => `${p.season} ${pickRoundLabel(p.round)} → ${teamName(p.to)}`),
                     ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
                     ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+    ...devyLegParts(l, (rid) => String(teamName(rid))),
                   ].join(', ') || 'nothing'}
                 </span>
               )) : (<>
@@ -1359,8 +1363,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     if (busy === 'sync') return;
     setBusy('sync');
     try {
-      const r = l.provider === 'espn'
-        ? await syncEspnSeason(l.league_id, stripProvider(l.sleeper_league_id), l.season)
+      // 0423: every platform the self-serve import knows, not ESPN alone.
+      const r = l.provider && l.provider !== 'sleeper' && l.provider !== 'native'
+        ? await syncProviderSeason(l.league_id, l.provider as ImportProvider, stripProvider(l.sleeper_league_id), l.season)
         : await (async () => { let pairs = 0; for (let w = 1; w <= 14; w++) pairs += (await syncWeek(l.league_id, l.sleeper_league_id, w)).pairs; return { weeks: 14, pairs }; })();
       setBusy(`✓ ${r.weeks} weeks · ${r.pairs} matchups`); setTab('matchups'); await loadM();
     } catch (e) { setBusy(errMsg(e, 'sync failed')); }
@@ -3135,6 +3140,43 @@ function DeleteLeague({ name, onDelete }: { name: string; onDelete: () => Promis
 // Per-account feature gates (0094/0095): 'solo' = standalone pods/showdowns;
 // 'dfs_commish' = may found DFS leagues; 'native' = may create in-app drafted
 // leagues (incl. mock drafts). All founder-approval switches.
+/** THE CAP (0422): how many accounts the pilot holds, and how full it is. */
+function UserCap() {
+  const [door, setDoor] = useState<{ open: boolean; count: number; cap: number } | null>(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = () => signupOpen().then((d) => { setDoor(d); setDraft(String(d.cap)); });
+  useEffect(() => { void load(); }, []);
+  const save = async () => {
+    const n = Number(draft);
+    if (busy || !Number.isFinite(n)) return;
+    setBusy(true); setMsg(null);
+    const r: { ok: boolean; error?: string; cap?: number } = await adminSetUserCap(Math.round(n)).catch((x) => ({ ok: false, error: String(x) }));
+    setBusy(false);
+    setMsg(r.ok ? `✓ cap is ${r.cap}` : `⚠ ${r.error ?? 'failed'}`);
+    void load();
+  };
+  return (
+    <div style={card}>
+      <div style={h}>ACCOUNT CAP</div>
+      <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
+        Sign-up is open to anyone until the cap; past it the database refuses the account and the form shows the waitlist. Seat agents don’t count. The daily sweep retires accounts quiet for 30 days (told 14 days ahead), which is how spots come back.
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 13, color: 'var(--text)', marginBottom: 8 }}>
+        {door ? <>{door.count.toLocaleString()} of {door.cap.toLocaleString()} spots taken · {door.open ? 'OPEN' : 'FULL'}</> : '…'}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={draft} onChange={(e) => { setDraft(e.target.value); setMsg(null); }} type="number" min={0} max={1000000}
+          style={{ fontFamily: 'inherit', fontSize: 14, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: 120 }} />
+        <button className="mono" disabled={busy} onClick={save}
+          style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '6px 9px', cursor: 'pointer', fontFamily: 'inherit' }}>SET CAP</button>
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12.5, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 8 }}>{msg}</div>}
+    </div>
+  );
+}
+
 function FeatureFlags() {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -3151,7 +3193,7 @@ function FeatureFlags() {
     <div style={card}>
       <div style={h}>FEATURE FLAGS</div>
       <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 8 }}>
-        <b>solo</b> — standalone pods + weekly showdowns · <b>dfs_commish</b> — may create DFS leagues · <b>native</b> — may create drafted-on-site leagues (incl. mocks). Account must exist (signed in once).
+        <b>solo</b> — standalone pods + weekly showdowns · <b>dfs_commish</b> — may create DFS leagues · <b>native</b> — no longer read (0422: every account may create leagues). Account must exist (signed in once).
       </div>
       <input value={email} onChange={(e) => { setEmail(e.target.value); setMsg(null); }} placeholder="player@email.com" type="email"
         style={{ fontFamily: 'inherit', fontSize: 14, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 5, padding: '8px 10px', outline: 'none', width: '100%', boxSizing: 'border-box' }} />

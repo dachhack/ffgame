@@ -216,23 +216,26 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
     Animated.timing(bx, { toValue: mx(ballX), duration: 550, useNativeDriver: false }).start();
   }, [ballX, flip]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // THE STRIP READS FROM ACROSS THE ROOM (v0.607.0, web parity). Founder: "A
+  // lot larger team names, score and time on the fields view." The line was
+  // 9px — the smallest text on the card for the three things you glance for.
   const strip = (abbr: string, hasBall: boolean) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-      <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: hasBall ? t.text : t.dim }}>{abbr}</Text>
-      {hasBall && !over && <Text style={{ fontSize: 8 }}>🏈</Text>}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <Text style={{ fontFamily: MONO, fontSize: 14, fontWeight: '700', color: hasBall ? t.text : t.dim }}>{abbr}</Text>
+      {hasBall && !over && <Text style={{ fontSize: 11 }}>🏈</Text>}
     </View>
   );
 
   return (
     <View style={{ marginTop: 5, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 6 }}>
       {/* score + clock strip */}
-      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 3 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 5, paddingRight: 30 }}>
         {strip(away, ballTm === away)}
-        <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.text }}>{score.a}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: '800', color: t.text }}>{score.a}</Text>
         {/* The LAST PLAY's clock, not the playback clock — a window clock can
             overshoot the real game and read a Q4 game as OT. */}
-        <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.text }}>{score.h}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '600', color: t.faint }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: '800', color: t.text }}>{score.h}</Text>
         {strip(home, ballTm === home)}
         <Pressable
           onPress={toggleFlip}
@@ -278,18 +281,19 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
         {redZone && (
           <Rect x={(flip ? !attacksRight : attacksRight) ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP} fill={alpha(t.fx.nuke, 32)} />
         )}
-        <SvgText x={ezAwayX + EZ / 2} y={MID} fill={ezText(awayCol)} fontSize={9} fontWeight="700" textAnchor="middle"
+        <SvgText x={ezAwayX + EZ / 2} y={MID} fill={ezText(awayCol)} fontSize={13} fontWeight="800" textAnchor="middle"
           transform={`rotate(${ezAwayX < W / 2 ? -90 : 90} ${ezAwayX + EZ / 2} ${MID})`}>{away}</SvgText>
-        <SvgText x={ezHomeX + EZ / 2} y={MID} fill={ezText(homeCol)} fontSize={9} fontWeight="700" textAnchor="middle"
+        <SvgText x={ezHomeX + EZ / 2} y={MID} fill={ezText(homeCol)} fontSize={13} fontWeight="800" textAnchor="middle"
           transform={`rotate(${ezHomeX < W / 2 ? -90 : 90} ${ezHomeX + EZ / 2} ${MID})`}>{home}</SvgText>
 
-        {/* yard lines + numbers */}
+        {/* yard lines + numbers — v0.590.0: every label sized to read on a
+            phone, where the 400-wide drawing renders ~330pt (×0.8). */}
         {Array.from({ length: 21 }, (_, i) => (
           <Line key={i} x1={FX + (i / 20) * FW} y1={TOP} x2={FX + (i / 20) * FW} y2={BOT}
             stroke={i % 2 ? alpha(t.bd, 55) : t.bd} strokeWidth={i === 0 || i === 20 ? 1.6 : 0.7} />
         ))}
         {[10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => (
-          <SvgText key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill={t.faint} fontSize={6.5} textAnchor="middle">{n}</SvgText>
+          <SvgText key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill={t.dim} fontSize={10.5} fontWeight="700" textAnchor="middle">{n}</SvgText>
         ))}
 
         {/* first-down line */}
@@ -330,9 +334,9 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
           <AnimatedG x={bx as unknown as number}>
             <Line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
             <Circle cx={0} cy={MID} r={10.5} fill={ballCol ? mix(ballCol.c, 30, t.surface) : t.surface} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
-            <SvgText x={0} y={MID + 2.5} fill={t.text} fontSize={6} fontWeight="700" textAnchor="middle">{ballTm}</SvgText>
+            <SvgText x={0} y={MID + 3.5} fill={t.text} fontSize={9} fontWeight="800" textAnchor="middle">{ballTm}</SvgText>
             {ballTm && teamLogo(ballTm, { week }) && <SvgImage href={{ uri: teamLogo(ballTm, { week })! }} x={-10} y={MID - 10} width={20} height={20} />}
-            <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 2.5} fill={ballCol?.c ?? t.faint} fontSize={8} fontWeight="700" textAnchor="middle">
+            <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 3.5} fill={ballCol?.c ?? t.faint} fontSize={10} fontWeight="700" textAnchor="middle">
               {(flip ? !attacksRight : attacksRight) ? '▶' : '◀'}
             </SvgText>
             {/* the ball carrier, above the spot: headshot in a ring, name under */}
@@ -340,8 +344,8 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
               <G>
                 <Circle cx={0} cy={TOP + 13} r={12} fill={t.surface} stroke={ballCol?.c ?? t.dimstrong} strokeWidth={1.4} />
                 {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
-                <Rect x={-26} y={TOP + 27} width={52} height={9} rx={2} fill={alpha('#000000', 0.55)} />
-                <SvgText x={0} y={TOP + 34} fill="#FFFFFF" fontSize={6.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
+                <Rect x={-38} y={TOP + 27} width={76} height={13} rx={2} fill={alpha('#000000', 0.6)} />
+                <SvgText x={0} y={TOP + 37} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
               </G>
             )}
           </AnimatedG>
@@ -526,14 +530,14 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
       )}
       {/* The selected game's own line: teams, score, where its clock stands. */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 10, flexShrink: 0 }}>
-        {!!teamLogo(cur.away, { week }) && <Image source={{ uri: teamLogo(cur.away, { week })! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
-        <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.away}</Text>
+        {!!teamLogo(cur.away, { week }) && <Image source={{ uri: teamLogo(cur.away, { week })! }} style={{ width: 22, height: 22, borderRadius: 2 }} />}
+        <Text style={{ fontFamily: MONO, fontSize: fs(15), fontWeight: '700', color: t.text }}>{cur.away}</Text>
         {last
-          ? <Text style={{ fontFamily: MONO, fontSize: fs(14), fontWeight: '800', color: t.text }}>{last.as} — {last.hs}</Text>
-          : <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '700', color: t.faint }}>@</Text>}
-        <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{cur.home}</Text>
-        {!!teamLogo(cur.home, { week }) && <Image source={{ uri: teamLogo(cur.home, { week })! }} style={{ width: 16, height: 16, borderRadius: 2 }} />}
-        <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: cur.state === 'live' ? t.opp : t.faint }}>
+          ? <Text style={{ fontFamily: MONO, fontSize: fs(22), fontWeight: '800', color: t.text }}>{last.as} — {last.hs}</Text>
+          : <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '700', color: t.faint }}>@</Text>}
+        <Text style={{ fontFamily: MONO, fontSize: fs(15), fontWeight: '700', color: t.text }}>{cur.home}</Text>
+        {!!teamLogo(cur.home, { week }) && <Image source={{ uri: teamLogo(cur.home, { week })! }} style={{ width: 22, height: 22, borderRadius: 2 }} />}
+        <Text style={{ fontFamily: MONO, fontSize: fs(12), fontWeight: '700', color: cur.state === 'live' ? t.opp : t.faint }}>
           {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (stoppageLabel(cur.feed) ?? liveClockLabel(cur.feed) ?? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE')) : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
         </Text>
       </View>

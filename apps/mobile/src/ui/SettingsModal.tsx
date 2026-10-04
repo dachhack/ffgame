@@ -13,14 +13,15 @@
 // The demo board (a scripted 2025 week) lived in here until v0.502.0, when the
 // 2025 bake left the app with it.
 
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
 import { Mono } from './prims';
 import { VoicePicker } from './VoicePicker';
+import { DevyValues } from './DevyValues';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
-import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, type PushLogRow } from '@drip/core/data/liveApi';
+import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, getSession, deleteMyAccount, type PushLogRow } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
 import { tap } from './feedback';
 import { Overlay } from './Overlay';
@@ -98,9 +99,13 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
     { id: 'theme', icon: '🎨', name: 'Color theme', value: themeName },
     { id: 'cards', icon: '🃏', name: 'Cards', value: `${sizeName} · ${skinName}` },
     { id: 'voice', icon: '🔊', name: 'Play-by-play voice', value: 'the voice that reads plays aloud' },
+    // v0.601.0: StatHead-based devy values, 1QB and SF, for every player.
+    { id: 'devy', icon: '🎓', name: 'Devy values', value: '1QB & SF, refreshed with each StatHead board' },
     // A home-screen widget is Android's (react-native-android-widget).
     ...(Platform.OS === 'android' ? [{ id: 'widget' as Section, icon: '📱', name: 'Home-screen widget', value: 'which leagues it shows' }] : []),
     ...(isAdmin ? [{ id: 'rehearsal' as Section, icon: '🧪', name: 'Rehearsal tools', value: 'sim strip on test boards' }] : []),
+    // 0422: the way out — delete the account from the app (Apple 5.1.1(v)).
+    { id: 'account', icon: '🗑', name: 'Account', value: 'delete my account' },
   ];
   const current = sections.find((x) => x.id === section);
   return (
@@ -209,6 +214,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
               </View>
             )}
             {section === 'voice' && <VoicePicker />}
+            {section === 'devy' && <DevyValues />}
+            {section === 'account' && <DeleteAccount onDeleted={() => { onClose(); onSignOut(); }} />}
             {section === 'widget' && <WidgetLeaguesPicker />}
             {section === 'rehearsal' && isAdmin && <RehearsalToggle />}
           </>
@@ -242,9 +249,49 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   );
 }
 
-type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'widget' | 'rehearsal';
+type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'devy' | 'widget' | 'rehearsal' | 'account';
 
 /** One compact line in the menu's lower half: an action, not a category. */
+/** DELETE MY ACCOUNT (0422). Type the email back to confirm. A commissioner of
+ *  a league with other members is refused by name until the league has
+ *  another commissioner or is deleted. */
+function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
+  const t = useTheme();
+  const [email, setEmail] = useState<string | null>(null);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { getSession().then((s) => setEmail(s?.user.email ?? '')).catch(() => setEmail('')); }, []);
+  const match = !!email && typed.trim().toLowerCase() === email.trim().toLowerCase();
+  const go = async () => {
+    if (!match || busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await deleteMyAccount(typed);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'could not delete the account')); return; }
+      onDeleted();
+    } catch (e) { setErr(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={{ padding: 14, gap: 10 }}>
+      <Text style={{ fontSize: 13, lineHeight: 19, color: t.dim }}>
+        Your account and its personal details are removed for good. Leagues you played in keep their results, with your seat shown by team name.
+        If you commission a league with other members, hand it to someone else or delete it first.
+      </Text>
+      <Mono size={9} tone="faint" track={0.12}>{email ? `TYPE ${email.toUpperCase()} TO CONFIRM` : 'TYPE YOUR EMAIL TO CONFIRM'}</Mono>
+      <TextInput value={typed} onChangeText={(v) => { setTyped(v); setErr(null); }} autoCapitalize="none" autoCorrect={false} keyboardType="email-address"
+        placeholder={email ?? ''} placeholderTextColor={t.faint}
+        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 9, fontFamily: MONO, fontSize: 14, color: t.text, backgroundColor: t.bg }} />
+      <Pressable onPress={() => { tap(); void go(); }} disabled={!match || busy}
+        style={{ backgroundColor: t.opp, borderRadius: 7, paddingVertical: 12, alignItems: 'center', opacity: !match || busy ? 0.5 : 1 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.7, color: '#fff' }}>{busy ? '…' : 'DELETE MY ACCOUNT'}</Text>
+      </Pressable>
+      {!!err && <Mono size={10.5} tone="opp">{err}</Mono>}
+    </View>
+  );
+}
+
 function ActionRow({ icon, label, hint, strong, onPress }: {
   icon: string; label: string; hint?: string; strong?: boolean; onPress: () => void;
 }) {

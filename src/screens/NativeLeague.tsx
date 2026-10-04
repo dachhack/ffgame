@@ -6,6 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
+import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, devyChoiceBlocked, DEVY_CHOICE_INFO, type DevyChoice } from '@drip/core/data/devyShares';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag, InjuryNow } from '../app/ui';
 import { useStore } from '../app/store';
@@ -18,6 +19,7 @@ import { clearsOn } from '@drip/core/data/waiverDays';
 import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { fmtTimeLeft, voteTally } from '@drip/core/data/tradeClock';
 import { gradeTrade, type GradeResult } from '@drip/core/data/tradeGrade';
+import { tradeConfirm, expiryLine, reviewLine, type ConfirmLeg } from '@drip/core/data/tradeConfirm';
 import { ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
@@ -59,12 +61,14 @@ import {
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
-  devySharesState,
+  devySharesState, type DevySharesState,
+  setupLeagueDevy, setLeagueDevyOpen,
 } from '@drip/core/data/liveApi';
-import { DevySharesPanel } from './DevyShares';
+import { DevySharesPanel, DevyStakesList } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
+import { devyBlockLine, devyBlockRound, draftRoundLabel, pickRoundLabel } from '@drip/core/data/devyDraft';
 import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setDynFormat } from '@drip/core/data/dyn2026';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
@@ -193,13 +197,13 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // until the game is chosen. Mocks are exempt: a mock is a draft with no
   // season behind it, so it drafts the drip shape without asking.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
-  // THE SPORT (0398). NFL is the default and everything below reads as it
+  // THE SPORT (0426). NFL is the default and everything below reads as it
   // did; a daily sport (NBA / NHL / MLB / WNBA) is CLASSIC by construction,
   // plays Mon–Sun periods from a start date, draws its pool from the sport
   // directory, and skips the formats and continuities that are still
   // football-only (guillotine, vampire, contracts, dynasty).
   const [sport, setSport] = useState<Sport>('nfl');
-  // THE SPORTS FLAG (0404): the chips show for holders of the 'sports'
+  // THE SPORTS FLAG (0432): the chips show for holders of the 'sports'
   // feature and admins; the create RPC enforces the same gate.
   const [sportsOn, setSportsOn] = useState(false);
   useEffect(() => {
@@ -253,6 +257,11 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
   const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>('snake');
+  // 0398: devy is a question at creation, not an admin switch found later.
+  const [devy, setDevy] = useState<DevyChoice>('none');
+  const [devySpots, setDevySpots] = useState(3);
+  // 0399: the commissioner decides when the market opens.
+  const [devyOpen, setDevyOpen] = useState<'now' | 'after_draft'>('after_draft');
   const [budget, setBudget] = useState(200);
   // Pace: LIVE = everyone in the room (seconds); SLOW = days-long drafts
   // (hour-scale clocks; queues + proxy bids keep turns fair while offline).
@@ -378,7 +387,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       setNote(`Creating your ${contLabel}${isSport ? sportDef.league : chosenGame === 'classic' ? 'CLASSIC' : 'DRIP'} league…`);
       const contN = continuity === 'keeper' ? keepN : dynastyType ? rookieN : null;
       if (isSport) {
-        // A DAILY SPORT (0398): the server seeds the pool from its directory
+        // A DAILY SPORT (0426): the server seeds the pool from its directory
         // and the schedule is periods from the start date, so the two
         // client-side steps the NFL path runs below have nothing to do here.
         const weeks = sportWeeks ?? sportDef.regularSeasonWeeks;
@@ -421,8 +430,21 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         });
         copyReportPending = steps.filter((s) => !s.ok).map((s) => `${s.step} — ${friendlyError(s.error ?? 'refused')}`);
       }
+      // DEVY before the pool: devy spots need college players IN the pool;
+      // the market keeps them out of it (they are bought, not drafted).
+      const devyNow = chosenGame === 'classic' && !isSport && !devyChoiceBlocked(devy, { classic: true, auction: mode === 'auction', contract: contractType }) ? devy : 'none';
+      if (devyNow !== 'none') {
+        setNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
+        const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
+        if (!dr.ok) copyReportPending = [...copyReportPending, `devy — ${friendlyError(dr.error ?? 'refused')}`];
+        else if (devyNow === 'shares' && devyOpen === 'now') {
+          const or = await setLeagueDevyOpen(r.league_id, 'now');
+          if (!or.ok) copyReportPending = [...copyReportPending, `devy market opening — ${friendlyError(or.error ?? 'refused')}`];
+        }
+      }
       setNote('Building the 2026 player pool…');
-      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote));
+      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote,
+        devyNow === 'spots' ? { positions: ['COLLEGE'] } : undefined));
       if (!pool.ok) { setErr(friendlyError(pool.error ?? 'Could not seed the player pool.')); setBusy(false); return; }
       setNote('Generating the season schedule…');
       const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
@@ -692,6 +714,49 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             : <div><div className="mono" style={label}>BID WINDOW (HRS)</div><div style={{ marginTop: 7 }}>{num(bellHrs, setBellHrs, 1, 48, 1)}</div></div>)}
           {mode === 'auction' && <div><div className="mono" style={label}>LOTS AT ONCE</div><div style={{ marginTop: 7 }}>{num(maxLots, setMaxLots, 1, 4, 1)}</div></div>}
         </div>
+        {/* DEVY (0398) — its own question, because a devy league is a
+            different game and nothing else on this form says so. Not for a
+            daily sport (0426): college football players have no place in an
+            NBA or NHL pool. */}
+        {kind === 'league' && game === 'classic' && !isSport && (() => {
+          const blk = (c: DevyChoice) => devyChoiceBlocked(c, { classic: true, auction: mode === 'auction', contract: contractType });
+          return (
+            <div style={{ marginTop: 16 }}>
+              <div className="mono" style={label} title={DEVY_CHOICE_INFO}>DEVY (COLLEGE PLAYERS) ⓘ</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Chip on={devy === 'none'} onClick={() => setDevy('none')}>NO DEVY</Chip>
+                <Chip on={devy === 'spots'} onClick={() => setDevy('spots')}>DEVY SPOTS</Chip>
+                <Chip on={devy === 'shares'} onClick={() => { if (!blk('shares')) setDevy('shares'); }}>DEVY MARKET</Chip>
+                {devy === 'spots' && (
+                  <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginLeft: 8 }}>
+                    <span className="mono" style={{ ...label, marginTop: 0 }}>SPOTS / TEAM</span>{num(devySpots, setDevySpots, 1, 10, 1)}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+                {devy === 'none' ? 'An NFL-only league. Pick DEVY SPOTS or DEVY MARKET to make it a devy league.'
+                  : devy === 'spots' ? `College players are in the draft pool, and every team gets ${devySpots} roster spot${devySpots === 1 ? '' : 's'} that hold only college players — drafted and kept like anyone else, and moved to the NFL roster when they graduate.`
+                  : 'College players stay out of the draft. Every team gets 100 points to buy shares: the first to 20 shares — or the only team with 5+ shares and 15+ points in — reserves the right to draft that player as a rookie. Prices rise as players play well, so early scouting pays. Every year, shares lock on Jan 15 until the rookie draft.'}
+              </div>
+              {devy === 'shares' && !blk('shares') && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span className="mono" style={label}>MARKET OPENS</span>
+                  <Chip on={devyOpen === 'after_draft'} onClick={() => setDevyOpen('after_draft')}>AFTER THE DRAFT</Chip>
+                  <Chip on={devyOpen === 'now'} onClick={() => setDevyOpen('now')}>RIGHT AWAY</Chip>
+                  <span style={{ fontSize: 11.5, color: 'var(--dim)', flexBasis: '100%', lineHeight: 1.5 }}>
+                    {devyOpen === 'now'
+                      ? 'Teams can buy shares as soon as they join — scouting starts before the startup draft (paused while it runs).'
+                      : 'Shares open once the startup draft is done, so everyone starts buying at the same moment.'} You can change this in COMMISH until the draft.
+                  </span>
+                </div>
+              )}
+              {blk(devy) && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn)', marginTop: 6 }}>⚠ {blk(devy)} — it won't be set up.</div>}
+              {!blk(devy) && blk('shares') && devy !== 'shares' && (
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6 }}>DEVY MARKET: {blk('shares')}</div>
+              )}
+            </div>
+          );
+        })()}
         {/* What the roster looks like is now a CONSEQUENCE of the game type,
             not a question — and every part of it is editable on the
             commissioner's ROSTER tab until the draft starts. Say what you're
@@ -717,7 +782,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         {copyReport !== null && copyReport.length > 0 && madeLeagueId && (
           <div style={{ background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))', border: '1px solid var(--warn)', borderRadius: 8, padding: 14, marginTop: 16 }}>
             <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--warn)' }}>
-              ⚠ THE LEAGUE WAS CREATED — SOME SETTINGS DIDN'T COPY
+              ⚠ THE LEAGUE WAS CREATED — SOME SETTINGS DIDN'T TAKE
             </div>
             {copyReport.map((line, i) => (
               <div key={`cr-${i}`} className="mono" style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 5, lineHeight: 1.5 }}>· {line}</div>
@@ -1329,6 +1394,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     if (myRoster == null) return c;
     for (const pk of st?.picks ?? []) {
       if (pk.roster_id !== myRoster) continue;
+      // 0411: with a devy block the college players fill devy spots, which
+      // carry no position caps (0366) — they don't count here.
+      if (st?.devy_from != null && isCollegeSlug(pk.slug)) continue;
       const p = poolBySlug.get(pk.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
     }
     for (const l of st?.lots ?? []) {
@@ -1336,8 +1404,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       const p = poolBySlug.get(l.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
     }
     return c;
-  }, [st?.picks, st?.lots, myRoster, poolBySlug]);
-  const atCap = (pos: string) => {
+  }, [st?.picks, st?.lots, st?.devy_from, myRoster, poolBySlug]);
+  const atCap = (pos: string, slug?: string) => {
+    if (st?.devy_from != null && slug && isCollegeSlug(slug)) return false;   // 0411
     const cap = st?.pos_caps?.[pos as keyof PosCaps];
     return cap != null && (myPosCount[pos] ?? 0) >= cap;
   };
@@ -1355,7 +1424,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   const eligPos = useMemo(
     () => leagueEligiblePos({ roster: gm?.roster ?? null, slots: gm?.slots ?? null } as GameModeInfo),
     [gm]);
-  // A sport league's chips are its own positions (0398), in the sport's order.
+  // A sport league's chips are its own positions (0426), in the sport's order.
   const posChips = useMemo(
     () => (gm?.sport && gm.sport !== 'nfl' ? SPORTS[gm.sport].positions : POS_FILTERS.filter((p) => p !== 'ALL'))
       .filter((p) => !bannedPos(p) && (!eligPos || eligPos.has(p))),
@@ -1528,6 +1597,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
     finally { setBusy(false); }
   };
 
+  // 0411: the devy block takes college players only — the list follows it in.
+  const inDevyBlock = !!st && st.status === 'live' && devyBlockRound(st.current_overall, st.order?.length ?? 0, st.devy_from) != null;
+  useEffect(() => { if (inDevyBlock) setLevel('cfb'); }, [inDevyBlock]);
   if (!st) return (
     <div>
       {!embedded && <button onClick={onBack} className="mono" style={{ ...linkBtn, color: 'var(--you)', marginBottom: 10 }}>← my leagues</button>}
@@ -1813,6 +1885,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)' }}>
                     {auction ? `NOMINATION ${st.current_overall + (st.lots ?? []).length}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
                   </div>
+                  {!auction && devyBlockLine(st.current_overall, teams, st.devy_from, st.devy_rounds) && (
+                    <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: devyBlockRound(st.current_overall, teams, st.devy_from) != null ? 'var(--you)' : 'var(--faint)', marginTop: 2 }}>
+                      🎓 {devyBlockLine(st.current_overall, teams, st.devy_from, st.devy_rounds)}
+                    </div>
+                  )}
                   <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: myTurn ? 'var(--you)' : st.on_clock == null ? 'var(--faint)' : 'var(--text)', marginTop: 4 }}>
                     {st.on_clock == null ? 'Every lot is on the block — the next nomination opens when one sells'
                       : myTurn ? (auction ? 'YOUR NOMINATION — pick a player below' : 'YOUR PICK')
@@ -2128,12 +2205,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
               const inQ = queue.includes(p.slug);
               return (
                 <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)' }}>
-                  <button onClick={() => act(p.slug)} disabled={assigning ? busy : (!myTurn || busy || atCap(p.pos))} className="mono"
-                    title={assigning ? `assign to ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}` : atCap(p.pos) ? `position limit reached (${posLabel(p.pos)})` : undefined}
+                  <button onClick={() => act(p.slug)} disabled={assigning ? busy : (!myTurn || busy || atCap(p.pos, p.slug))} className="mono"
+                    title={assigning ? `assign to ${teamName(st.on_clock) ?? `Team ${st.on_clock}`}` : atCap(p.pos, p.slug) ? `position limit reached (${posLabel(p.pos)})` : undefined}
                     style={{ ...btn, padding: '7px 8px', fontSize: 9, width: 54, flexShrink: 0,
                       background: assigning ? 'var(--warn)' : btn.background,
-                      opacity: (assigning ? !busy : myTurn && !busy && !atCap(p.pos)) ? 1 : 0.35 }}>
-                    {assigning ? 'ASSIGN' : atCap(p.pos) ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
+                      opacity: (assigning ? !busy : myTurn && !busy && !atCap(p.pos, p.slug)) ? 1 : 0.35 }}>
+                    {assigning ? 'ASSIGN' : atCap(p.pos, p.slug) ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
                   </button>
                   <button onClick={() => setCardFor(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
                     <PlayerImg playerId={p.slug} espnId={p.espn_id} team={p.team} pos={p.pos as Pos} size={28} />
@@ -2191,7 +2268,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             if (rid == null) return null;
             const rows = pickRowsFor(rid);
             const pickOf = new Map(rows.map((pk) => [pk.slug, pk]));
-            const cost = (pk: DraftPickRow) => (auction ? `$${pk.price ?? 1}` : `R${pk.round}`);
+            const cost = (pk: DraftPickRow) => (auction ? `$${pk.price ?? 1}` : draftRoundLabel(pk.round, teams, st.devy_from));
             // One row: a tag on the left (the SPOT it fills, or the round/price
             // when there are no spots to fill), the player, where he came from.
             const row = (key: string | number, tag: string, slug: string, withCost = false) => {
@@ -2295,7 +2372,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                     ones you already get there. */}
                 {!gone && (() => {
                   const onBlock = (st.lots ?? []).some((l) => l.slug === slug);
-                  const capped = p ? atCap(p.pos) : false;
+                  const capped = p ? atCap(p.pos, p.slug) : false;
                   const can = !onBlock && !busy && (assigning || myTurn) && !capped;
                   return (
                     <button onClick={() => act(slug)} disabled={!can} className="mono"
@@ -2462,7 +2539,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
 export type TeamFocus = 'trades' | 'waivers' | 'options';
 /** MY TEAM's tabs (v0.296.5) — the app's three, plus KEEPERS where the league
  *  keeps anyone. ROSTER first, always: it is what the screen is for. */
-type TeamTab = 'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts';
+type TeamTab = 'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts' | 'devy';
 
 // ── Keepers (0182): declare who you carry into next season ──────────────────
 // Renders nothing unless the commissioner set a keeper count. Undeclared spots
@@ -3033,6 +3110,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // itself the same way, but a tab that opens onto nothing is worse than a tab
   // that isn't there.
   const [keeperCount, setKeeperCount] = useState(0);
+  // v0.575.0 (founder: "make it one of the top tabs on the my team page"):
+  // a devy-market league gets a DEVY tab holding the market.
+  const [devyMarketOn, setDevyMarketOn] = useState(false);
+  useEffect(() => { devySharesState(leagueId).then((r) => setDevyMarketOn(!!(r.ok && r.on))).catch(() => {}); }, [leagueId]);
 
   const refresh = async () => {
     try {
@@ -3412,6 +3493,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           ['trades', 'TRADES'],
           ...(hasContracts ? [['contracts', 'CONTRACTS'] as const] : []),
           ...(keeperCount > 0 ? [['keepers', 'KEEPERS'] as const] : []),
+          ...(devyMarketOn ? [['devy', 'DEVY'] as const] : []),
         ] as const).map(([id, label]) => (
           <Chip key={id} on={tab === id} onClick={() => setTab(id)}>{label}</Chip>
         ))}
@@ -3527,7 +3609,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             const grad = !isCollegeSlug(p.slug);
             return (
               <RosterLine key={p.slug} badge="DV" tone="var(--you)" p={p} busy={busy}
-                sub={grad ? `${p.pos} · ${p.team} · drafted — move him to active` : [p.pos, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
+                sub={grad ? `${p.pos} · ${p.team} · drafted — move him to active` : [c?.declared ? 'DECLARED' : null, p.pos, c?.custom ? c.level : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
                 onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
             );
           })}
@@ -3537,8 +3619,8 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           ))}
         </>)}
 
-        {/* DEVY SHARES (0387) — shows only in a shares league */}
-        {(gm?.positions ?? []).includes('COLLEGE') && <DevySharesPanel leagueId={leagueId} myRoster={myRoster} />}
+        {/* DEVY SHARES (0387) — v0.575.0: the market is the DEVY tab now. */}
+        {devyMarketOn && <DevyStakesList leagueId={leagueId} rid={shownRid} mine={viewingMine} onInvest={() => setTab('devy')} />}
 
       </div>
 
@@ -3549,6 +3631,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
           for it in the two weeks a year it matters and where it is noise for
           the other fifty. */}
       {tab === 'keepers' && myRoster != null && <KeepersCard leagueId={leagueId} myRoster={myRoster} mine={mine} />}
+
+      {tab === 'devy' && devyMarketOn && (
+        <div style={{ ...card, marginBottom: 12 }}><DevySharesPanel leagueId={leagueId} myRoster={myRoster} /></div>
+      )}
 
       {tab === 'waivers' && (<>
       {/* pending + recent claims */}
@@ -4028,12 +4114,21 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   // 0328: the league's lineup spec and scoring — what the trade grade reads
   // the replacement line off. Loaded once beside everything else.
   const [mode, setMode] = useState<GameModeInfo | null>(null);
+  // 0398: DEVY SHARES in a two-team offer; any of them files a two-leg trade.
+  const [shares, setShares] = useState<DevySharesState | null>(null);
+  // v0.584.0: the offer is read back, in full, before it goes.
+  const [confirming, setConfirming] = useState(false);
+  const [giveShares, setGiveShares] = useState<Record<string, number>>({});
+  const [getShares, setGetShares] = useState<Record<string, number>>({});
+  const [devyCashDraft, setDevyCashDraft] = useState('');
+  const [devyCashDir, setDevyCashDir] = useState<1 | -1>(1);
 
   const load = () => Promise.all([
     leagueTrades(leagueId).then((t) => { if (Array.isArray(t)) setTrades(t); }),
     tradeSignals(leagueId).then((s) => { if (Array.isArray(s)) setSignals(s); }),
     leagueContracts(leagueId).then((c) => setContracts(c.contracts ? c : null)).catch(() => {}),
     leagueGameMode(leagueId).then((m) => { if (m.ok) setMode(m); }).catch(() => {}),
+    devySharesState(leagueId).then((r) => setShares(r.ok && r.on && r.current !== false ? r : null)).catch(() => {}),
     pickAssets(leagueId).then((a) => {
       if (!a.ok) return;
       setPickTradingOn(a.pick_trading !== false);
@@ -4077,7 +4172,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
    *  slot says DRAFT rather than a season, because "2026 R1" beside "2027 R1"
    *  reads as two future picks when one is a slot in the draft running now. */
   const pickLabel = (p: { season: string; round: number; orig: number; kind?: string }, holder: number) =>
-    `${p.kind === 'startup' ? 'DRAFT' : p.season} R${p.round}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
+    `${p.kind === 'startup' ? 'DRAFT' : p.season} ${pickRoundLabel(p.round)}${p.orig !== holder ? ` (${teamName(p.orig)}’s slot)` : ''}`;
   /** One seat's side of a multi-team deal (0322): every asset with the seat
    *  it is addressed to, since that is the only thing that says what the
    *  trade actually is. */
@@ -4087,6 +4182,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
       ...l.send_picks.map((p) => `${pickLabel(p, l.roster_id)} → ${teamName(p.to)}`),
       ...l.send_faab.map((f) => `$${f.amount} FAAB → ${teamName(f.to)}`),
       ...l.send_cap.map((f) => `$${f.amount} cap → ${teamName(f.to)}`),
+    ...devyLegParts(l, (rid) => String(teamName(rid))),
     ];
     return parts.join(', ') || 'nothing';
   };
@@ -4128,13 +4224,17 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   };
   const capDollars = (parseInt(capDraft, 10) || 0) * capDir;
   const faabDollars = (parseInt(faabDraft, 10) || 0) * faabDir;
+  const devyCash = (Number(devyCashDraft) || 0) * devyCashDir;
+  const hasDevy = offersDevy(giveShares, getShares, devyCash);
   const nothingOffered = give.length + get.length + givePicks.length + getPicks.length
-    + Math.abs(capDollars) + Math.abs(faabDollars) === 0;
+    + Math.abs(capDollars) + Math.abs(faabDollars) === 0 && !hasDevy;
   const closeModal = () => {
+    setConfirming(false);
     setOpen(false); setCounterOf(null); setPartner(null); setGive([]); setGet([]);
     setGivePicks([]); setGetPicks([]); setNote('');
     setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setExpiryHours(null);
     setExtraTeams([]); setDest({}); setPickDest({}); setFaabTarget(null);
+    setGiveShares({}); setGetShares({}); setDevyCashDraft(''); setDevyCashDir(1);
   };
   // An offer answered with an offer (0321) is the same form: the difference is
   // which RPC files it, and that a counter's seats are already decided.
@@ -4178,21 +4278,39 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
       scoring: mode?.scoring,
     })
     : null;
+  /** A three-plus-team offer as legs: each seat and what it sends where. */
+  const multiLegs = () => teamsIn.map((rid) => ({
+    roster: rid,
+    send: Object.entries(dest)
+      .filter(([slug]) => holderOf(slug) === rid)
+      .map(([slug, to]) => ({ slug, to })),
+    send_picks: assets
+      .filter((p) => p.owner === rid && pickDest[pickKey(p)] != null)
+      .map((p) => ({ season: p.season, round: p.round, orig: p.orig, to: pickDest[pickKey(p)] })),
+    ...(rid === myRoster && faabDollars > 0 && faabTarget != null
+      ? { send_faab: [{ to: faabTarget, amount: faabDollars }] } : {}),
+  }));
+  /** THE READ-BACK (v0.584.0): what every team gets, the terms around it. */
+  const confirmTeams = () => {
+    if (myRoster == null || partner == null) return [];
+    const legs: ConfirmLeg[] = isMulti ? multiLegs() : twoSeatDevyLegs({
+      me: myRoster, partner, give, get,
+      givePicks: givePicks.map((p) => ({ ...p })), getPicks: getPicks.map((p) => ({ ...p })),
+      faab: faabDollars, cap: capDollars, giveShares, getShares, devyCash,
+    }).map((l) => ({ ...l, send_picks: l.send_picks.map((p) => ({ ...p, kind: [...givePicks, ...getPicks].find((x) => x.season === p.season && x.round === p.round && x.orig === p.orig)?.kind })) }));
+    return tradeConfirm(legs, {
+      me: myRoster, teamName: (rid) => String(teamName(rid) ?? `Team ${rid}`),
+      player: (s) => { const dt = dealTag(s); return dt ? `${pname(s)} (${dt})` : pname(s); },
+      pick: (p, holder) => pickLabel(p, holder),
+      shareName: (s) => shares?.players?.find((x) => x.slug === s)?.name ?? s,
+      retain,
+    });
+  };
   const proposeMulti = async () => {
     if (busy || myRoster == null || multiAssets === 0) return;
     setBusy(true); setErr(null);
     try {
-      const legs = teamsIn.map((rid) => ({
-        roster: rid,
-        send: Object.entries(dest)
-          .filter(([slug]) => holderOf(slug) === rid)
-          .map(([slug, to]) => ({ slug, to })),
-        send_picks: assets
-          .filter((p) => p.owner === rid && pickDest[pickKey(p)] != null)
-          .map((p) => ({ season: p.season, round: p.round, orig: p.orig, to: pickDest[pickKey(p)] })),
-        ...(rid === myRoster && faabDollars > 0 && faabTarget != null
-          ? { send_faab: [{ to: faabTarget, amount: faabDollars }] } : {}),
-      }));
+      const legs = multiLegs();
       const r = await proposeMultiTrade(leagueId, legs, note.trim() || undefined, expiryHours ?? undefined);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
       closeModal();
@@ -4205,6 +4323,16 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
     if (busy || myRoster == null || partner == null || nothingOffered) return;
     setBusy(true); setErr(null);
     try {
+      // 0398: shares in the deal → a two-leg trade, everything else riding along.
+      if (hasDevy) {
+        if (Object.values(retain).some((v) => v > 0)) { setErr('Salary retention can\u2019t ride with devy shares — take one out.'); return; }
+        const r = await proposeMultiTrade(leagueId, twoSeatDevyLegs({
+          me: myRoster, partner, give, get, givePicks, getPicks,
+          faab: faabDollars, cap: capDollars, giveShares, getShares, devyCash,
+        }), note.trim() || undefined, expiryHours ?? undefined);
+        if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not propose the trade.')); return; }
+        closeModal(); await load(); onChanged(); return;
+      }
       const retainTerms = [...give, ...get]
         .filter((s) => (retain[s] ?? 0) > 0)
         .map((s) => ({ slug: s, amount: retain[s] }));
@@ -4557,6 +4685,43 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
                 </div>
               </div>
             )}
+            {/* DEVY SHARES (0398): shares and devy cash ride a two-team offer. */}
+            {partner != null && !isMulti && !counterOf && shares && (
+              <div style={{ marginTop: 12, border: '1px solid var(--bd)', borderRadius: 6, padding: 8 }}>
+                <div className="mono" style={{ ...label, marginBottom: 4 }}>🎓 DEVY SHARES</div>
+                {([[myRoster, giveShares, setGiveShares, 'YOU SEND'], [partner, getShares, setGetShares, 'YOU GET']] as const).map(([rid, val, setVal, lbl]) => {
+                  const stakes = (shares.players ?? []).filter((p) => !p.graduated_to)
+                    .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) })).filter((x) => !!x.h);
+                  return (
+                    <div key={lbl} style={{ marginTop: 6 }}>
+                      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>{lbl}</div>
+                      {stakes.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>no shares</div>}
+                      {stakes.map(({ p, h }) => (
+                        <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+                          <span style={{ flex: 1, fontSize: 12.5, color: (val[p.slug] ?? 0) > 0 ? 'var(--you)' : 'var(--text)' }}>{p.name ?? p.slug} <span style={{ color: 'var(--faint)' }}>{h!.shares} held</span></span>
+                          <input type="number" min={0} max={h!.shares} value={val[p.slug] ?? 0}
+                            onChange={(e) => setVal({ ...val, [p.slug]: Math.max(0, Math.min(h!.shares, Math.floor(Number(e.target.value) || 0))) })}
+                            style={{ width: 56, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>DEVY CASH</span>
+                  <select value={devyCashDir} onChange={(e) => setDevyCashDir(Number(e.target.value) === -1 ? -1 : 1)}
+                    style={{ padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }}>
+                    <option value={1}>I send</option><option value={-1}>I ask</option>
+                  </select>
+                  <input value={devyCashDraft} onChange={(e) => setDevyCashDraft(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0"
+                    style={{ width: 64, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 5, background: 'var(--bg)', color: 'var(--text)' }} />
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>you have {fmtPts(teamBook(shares, myRoster).cash)}</span>
+                </div>
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 4 }}>
+                  Shares carry what they cost, and a whole maxed stake keeps its place in line for the player's right.
+                </div>
+              </div>
+            )}
             {/* THE MULTI-TEAM BUILDER (0322): one block per seat, each asset
                 checked and then pointed at whoever receives it. The default
                 is the next team round the ring — the carousel most of these
@@ -4717,15 +4882,51 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             </div>
             <input value={note} maxLength={140} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)…" style={{ ...input, marginTop: 12 }} />
             {err && <div className="mono" style={errStyle}>{err}</div>}
-            <button onClick={propose}
+            <button onClick={() => { setErr(null); setConfirming(true); }}
               disabled={busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered)}
               className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy || partner == null || (isMulti ? multiAssets === 0 : nothingOffered) ? 0.5 : 1 }}>
-              {counterOf ? '⇄ SEND THE COUNTER'
-                : isMulti ? `⇄ SEND THE ${teamsIn.length}-TEAM OFFER` : '⇄ SEND THE OFFER'}
-              {tradeReview === 'commish' ? ' (commish must approve)'
-                : tradeReview === 'league' ? ' (the league votes)' : ''}
+              {counterOf ? 'REVIEW THE COUNTER →' : isMulti ? `REVIEW THE ${teamsIn.length}-TEAM OFFER →` : 'REVIEW THE OFFER →'}
             </button>
             <div style={{ textAlign: 'center', marginTop: 10 }}><button onClick={closeModal} className="mono" style={linkBtn}>cancel</button></div>
+          </div>
+        </div>
+      )}
+      {/* THE READ-BACK (v0.584.0): the whole offer, one last look, then send. */}
+      {open && confirming && myRoster != null && partner != null && (
+        <div onClick={() => setConfirming(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 440, maxHeight: '85vh', overflowY: 'auto' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+              {counterOf ? 'Confirm your counter' : 'Confirm your offer'}
+            </div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 3 }}>
+              {isMulti ? `${teamsIn.length}-team trade with ${teamsIn.filter((r) => r !== myRoster).map((r) => teamName(r)).join(', ')}` : `Trade with ${teamName(partner)}`}
+            </div>
+            {confirmTeams().map((t) => (
+              <div key={t.roster} style={{ marginTop: 12, border: `1px solid ${t.mine ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 6, padding: 8 }}>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', fontWeight: 700, color: t.mine ? 'var(--you)' : 'var(--dim)' }}>{t.title}</div>
+                {t.gets.length === 0 && <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>nothing</div>}
+                {t.gets.map((g, i) => <div key={i} style={{ fontSize: 12.5, color: 'var(--text)', marginTop: 4, lineHeight: 1.4 }}>• {g}</div>)}
+              </div>
+            ))}
+            {grade && (
+              <div className="mono" style={{ fontSize: 10.5, marginTop: 12, lineHeight: 1.5,
+                color: grade.verdict === 'for' ? 'var(--you)' : grade.verdict === 'against' ? 'var(--opp)' : 'var(--warn)' }}>
+                ⚖ {grade.summary}
+              </div>
+            )}
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, lineHeight: 1.6 }}>
+              <div>⏱ {expiryLine(expiryHours, offerDays)}</div>
+              <div>⚑ {reviewLine(tradeReview)}</div>
+              {note.trim() && <div>✎ “{note.trim()}”</div>}
+            </div>
+            {err && <div className="mono" style={errStyle}>{err}</div>}
+            <button onClick={() => void propose()} disabled={busy} className="mono"
+              style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.5 : 1 }}>
+              {busy ? 'SENDING…' : counterOf ? '⇄ SEND THE COUNTER' : '⇄ SEND THE OFFER'}
+            </button>
+            <div style={{ textAlign: 'center', marginTop: 10 }}>
+              <button onClick={() => setConfirming(false)} className="mono" style={linkBtn}>← edit the offer</button>
+            </div>
           </div>
         </div>
       )}

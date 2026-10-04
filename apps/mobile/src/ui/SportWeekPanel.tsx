@@ -1,4 +1,4 @@
-// THE SPORT WEEK, on the phone (0398) — the web SportWeekPanel's twin: the
+// THE SPORT WEEK, on the phone (0426) — the web SportWeekPanel's twin: the
 // period, both seats' locked slot-days with each line's points (or the
 // category grid, or the roto table), and today's slate. Scored through the
 // same core functions the worker uses, so the number here is the number in

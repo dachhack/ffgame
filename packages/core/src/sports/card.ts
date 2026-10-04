@@ -1,4 +1,4 @@
-// WHAT A PLAYER CARD SHOWS FOR A SPORT PLAYER (v0.570.0): the handful of
+// WHAT A PLAYER CARD SHOWS FOR A SPORT PLAYER (v0.622.0): the handful of
 // numbers a manager reads first, per sport, from a season line or a game
 // line. Per-game averages come off the season line (gp) and ratios off the
 // category definitions, so the card, the panel and the worker agree on

@@ -32,6 +32,7 @@ import { tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { draftEventLine, draftEventTime } from '@drip/core/data/draftLog';
 import { headshot } from '@drip/core/data/media';
 import { myFavorites, loadTeamOverrides, playerFlags, leagueMarket, leagueContracts } from '@drip/core/data/liveApi';
+import { devyBlockLine, devyBlockRound, draftRoundLabel } from '@drip/core/data/devyDraft';
 import { sortPool, POOL_SORTS, projFor, adpFor, installLiveMarket, clearLiveMarket, dynFor, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
@@ -45,7 +46,7 @@ import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton }
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
-import { teamLabel } from '@drip/core/data/college';
+import { teamLabel, isCollegeSlug } from '@drip/core/data/college';
 
 // v0.554.0: every position the league can play — IDP, FB, HC and P included
 // (the list used to stop at DEF); posChips trims it to the league's own.
@@ -306,6 +307,9 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     if (myRoster == null) return c;
     for (const pk of st?.picks ?? []) {
       if (pk.roster_id !== myRoster) continue;
+      // 0411: with a devy block the college players fill devy spots, which
+      // carry no position caps (0366) — they don't count here.
+      if (st?.devy_from != null && isCollegeSlug(pk.slug)) continue;
       const p = poolBySlug.get(pk.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
     }
     for (const l of st?.lots ?? []) {
@@ -313,8 +317,9 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       const p = poolBySlug.get(l.slug)?.pos; if (p) c[p] = (c[p] ?? 0) + 1;
     }
     return c;
-  }, [st?.picks, st?.lots, myRoster, poolBySlug]);
-  const atCap = (p: string) => {
+  }, [st?.picks, st?.lots, st?.devy_from, myRoster, poolBySlug]);
+  const atCap = (p: string, slug?: string) => {
+    if (st?.devy_from != null && slug && isCollegeSlug(slug)) return false;   // 0411
     const cap = st?.pos_caps?.[p as keyof PosCaps];
     return cap != null && (myPosCount[p] ?? 0) >= cap;
   };
@@ -327,7 +332,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   // in the league roster"): the lineup spec's eligible-position set trims the
   // chips too — a builder league with no K spot shows no K filter.
   const eligPos = useMemo(() => leagueEligiblePos(gm), [gm]);
-  // A sport league's chips are its own positions (0398), in the sport's order.
+  // A sport league's chips are its own positions (0426), in the sport's order.
   const posChips = useMemo(
     () => (gm?.sport && gm.sport !== 'nfl' ? SPORTS[gm.sport].positions : POS_FILTERS.filter((p) => p !== 'ALL'))
       .filter((p) => !bannedPos(p) && (!eligPos || eligPos.has(p))),
@@ -539,6 +544,9 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
     void run(() => makeDraftPick(leagueId, slug));
   };
 
+  // 0411: the devy block takes college players only — the list follows it in.
+  const inDevyBlock = !!st && st.status === 'live' && devyBlockRound(st.current_overall, st.order?.length ?? 0, st.devy_from) != null;
+  useEffect(() => { if (inDevyBlock) setLevel('cfb'); }, [inDevyBlock]);
   if (!st) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
@@ -852,6 +860,11 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                 <Mono size={9} tone="faint" track={0.12}>
                   {auction ? `NOMINATION ${st.current_overall + (st.lots ?? []).length}` : `ROUND ${round} / ${st.rounds} · PICK ${st.current_overall}`}
                 </Mono>
+                {!auction && !!devyBlockLine(st.current_overall, teams, st.devy_from, st.devy_rounds) && (
+                  <Mono size={8.5} weight="700" tone={devyBlockRound(st.current_overall, teams, st.devy_from) != null ? 'you' : 'faint'} style={{ marginTop: 2 }}>
+                    🎓 {devyBlockLine(st.current_overall, teams, st.devy_from, st.devy_rounds)}
+                  </Mono>
+                )}
                 <Text numberOfLines={2} style={{ fontSize: 15.5, fontWeight: '700', color: myTurn ? t.you : st.on_clock == null ? t.faint : t.text, marginTop: 3 }}>
                   {st.on_clock == null ? 'Every lot is on the block — the next nomination opens when one sells'
                     : myTurn ? (auction ? 'YOUR NOMINATION — pick below' : 'YOUR PICK')
@@ -1058,7 +1071,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
             const adp = adpFor(p.slug); const proj = projFor(p.slug, p.pos);
             const dyn = dynasty ? dynFor(p.slug) : null;
             const inQ = queue.includes(p.slug);
-            const capped = atCap(p.pos);
+            const capped = atCap(p.pos, p.slug);
             const gone = taken.has(p.slug);
             const can = !gone && (assigning ? !busy : (myTurn && !busy && !capped));
             return (
@@ -1202,7 +1215,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
             if (rid == null) return null;
             const rows = pickRowsFor(rid);
             const pickOf = new Map(rows.map((pk) => [pk.slug, pk]));
-            const cost = (pk: DraftPickRow) => (auction ? `$${pk.price ?? 1}` : `R${pk.round}`);
+            const cost = (pk: DraftPickRow) => (auction ? `$${pk.price ?? 1}` : draftRoundLabel(pk.round, teams, st.devy_from));
             // One row: a tag on the left (the SPOT it fills, or the round/price
             // when there are no spots to fill), the player, where he came from.
             const row = (key: string | number, tag: string, slug: string, withCost = false) => {
@@ -1315,7 +1328,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                     cannot disagree about what is legal. */}
                 {!gone && (() => {
                   const onBlock = (st.lots ?? []).some((l) => l.slug === slug);
-                  const capped = p ? atCap(p.pos) : false;
+                  const capped = p ? atCap(p.pos, p.slug) : false;
                   const can = !onBlock && !busy && (assigning || myTurn) && !capped;
                   return (
                     <Pressable disabled={!can} onPress={() => { tap(); act(slug); }}

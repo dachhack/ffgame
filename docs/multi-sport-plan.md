@@ -2,7 +2,7 @@
 
 > _Assessed 2026-09-30. Founder: "What would it take for us to do hockey, NBA,
 > MLB, WNBA fantasy … let's assume native leagues for all of these and no drip
-> format." This is the assessment and the phased plan; v0.564.0 ships phase 1._
+> format." This is the assessment and the phased plan; v0.616.0 ships phase 1._
 
 ## 0. The verdict in one paragraph
 
@@ -35,19 +35,19 @@ posture as ESPN today.
 
 ## 2. What changes
 
-**The stat spine (phase 1, shipped v0.564.0)**
+**The stat spine (phase 1, shipped v0.616.0)**
 
 - No play-by-play. A classic league needs each player's line per game, and
   every other league's official feed publishes exactly that, live, as a box
   score. Non-NFL games are stored as cumulative per-game **stat lines**
-  (`game_stat_line`, 0396): idempotent upserts, trivial true-up, no text
+  (`game_stat_line`, 0424): idempotent upserts, trivial true-up, no text
   parsing, no possession model.
 - One **SportDef** per sport (`packages/core/src/sports/`): eligibility
   codes, feed-position map, slot types, default lineup, stat vocabulary,
   derived stats, default points table, categories, injury statuses, season
   shape. The NFL is in the registry for shape only; it keeps scoring through
   `engine/classic.ts`.
-- **`league.sport`** (0396), default `'nfl'`. `sport_game` is the daily
+- **`league.sport`** (0424), default `'nfl'`. `sport_game` is the daily
   slate keyed `(sport, season, game_id)` — the bare `week` keys that
   `live_play`, `game_feed` and `nfl_slate` share are not extended to other
   sports (the college work's +200 week offset is the cautionary tale).
@@ -63,24 +63,24 @@ posture as ESPN today.
   (`server/src/poll/sportGames.js`) gated on `SPORTS=nhl,mlb` so the NFL
   worker is unchanged when unset; CLI `sport-poll <sport> [date] [--force]`.
 
-**v0.570.0**: the lineup builder (0403 `set_sport_lineup`) and the sport player card.
+**v0.622.0**: the lineup builder (0431 `set_sport_lineup`) and the sport player card.
 
-**v0.569.0**: ten fixes from a code review (see STATUS.md).
+**v0.621.0**: ten fixes from a code review (see STATUS.md).
 
-**v0.568.0**: the NBA/WNBA schedule by date, sport leagues kept out of
-auto-playoffs (0401), the mobile wire chips, `docs/multi-sport-review.md`.
+**v0.620.0**: the NBA/WNBA schedule by date, sport leagues kept out of
+auto-playoffs (0429), the mobile wire chips, `docs/multi-sport-review.md`.
 
-**v0.567.0**: `set_sport_settings` + the SCORING page for a sport league;
+**v0.619.0**: `set_sport_settings` + the SCORING page for a sport league;
 injuries on the boards through `injury_status`.
 
-**Phase 4 and the app (shipped v0.566.0)**: roto (`sport_roto`, the
+**Phase 4 and the app (shipped v0.618.0)**: roto (`sport_roto`, the
 worker's season table), slot eligibility enforced at the lock, names for
 sport keys on both boards, the mobile create flow, draft chips and week
 panel. Still open: MLB games-played and innings caps, period-aware playoffs, the
 mobile commissioner's sport scoring and lineup pages, the mobile sport
 player card.
 
-**Phases 2–3 (shipped v0.565.0)**: the directory and rank (`sport_player`,
+**Phases 2–3 (shipped v0.617.0)**: the directory and rank (`sport_player`,
 `seed_sport_pool`, `league_pool.eligible`), creation with a sport,
 periods from 301, per-game locks (`sport_slot_lock` + the two triggers),
 the worker's lock/score/final loop, the web create form, draft/wire chips

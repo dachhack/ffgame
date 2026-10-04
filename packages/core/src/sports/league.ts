@@ -1,4 +1,4 @@
-// A SPORT LEAGUE'S SHAPE (phase 3, v0.565.0) — the settings a native league
+// A SPORT LEAGUE'S SHAPE (phase 3, v0.617.0) — the settings a native league
 // in a daily sport carries, and the period calendar it plays on.
 //
 // THE CALENDAR. A daily sport still plays head-to-head by the week: period

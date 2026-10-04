@@ -1,4 +1,4 @@
-// THE DAILY-SPORT POLLER (v0.564.0) — sport_game + game_stat_line, per day.
+// THE DAILY-SPORT POLLER (v0.616.0) — sport_game + game_stat_line, per day.
 //
 // For each sport the worker is asked to carry (SPORTS=nhl,mlb in the env —
 // unset means none, so the NFL worker is unchanged), one pass:

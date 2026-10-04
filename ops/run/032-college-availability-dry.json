@@ -1,0 +1,5 @@
+{
+  "mode": "college-availability",
+  "dry": true,
+  "why": "v0.615.1: ops 031 read all four conferences (318 designations, 52 schools) and crashed before printing them. Same dry read again, with the list: every designation against the live college_player table, rostered players starred, every unmatched row. Touches nothing."
+}

@@ -207,6 +207,40 @@ export const SCORING_NOTES: FormatNote[] = [
   { name: 'K & D/ST', icon: '🦵', line: 'Kickers scored by distance, defenses by points allowed, sacks, takeaways and scores — on or off per league.' },
 ];
 
+// ── THE LANDING'S FEATURE BOARD (v0.614.0) ────────────────────────────────
+//
+// Founder's revamp of the signed-out web flow: "Get account · Features ·
+// League Types · Competitive Modes · Positions · Scoring Options · Matchup
+// Style · Drip Demo image click to demo." Five groups, in the founder's order
+// and with the founder's names. Each chip opens one line, from the manager's
+// side of the screen; the lines reuse the notes above wherever one exists so
+// the join card, the create screen and the landing keep saying the same thing.
+const note = (list: FormatNote[], name: string): FormatNote => list.find((n) => n.name === name) ?? { name, line: '' };
+export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote[] }[] = [
+  { heading: 'League types', sub: 'What carries from one season to the next.', notes: [
+    note(CONTINUITY_NOTES, 'Redraft'), note(CONTINUITY_NOTES, 'Dynasty'), note(CONTINUITY_NOTES, 'Keeper'), note(CONTINUITY_NOTES, 'Contract'),
+    { name: 'Devy', icon: '🎓', line: 'College players on your roster before they’re drafted — as devy spots or as shares bought in a devy market, priced off StatHead’s rankings.' },
+  ] },
+  { heading: 'Competitive modes', sub: 'How the season ends differently.', notes: [
+    note(FORMAT_NOTES, 'Vampire'), note(FORMAT_NOTES, 'Guillotine'), note(FORMAT_NOTES, 'Golf'),
+  ] },
+  { heading: 'Positions', sub: 'Every spot a lineup can have, on or off per league.', notes: [
+    { name: 'QB · RB · WR · TE', icon: '🏈', line: 'The core lineup, with flex and superflex spots shaped however the commissioner likes.' },
+    { name: 'K · D/ST', icon: '🦵', line: 'Kickers scored by distance, defenses by points allowed, sacks, takeaways and scores.' },
+    { name: 'DL · DE · LB · DB', icon: '🛡️', line: 'IDP: defensive linemen, ends, linebackers and backs as real starters, with tackles, sacks and takeaways scored live.' },
+    { name: 'RET · FB · PUNT · HC', icon: '🧢', line: 'Returners scored on returns alone, fullbacks, punters, and head coaches scored on the team’s result.' },
+    { name: 'Scoped positions', icon: '🎯', line: 'A spot limited to a team, a tenure (rookies, years 2–3, vets) or a position group — "one rookie WR", "a Cowboy every week".' },
+  ] },
+  { heading: 'Scoring options', sub: 'Knob by knob, or by the rule.', notes: [
+    { name: 'Single-spot best ball', icon: '🤖', line: 'Flag any one spot (or all of them) as best ball: it starts the top scorer you didn’t field by hand, after the fact.' },
+    { name: 'Scoped bonuses', icon: '✨', line: 'Bonus points or multipliers that apply only to players matching a filter — a team, a position, a tenure — stacked as many as you like.' },
+    { name: 'Others', icon: '🎚️', line: 'PPR at any value, TD bonuses, yardage multipliers, turnover penalties, per-metric overrides — every value a switch the commissioner holds.' },
+  ] },
+  { heading: 'Matchup style', sub: 'The game your week is played in.', notes: [
+    note(GAME_NOTES, 'Drip'), note(GAME_NOTES, 'Classic'),
+  ] },
+];
+
 /** The gallery the landing draws: every group is a question the create screen
  *  asks, in the order it asks them. */
 export const LEAGUE_MENU: { heading: string; notes: FormatNote[] }[] = [

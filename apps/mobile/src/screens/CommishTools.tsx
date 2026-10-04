@@ -16,7 +16,8 @@ import { ActivityIndicator, Alert, Animated, Image, PanResponder, Pressable, Scr
 import {
   adminAssignRoster, adminLeagueJoiners, setLeagueWaitlist, adminLeagueMembers, commishBulkCoin,
   commishClaimRoster, commishClearCoin, commishGrantWeeklyBudget, commishOverview,
-  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode,
+  commishSeedCoin, commishSetManager, commishSetWeeklyBudget, friendlyError, leaguePracticeWeek, devySharesState, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen,
+  devyLaunchState, setLeagueDevyLaunch, commishDevyLaunchNow, type DevyLaunchState, type DevyLaunchCfg,
   leagueInvite, nativeTeamState,
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
@@ -36,6 +37,8 @@ import {
   leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict, leagueIsCollegeCalendar,
   isAdmin, setLeaguePositionAccess, setLeagueCalendar,
 } from '@drip/core/data/liveApi';
+import { draftState as draftStateOf, leagueGameMode as gameModeOf, setDevyRounds } from '@drip/core/data/liveApi';
+import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomCollege, CUSTOM_COLLEGE_LEVELS, type CustomCollegeRow } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
@@ -62,6 +65,7 @@ const SPOT_PRESETS: { chip: string; pos: string[]; label: string; bb?: boolean; 
   { chip: 'VET 8+ FLEX', pos: ['RB', 'WR', 'TE'], label: 'Vet 8+ Flex', fMin: '8' },
 ];
 import { useTheme, MONO, fs } from '../theme.native';
+import { DOW_LABELS, slotLabel, launchRulesText } from '@drip/core/data/devyShares';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -2947,15 +2951,49 @@ function DeleteLeagueCard({ leagueId, onDeleted }: { leagueId: string; onDeleted
 function DevyModeCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [on, setOn] = useState<boolean | null>(null);
+  const [cash, setCash] = useState<string>('100');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => { devySharesState(leagueId).then((r) => setOn(!!r.on)).catch(() => setOn(null)); }, [leagueId]);
+  // 0399: when the market opens — only a question until the first draft is done
+  const [openNow, setOpenNow] = useState(false);
+  const [drafted, setDrafted] = useState(true);
+  useEffect(() => {
+    devySharesState(leagueId).then((r) => {
+      setOn(!!r.on); setCash(String(r.start_cash ?? 100)); setOpenNow(!!r.open_now); setDrafted(r.drafted !== false);
+    }).catch(() => setOn(null));
+  }, [leagueId]);
+  const pickOpen = async (open: 'now' | 'after_draft') => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyOpen(leagueId, open);
+      if (r.ok) { commit(); setOpenNow(open === 'now'); setNote(open === 'now' ? '✓ the market is open — teams can buy shares now' : '✓ the market opens once the draft is done'); }
+      else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
   const pick = async (mode: 'spots' | 'shares') => {
     setBusy(true); setNote(null);
     try {
       const r = await setLeagueDevyMode(leagueId, mode);
-      if (r.ok) { commit(); setOn(mode === 'shares'); setNote(mode === 'shares' ? '✓ devy shares on — the league chat says so' : '✓ back to devy spots'); }
+      if (r.ok) { commit(); setOn(mode === 'shares'); setNote(mode === 'shares' ? '✓ devy market on — the league chat says so' : '✓ back to devy spots; every share was cashed out'); }
       else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  // 0396: a switch has consequences, so it asks first.
+  const confirm = (mode: 'spots' | 'shares') => Alert.alert(
+    mode === 'shares' ? 'Turn on the devy market?' : 'Back to devy spots?',
+    mode === 'shares'
+      ? 'College players leave the player pool, and every team gets its starting cash to buy shares. It can\u2019t change again during a draft, or from Jan 15 until the rookie draft once anyone holds shares.'
+      : 'Every team\u2019s shares are sold at today\u2019s value and the cash stays with them. No one keeps a devy right.',
+    [{ text: 'Cancel', style: 'cancel' }, { text: mode === 'shares' ? 'Turn on' : 'Switch back', onPress: () => void pick(mode) }]);
+  const saveCash = async () => {
+    const n = Number(cash);
+    if (!Number.isFinite(n)) { setNote('✗ a number, 0 to 500'); return; }
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyStartCash(leagueId, n);
+      if (r.ok) { commit(); setNote(`✓ new teams start with ${r.start_cash}`); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
     } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
     finally { setBusy(false); }
   };
@@ -2963,11 +3001,204 @@ function DevyModeCard({ leagueId }: { leagueId: string }) {
   return (
     <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
       <LabelInfo label="DEVY"
-        info={'SPOTS: college players sit in devy roster spots until they turn pro.\n\nSHARES: a market. Nobody rosters college players; every team gets 100 points to buy shares in them, priced weekly by how they play and how much of the league wants them. Up to 20 shares in one player; the first team to 20 holds his right (if only one team is in, 5+ holds it), which reserves him in the rookie draft at any of the holder\u2019s picks. Selling, or his turning pro, pays today\u2019s price (up to 3× what was paid). Shares lock from Jan 15 until the rookie draft.\n\nShares need the DEVY spots at 0 and no college players on rosters.'} />
+        info={'SPOTS: college players sit in devy roster spots until they turn pro.\n\nSHARES (the devy market): nobody rosters college players. Every team gets starting cash to buy shares in them, priced weekly by how they play. A stake maxes at 20 shares or 60 points; the first team to max holds his right (or the only team with 5+ shares and 15+ points in), which reserves him in the rookie draft. When he\u2019s drafted, shares pay the better of his college price and his draft round, up to 3× what was paid; if he leaves undrafted, half comes back. Shares lock from Jan 15 until the rookie draft.\n\nShares need a snake or linear draft, the DEVY spots at 0, and no college players on rosters.'} />
       <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-        <Chip label="SPOTS" on={!on} disabled={busy || !on} onPress={() => { tap(); void pick('spots'); }} />
-        <Chip label="SHARES" on={on} disabled={busy || on} onPress={() => { tap(); void pick('shares'); }} />
+        <Chip label="SPOTS" on={!on} disabled={busy || !on} onPress={() => { tap(); confirm('spots'); }} />
+        <Chip label="SHARES" on={on} disabled={busy || on} onPress={() => { tap(); confirm('shares'); }} />
       </View>
+      {on && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+          <Mono size={8.5} tone="dim">NEW TEAM CASH</Mono>
+          <TextInput value={cash} onChangeText={(x) => setCash(x.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad"
+            style={{ minWidth: 56, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3, color: t.text, fontFamily: MONO, fontSize: fs(11) }} />
+          <Chip label="SAVE" disabled={busy} onPress={() => { tap(); void saveCash(); }} />
+        </View>
+      )}
+      {on && <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>A team with no book yet starts with this. A team someone takes over keeps what it has.</Mono>}
+      {on && !drafted && (
+        <View style={{ marginTop: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Mono size={8.5} tone="dim">MARKET OPENS</Mono>
+            <Chip label="AFTER THE DRAFT" on={!openNow} disabled={busy || !openNow} onPress={() => { tap(); void pickOpen('after_draft'); }} />
+            <Chip label="RIGHT AWAY" on={openNow} disabled={busy || openNow} onPress={() => { tap(); void pickOpen('now'); }} />
+          </View>
+          <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Right away lets teams scout and buy before the startup draft (paused while it runs). Either way, every year after, shares lock from Jan 15 until the rookie draft.</Mono>
+        </View>
+      )}
+      {on && <DevyLaunchCard leagueId={leagueId} />}
+      {!on && <DevyRoundsCard leagueId={leagueId} />}
+      {!on && <DevyCustomCard leagueId={leagueId} />}
+      {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
+    </View>
+  );
+}
+
+/** THE DEVY DRAFT (0411): how many devy rounds end the draft. */
+function DevyRoundsCard({ leagueId }: { leagueId: string }) {
+  const [spots, setSpots] = useState<number | null>(null);
+  const [n, setN] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    gameModeOf(leagueId).then((g) => setSpots(g.ok ? g.shape?.devy ?? 0 : 0)).catch(() => setSpots(0));
+    draftStateOf(leagueId).then((d) => setN(d.devy_rounds ?? 0)).catch(() => {});
+  }, [leagueId]);
+  if (!spots) return null;
+  const save = async (v: number) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setDevyRounds(leagueId, v);
+      if (r.ok) { commit(); setN(v); setNote(v ? `✓ the draft ends with ${v} devy round${v === 1 ? '' : 's'}` : '✓ no devy rounds — devy spots fill from the wire'); }
+      else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={{ marginTop: 10 }}>
+      <LabelInfo label="DEVY ROUNDS"
+        info={'The draft ends with this many devy rounds: every pick in them is a college player, and none before them.\n\nIn a dynasty league with rookie picks, devy picks are assets too \u2014 trade them like any pick.\n\nIn the startup draft the devy rounds fill the devy spots; every year after, they\u2019re how teams restock after players turn pro.'} />
+      <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+        {Array.from({ length: Math.min(5, spots) + 1 }, (_, v) => (
+          <Chip key={v} label={v === 0 ? 'OFF' : String(v)} on={n === v} disabled={busy || n === v} onPress={() => { tap(); void save(v); }} />
+        ))}
+      </View>
+      {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 4 }}>{note}</Mono>}
+    </View>
+  );
+}
+
+/** CUSTOM COLLEGE PLAYERS (0410): a player the directory doesn't have — D2,
+ *  JUCO, a recruit — into this league's pool only. */
+function DevyCustomCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [rows, setRows] = useState<CustomCollegeRow[]>([]);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [pos, setPos] = useState('RB');
+  const [school, setSchool] = useState('');
+  const [cls, setCls] = useState<number | null>(null);
+  const [level, setLevel] = useState<string>('D2');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => leagueCustomCollege(leagueId).then((r) => setRows(Array.isArray(r) ? r : [])).catch(() => {});
+  useEffect(() => { void load(); }, [leagueId]);
+  const add = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishAddCustomCollege(leagueId, { name, pos, school: school || null, cls, level });
+      if (r.ok) { commit(); setNote(`✓ ${r.name} is in the pool — claim or draft him like anyone else`); setName(''); setSchool(''); setCls(null); await load(); }
+      else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const remove = async (slug: string) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishRemoveCustomCollege(leagueId, slug);
+      if (r.ok) { commit(); setNote('✓ removed from the pool'); await load(); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const inputStyle = { borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 4, color: t.text, fontFamily: MONO, fontSize: fs(11) } as const;
+  return (
+    <View style={{ marginTop: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <LabelInfo label="CUSTOM PLAYERS"
+          info={'Players the college directory doesn\u2019t have \u2014 D2, D3, NAIA, JUCO, a signed recruit. They go into this league\u2019s pool only, where teams claim or draft them like anyone else. ESPN has no feed on them, so they score nothing: a devy stash until they reach FBS.'} />
+        <Mono size={8.5} tone="faint">{rows.length ? `${rows.length} added` : 'none'}</Mono>
+        <Chip label={open ? 'CLOSE' : '+ ADD'} on={open} onPress={() => { tap(); setOpen(!open); }} />
+      </View>
+      {open && (
+        <View style={{ gap: 6, marginTop: 6 }}>
+          <TextInput value={name} onChangeText={setName} placeholder="Name" placeholderTextColor={t.faint} style={inputStyle} />
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+            {['QB', 'RB', 'WR', 'TE', 'K'].map((p) => <Chip key={p} label={p} on={pos === p} onPress={() => { tap(); setPos(p); }} />)}
+          </View>
+          <TextInput value={school} onChangeText={setSchool} placeholder="School" placeholderTextColor={t.faint} style={inputStyle} />
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+            {[1, 2, 3, 4].map((c) => <Chip key={c} label={collegeClassLabel(c)} on={cls === c} onPress={() => { tap(); setCls(cls === c ? null : c); }} />)}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+            {CUSTOM_COLLEGE_LEVELS.map((l) => <Chip key={l} label={l} on={level === l} onPress={() => { tap(); setLevel(l); }} />)}
+          </View>
+          <Chip label="ADD TO THE POOL" on disabled={busy || name.trim().length < 3} onPress={() => { tap(); void add(); }} />
+          {rows.map((r) => (
+            <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Mono size={9.5} tone="text" weight="700">{r.name}</Mono>
+              <Mono size={8.5} tone="dim">{[r.pos, r.level, r.school, r.class_year ? collegeClassLabel(r.class_year) : null].filter(Boolean).join(' · ')}</Mono>
+              <View style={{ flex: 1 }} />
+              {r.roster_id != null ? <Mono size={8.5} tone="faint">rostered</Mono>
+                : <Chip label="REMOVE" disabled={busy} onPress={() => { tap(); void remove(r.slug); }} />}
+            </View>
+          ))}
+        </View>
+      )}
+      {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 4 }}>{note}</Mono>}
+    </View>
+  );
+}
+
+/** NEW-PLAYER LAUNCHES (0407) — every number the commissioner's: on/off, the
+ *  weekly slot, the window, the catch-up window, the order cap, LAUNCH NOW. */
+function DevyLaunchCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [ls, setLs] = useState<DevyLaunchState | null>(null);
+  const [cfg, setCfg] = useState<DevyLaunchCfg | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => devyLaunchState(leagueId).then((r) => { setLs(r); if (r.cfg) setCfg(r.cfg); }).catch(() => {});
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  if (!cfg || !ls?.can_edit) return null;
+  const save = async (patch: Partial<DevyLaunchCfg>) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueDevyLaunch(leagueId, patch);
+      if (r.ok && r.cfg) { commit(); setCfg(r.cfg); setNote('✓ saved'); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const now = async () => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishDevyLaunchNow(leagueId);
+      if (r.ok) { commit(); setNote('✓ launch open — the league chat says so'); void load(); } else { warn(); setNote(`✗ ${friendlyError(r.error ?? 'failed')}`); }
+    } catch (e) { warn(); setNote(`✗ ${friendlyError(e instanceof Error ? e.message : String(e))}`); }
+    finally { setBusy(false); }
+  };
+  const stepper = (label: string, v: number, lo: number, hi: number, by: number, key: keyof DevyLaunchCfg, show: (n: number) => string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      <Mono size={8.5} tone="dim" style={{ width: 92 }}>{label}</Mono>
+      <Chip label="−" disabled={busy || v - by < lo} onPress={() => { tap(); void save({ [key]: v - by } as Partial<DevyLaunchCfg>); }} />
+      <Text style={{ minWidth: 64, textAlign: 'center', fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.text }}>{show(v)}</Text>
+      <Chip label="+" disabled={busy || v + by > hi} onPress={() => { tap(); void save({ [key]: v + by } as Partial<DevyLaunchCfg>); }} />
+    </View>
+  );
+  return (
+    <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Mono size={9} tone="dim" weight="700" style={{ flex: 1 }}>NEW-PLAYER LAUNCHES</Mono>
+        <InfoChip title="New-player launches">{launchRulesText(cfg)}</InfoChip>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+        <Chip label="ON" on={cfg.on} disabled={busy || cfg.on} onPress={() => { tap(); void save({ on: true }); }} />
+        <Chip label="OFF" on={!cfg.on} disabled={busy || !cfg.on} onPress={() => { tap(); void save({ on: false }); }} />
+      </View>
+      {!cfg.on && <Mono size={8.5} tone="faint" style={{ marginTop: 4 }}>Off: new college players are buyable the moment they appear.</Mono>}
+      {cfg.on && (<>
+        <View style={{ flexDirection: 'row', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+          {DOW_LABELS.map((d, i) => <Chip key={d} label={d.toUpperCase()} on={cfg.dow === i} disabled={busy} onPress={() => { tap(); void save({ dow: i }); }} />)}
+        </View>
+        {stepper('HOUR (ET)', cfg.hour, 0, 23, 1, 'hour', (n) => slotLabel({ dow: cfg.dow, hour: n }).split(' ').slice(1).join(' '))}
+        {stepper('WINDOW', cfg.window_h, 12, 336, 12, 'window_h', (n) => `${n}h`)}
+        {stepper('CATCH-UP', cfg.catchup_h, 24, 720, 24, 'catchup_h', (n) => `${n / 24} days`)}
+        {stepper('ORDER CAP', cfg.cap, 1, 20, 1, 'cap', (n) => `${n} sh`)}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <Chip label="LAUNCH NOW" disabled={busy || !!ls.open || !ls.pending_count || !!ls.locked} onPress={() => { tap(); void now(); }} />
+          <Mono size={8.5} tone="faint" style={{ flex: 1 }}>
+            {ls.open ? 'A launch is open.' : ls.locked ? 'Market locked — a catch-up opens when it reopens.' : `${ls.pending_count ?? 0} waiting · next ${slotLabel(cfg)}`}
+          </Mono>
+        </View>
+      </>)}
       {!!note && <Mono size={9} tone={note.startsWith('✗') ? 'opp' : 'you'} style={{ marginTop: 6 }}>{note}</Mono>}
     </View>
   );

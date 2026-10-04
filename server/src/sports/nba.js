@@ -1,4 +1,4 @@
-// NBA and WNBA → stat lines (v0.564.0). Source: the leagues' liveData CDN,
+// NBA and WNBA → stat lines (v0.616.0). Source: the leagues' liveData CDN,
 // the JSON NBA.com's own game pages read. Same shape for both leagues; the
 // league id in the path is 00 (NBA) or 10 (WNBA).
 //

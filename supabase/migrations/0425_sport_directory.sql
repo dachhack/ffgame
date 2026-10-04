@@ -1,4 +1,4 @@
--- 0397 — THE SPORT DIRECTORY (phase 2, v0.565.0): every rostered NBA / WNBA /
+-- 0425 — THE SPORT DIRECTORY (phase 2, v0.617.0): every rostered NBA / WNBA /
 -- NHL / MLB player, ranked, and the pool a sport league drafts from.
 --
 -- `sport_player` is what the worker's directory sweep writes
@@ -65,7 +65,7 @@ grant execute on function sport_player_add_alt(text, text, text, text) to servic
 
 -- ── league_pool.eligible ──────────────────────────────────────────────────────
 alter table league_pool add column if not exists eligible text[];
-comment on column league_pool.eligible is '0397: every slot position this player may fill (NBA SG/SF, MLB 1B/OF…). NULL = just `pos`, which is every NFL row.';
+comment on column league_pool.eligible is '0425: every slot position this player may fill (NBA SG/SF, MLB 1B/OF…). NULL = just `pos`, which is every NFL row.';
 
 -- ── seed a sport league's pool from the directory ────────────────────────────
 -- The NFL pool is built client-side from the Sleeper directory and posted

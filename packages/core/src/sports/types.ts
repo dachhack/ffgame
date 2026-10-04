@@ -1,4 +1,4 @@
-// THE SPORT SPINE (v0.564.0) — what a sport IS to the platform.
+// THE SPORT SPINE (v0.616.0) — what a sport IS to the platform.
 //
 // Founder: "What would it take for us to do hockey, NBA, MLB, WNBA fantasy …
 // let's assume native leagues for all of these and no drip format."
@@ -13,7 +13,7 @@
 // effects fire on plays. A classic league only needs each player's line for
 // each game — and every other league's official feed publishes exactly that,
 // live, as a box score. So the unit of ingest for a non-NFL sport is the
-// cumulative per-game STAT LINE (game_stat_line, migration 0396): idempotent
+// cumulative per-game STAT LINE (game_stat_line, migration 0424): idempotent
 // to upsert, trivial to true up, no text parsing, no possession model.
 //
 // WHY ONE VOCABULARY PER SPORT. A feed's field names are the adapter's

@@ -109,6 +109,11 @@ begin
     '[{"pos":["QB"],"flags":["a","b","c","d","e","f","g","h","i"]}]'::jsonb),
     'at most 8 flags', 'ss5a nine flags on one spot is refused');
 
+  -- 0408: a school scope (tier or conference) survives; junk does not.
+  perform assert_true(sanitize_scoped_rules('[{"conf":["G5","Big Ten","x;drop",""],"bonus_mult":0.8}]'::jsonb)
+    = '[{"conf":["G5","Big Ten"],"bonus_mult":0.8}]'::jsonb, 'ss6 a school scope keeps its tiers and conferences');
+  perform assert_true(sanitize_scoped_rules('[{"conf":["P4"]}]'::jsonb) = '[]'::jsonb,
+    'ss6a a school scope with no value is dropped');
   raise notice 'scoped-scope probes done';
 end $$;
 

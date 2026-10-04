@@ -7,7 +7,7 @@
 // This pins both, and pins that no NFL-style slug can be read as college.
 // Run: npx tsx scripts/check-college.mjs
 import { readFileSync } from 'node:fs';
-import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS, setCollegeMeta, collegeRuleAllows } from '../packages/core/src/data/college.ts';
+import { collegeSlug, isCollegeSlug, collegeEspnId, levelOf, collegePos, COLLEGE_POSITIONS, setCollegeMeta, collegeRuleAllows, isCustomCollegeId } from '../packages/core/src/data/college.ts';
 import { slugOf } from './espn/espnAdapter.mjs';
 import { isPreseasonWeek, isCollegeWeek, weekLabel, weekTick, weekTitle } from '../packages/core/src/data/nflSlate.ts';
 import { slotAllows, classicSlotsFromSpec, slotFilterLabel, slateAwareProj, optimalLineup } from '../packages/core/src/engine/classic.ts';
@@ -21,6 +21,8 @@ const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${la
 ok(collegeSlug('4688380') === 'c-4688380' && collegeSlug(4890973) === 'c-4890973', 'collegeSlug from string or number');
 let threw = false; try { collegeSlug('abc'); } catch { threw = true; }
 ok(threw, 'collegeSlug refuses a non-numeric id');
+ok(isCustomCollegeId('990000001') && isCollegeSlug('c-990000001') && !isCustomCollegeId('4688380') && !isCustomCollegeId('98999999') && !isCustomCollegeId(null),
+  'a custom player (0410) is a college slug from the reserved range; ESPN ids are not');
 ok(isCollegeSlug('c-4688380') && collegeEspnId('c-4688380') === '4688380' && levelOf('c-4688380') === 'college',
   'a college slug reads back its ESPN id and level');
 
@@ -151,13 +153,26 @@ ok(/is_practice_week[\s\S]*?coalesce\(p_week, 0\) between 101 and 199/.test(cal)
   const alone = { ...mine, holders: [h(1, 3, 'Me')], right: null };
   ok(myStake(mine, 1) === 20 && myStake(mine, 3) === 0, 'a team\'s own stake');
   ok(rightLine(mine, 1).startsWith('★ YOUR RIGHT') && rightLine(theirs, 1).startsWith('Them holds'), 'whose right it is, in words');
-  ok(rightLine(alone, 1) === 'only you — 2 more to hold his right', 'a sole holder under the floor is told how far');
+  ok(rightLine(alone, 1) === 'not qualified yet — 2 more shares and 15.00 more points in', 'a holder under the floor is told how far (0396: 5 shares AND 15 spent)');
+  const { maxBuy } = await import('../packages/core/src/data/devyShares.ts');
+  ok(maxBuy(0, 0, 10) === 6 && maxBuy(0, 0, 1) === 20 && maxBuy(5, 50, 10) === 1 && maxBuy(6, 60, 10) === 0 && maxBuy(20, 20, 1) === 0,
+    'the most a buy may add: 20 shares or 60 points, whichever first');
+  const { devyLegParts } = await import('../packages/core/src/data/devyShares.ts');
+  const parts = devyLegParts({ send_shares: [{ slug: 'c-1', shares: 5, to: 3, name: 'Arch Manning' }, { slug: 'c-2', shares: 1, to: 3 }], send_devy_cash: [{ to: 3, amount: 12.5 }] }, (r) => `Team ${r}`);
+  ok(parts.join(' | ') === '5 shares of Arch Manning → Team 3 | 1 share of c-2 → Team 3 | 12.50 devy cash → Team 3', 'a trade leg\'s devy items, in words (0397)');
+  const { twoSeatDevyLegs, offersDevy } = await import('../packages/core/src/data/devyShares.ts');
+  const legs = twoSeatDevyLegs({ me: 1, partner: 2, give: ['josh-allen'], get: [], givePicks: [], getPicks: [{ season: '2027', round: 3, orig: 2 }],
+    faab: -10, cap: 0, giveShares: {}, getShares: { 'c-9': 10 }, devyCash: 7.5 });
+  ok(legs[0].roster === 1 && legs[0].send[0].slug === 'josh-allen' && legs[0].send[0].to === 2 && legs[0].send_devy_cash[0].amount === 7.5 && legs[0].send_faab.length === 0
+    && legs[1].roster === 2 && legs[1].send_picks[0].round === 3 && legs[1].send_picks[0].to === 1 && legs[1].send_faab[0].amount === 10
+    && legs[1].send_shares[0].slug === 'c-9' && legs[1].send_shares[0].shares === 10, 'a mixed two-team offer: players, picks, FAAB, shares and cash on the right legs (0398)');
+  ok(offersDevy({}, { 'c-9': 1 }) && !offersDevy({ 'c-1': 0 }, {}, 0) && offersDevy({}, {}, -3), 'does an offer carry devy items');
   ok(lockLine({ ...st, locked: true }).startsWith('Locked') && lockLine({ ...st, on: false }) === '', 'the lock line, and silence off');
   // 0388: the market's book
   const { teamBook, stakeLine } = await import('../packages/core/src/data/devyShares.ts');
   const mk = { ...st, cash: { 1: 58 }, value: { 1: 120 }, used: { 1: 61 } };
   ok(teamBook(mk, 1).cash === 58 && teamBook(mk, 1).value === 120 && teamBook(mk, 2).cash === 100, 'a team\'s cash and stakes; a new team has 100');
-  ok(stakeLine(19, 57) === 'paid 19 · worth 57 (+38)' && stakeLine(20, 12.5) === 'paid 20 · worth 12.5 (-7.5)', 'a stake against what it cost');
+  ok(stakeLine(19, 57) === 'paid 19.00 · worth 57.00 (+38.00)' && stakeLine(20, 12.5) === 'paid 20.00 · worth 12.50 (-7.50)', 'a stake against what it cost');
 }
 
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }

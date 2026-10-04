@@ -1,4 +1,4 @@
-// A SPORT PLAYER'S CARD (0403) — what the player card shows for a key like
+// A SPORT PLAYER'S CARD (0431) — what the player card shows for a key like
 // nba-1658 in place of the NFL bio and statline: the directory's facts
 // (team, eligibility, injury, rank), the season as per-game numbers, and
 // his last ten games with the points each would score under the league

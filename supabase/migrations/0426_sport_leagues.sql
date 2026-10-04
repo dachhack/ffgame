@@ -1,4 +1,4 @@
--- 0398 — SPORT LEAGUES (phase 3, v0.565.0): a native league in a daily sport.
+-- 0426 — SPORT LEAGUES (phase 3, v0.617.0): a native league in a daily sport.
 --
 -- What a daily sport changes about a native classic league, and nothing more:
 --
@@ -20,8 +20,8 @@
 --     verdict (cats), written by the worker into matchup_state / matchup as
 --     every other league's is, so standings and playoffs read as before.
 --
--- AMENDED ON THE BRANCH before any deploy (v0.570.0): create_native_league
--- also stores roster_shape for a sport league; 0403 backfills a database
+-- AMENDED ON THE BRANCH before any deploy (v0.622.0): create_native_league
+-- also stores roster_shape for a sport league; 0431 backfills a database
 -- that ran the earlier text.
 --
 -- Undo:
@@ -203,7 +203,7 @@ declare
   use_div boolean; rot int; pool int[]; pairs int[]; div_a text; j int; pick int;
   start_wk int; cap int; last_wk int := 0;
 begin
-  -- 0398: a sport league plays periods from 301.
+  -- 0426: a sport league plays periods from 301.
   if league_sport(p_league_id) <> 'nfl' then
     return sport_generate_schedule(p_league_id, p_weeks);
   end if;

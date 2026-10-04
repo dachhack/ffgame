@@ -115,8 +115,34 @@ const money = grade({ players: [], faab: 20 }, { players: [] });
 ok(money.faab === -20 && /\$-?20 FAAB/.test(money.summary), 'FAAB is reported as money, not points');
 
 // 8. a player with no projection at all is named rather than silently zeroed
+// 0411: a devy pick counts for something, and less than a rookie 1st
+const devy1 = grade({ players: [] }, { players: [], picks: [{ season: '2027', round: 101 }] });
+const devy3 = grade({ players: [] }, { players: [], picks: [{ season: '2027', round: 103 }] });
+ok(devy1.delta > 0 && devy1.delta < withPick.delta && devy3.delta <= devy1.delta,
+  `a devy pick is worth something, under a rookie 1st, and later ones less (D1 ${devy1.delta}, D3 ${devy3.delta}, R1 ${withPick.delta})`);
 const nobody = grade({ players: [] }, { players: [{ slug: 'not-a-real-player', pos: 'RB' }] });
 ok(nobody.missing.includes('not-a-real-player'), 'an unprojected player is flagged');
+
+// v0.584.0: the offer, read back — every asset is exactly one team's "gets"
+{
+  const { tradeConfirm, expiryLine, reviewLine } = await import('../packages/core/src/data/tradeConfirm.ts');
+  const { twoSeatDevyLegs } = await import('../packages/core/src/data/devyShares.ts');
+  const names = { 1: 'Mine', 2: 'Rival', 3: 'Third' };
+  const legs = twoSeatDevyLegs({ me: 1, partner: 2, give: ['josh-allen'], get: ['ceedee-lamb'],
+    givePicks: [{ season: '2027', round: 101, orig: 1 }], getPicks: [], faab: -10, cap: 0,
+    giveShares: {}, getShares: { 'c-9': 4 }, devyCash: 2.5 });
+  const sum = tradeConfirm(legs, { me: 1, teamName: (r) => names[r], player: (s) => s.toUpperCase(),
+    pick: (p) => `${p.season} R${p.round}`, shareName: () => 'Arch', retain: { 'josh-allen': 5 } });
+  ok(sum.length === 2 && sum[0].title === 'YOU GET' && sum[1].title === 'RIVAL GETS', 'the read-back: you first, then them', sum.map((x) => x.title));
+  ok(JSON.stringify(sum[0].gets) === JSON.stringify(['CEEDEE-LAMB from Rival', '$10 FAAB from Rival', '4 devy shares of Arch from Rival']), 'what you get, each with where it comes from', sum[0].gets);
+  ok(JSON.stringify(sum[1].gets) === JSON.stringify(['JOSH-ALLEN from you (you keep paying $5 of his salary)', '2027 R101 from you', '2.50 devy cash from you']), 'what they get, retention said', sum[1].gets);
+  const three = tradeConfirm([
+    { roster: 1, send: [{ slug: 'a', to: 2 }] }, { roster: 2, send: [{ slug: 'b', to: 3 }] }, { roster: 3, send: [{ slug: 'c', to: 1 }] },
+  ], { me: 1, teamName: (r) => names[r], player: (s) => s, pick: () => '' });
+  ok(three.map((x) => x.gets.join()).join('|') === 'c from Third|a from you|b from Rival', 'a three-team ring reads as three gets', three);
+  ok(expiryLine(null, 3) === "Stands 3 days (the league's default)" && expiryLine(6, 3) === 'Stands 6 hours' && expiryLine(24, null) === 'Stands 1 day' && expiryLine(-1, 3).includes('no time limit'), 'the expiry, in words');
+  ok(reviewLine('league').includes('veto') && reviewLine(null).includes('immediately'), 'what happens on accept');
+}
 
 console.log(fails === 0 ? '\nALL TRADE-GRADE ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

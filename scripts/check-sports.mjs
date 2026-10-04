@@ -1,4 +1,4 @@
-// The sport spine (v0.564.0): every sport definition is complete and
+// The sport spine (v0.616.0): every sport definition is complete and
 // self-consistent, and the stat-line scorer, the categories comparison and
 // the roto ranking do what the rulebook says. Run: npx tsx scripts/check-sports.mjs
 import { SPORTS, SPORT_IDS, sportOf, sportDef, isDailySport, eligibleFor, slotAccepts, playerKey, parsePlayerKey } from '../packages/core/src/sports/index.ts';
@@ -80,7 +80,7 @@ ok(roto[0].id === 't1' || roto[0].id === 't2', `standings lead: ${roto[0].id} wi
 ok(sumLines([{ a: 1 }, { a: 2, b: 1 }]).a === 3, 'sumLines');
 
 // ── 5. the database names the same sports ───────────────────────────────────
-const sql = readFileSync(new URL('../supabase/migrations/0396_sports.sql', import.meta.url), 'utf8');
+const sql = readFileSync(new URL('../supabase/migrations/0424_sports.sql', import.meta.url), 'utf8');
 const inList = /sport in \(([^)]*)\)/.exec(sql)?.[1]?.match(/'([a-z]+)'/g)?.map((s) => s.replace(/'/g, '')) ?? [];
 ok(inList.join() === SPORT_IDS.join(), `league.sport's check list is SPORT_IDS (${inList.join(', ')})`);
 
@@ -88,7 +88,7 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
 
 // ── 6. the lineup builder's positions and the card ──────────────────────────
 {
-  const sql403 = readFileSync(new URL('../supabase/migrations/0403_sport_lineup_and_card.sql', import.meta.url), 'utf8');
+  const sql403 = readFileSync(new URL('../supabase/migrations/0431_sport_lineup_and_card.sql', import.meta.url), 'utf8');
   for (const id of ['nba', 'wnba', 'nhl', 'mlb']) {
     const m = new RegExp(`when '${id}'\\s+then array\\[([^\\]]*)\\]`).exec(sql403);
     const list = m ? m[1].match(/'([A-Z0-9]+)'/g).map((x) => x.replace(/'/g, '')) : [];
@@ -115,7 +115,7 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
 
 // ── 7. the sports flag gates the one door ───────────────────────────────────
 {
-  const sql404 = readFileSync(new URL('../supabase/migrations/0404_sports_flag.sql', import.meta.url), 'utf8');
+  const sql404 = readFileSync(new URL('../supabase/migrations/0432_sports_flag.sql', import.meta.url), 'utf8');
   ok(/create or replace function has_sports\(\)/.test(sql404) && /features \? 'sports'/.test(sql404), 'has_sports() reads the sports feature, admins pass');
   ok(/if sp <> 'nfl' and not has_sports\(\) then/.test(sql404) && /create or replace function create_native_league\(/.test(sql404), 'create_native_league refuses a daily sport without the flag');
   const web = readFileSync(new URL('../src/screens/NativeLeague.tsx', import.meta.url), 'utf8');

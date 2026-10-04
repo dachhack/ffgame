@@ -17,7 +17,7 @@ import { autoLineup, liveTeamOf } from './engine.js';
 import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
-import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
+import { slugMeta, normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { setCollegeMeta } from '../../packages/core/src/data/college.ts';
 import { LOCK_LEAD_MS, hasSlate, windowForTeam } from '../../packages/core/src/data/nflSlate.ts';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
@@ -186,7 +186,9 @@ export function teamKickoffs(slate) {
     if (!Number.isFinite(ms)) continue;
     for (const team of [g.home, g.away]) {
       if (!team) continue;
-      const k = String(team).toUpperCase();
+      // Normalized (v0.597.0): the pool says LAR where the slate says LA, and
+      // an unmatched Rams player sealed at Thursday's kickoff (#1095).
+      const k = normTeam(String(team));
       out[k] = Math.min(out[k] ?? Infinity, ms);
     }
   }
@@ -220,7 +222,8 @@ export function teamKickoffs(slate) {
 export function classicSealAt(slug, team, teamKicks) {
   const kicks = Object.values(teamKicks).filter(Number.isFinite);
   if (!slug) return Math.max(...kicks);
-  return team != null && Number.isFinite(teamKicks[team]) ? teamKicks[team] : Math.min(...kicks);
+  const k = team != null ? normTeam(String(team)) : null;
+  return k && Number.isFinite(teamKicks[k]) ? teamKicks[k] : Math.min(...kicks);
 }
 
 export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
@@ -248,9 +251,9 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
   const poolTeam = new Map((pool ?? []).map((r) => [`${r.league_id}:${r.slug}`, r.team]));
   const teamOf = (leagueId, slug) => {
     const fromPool = poolTeam.get(`${leagueId}:${slug}`);
-    if (fromPool) return String(fromPool).toUpperCase();
+    if (fromPool) return normTeam(String(fromPool));
     const baked = PLAYER_BIO[slug]?.team;
-    return baked ? String(baked).toUpperCase() : null;
+    return baked ? normTeam(String(baked)) : null;
   };
 
   const dueIds = [];
@@ -327,7 +330,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
   // team's kickoff, or the week's first when he cannot be placed (unknown
   // team, or a bye) — unknown falls to the stricter answer, as it does there.
   const kickedOff = (team) => {
-    const t = team ? String(team).toUpperCase() : null;
+    const t = team ? normTeam(String(team)) : null;
     const kick = t && Number.isFinite(teamKicks[t]) ? teamKicks[t] : firstKick;
     return kick <= nowMs;
   };

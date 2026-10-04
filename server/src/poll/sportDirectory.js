@@ -1,4 +1,4 @@
-// THE SPORT DIRECTORY (phase 2, v0.565.0) — sport_player, per sport.
+// THE SPORT DIRECTORY (phase 2, v0.617.0) — sport_player, per sport.
 //
 // One sweep per sport: the adapter's directory() (rosters + a season line
 // per player for ranking) → eligibility in core's vocabulary → a rank →
@@ -132,7 +132,7 @@ export async function syncSportDirectory(sport, season) {
     .update({ active: false, updated_at: new Date().toISOString() })
     .eq('sport', sport).eq('active', true).lt('seen_at', sweepStart).select('player_key');
   if (rErr) log(`${sport}: retirement pass: ${rErr.message}`);
-  // Every league pool of this sport follows the directory (0402): a traded
+  // Every league pool of this sport follows the directory (0430): a traded
   // player's team, a newly earned eligibility. The pool is what the locks
   // and the DB lock read, so a stale team there is a player who never scores.
   const { data: moved, error: mErr } = await db().rpc('sport_pool_refresh', { p_sport: sport });

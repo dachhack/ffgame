@@ -4,7 +4,7 @@ import { leagueScoring, scopedAdjustFor } from './leagueScoring';
 import { flagRulesFor } from '../data/commish';
 import { realPbpFor, realPossFor, realWallFor, REAL_WEEKS, type RealPlay, type RealPlayKind } from '../data/realPbp';
 import { returnPlaysFor } from '../data/returns';
-import { feedPossFor } from '../data/gameFeed';
+import { feedPossFor, gameFeedFor } from '../data/gameFeed';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Real-data resolution. Every player's week is driven by baked real 2025
@@ -735,7 +735,16 @@ export function resolveSlot(you: SlotInput, their: SlotInput, week: number, game
   // replayed baked week must keep scoring exactly as it always has.
   const possFor = (team?: string | null): number[][] => {
     const baked = realPossFor(week, team ?? '');
-    return baked.length ? baked : feedPossFor(week, team);
+    if (baked.length) return baked;
+    const fed = feedPossFor(week, team);
+    // NO POSSESSION YET IS NOT "UNKNOWN" (v0.587.0). Early in a live game a
+    // team that hasn't had a drive has no intervals, and an empty list is
+    // what `offSecs` reads as "no data — accrue every minute". A punt return
+    // on the first series then dripped ungated to the final whistle: 15 yds
+    // → 9.4 points at 12:47 of the 1st. When the team's game IS on the feed,
+    // an empty answer means "no offensive time yet" — a zero-width interval.
+    if (!fed.length && gameFeedFor(week, team)) return [[0, 0]];
+    return fed;
   };
   const youPoss = dripYou && !proj ? possFor(you.player.team) : [];
   const theirPoss = dripTheir && !proj ? possFor(their.player.team) : [];

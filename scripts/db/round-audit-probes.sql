@@ -235,7 +235,7 @@ begin
   -- ── ra11. the season map answers by id ──
   r := upsert_proj_board(jsonb_build_array(
     jsonb_build_object('sleeper_id', 'ra-sid-1', 'slug', null, 'ppg', 12.0, 'gp', 17, 'per_week', 12.0)),
-    '2026-09-21T16:00:00Z');
+    (now() - interval '2 days')::text);
   r := league_market(lid);
   perform ra_true((r -> 'proj' ->> 'ra-sid-1')::numeric = 12.0, 'ra11 a board row with no slug answers by its id — 0335 served {}');
 end $$;

@@ -22,6 +22,12 @@ export const collegeSlug = (espnId: string | number): string => {
 export const isCollegeSlug = (slug: string | null | undefined): boolean =>
   !!slug && COLLEGE_SLUG.test(slug);
 
+/** A commissioner's custom college player (0410): an id from the reserved
+ *  range 990000001+ (ESPN's athlete ids are seven digits). ESPN has nothing
+ *  on him, so a card doesn't ask. */
+export const isCustomCollegeId = (espnId: string | null | undefined): boolean =>
+  !!espnId && /^\d{9,}$/.test(espnId) && Number(espnId) >= 990000001;
+
 /** The ESPN athlete id inside a college slug, or null for any other slug. */
 export const collegeEspnId = (slug: string | null | undefined): string | null =>
   (slug && COLLEGE_SLUG.exec(slug)?.[1]) || null;

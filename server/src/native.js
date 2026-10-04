@@ -46,9 +46,9 @@ async function sweepProgression(log) {
     .eq('provider', 'native').eq('kind', 'league').eq('is_mock', false);
   if (error) { log('progression sweep', error.message); return { generated, advanced, eliminated }; }
   for (const lg of leagues ?? []) {
-    // A SPORT LEAGUE (0398) plays periods from week 301; the bracket rules
+    // A SPORT LEAGUE (0426) plays periods from week 301; the bracket rules
     // read NFL weeks and would book playoffs over a season that has not
-    // begun. Period-aware playoffs are not built — skip, as 0401's SQL guard does.
+    // begun. Period-aware playoffs are not built — skip, as 0429's SQL guard does.
     if (lg.sport && lg.sport !== 'nfl') continue;
     const format = lg.settings_json?.format;
     try {

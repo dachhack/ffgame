@@ -1,4 +1,4 @@
--- 0400 — A SPORT LEAGUE'S SETTINGS ARE THE COMMISSIONER'S (v0.567.0).
+-- 0428 — A SPORT LEAGUE'S SETTINGS ARE THE COMMISSIONER'S (v0.619.0).
 --
 -- `set_sport_settings` patches settings_json.sport: the scoring knobs
 -- (stat id → points, any time — the worker rescores every live matchup on

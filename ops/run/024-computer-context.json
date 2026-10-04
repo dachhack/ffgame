@@ -1,0 +1,5 @@
+{
+  "mode": "computer-context",
+  "issue": "1095,1038",
+  "why": "Post the chat from before the two open @computer asks on their issues (v0.595.0's context, backfilled): #1095 \"I thought we fixed this.\" arrived without the \"this\"."
+}

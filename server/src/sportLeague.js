@@ -1,11 +1,11 @@
-// SPORT LEAGUES ON THE WORKER (phase 3, v0.565.0) — locking and resolving.
+// SPORT LEAGUES ON THE WORKER (phase 3, v0.617.0) — locking and resolving.
 //
 // Two jobs, both run from the sports loop (index.js) after each poll:
 //
 //   LOCK. When a game starts, every seat in every league of that sport whose
 //   period covers today has its starting slots holding players on the two
 //   teams snapshotted into sport_slot_lock for the day. The DB trigger
-//   (0398 enforce_sport_pick_lock) has refused edits to those players since
+//   (0426 enforce_sport_pick_lock) has refused edits to those players since
 //   the start, so the snapshot IS the lineup as the manager left it. A slot
 //   is locked once per day; a player with no game today is never locked.
 //
@@ -46,7 +46,7 @@ export function locksFor(game, picks, poolTeamOf, existing, allows = () => true)
     // illegal spot, decided here once rather than at every read.
     if (!allows(p.roster_slot, p.player_slug)) { log(`illegal lineup spot skipped: ${p.player_slug} in ${p.roster_slot}`); continue; }
     // One lock per slot per GAME: a doubleheader's second game locks the
-    // slot again for the day, under its own game id (0402).
+    // slot again for the day, under its own game id (0430).
     const key = `${p.matchup_id}|${p.app_user_id}|${game.gameDate}|${p.roster_slot}|${game.gameId}`;
     if (existing.has(key)) continue;
     out.push({ matchup_id: p.matchup_id, app_user_id: p.app_user_id, game_date: game.gameDate, roster_slot: p.roster_slot, player_slug: p.player_slug, game_id: game.gameId });
@@ -84,7 +84,7 @@ export function scoreMatchup(def, settings, homeRows, awayRows) {
   return { homeScore: home.total, awayScore: away.total, slotScores: { format: 'points', home: home.slots, away: away.slots } };
 }
 
-/** ROTO (0399): every seat's season totals → the ranking. `rows` are
+/** ROTO (0427): every seat's season totals → the ranking. `rows` are
  *  sport_league_lines_svc rows; seats with no line yet still appear (at the
  *  bottom of every category). */
 export function rotoTable(def, settings, rows, rosterIds) {
@@ -227,7 +227,7 @@ export async function resolveSportLeagues(sport, now = new Date()) {
         counts.finals++;
       }
     }
-    // ROTO (0399): the season table, from every locked slot-day so far.
+    // ROTO (0427): the season table, from every locked slot-day so far.
     if (lg.sportSettings.format === 'roto') {
       const [{ data: rows, error: rErr }, { data: seats }] = await Promise.all([
         db().rpc('sport_league_lines_svc', { p_league_id: lg.id }),

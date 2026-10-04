@@ -13,6 +13,8 @@ import { APK_ZIP_URL } from '@drip/core/data/changelog';
 import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
+import { DevyValuesSheet } from './DevyValues';
+import { DeleteAccountSheet } from './DeleteAccount';
 import { GameIcon, UI_ART, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
@@ -332,7 +334,7 @@ export function PlayerImg({ playerId, espnId, team, pos, size = 30 }: { playerId
 
 // The theme colours the NFL's positions (theme.ts `pos`); a sport league's
 // codes (PG, LW, 1B…) borrow the nearest football family so a board stays
-// readable without a second palette per sport (0398).
+// readable without a second palette per sport (0426).
 const POS_FAMILY: Record<string, Pos> = {
   PG: 'QB', SG: 'WR', G: 'QB', SF: 'WR', PF: 'RB', F: 'RB', C: 'TE', UTIL: 'TE',
   LW: 'WR', RW: 'WR', W: 'WR', D: 'RB',
@@ -447,6 +449,8 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
   const [menuAlign, setMenuAlign] = useState<'left' | 'right'>('right');
   const [rules, setRules] = useState(false);
   const [faq, setFaq] = useState(false);
+  const [devy, setDevy] = useState(false);
+  const [delAcct, setDelAcct] = useState(false); // 0422: delete my account
   const [session, setSession] = useState<Session | null>(null);
   const [admin, setAdmin] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -604,6 +608,16 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
           >
             ❓ FAQ
           </button>
+          {/* v0.601.0: StatHead-based devy values, 1QB and SF — any signed-in player. */}
+          {session && (
+            <button
+              onClick={() => { setOpen(false); setDevy(true); }}
+              className="mono"
+              style={{ width: '100%', borderTop: '1px solid var(--bd)', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', paddingTop: 12, marginTop: -2, textAlign: 'left', background: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--text)', cursor: 'pointer' }}
+            >
+              🎓 Devy values · 1QB & SF
+            </button>
+          )}
           {/* The Android playtest build and what shipped (v0.393.0). One link,
               always the newest build — release-apk.yml keeps it current.
               v0.410.0: it is the ZIP. The direct .apk stalls at 100% in a
@@ -662,7 +676,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
                 try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
                 setSleeperUser(null);
                 markBootSessionChecked(); // don't let the demo's boot check race the async signOut
-                navigate({ name: 'demo' });
+                navigate({ name: 'landing' });
               }}
               className="mono"
               title={session.user.email ?? 'Sign out'}
@@ -671,10 +685,34 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
               ⏻ Sign out
             </button>
           )}
+          {/* 0422: the way out. Below sign-out, quieter than it. */}
+          {session && (
+            <button
+              onClick={() => { setOpen(false); setDelAcct(true); }}
+              className="mono"
+              style={{ width: '100%', border: 'none', paddingTop: 8, textAlign: 'left', background: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--faint)', cursor: 'pointer' }}
+            >
+              Delete my account
+            </button>
+          )}
         </div>
       )}
       {rules && <Rulebook onClose={() => setRules(false)} />}
       {faq && <Faq onClose={() => setFaq(false)} onOpenRulebook={() => setRules(true)} />}
+      {devy && <DevyValuesSheet onClose={() => setDevy(false)} />}
+      {delAcct && session && (
+        <DeleteAccountSheet email={session.user.email ?? ''} onClose={() => setDelAcct(false)}
+          onDeleted={() => {
+            // The row is gone server-side; drop the session the same way
+            // sign-out does and land on the front door.
+            setDelAcct(false);
+            signOut().catch(() => {});
+            try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
+            setSleeperUser(null);
+            markBootSessionChecked();
+            navigate({ name: 'landing' });
+          }} />
+      )}
     </div>
   );
 }

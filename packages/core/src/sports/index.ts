@@ -16,7 +16,7 @@ export const SPORTS: Record<Sport, SportDef> = { nfl: NFL, nba: NBA, wnba: WNBA,
 export const isSport = (s: unknown): s is Sport => typeof s === 'string' && (SPORT_IDS as readonly string[]).includes(s);
 
 /** The sport a league row / settings blob names; anything unknown is the NFL,
- *  because every league that existed before 0396 is. */
+ *  because every league that existed before 0424 is. */
 export function sportOf(src: { sport?: string | null } | string | null | undefined): Sport {
   const s = typeof src === 'string' ? src : src?.sport;
   return isSport(s) ? s : 'nfl';
@@ -61,7 +61,7 @@ export function parsePlayerKey(key: string | null | undefined): { sport: Sport; 
   return m ? { sport: m[1] as Sport, id: m[2] } : null;
 }
 
-// ── Names, for boards that only hold a key (0398) ────────────────────────────
+// ── Names, for boards that only hold a key (0426) ────────────────────────────
 // A sport key is a feed id ('nba-1658'), so prettifying it prints "Nba 1658".
 // The host installs the league's names (from league_pool / myPool rows) and a
 // board asks here first, exactly as college's setCollegeNames works.

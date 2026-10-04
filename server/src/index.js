@@ -13,6 +13,7 @@ import { buildPlayerIndex } from './playerIndex.js';
 import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './poll/scoreboard.js';
 import { pollGame, nflWeekForKickoff, nflWeekWindows } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
+import { pollCollegeAvailability } from './poll/collegeAvailability.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides, installTeamOverrides } from './poll/teamOverrides.js';
 import { syncDepthChart } from './poll/depthChart.js';
@@ -23,8 +24,11 @@ import { sweepTrending } from './poll/trending.js';
 import { sweepProjections, installLiveProjRate } from './poll/projections.js';
 import { sweepXref } from './poll/xref.js';
 import { sweepCollege } from './poll/college.js';
+import { sweepDevyBoard } from './poll/statheadDevy.js';
 import { writeCollegeScores } from './poll/collegeScores.js';
 import { sweepGraduation } from './poll/graduate.js';
+import { sweepDeclared } from './poll/declared.js';
+import { sweepOffboardDaily } from './offboard.js';
 import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS, BOWL_BASE, bowlSchedule, etTuesdayStart } from './poll/collegeSlate.js';
 import { setCollegeProjections } from '../../packages/core/src/engine/projScoring.ts';
 import { sweepDynasty } from './poll/dynasty.js';
@@ -59,6 +63,7 @@ import { setRuntimeSlate, PRESEASON_BASE, PRESEASON_WEEKS } from '../../packages
 
 let playerIndex = null;
 let lastInjuryPoll = 0;
+let lastCollegeAvail = 0;
 // The roster sweep's own clock. Zero means "never run", so the first tick after
 // boot takes a census — a deploy is exactly when the table is most likely stale.
 let lastRosterPoll = 0;
@@ -326,8 +331,23 @@ function gameDay(games, now = Date.now()) {
  *  tick — every kickoff for the previous week is in the past, so the ramp goes
  *  quiet and the hourly rung fires. Rollover happens midweek, far from any
  *  kickoff, which is precisely when an hour of lag costs nothing. */
+/** Every current-season Sleeper league (0422's sleeper_leagues_for_sync),
+ *  plus whatever PILOT_LEAGUE_IDS still names. Before 0422 the env list was
+ *  the whole set, so a league nobody added to fly.toml never synced; a league
+ *  anyone can now bring in on their own must sync without a deploy. The RPC
+ *  missing (migration not yet applied) falls back to the env list alone. */
+async function leagueIdsToSync(season) {
+  const ids = new Set(config.leagueIds);
+  try {
+    const { data, error } = await db().rpc('sleeper_leagues_for_sync', { p_season: season });
+    if (error) throw error;
+    for (const r of data ?? []) if (r.sleeper_league_id) ids.add(String(r.sleeper_league_id));
+  } catch (e) { log('sync: league list from db unavailable —', e.message); }
+  return [...ids];
+}
+
 async function syncTick() {
-  if (syncing || !config.leagueIds.length) return;
+  if (syncing) return;
   const now = Date.now();
 
   // ── THE CADENCE DECISION (v0.319.0), BEFORE ANY NETWORK CALL ────────────
@@ -360,10 +380,12 @@ async function syncTick() {
   }
 
   const season = config.season;
+  const ids = await leagueIdsToSync(season);
+  if (!ids.length) { lastSyncAt = now; return; }
   const week = await regularWeek(season);
   syncing = true;
   try {
-    const r = await syncAllLeagues(week, season, playerIndex, config.leagueIds);
+    const r = await syncAllLeagues(week, season, playerIndex, ids);
     const took = Date.now() - now;
     lastSyncedWeek = week; lastSyncAt = Date.now();
     log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`,
@@ -888,6 +910,24 @@ async function tick() {
     catch (e) { log('injury poll error', e.message); }
   }
 
+  // THE COLLEGE AVAILABILITY REPORTS (v0.615.0). Founder: "We need to know
+  // status BEFORE the game so people can make roster changes." The Power
+  // Four's conference availability reports, written into injury_status under
+  // c- slugs (see poll/collegeAvailability.js). Its own slow clock: four
+  // multi-megabyte reads, posted on a schedule no faster than hourly. The
+  // clock is set before the read so a failing publisher is retried on the
+  // cadence, not every tick.
+  const availEvery = cfb ? (gameDay(seen, Date.now()) ? config.collegeAvailGamedayMs : config.collegeAvailPollMs) : config.collegeAvailIdleMs;
+  if (Date.now() - lastCollegeAvail >= availEvery) {
+    lastCollegeAvail = Date.now();
+    try {
+      const r = await pollCollegeAvailability({ log });
+      const confs = Object.entries(r.conferences).map(([c, v]) => `${c} ${v.error ? 'ERR ' + v.error : `${v.reports} ${v.types.join('/') || '—'}`}`).join(', ');
+      log(`college availability: ${r.designated} designated (${r.carried} carried) across ${r.schools} schools — ${r.wrote} written, ${r.pruned} cleared${r.prunedSkipped ? ' (prune SKIPPED, a conference did not answer)' : ''}, ${r.unmatched.length} unmatched · ${confs}`);
+      for (const u of r.unmatched.slice(0, 8)) log(`  unmatched ${u.why}: ${u.conf} ${u.team} — ${u.pos} #${u.jersey} ${u.name} (${u.raw})`);
+    } catch (e) { log('college availability error', e.message); }
+  }
+
   // WHERE EVERY PLAYER PLAYS (v0.305.0), on the tick rather than on the daily
   // directory refresh: 32 small ESPN fetches, so a cut, a signing or a
   // practice-squad elevation reaches the app the same afternoon it happens.
@@ -947,6 +987,10 @@ async function tick() {
   // roster requests, so it runs detached: the tick starts it and moves on.
   try { sweepCollege(config.season, log); }
   catch (e) { log('college sweep error', e.message); }
+  // StatHead's devy board (v0.592.0): reprice the devy market the moment a
+  // new week of profiles lands (profilesThrough moves) — the Sunday rescore.
+  try { sweepDevyBoard((fn, args) => db().rpc(fn, args), log); }
+  catch (e) { log('stathead devy watch error', e.message); }
   // THE COLLEGE SLATE (0371), daily: all fifteen weeks at board week 200 + N,
   // so a league switched to the college calendar can lay its schedule at once.
   try {
@@ -958,6 +1002,15 @@ async function tick() {
   // on an NFL team moves to his NFL slug in every league holding him.
   try { sweepGraduation(playerIndex, log); }
   catch (e) { log('graduation sweep error', e.message); }
+  // DECLARED (0409). Daily between the bowls and the draft, detached: this
+  // year's NFL draft prospect pool by college ESPN id, for the DECLARED tag.
+  try { sweepDeclared(log); }
+  catch (e) { log('declared sweep error', e.message); }
+  // OFFBOARDING (0422, v0.612.0). Daily, detached: tell an inactive account
+  // it will be removed, remove one whose notice has run out. Fails closed
+  // without mail credentials (nothing told, nothing removed).
+  try { sweepOffboardDaily(log); }
+  catch (e) { log('offboard sweep error', e.message); }
 
   // THE DYNASTY BOARD (0335). Weekly, gated inside the sweep: a dynasty value
   // is a long-horizon opinion of a career and does not move on a Tuesday.
@@ -1007,6 +1060,12 @@ async function tick() {
 
 async function main() {
   log('worker starting; season', config.season);
+  // v0.597.0 (0414): reopen classic picks an older worker sealed before their
+  // player's kickoff (the Rams, LAR vs LA, #1095). A no-op once none are left.
+  try {
+    const { data, error } = await db().rpc('unseal_early_classic_picks');
+    if (error) log('unseal early picks', error.message); else if (data) log('reopened', data, 'classic picks sealed before kickoff');
+  } catch (e) { log('unseal early picks', e.message); }
   playerIndex = await buildPlayerIndex();
   log('player index built:', playerIndex.size, 'players');
   // Publish baked-vs-live team drift (0142) whenever the directory is fresh —
@@ -1055,6 +1114,17 @@ async function main() {
   // inside a play tick.
   setInterval(() => manualSyncTick().catch((e) => log('manual sync error', e.message)), config.playsPollMs);
 
+  // DEVY LAUNCHES (0407): open the weekly / catch-up windows and fill the ones
+  // that have closed. Its own 5-minute loop — the clock of a sealed window,
+  // not a scoring tick, so it never waits on one.
+  const launchTick = async () => {
+    const { data, error } = await db().rpc('devy_launch_tick');
+    if (error) log('devy launch tick', error.message);
+    else if (data?.opened || data?.filled) log(`devy launches: ${data.opened ?? 0} opened, ${data.filled ?? 0} filled`);
+  };
+  await launchTick().catch((e) => log('devy launch tick', e.message));
+  setInterval(() => launchTick().catch((e) => log('devy launch tick', e.message)), 5 * 60_000);
+
   // App push notifications (0150): detect + deliver on a 60s sweep, its own
   // loop — a slow FCM round must never stretch a play tick.
   await sweepPush().catch((e) => log('push sweep error', e.message));
@@ -1075,7 +1145,7 @@ async function main() {
   await trueup().catch((e) => log('true-up error', e.message));
   setInterval(() => trueup().catch((e) => log('true-up error', e.message)), 6 * 3600e3);
 
-  // THE DAILY SPORTS (v0.564.0): sport_game + game_stat_line for whatever
+  // THE DAILY SPORTS (v0.616.0): sport_game + game_stat_line for whatever
   // SPORTS= names. Its own loop, never inside a play tick — an NHL box score
   // that hangs must not stretch an NFL window. Self-paced: the next pass is
   // scheduled when this one ends, tight while any game is live, relaxed when
@@ -1086,7 +1156,7 @@ async function main() {
       try {
         const r = await tickSports(config.sports);
         live = r.live; nextStartMs = r.nextStartMs;
-        // Then the leagues (0398): lock what just started, score what is live.
+        // Then the leagues (0426): lock what just started, score what is live.
         for (const sport of config.sports) {
           try {
             const locked = await lockStartedGames(sport, r.games[sport] ?? []);
@@ -1104,7 +1174,7 @@ async function main() {
     };
     log('daily sports:', config.sports.join(', '));
     void sportsLoop();
-    // The directory (0397): at boot and daily, detached from the game loop.
+    // The directory (0425): at boot and daily, detached from the game loop.
     const sweep = async () => {
       for (const sport of config.sports) {
         try { const r = await syncSportDirectory(sport, currentSeason(sport)); log(`sport directory ${sport}: ${r.players} players, ${r.retired} retired`); }
@@ -1115,26 +1185,24 @@ async function main() {
     setInterval(() => { void sweep(); }, 24 * 3600e3);
   }
 
-  // Weekly schedule + lineup auto-sync for all configured leagues (separate, slower
-  // loop — a 100-league sync can outlast one play tick).
-  if (config.leagueIds.length) {
-    await syncTick().catch((e) => log('sync tick error', e.message));
-    setInterval(() => syncTick().catch((e) => log('sync tick error', e.message)), config.syncCheckMs);
-    // Public pods (0089): deal rosters + pair matchups for the current week.
-    // Own cadence, independent of PILOT_LEAGUE_IDS. Always the REGULAR-season
-    // week — pods are a regular-season product, and preseason no longer switches
-    // them off (it used to, purely because both keyed off the same single week).
-    const podTick = async () => {
-      const season = config.season;
-      const week = await regularWeek(season);
-      const r = await ensurePods(week, season, playerIndex);
-      if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
-    };
-    await podTick().catch((e) => log('pod tick error', e.message));
-    setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.podCheckMs);
-  } else {
-    log('no PILOT_LEAGUE_IDS set — weekly auto-sync disabled');
-  }
+  // Weekly schedule + lineup auto-sync for every current-season Sleeper
+  // league (separate, slower loop — a 100-league sync can outlast one play
+  // tick). Since 0422 the list comes from the database each pass, so this
+  // runs whether or not PILOT_LEAGUE_IDS is set; an empty list is a no-op.
+  await syncTick().catch((e) => log('sync tick error', e.message));
+  setInterval(() => syncTick().catch((e) => log('sync tick error', e.message)), config.syncCheckMs);
+  // Public pods (0089): deal rosters + pair matchups for the current week.
+  // Own cadence. Always the REGULAR-season week — pods are a regular-season
+  // product, and preseason no longer switches them off (it used to, purely
+  // because both keyed off the same single week).
+  const podTick = async () => {
+    const season = config.season;
+    const week = await regularWeek(season);
+    const r = await ensurePods(week, season, playerIndex);
+    if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
+  };
+  await podTick().catch((e) => log('pod tick error', e.message));
+  setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.podCheckMs);
 }
 
 // Only when run as the entrypoint. `contextsFor` is exported for its test, and

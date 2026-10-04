@@ -1,4 +1,4 @@
-// MLB → stat lines (v0.564.0). Source: statsapi.mlb.com, MLB's own Gameday
+// MLB → stat lines (v0.616.0). Source: statsapi.mlb.com, MLB's own Gameday
 // API. No key. The cleanest of the four feeds: an official schedule, a live
 // feed that carries the box score, and a diffPatch endpoint for incremental
 // polling later.

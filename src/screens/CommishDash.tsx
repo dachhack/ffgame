@@ -440,7 +440,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // GOLF (v0.303.0): null until the mode load lands, so neither button lights
   // up on a guess.
   const [golf, setGolf] = useState<boolean | null>(null);
-  // A SPORT LEAGUE (0398/0400): its lineup is the sport's standard shape and
+  // A SPORT LEAGUE (0426/0428): its lineup is the sport's standard shape and
   // its scoring page is SportSettings, not the football catalog.
   const [sport, setSport] = useState<Sport>('nfl');
   const [sportBlock, setSportBlock] = useState<Record<string, unknown> | null>(null);

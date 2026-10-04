@@ -1,7 +1,9 @@
 # Multi-sport — the morning review
 
-> _Written 2026-09-30 overnight, on branch `ccr-e05744f1-ro7jlw` (v0.564.0 →
-> v0.571.0). Nothing is merged; the web and the app are yours to review._
+> _Written 2026-09-30 overnight, on branch `ccr-e05744f1-ro7jlw`; renumbered
+> onto main 2026-10-04 (v0.624.0). Main had taken the same numbers while the
+> branch was cut, so the branch's migrations are 0424 → 0432 (0396 → 0404
+> below in the commit history) and its versions v0.616.0 → v0.623.2._
 
 ## What is on the branch
 
@@ -9,15 +11,15 @@ Five commits, one per version, each with a STATUS.md entry:
 
 | Version | What |
 |---|---|
-| v0.564.0 | The sport spine: SportDefs, the stat-line scorer, 0396 (`league.sport`, `sport_game`, `game_stat_line`), NHL / MLB / NBA-WNBA box-score adapters, the poller |
-| v0.565.0 | The directory and rank (0397 `sport_player`, `league_pool.eligible`), creation with a sport, periods from week 301, per-game locks (0398), the worker's lock → score → final loop, the web create form, draft chips, `SportWeekPanel` |
-| v0.566.0 | Roto (0399), eligibility enforced at the lock, names for sport keys on both boards, the mobile create flow, draft chips and week panel |
-| v0.567.0 | The commissioner's sport scoring page (0400 `set_sport_settings`), injuries on the boards |
-| v0.568.0 | NBA/WNBA schedule by date, sport leagues kept out of auto-playoffs, the mobile wire chips, this note |
-| v0.569.0 | Ten fixes from a code review of the branch (the sweep's retirement pass, pools following trades, WNBA team codes, postponements, mid-draft leagues, doubleheaders, stuck games, cadence, reads per tick, pills) |
-| v0.570.0 | The lineup builder for sport leagues (0403), the sport player card |
-| v0.570.1 | Ten fixes from a second review pass (the card's season numbers and ratios, DNP, the headshot, last-ten ordering, the builder's rounds and frozen state) |
-| v0.571.0 | The `sports` feature flag (0404): sport leagues for flag holders and admins only |
+| v0.616.0 | The sport spine: SportDefs, the stat-line scorer, 0424 (`league.sport`, `sport_game`, `game_stat_line`), NHL / MLB / NBA-WNBA box-score adapters, the poller |
+| v0.617.0 | The directory and rank (0425 `sport_player`, `league_pool.eligible`), creation with a sport, periods from week 301, per-game locks (0426), the worker's lock → score → final loop, the web create form, draft chips, `SportWeekPanel` |
+| v0.618.0 | Roto (0427), eligibility enforced at the lock, names for sport keys on both boards, the mobile create flow, draft chips and week panel |
+| v0.619.0 | The commissioner's sport scoring page (0428 `set_sport_settings`), injuries on the boards |
+| v0.620.0 | NBA/WNBA schedule by date, sport leagues kept out of auto-playoffs, the mobile wire chips, this note |
+| v0.621.0 | Ten fixes from a code review of the branch (the sweep's retirement pass, pools following trades, WNBA team codes, postponements, mid-draft leagues, doubleheaders, stuck games, cadence, reads per tick, pills) |
+| v0.622.0 | The lineup builder for sport leagues (0431), the sport player card |
+| v0.622.1 | Ten fixes from a second review pass (the card's season numbers and ratios, DNP, the headshot, last-ten ordering, the builder's rounds and frozen state) |
+| v0.623.0 | The `sports` feature flag (0432): sport leagues for flag holders and admins only |
 
 The plan and the assessment behind it: `docs/multi-sport-plan.md`.
 
@@ -48,12 +50,12 @@ the commissioner's sport scoring page.
 
 ## What it takes to run
 
-1. **Migrations 0396 → 0404**, in order — `DATABASE_URL=... scripts/apply-sport-migrations.sh` does it. All of them applied cleanly on a
+1. **Migrations 0424 → 0432**, in order — `DATABASE_URL=... scripts/apply-sport-migrations.sh` does it, and a merge to main runs them through `migrate.yml` (added files only, sorted) without a click. All of them applied cleanly on a
    local Postgres 16 with Supabase shims (`auth.uid()` etc.), alongside
-   every earlier migration. 0398 **drops and recreates
+   every earlier migration. 0426 **drops and recreates
    `create_native_league`** with two trailing defaulted arguments; every
    existing caller keeps working (the blueprint check pins this).
-2. **The worker** with `SPORTS=nhl,mlb` (or `nba`, `wnba`) in its env.
+2. **The worker** with `SPORTS=nhl,mlb` (or `nba`, `wnba`) in its env — `fly.toml` carries `nhl,mlb`, and a merge to main redeploys it through `deploy-worker.yml`.
    Unset, it is byte-for-byte the NFL worker. With it: a directory sweep at
    boot and daily (`sport_player` + injuries), and a self-paced game loop
    (a minute while a game is live, ten when none, waking for the next
@@ -102,7 +104,7 @@ the commissioner's sport scoring page.
 - **The NFL worker's week-keyed loops** never see weeks 301+, by design;
   `lockDueMatchups` with a null week selects by `lock_at`, and a sport
   matchup has none until it is already live. Auto-playoffs skip sport
-  leagues (v0.568.0) — period-aware playoffs are not built.
+  leagues (v0.620.0) — period-aware playoffs are not built.
 - **Lineup UI honours the primary position only**; the worker's lock
   honours the full eligibility list. A player the UI let into a slot he
   may not fill never locks (logged), so he scores 0 there.

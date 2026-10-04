@@ -1,4 +1,4 @@
--- 0403 — A SPORT LEAGUE SHAPES ITS OWN LINEUP; A SPORT PLAYER HAS A CARD (v0.570.0).
+-- 0431 — A SPORT LEAGUE SHAPES ITS OWN LINEUP; A SPORT PLAYER HAS A CARD (v0.622.0).
 --
 -- set_sport_lineup is set_league_classic_slots for a daily sport: the same
 -- guards (commissioner, classic, before the draft, at most 20 starters),
@@ -93,9 +93,9 @@ $$;
 grant execute on function sport_player_card(text) to authenticated;
 
 -- ── roster_shape for sport leagues created before creation stored one ───────
--- create_native_league (0398, amended on this branch before any deploy)
+-- create_native_league (0426, amended on this branch before any deploy)
 -- stores roster_shape for a sport league so _sync_classic_rounds has a bench
--- to add. A database that ran the earlier 0398 has sport leagues without it;
+-- to add. A database that ran the earlier 0426 has sport leagues without it;
 -- give them the sport block's bench and IR.
 update league
    set settings_json = coalesce(settings_json, '{}'::jsonb) || jsonb_build_object('roster_shape', jsonb_build_object(

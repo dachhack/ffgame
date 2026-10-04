@@ -1,4 +1,4 @@
-// NHL → stat lines (v0.564.0). Source: api-web.nhle.com, the public JSON
+// NHL → stat lines (v0.616.0). Source: api-web.nhle.com, the public JSON
 // behind NHL.com's Gamecenter. No key; updates live with the game.
 //
 //   schedule  /v1/schedule/{YYYY-MM-DD}     the week from that date (gameWeek[])

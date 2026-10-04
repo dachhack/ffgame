@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Apply the multi-sport migrations (0396 → 0404) to a Supabase project, in
+# Apply the multi-sport migrations (0424 → 0432) to a Supabase project, in
 # order, stopping at the first error. Needs the project's Postgres connection
 # string (Supabase dashboard → Project Settings → Database → Connection string,
 # the "session" URI; use the pooler URI on port 6543 if 5432 is closed).
@@ -10,20 +10,20 @@
 # Idempotent: every migration uses `create or replace` / `if not exists`, and
 # the two that alter a key or backfill guard themselves, so re-running after a
 # partial apply is safe. The optional first argument is the first file to
-# apply (e.g. 0398 to skip ones already run).
+# apply (e.g. 0426 to skip ones already run).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${DATABASE_URL:?set DATABASE_URL to the Postgres connection string of the project}"
-from="${1:-0396}"
-for f in supabase/migrations/0396_sports.sql \
-         supabase/migrations/0397_sport_directory.sql \
-         supabase/migrations/0398_sport_leagues.sql \
-         supabase/migrations/0399_sport_roto.sql \
-         supabase/migrations/0400_sport_settings.sql \
-         supabase/migrations/0401_sport_no_playoffs_yet.sql \
-         supabase/migrations/0402_sport_locks_per_game.sql \
-         supabase/migrations/0403_sport_lineup_and_card.sql \
-         supabase/migrations/0404_sports_flag.sql; do
+from="${1:-0424}"
+for f in supabase/migrations/0424_sports.sql \
+         supabase/migrations/0425_sport_directory.sql \
+         supabase/migrations/0426_sport_leagues.sql \
+         supabase/migrations/0427_sport_roto.sql \
+         supabase/migrations/0428_sport_settings.sql \
+         supabase/migrations/0429_sport_no_playoffs_yet.sql \
+         supabase/migrations/0430_sport_locks_per_game.sql \
+         supabase/migrations/0431_sport_lineup_and_card.sql \
+         supabase/migrations/0432_sports_flag.sql; do
   n=$(basename "$f" | cut -c1-4)
   if [[ "$n" < "$from" ]]; then echo "skip    $f"; continue; fi
   echo "apply   $f"
