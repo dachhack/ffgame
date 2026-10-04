@@ -72,6 +72,7 @@ import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '..
 import { Overlay } from '../ui/Overlay';
 import { InfoChip, LabelInfo } from '../ui/InfoChip';
 import { SportLineup } from '../ui/SportLineup';
+import { SportSettings } from '../ui/SportSettings';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
@@ -2719,10 +2720,9 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
         </View>
         );
       })()}
+      {/* A SPORT LEAGUE'S SCORING (v0.628.0): the web page's twin. */}
       {view === 'scoring' && mode === 'classic' && sport !== 'nfl' && (
-        <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
-          A {SPORTS[sport].league} league scores box-score stat lines — points per stat, categories or roto. Its table is on the web console's SCORING page for now.
-        </Mono>
+        <SportSettings leagueId={leagueId} sport={sport} initial={gmInfo?.sport_settings ?? null} locked={drafted} />
       )}
       {view === 'scoring' && mode === 'classic' && sport === 'nfl' && (
         <View>

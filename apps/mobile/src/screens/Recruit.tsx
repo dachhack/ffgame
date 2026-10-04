@@ -28,7 +28,7 @@ import {
 } from '@drip/core/data/leagueBlueprint';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
-import { sportLeagueSettings, currentSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
+import { sportLeagueSettings, currentSeason, priorSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -185,6 +185,14 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const [sportsOn, setSportsOn] = useState(false);
   const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
   const [sportFormat, setSportFormat] = useState<SportFormat>('points');
+  // REPLAY (v0.628.0): last season on a clock that runs a year behind — the
+  // web form's twin. Week 301 opens this real week either way.
+  const [replay, setReplay] = useState(false);
+  const pickReplay = (on: boolean) => {
+    setReplay(on);
+    const thisMon = mondayOnOrBefore(new Date().toISOString().slice(0, 10));
+    setPeriodStart(on ? addDays(thisMon, -364) : mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+  };
   const sportDef = SPORTS[sport];
   const isSport = sport !== 'nfl';
   const pickSport = (sp: Sport) => {
@@ -488,10 +496,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         // and the schedule is periods from the start date.
         const starters = Object.values(sportDef.defaultRoster).reduce((a, b) => a + b, 0);
         const weeks = sportDef.regularSeasonWeeks;
-        const contN = continuity === 'keeper' ? keepN : null;
-        const rs = await createNativeLeague(nm, currentSeason(sport), teamCount, starters + sportDef.benchDefault, secs, draftMode,
-          200, 15, 1, null, null, null, 'classic', continuity === 'keeper' ? 'keeper' : 'redraft', contN,
-          sport, sportLeagueSettings(sport, { periodStart, weeks, format: sportFormat }));
+        const contN = continuity === 'keeper' ? keepN : continuity === 'dynasty' ? rookieN : null;
+        const season = replay ? priorSeason(sport) : currentSeason(sport);
+        const rs = await createNativeLeague(nm, season, teamCount, starters + sportDef.benchDefault, secs, draftMode,
+          200, 15, 1, null, null, null, 'classic', continuity === 'keeper' ? 'keeper' : continuity === 'dynasty' ? 'dynasty' : 'redraft', contN,
+          sport, sportLeagueSettings(sport, { periodStart, weeks, format: sportFormat, replay: replay ? { season } : null }));
         if (!rs.ok || !rs.league_id) { warn(); setErr(friendlyError(rs.error ?? 'could not create the league')); return; }
         setMakeNote('Generating the season schedule…');
         const ss = await nativeGenerateSchedule(rs.league_id, weeks);
@@ -829,12 +838,19 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                       <Chip label="CATEGORIES" on={sportFormat === 'cats'} onPress={() => { tap(); setSportFormat('cats'); }} />
                       <Chip label="ROTO" on={sportFormat === 'roto'} onPress={() => { tap(); setSportFormat('roto'); }} />
                     </View>
+                    {/* REPLAY (v0.628.0): last season, day by day, a year behind. */}
+                    <LabelInfo label="SEASON"
+                      info={`LIVE — this season as it happens.\n\nREPLAY — the ${priorSeason(sport)} season replayed from the first week you pick, one real day per replayed day: games start, lock and go final at the hour they did then. Pick a week when the season was in full swing${sport === 'mlb' ? ' (April to September)' : ''}.`} />
+                    <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                      <Chip label={`LIVE · ${currentSeason(sport)}`} on={!replay} onPress={() => { tap(); pickReplay(false); }} />
+                      <Chip label={`REPLAY · ${priorSeason(sport)}`} on={replay} onPress={() => { tap(); pickReplay(true); }} />
+                    </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                      <Mono size={8.5} tone="faint" track={0.1}>FIRST WEEK</Mono>
+                      <Mono size={8.5} tone="faint" track={0.1}>FIRST WEEK{replay ? ` (${priorSeason(sport)})` : ''}</Mono>
                       <Pressable hitSlop={6} onPress={() => { tap(); setPeriodStart((d) => addDays(d, -7)); }}>
                         <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
                       </Pressable>
-                      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>Mon {periodStart.slice(5).replace('-', '/')}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>Mon {replay ? periodStart.replace(/-/g, '/') : periodStart.slice(5).replace('-', '/')}</Text>
                       <Pressable hitSlop={6} onPress={() => { tap(); setPeriodStart((d) => addDays(d, 7)); }}>
                         <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
                       </Pressable>
