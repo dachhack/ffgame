@@ -22,6 +22,12 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.615.1 — the availability read-back prints its list
+
+> - Ops 031's first live read of the conference reports worked — all four conferences answered, 318 players designated across 52 schools — and then the read-back crashed before printing them (the CLI case had no database handle for the name lookup). Fixed; ops 032 is the same dry read again.
+
+- `server/src/cli.js` `college-avail`: imports `db` like the other cases. `ops/run/032-college-availability-dry.json`.
+
 ### v0.615.0 — college availability before kickoff: the conferences' own reports, on the player
 
 > - Founder: "We need to know status BEFORE the game so people can make roster changes." College football has no league-wide injury report, but since 2025 the **SEC, Big Ten, ACC and Big 12 each publish a player availability report** for conference games — three days, two days and one day before kickoff (Probable / Questionable / Doubtful / Out) and a final one about ninety minutes before (Available / Game Time Decision / Out / Out 1st half). The worker now reads all four and puts them on the player: the **O / D / Q badge** on the board and lineup, the detail on the player card in the conference's own words ("SEC availability report · Game Day (Saturday 9:30 CT) · Out · Sat Oct 3 vs Mississippi State"), the projection discount, and the classic auto-slot's ruled-out set — the same places an NFL designation already shows.
