@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.627.1 — the ADP pages' team codes, read live
+
+> - Every NBA, NHL and MLB player on the ADP pages now lands on his real team in the draft room.
+
+A live read of the three pages after v0.627.0: the NBA page writes NOR and
+UTH (now NOP and UTA), and the MLB page's small print has no team for a
+free agent ("SP,DH"), so the first token — a position — was read as one,
+while SF was dropped as a small forward on a page where it is the Giants.
+The team is now the token LEFT of the dash only, and the position codes
+that are never a team are listed per sport. Live: 31/32/31 team sets, the
+feeds' codes exactly, FA blank.
+
 ### v0.627.0 — ADP and projections for the daily sports
 
 > - NBA, NHL and MLB draft rooms sort by consensus pre-season ADP; a new league's pool opens in draft order.

@@ -27,9 +27,17 @@ const log = (...a) => console.log('[sport-market]', ...a);
  *  directory stores. Anything not listed passes through upper-cased. */
 export const TEAM_ALIAS = {
   nhl: { NJ: 'NJD', TB: 'TBL', LA: 'LAK', SJ: 'SJS', MON: 'MTL', WAS: 'WSH', VEG: 'VGK', UTAH: 'UTA', ARI: 'UTA', CLB: 'CBJ', NAS: 'NSH', WIN: 'WPG' },
-  nba: { GS: 'GSW', NO: 'NOP', NY: 'NYK', SA: 'SAS', UTAH: 'UTA', WSH: 'WAS', PHO: 'PHX', BRK: 'BKN', CHO: 'CHA' },
+  nba: { GS: 'GSW', NO: 'NOP', NOR: 'NOP', NY: 'NYK', SA: 'SAS', UTAH: 'UTA', UTH: 'UTA', WSH: 'WAS', PHO: 'PHX', BRK: 'BKN', CHO: 'CHA' },
   wnba: { NY: 'NYL', LV: 'LVA', LA: 'LAS', CONN: 'CON', PHX: 'PHO', WSH: 'WAS', GS: 'GSV' },
   mlb: { CHW: 'CWS', ARI: 'AZ', WAS: 'WSH', OAK: 'ATH', SDP: 'SD', SFG: 'SF', TBR: 'TB', KCR: 'KC', WSN: 'WSH' },
+};
+/** Position codes the pages print, per sport — never a team there (SF is a
+ *  forward on the NBA page and the Giants on the MLB one). */
+const POSITION_CODES = {
+  nba: new Set(['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']),
+  wnba: new Set(['G', 'F', 'C', 'UTIL']),
+  nhl: new Set(['C', 'LW', 'RW', 'D', 'G', 'UT']),
+  mlb: new Set(['SP', 'RP', 'DH', 'LF', 'CF', 'RF', 'OF', 'SS', 'C', 'UT', 'UTIL']),
 };
 export const feedTeam = (sport, code) => {
   const c = String(code ?? '').trim().toUpperCase();
@@ -57,9 +65,16 @@ export function parseFantasyProsAdp(html, sport) {
     const name = (/fp-player-name="([^"]+)"/.exec(label)?.[1] ?? /class="player-name[^"]*"[^>]*>([^<]+)</.exec(label)?.[1] ?? '').trim();
     if (!name) continue;
     const small = /<small[^>]*>([\s\S]*?)<\/small>/.exec(label)?.[1] ?? '';
-    const smallText = small.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const team = feedTeam(sport, /\b([A-Z]{2,4})\b/.exec(smallText)?.[1] ?? '');
-    const posText = (/-\s*([A-Z0-9,/ ]+)\)?\s*$/.exec(smallText)?.[1] ?? '').trim();
+    const smallText = small.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/[()]/g, ' ').trim();
+    // "DEN - C" / "LAD - SP,DH": the team is left of the dash, the positions
+    // right of it. "COL" alone is the team (the NHL page keeps positions in a
+    // column). A row with positions and no team ("SP,DH", a free agent) has
+    // no team — the first token must not be read as one.
+    const dash = smallText.indexOf(' - ');
+    const left = dash >= 0 ? smallText.slice(0, dash) : smallText;
+    const posText = dash >= 0 ? smallText.slice(dash + 3).trim() : '';
+    const rawTeam = /\b([A-Z]{2,4})\b/.exec(left)?.[1] ?? '';
+    const team = rawTeam && !POSITION_CODES[sport]?.has(rawTeam) && rawTeam !== 'FA' ? feedTeam(sport, rawTeam) : '';
     let pos = posText ? posText.split(/[,/]/).map((p) => p.trim().replace(/\d+$/, '')).filter(Boolean) : [];
     // The NHL page keeps the position in its own column ("C1", "RW2", "G1").
     if (!pos.length) {
