@@ -775,23 +775,43 @@ export function buildMatchup(
 export interface ClutchOffer { id: 'clutch-don' | 'clutch-encore' | 'clutch-counter'; slotKey: string; armFrom: number; armUntil: number; note: string; }
 const CLUTCH_HALFTIME = 1800; // 30:00 game clock
 const CLUTCH_WINDOW = 300;    // how long an offer stays open (game seconds)
-export function clutchOffers(slot: ResolvedSlot, week: number): ClutchOffer[] {
+/** Encore closes here (55:00): "arm it any time before the game ends". */
+export const ENCORE_ARM_UNTIL = 3300;
+/** What a clutch offer is read from — the pieces of a resolved slot the app's
+ *  live board also holds (v0.624.1): the player fielded, his metric, the duel's
+ *  event stream (banks for the halftime lead, the nuke for Counter-Wipe) and
+ *  whether anyone is across from him. */
+export interface ClutchSpot { player: Player; metricId?: string | null; events: PbpEvent[]; hasOpponent: boolean }
+export function clutchOffersFor(spot: ClutchSpot, week: number, key: string): ClutchOffer[] {
   const out: ClutchOffer[] = [];
-  if (!slot.you) return out;
-  const key = slotKey(slot.win, slot.slotIndex);
   // Halftime lead ≥10 → conditional Double or Nothing (arm before Q3 develops).
-  if (slot.their) {
-    const half = banksAtClock(slot.events, CLUTCH_HALFTIME);
+  if (spot.hasOpponent) {
+    const half = banksAtClock(spot.events, CLUTCH_HALFTIME);
     if (half.you - half.their >= 10) out.push({ id: 'clutch-don', slotKey: key, armFrom: CLUTCH_HALFTIME, armUntil: CLUTCH_HALFTIME + CLUTCH_WINDOW, note: `Up ${(half.you - half.their).toFixed(1)} at half` });
   }
   // A first-half TD → Encore: the next TD banks +12 (arm any time before the end).
-  const h1 = statlineAt(slot.you.player, week, CLUTCH_HALFTIME, slot.you.metricId ?? undefined);
+  // Open from the TD itself (v0.624.1), not from the half: the card says
+  // "offered when one of your players scores a touchdown in the first half",
+  // and the founder's Zay Flowers had scored with 0:12 left in the second
+  // quarter — the offer used to wait for 30:00 to tick over. The engine only
+  // asks that the NEXT TD come after the arm clock, so an arm in the first
+  // half is as good as one in the third quarter.
+  const h1 = statlineAt(spot.player, week, CLUTCH_HALFTIME, spot.metricId ?? undefined);
   const h1tds = h1.passTds + h1.rushTds + h1.recTds + h1.retTds;
-  if (h1tds > 0) out.push({ id: 'clutch-encore', slotKey: key, armFrom: CLUTCH_HALFTIME, armUntil: 3300, note: `${h1tds} first-half TD` });
+  if (h1tds > 0) out.push({ id: 'clutch-encore', slotKey: key, armFrom: 0, armUntil: ENCORE_ARM_UNTIL, note: `${h1tds} first-half TD` });
   // An opponent nuke wiped you → Counter-Wipe, open for a short window after it.
-  const wipe = [...slot.events].reverse().find((e) => e.side === 'their' && e.effect?.type === 'nuke' && /wiped|NUKE|WIPE/i.test(e.effect.text));
+  const wipe = [...spot.events].reverse().find((e) => e.side === 'their' && e.effect?.type === 'nuke' && /wiped|NUKE|WIPE/i.test(e.effect.text));
   if (wipe) out.push({ id: 'clutch-counter', slotKey: key, armFrom: wipe.clock, armUntil: wipe.clock + CLUTCH_WINDOW, note: `Nuked at ${fmtClock(wipe.clock)}` });
   return out;
+}
+export function clutchOffers(slot: ResolvedSlot, week: number): ClutchOffer[] {
+  if (!slot.you) return [];
+  return clutchOffersFor({ player: slot.you.player, metricId: slot.you.metricId, events: slot.events, hasOpponent: !!slot.their }, week, slotKey(slot.win, slot.slotIndex));
+}
+/** The clock an arm records (parity with the web's onArmClutch): Counter-Wipe
+ *  names the nuke it negates; Encore and the Gamble stamp the moment. */
+export function clutchArmClock(o: ClutchOffer, winClock: number): number {
+  return o.id === 'clutch-counter' ? o.armFrom : winClock;
 }
 
 // ── Drip-coin economy — the rules live in scoringRules.ts ────────────────────
