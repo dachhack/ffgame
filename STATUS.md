@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.614.2 — "Final · In progress" on the app's classic board, and a read-back for two quiet college players
+
+> - Founder's screenshot (Devy Test 1): T. Green (TE, LSU) and J. Dwyer (WR, TCU) read **"Final · In progress"** at 0.00. The two words contradict each other: the app printed "In progress" whenever a player had no counted play, even after his game went final. The web board already printed a dash there; the app does too now.
+> - Whether those two really recorded nothing is a separate question the label can't answer. Dwyer is TCU's lead receiver and Green starts at LSU, so ops 030 reads back what the worker stored for every rostered college player in college week 5 and NFL week 4 (`college-report`, read-only). If their plays are missing rather than empty, that is a feed gap to fix next; this note stays open until the read-back says which.
+
+- App `ui/ClassicBoard.tsx`: a final game with no statline prints `—`, as the web does. `ops/run/030-college-report-wk205.json`. Unconfirmed cause for the zeros themselves.
+
 ### v0.614.1 — pictures from the site on the front door
 
 > - Founder: "Include pictures from the site." The landing now shows four real screens under the features — **Sealed picks** (the opponent's card backs before kickoff), **Live duels** (a Thursday-night duel dripping points), the **Classic board** (two lineups with live totals), and **Every game on a field** (a live field with the ball spot) — each a tap into the demo or the classic simulator. The demo card's picture is the Drip board live (the window battle bar, three duels, a nuke caption) instead of the setup screen.

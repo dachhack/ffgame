@@ -266,7 +266,11 @@ function BoardCell({ e, align, onGame, onName, empty }: {
   const bye = e.opponent === 'BYE';
   const started = !bye && e.state !== 'pre';
   const line = bye ? 'BYE'
-    : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? 'In progress'}`
+    // "Final · In progress" (v0.614.2, founder's screenshot of two college
+    // players): the statline is null while a man has no counted play, and
+    // once his game is final that is "no stats", not "in progress". The web
+    // board already prints the dash; the app said both words at once.
+    : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
     : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
