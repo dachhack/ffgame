@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.628.0 — replay and the sport scoring page, in the app
+
+> - The app's create flow offers SEASON: LIVE / REPLAY for a daily-sport league, and its COMMISH → SCORING page is the sport's own table — format, categories, points per stat.
+
+Founder: "Add replay and the scoring page to the mobile app."
+
+**Replay (Recruit).** The game step's sport block gets SEASON chips — LIVE ·
+2026 / REPLAY · 2025 — between SCORING and FIRST WEEK, the web form's
+twin: on REPLAY the first week jumps to the same calendar week a year back
+(the ± steps move it, the label shows the year) and the league is created
+on the prior season with the replay block. A dynasty choice now reaches the
+server too; the sport path had collapsed it to redraft.
+
+**Scoring (CommishTools → SCORING).** `ui/SportSettings`, the web page's
+twin in React Native: the format (points / H2H categories / roto) and the
+categories, frozen once the draft starts; the points per stat by stat
+group with changed values lit, `{LEAGUE} DEFAULT` and SAVE. Saves through
+`set_sport_settings`; the worker rescores on its next pass. The "see the
+web console" note is gone.
+
+Verified: the app's `tsc --noEmit`.
+
 ### v0.627.3 — the whole directory, page by page
 
 > - The MLB draft pool's ADP covers every player again: the worker read only the first 1,000 of the directory's 1,662.
