@@ -22,6 +22,342 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.624.0 — daily-sport leagues meet main
+
+> - NBA, NHL, MLB and WNBA leagues skip the devy question — college football players have no place in their pools.
+
+The sport branch (v0.564.0 → v0.571.2 when it was cut) lands on a main
+that had moved 61 commits and taken the same numbers: its migrations are
+now **0424 → 0432** (0396 → 0404 before) and its entries v0.616.0 →
+v0.623.2 below. Merged, not rebased; main's devy market, the open door
+(0422) and the platform imports (0423) are all in. Conflicts were the
+injury prune (both the college `c-` rows and the sport directories' rows
+stay out of it), the player card (the college card first, then the sport
+card), the worker's sync block (the sports loop sits ahead of 0422's
+database-driven Sleeper list), the parity list, the app's Recruit (main
+dropped the `native` flag read; the `sports` flag read stays), and
+STATUS.md. Verified on a local Postgres carrying every migration through
+0423 and then these nine; typecheck, build, the app's tsc and
+`check:parity` are green.
+
+### v0.623.2 — the worker's config names its sports
+
+> - `fly.toml` sets `SPORTS = "nhl,mlb"`, so the deployed worker sweeps the NHL and MLB directories and scores their games; NFL is untouched and sport leagues stay behind the flag.
+
+The repo's own workflows carry the credentials the build container does
+not: `Apply Supabase migrations` takes the nine sport files as its `file`
+input (space-separated, on this branch), and `Deploy the worker` on this
+branch ships the worker with this env. Neither can be dispatched by the
+integration that writes the repo (a 403, as `ops-run.yml` records), so
+both are a click in the Actions tab.
+
+### v0.623.1 — one script applies the sport migrations
+
+> - `scripts/apply-sport-migrations.sh` runs 0424 → 0432 in order against a project's connection string, stopping at the first error; safe to re-run.
+
+Founder: "You can do 1-3 and I'll playtest from there." The three steps
+(migrations, the flag, the worker with `SPORTS=`) need the real project's
+credentials, which the build container does not hold; this script is the
+first step as one command, proven idempotent by re-running it on the
+local Postgres that already carried all nine.
+
+### v0.623.0 — the sports flag: daily-sport leagues for the founder to test
+
+> - NBA / NHL / MLB / WNBA leagues are behind a per-account feature flag, the same way in-app leagues were.
+
+Founder: "Can we feature flag all of this to me so I can test?"
+
+**has_sports() (0432)** — `is_admin()` or `app_user.features ? 'sports'`,
+granted with the existing `admin_set_feature(email, 'sports', true)`.
+`create_native_league` is the one door into a sport league and now refuses
+a non-NFL sport without it; every downstream surface (draft chips, the
+week panel, the commissioner's sport tabs, the player card) keys off
+`league.sport`, so gating creation gates all of it. NFL creation is
+untouched. Both create flows show the WHICH SPORT chips to flag holders
+and admins only (`myFeatures` + `isAdmin`, as the native gate does).
+
+The worker's side stays on `SPORTS=` in its env: the directory and game
+feeds run for whichever sports it is told to carry, flag or not, so a
+tester's league has data waiting.
+
+Verified on the local Postgres: refused without the flag, NFL creation
+still fine, allowed once granted. `check:sports` pins the gate in the SQL
+and both forms.
+
+### v0.622.1 — the second review: the card's season numbers, the builder's rounds
+
+> - Fixes to the sport player card and the lineup builder from a second review pass.
+
+Ten findings on v0.622.0, all fixed:
+
+- **A season is a sum, not one big game.** The card re-derived
+  double-doubles and quality starts from season totals (a 20-QS pitcher
+  read "QS 0"). `seasonLine` / `seasonPoints` (core `sports/card.ts`) take
+  the per-game derived stats from stored counts — Sleeper's NBA season
+  stats carry `dd` / `td`, which the directory now keeps — and show "—"
+  where a source never counted them. FPTS/G on the card runs through it.
+- **OBP and WHIP** were computed without the sport's ratio inputs (OBP
+  always "—", WHIP always 0.00); the card goes through `categoryTotals`.
+- **Totals vs per game, per sport**: a goalie's saves are per game and his
+  shutouts a total; the old global list had NHL saves as a season total.
+- **DNP** keys off `played`, not the (never-null) line.
+- **The headshot** the RPC returns is shown, unless marks are hidden.
+- **Last ten games** are chosen by date, not by game id.
+- **The builder** reports the draft's rounds (`draft_rounds`, starters +
+  bench), not the roster size; its copy says IR is stashed into, not
+  drafted; and it renders frozen once the draft has started
+  (`draft_state`), rather than letting a save discover it.
+- **roster_shape at creation** was edited into 0426 after it had run on
+  the local database; 0431 backfills any sport league without one.
+- The dead decimals ternary and the inconsistent per-game list are gone.
+
+### v0.622.0 — a sport league shapes its own lineup, and a sport player has a card
+
+> - Commissioners of NBA / NHL / MLB / WNBA leagues build their own lineup before the draft.
+> - Clicking a sport player opens a card with his season and last games.
+
+**The lineup builder (0431 `set_sport_lineup`, `src/screens/SportLineup.tsx`).**
+Counts per slot type (2 C, 1 G, 2 UTIL…) plus the bench and IR shelves, on
+the LINEUP tab in place of the football builder; one SAVE writes the spec
+in the sport's positions (`sport_positions`, pinned to the SportDef by
+check-sports) and the draft's rounds follow — creation now stores
+`roster_shape` for a sport league so `_sync_classic_rounds` has a bench to
+add. Frozen once the draft starts, like the NFL builder; filters, best
+ball and per-spot rules stay football-only.
+
+**The card (0431 `sport_player_card`, `src/app/sportCard.tsx`).** The
+player card host branches on a sport key: the directory's facts (every
+eligibility as a pill, team, jersey, injury with its note, rank), the
+season as per-game numbers and ratios (core `sports/card.ts`: PTS/G and
+FG% for basketball, GAA and SV% for a goalie, ERA and WHIP for a pitcher,
+per population), and his last ten games with the points each scores under
+the league the card was opened from. The NFL card is untouched.
+
+### v0.621.0 — what the review found: the sweep that retired everyone, and nine more
+
+> - Fixes from a code review of the sport-league branch before anyone plays on it.
+
+A review of the branch (`/code-review high`) found ten defects; all are
+fixed, tested, and re-verified on the local Postgres.
+
+1. **The sweep retired its own rows.** The retirement pass took its
+   timestamp AFTER the rows were stamped, so every player just written read
+   as unseen and went inactive — and create_native_league would then say
+   "no NHL players in the directory". The sweep's start is taken first now.
+2. **A traded player never scored again.** The locks and the DB lock read
+   `league_pool.team`, written once at seeding. `sport_pool_refresh` (0430)
+   moves every sport league's pool rows to the directory's team,
+   eligibility and position after each sweep.
+3. **WNBA team codes.** ESPN's abbreviations (NY, CONN, PHX…) never matched
+   the box scores' tricodes (NYL, CON, PHO…); `wnbaTeam` maps them.
+4. **A postponement is not a start.** `startedGames` and
+   `sport_slug_started` (0430) ignore postponed and cancelled games,
+   whatever their clock says.
+5. **A league mid-draft went live by the calendar** and could have been
+   stamped 0–0 with its schedule frozen. The worker only touches leagues
+   whose draft is complete.
+6. **Doubleheaders.** `sport_slot_lock` is keyed per game as well as per
+   slot-day (0430), so a second game the same day locks and scores.
+7. **A stuck live game held every later period.** `periodDone` counts only
+   games from inside the period, for two days; `repollStaleLive` keeps
+   re-reading any game the table still calls live from before yesterday.
+8. **The loop dropped to its idle cadence while box fetches failed.**
+   `live` is the schedule's word now, not the box score's.
+9. **Four reads per league per started game per tick** became four per
+   league per pass; the games loop in memory.
+10. **Position pills got raw feed codes** ('L', 'G-F'); both panels map
+    through `eligibleFor` first.
+
+### v0.620.0 — the NBA schedule by date, no brackets for sport leagues yet, the review note
+
+> - Basketball leagues know tomorrow's and yesterday's games, not just today's.
+> - Daily-sport leagues are kept out of the playoff machinery until it understands their weeks.
+
+**The season schedule (NBA / WNBA).** The live scoreboard only knows today;
+any other date now comes from the CDN's season schedule file
+(`scheduleLeagueV2*.json`, cached six hours), and an early-morning
+scoreboard that has not rolled to the asked date falls back to it. Parsed
+from the file's documented shape — the CDN refuses the build container —
+with a test on a documented-shape sample.
+
+**No bracket yet (0429).** The playoff rules read NFL weeks, and a sport
+league's 301+ matchups satisfied "the regular season is final" vacuously,
+so generate_playoffs would have booked a bracket over a season that had
+not begun. The wrapper refuses for a sport league (quietly for the auto
+poke) and the worker's progression sweep skips them; verified on the
+local Postgres against the QA league.
+
+**Mobile.** The wire's position chips are the sport's, as the draft's are.
+
+**The review note.** `docs/multi-sport-review.md`: what is on the branch,
+what to look at first on the web and in the app, what it takes to run
+(migrations 0424–0429, `SPORTS=` on the worker), what was verified and
+how, the known gaps, and suggested next steps.
+
+### v0.619.0 — the commissioner's sport scoring, and injuries on the boards
+
+> - A sport league's commissioner sets its scoring, format and categories on the SCORING tab.
+> - Injured NBA / NHL / MLB / WNBA players show their status on every board.
+
+**set_sport_settings (0428).** Patches `settings_json.sport`: points per
+stat any time (the worker rescores every live matchup on its next pass);
+format and categories, and the first week's Monday and the week count,
+until the season is under way. Values are sanitised (finite numbers within
+±1000, formats points|cats|roto, category ids as plain tokens, the date
+normalised to its Monday); the SportDef decides which ids exist, so the
+page only offers real ones. `src/screens/SportSettings.tsx` is that page,
+in place of the football catalog when `league_game_mode.sport` is not nfl;
+the LINEUP tab explains the sport's standard shape instead of the builder
+(a daily-sport lineup builder is on the list).
+
+**Injuries.** The directory sweep writes each sport's injured into
+`injury_status` under the sport key, in the boards' four-letter vocabulary
+(IL-60 → IR, GTD → Q, out-for-season → IR), and clears the sport's healed
+rows; the NFL injury poll's prune now leaves sport keys alone. Every board
+that shows an injury tag shows theirs.
+
+`check-blueprint` learns the two defaulted sport arguments on
+create_native_league; `check:parity` is green.
+
+### v0.618.0 — roto, the mobile sport league, and lineups that lock only where they may
+
+> - Sport leagues can be ROTO: one season-long ranking per category instead of weekly winners.
+> - The app can create NBA / NHL / MLB / WNBA leagues and shows the week's locked lines on the classic board.
+
+**Roto (0427, phase 4).** `settings_json.sport.format = 'roto'`: the worker
+sums every locked slot-day of the season per seat (derived per game first,
+so a double-double counts per night), ranks the league in each category
+(core `rotoStandings`: best of N takes N, ties split places, a seat with no
+line yet has 0 of everything — last in the counting categories and, as in
+every roto league before opening night, first in turnovers) and writes
+`sport_roto`; `sport_roto_standings` reads it. The weekly matchups keep
+scoring head-to-head for the board's sake. `sport_league_lines_svc` is the
+worker's league-wide read.
+
+**Eligibility at the lock.** A player in a slot he may not fill (a centre at
+point guard) never locks, so he never scores — the same 0 the NFL resolver
+gives an illegal spot, decided once at tip-off (`slotAllowsFor`,
+`league_pool.eligible` over `roster_slots`) rather than at every read.
+
+**Names.** A sport key is a feed id, and prettifying it printed "Nba 1658".
+`setSportNames` / `sportNameFor` (core sports/index.ts) hold the league's
+names the way college's do; both classic boards install them from the pools
+they already load.
+
+**Mobile.** The create flow's first question is WHICH SPORT; a sport league
+asks POINTS / CATEGORIES / ROTO and the first week's Monday (± a week),
+hides the football-only continuities and formats, and skips the client-side
+pool. The draft's position chips are the sport's. The classic board draws
+`ui/SportWeekPanel` — the period, both seats' locked slot-days, the category
+grid or the roto table, today's slate. The web form gains the ROTO chip and
+its panel the roto table.
+
+`npm run typecheck` and the app's `tsc --noEmit` both clean; `check:sports`
+gains the roto table test.
+
+### v0.617.0 — sport leagues: the directory, creation, daily locks and the week's score
+
+> - Native NBA, NHL, MLB and WNBA leagues can be created: a ranked player pool, weekly head-to-head periods, and lineups that lock player by player at tip-off.
+> - Nothing changes for NFL leagues.
+
+Phases 2 and 3 of `docs/multi-sport-plan.md`, on the v0.616.0 spine.
+
+**The directory (0425, `server/src/poll/sportDirectory.js`).** `sport_player`:
+every rostered player per sport with eligibility in core's vocabulary
+(NBA "G-F" → SG/SF; MLB fielding games at 10+ → 2B/SS, starts → SP/RP, a
+two-way player DH+SP), an injury status (MLB's IL from the 40-man rosters,
+the NBA's from Sleeper), and a RANK — fantasy points under the sport's
+default table over the ranking season (this one at 20 games, else last),
+Sleeper's search rank as the NBA tiebreak. Sources: NHL standings + rosters +
+the stats REST season reports (skaters, goalies, realtime hits/blocks); MLB
+players + teams + the hitting/pitching/fielding leaderboards + 30 rosters;
+NBA Sleeper's directory and its `/stats/nba/regular/{year}` (which works —
+the research had it unverified); WNBA ESPN rosters. A sweep retires by
+absence, as college does. `league_pool.eligible text[]` (NULL = the pos
+column, every NFL row). `seed_sport_pool` fills a league's pool from the
+directory. Basketball box scores carry nba.com ids and the directories
+don't, so `xrefKey` crosswalks a line by name + team and remembers the
+match in `sport_player.alt_ids`.
+
+**Sport leagues (0426, core `sports/league.ts`, `server/src/sportLeague.js`).**
+`create_native_league` gains `p_sport` and `p_sport_settings` (the old
+15-argument door is dropped, not overloaded — PostgREST would find two
+candidates); a sport league is classic by construction, keeps `roster_slots`
+from the SportDef's standard lineup and a `settings_json.sport` block
+(format points|cats, categories, scoring overrides, period_start, weeks),
+and seeds its pool server-side. Board weeks are 301+ (`SPORT_WEEK_BASE`),
+each a Mon–Sun period from `period_start` — disjoint from 1–22 / 101+ /
+201+ so the NFL worker's week-keyed queries never touch a sport league;
+`native_generate_schedule` delegates to `sport_generate_schedule` for one.
+The lock is per game: `sport_slot_lock` is the worker's snapshot of each
+seat's starting slots when a player's game starts, and
+`enforce_sport_pick_lock` / `enforce_sport_roster_lock` refuse moving a
+player whose game today has started, in or out (`sport_slug_started`, on
+sport_game by the league's Eastern date). The worker's sports loop locks
+what just started, scores every live matchup from its locked slot-days
+(points, or the category verdict — `home_final` = category wins) into
+`matchup_state`, wakes for the next tip-off, and stamps a matchup final
+the day after its period with no game from it still live; standings read
+it as any week. `league_game_mode` carries `sport` and `sport_settings`.
+
+**Web.** The create form asks WHICH SPORT first; a sport league asks
+POINTS or CATEGORIES, the first week's Monday and the week count, hides
+the football-only formats and continuities, and skips the client-side pool.
+Draft and wire position chips are the sport's own. The classic board draws
+`SportWeekPanel` above the lineup: the period, both seats' locked slot-days
+with each line's points (or the category grid), today's slate. Position
+pills borrow a football colour family per code. Mobile: not yet.
+
+**QA.** Every migration through 0426 applied on a local Postgres 16 with
+Supabase shims; a SQL scenario created an NBA league from fixture players,
+generated a 301+ schedule, set both lineups, saw the tip-off lock refuse a
+started player's swap and drop while an idle one moved, read lines for both
+seats, and counted the final in standings. `server/test/sports-directory.mjs`,
+`sports-league.mjs` (pure) and `sports-league-io.mjs` (a chainable fake
+Supabase: lock → score → final) join `check:sports`.
+
+### v0.616.0 — the sport spine: NBA, WNBA, NHL and MLB as data
+
+> - Groundwork for hockey, basketball and baseball leagues: nothing changes for NFL leagues yet.
+
+The founder: "What would it take for us to do hockey, NBA, MLB, WNBA fantasy …
+let's assume native leagues for all of these and no drip format." The
+assessment and the phased plan are in `docs/multi-sport-plan.md`; this is
+phase 1, the data half of the spine.
+
+**One SportDef per sport (`packages/core/src/sports/`).** Eligibility codes
+and the feed-position map (NBA "G-F" → SG/SF, MLB "CF" → OF), slot types and
+the Yahoo/ESPN standard lineup, the stat vocabulary a box score is normalised
+into, derived stats (double-double, PPP, IP, quality start), the default
+points table, the categories a 9-cat / 5x5 league compares, injury statuses
+and the season shape. The NFL is in the registry for shape only; it keeps
+scoring through `engine/classic.ts`. `sports/score.ts` scores a line
+(points), compares two teams category by category (team FG% is made from
+summed makes and attempts; a ratio nobody registered is a tie) and ranks a
+league roto-style (best of N takes N, ties split places).
+
+**Stat lines, not plays (0424).** A classic league needs each player's line
+per game, and every other league's official feed publishes exactly that, live.
+`league.sport` (default `nfl`), `sport_game` (the daily slate, keyed sport +
+season + feed game id) and `game_stat_line` (one cumulative line per player
+per game, `player_key` = `<sport>-<feed id>` on college's numeric-id rule).
+`sport_lines_for` reads a period's lines for a set of players.
+
+**Adapters + poller (`server/src/sports/`, `server/src/poll/sportGames.js`).**
+NHL (api-web.nhle.com: box score plus the landing page for PPA/SHA and the
+game-winner), MLB (statsapi.mlb.com live feed), NBA/WNBA (the leagues'
+liveData CDN, same shape, browser headers required). Pure over the payloads,
+tested on captures of NHL opening night and the MLB postseason
+(`server/test/sports-adapters.mjs`); the NBA test runs on the documented
+sample because the CDN refuses the build container. The poller is gated on
+`SPORTS=nhl,mlb` — unset, the NFL worker is byte-for-byte what it was — and
+paces itself: a minute while a game is live, ten when none is. CLI:
+`sport-poll <sport> [date] [--force]`. A dry run against the live feeds
+wrote 9 games and 249 lines.
+
+`npm run check:sports` (in `check:parity`) pins the definitions, the scorer,
+the adapters on their fixtures, the poller's date and re-read rules, and that
+`league.sport`'s check list is core's `SPORT_IDS`.
 ### v0.615.1 — the availability read-back prints its list
 
 > - Ops 031's first live read of the conference reports worked — all four conferences answered, 318 players designated across 52 schools — and then the read-back crashed before printing them (the CLI case had no database handle for the name lookup). Fixed; ops 032 is the same dry read again.

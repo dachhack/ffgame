@@ -30,6 +30,8 @@ import { ModalBackdrop, PlayerImg, Img, InjuryBadge } from './ui';
 import { CollegeCardModal } from './collegeCard';
 import { isCollegeSlug } from '@drip/core/data/college';
 import { Ev, track } from '@drip/core/analytics';
+import { parsePlayerKey } from '@drip/core/sports/index';
+import { SportCardModal } from './sportCard';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -67,6 +69,9 @@ export function PlayerCardHost() {
   // 0406: a college player gets the devy card — its own component, so moving
   // between an NFL card and a college one never shares a hook's state.
   if (isCollegeSlug(req.slug)) return <CollegeCardModal req={req} onClose={() => setReq(null)} />;
+  // A sport key (0431) has its own card: the NFL bio, statline and season
+  // projection mean nothing for him.
+  if (parsePlayerKey(req.slug)) return <SportCardModal req={req} onClose={() => setReq(null)} />;
   return <PlayerCardModal req={req} onClose={() => setReq(null)} />;
 }
 

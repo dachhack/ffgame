@@ -20,6 +20,9 @@ import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { shortName } from '@drip/core/data/players';
 import { collegeNameFor, boardTeamFor, isCollegeSlug } from '@drip/core/data/college';
 import { SimStrip } from './SimStrip';
+import { SportWeekPanel } from './SportWeekPanel';
+import { setSportNames, sportNameFor, type Sport } from '@drip/core/sports/index';
+import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/league';
 import { headshot } from '@drip/core/data/media';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, feedClockLabel, fmtQuarterClock, groupFieldGames, type FieldBoardEntry } from '@drip/core/data/gameFeed';
@@ -328,6 +331,9 @@ const prettySlug = (slug: string): string => {
   // A college slug is an ESPN id — its name comes from the league's pool.
   const cn = collegeNameFor(slug);
   if (cn) return shortName(cn.full);
+  // A sport key (0426) is a feed id — its name comes from the league's pool.
+  const sn = sportNameFor(slug);
+  if (sn) return shortName(sn.full);
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
   return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
@@ -356,6 +362,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // on screen, because a total that means the opposite of what it looks like
   // is the one thing this screen must never let happen.
   const [golf, setGolf] = useState(false);
+  const [sport, setSport] = useState<Sport>('nfl');
+  const [sportSettings, setSportSettings] = useState<SportLeagueSettings | null>(null);
   const [slotsSpec, setSlotsSpec] = useState<SlotSpec[] | null>(null);
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
@@ -506,6 +514,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           // GOLF (v0.303.0) rides the same load: a league setting the engine
           // reads at scoring time, installed like the scoring adjustments.
           if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm)); setGolf(gm.golf === true); }
+          // A SPORT LEAGUE (0426) draws its week from locked slot-days.
+          if (gm.ok) { setSport(gm.sport ?? 'nfl'); setSportSettings(gm.sport && gm.sport !== 'nfl' ? sportSettingsOf({ sport: gm.sport_settings }) : null); }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -585,6 +595,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         // this board reads, so it carries the current team — override, directory,
         // then the row — not whatever team the pool row was seeded with.
         setSlugMetaOverrides(pl.map((x) => ({ slug: x.slug, pos: x.pos, team: liveTeamFor(x.slug, x.team, LIVE_SEASON) })));
+        setSportNames(pl.map((x) => ({ slug: x.slug, full: x.full, team: x.team })));
         // …but a roster blob carries no IDENTITY, and the IDP bake is keyed by
         // one: three of its 963 slugs name two different men. `league_pool_ids`
         // (0205) is the map that tells them apart, and it exists for this.
@@ -678,7 +689,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     // store a lineup) fields its best projected lineup from its roster, and
     // without this the board would show that seat empty while the resolver
     // scored it. In the founder's own leagues that is seven seats in eight.
-    myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); ensureCollegeNames(leagueId, p.map((x) => x.slug)).then((got) => { if (got && !stop) setFlagsVer((v) => v + 1); }).catch(() => {}); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: liveTeamFor(x.slug, x.team, LIVE_SEASON) }))); } }).catch(() => {});
+    myPool(leagueId, matchup.week, oppRoster).then((p) => { if (!stop) { setOppPool(p); ensureCollegeNames(leagueId, p.map((x) => x.slug)).then((got) => { if (got && !stop) setFlagsVer((v) => v + 1); }).catch(() => {}); setSlugMetaOverrides(p.map((x) => ({ slug: x.slug, pos: x.pos, team: liveTeamFor(x.slug, x.team, LIVE_SEASON) }))); setSportNames(p.map((x) => ({ slug: x.slug, full: x.full, team: x.team }))); } }).catch(() => {});
     const load = async () => {
       try {
         const [rev, rows, gf] = await Promise.all([
@@ -1393,6 +1404,10 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         {/* 🧪 SIM STRIP (v0.381.0): the web rehearsal controls, on this board —
             server-gated, so it renders for a super-admin on a LIVE TEST league
             and for nobody else. */}
+        {matchup && sport !== 'nfl' && sportSettings && (
+          <SportWeekPanel leagueId={leagueId} matchupId={matchup.id} week={matchup.week} sport={sport} settings={sportSettings}
+            homeRosterId={matchup.home_roster_id} awayRosterId={matchup.away_roster_id} myRosterId={seat} />
+        )}
         {testLive != null && matchup && (
           <SimStrip leagueId={leagueId} week={matchup.week} onChanged={() => void onPullRefresh()} />
         )}

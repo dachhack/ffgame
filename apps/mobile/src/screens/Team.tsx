@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { clearsOn } from '@drip/core/data/waiverDays';
+import { SPORTS } from '@drip/core/sports/index';
 import {
   addFreeAgent, cancelWaiverClaim,
   friendlyError, leaguePool, nativeRosters, setRosterSpot,
@@ -598,8 +599,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     () => leagueEligiblePos({ roster: gm?.roster ?? null, slots: gm?.slots ?? null }),
     [gm]);
   const posChips = useMemo(
-    () => POS_FILTERS.filter((p) => p !== 'ALL' && (!eligiblePos || eligiblePos.has(p))),
-    [eligiblePos]);
+    () => (gm?.sport && gm.sport !== 'nfl' ? SPORTS[gm.sport].positions : POS_FILTERS.filter((p) => p !== 'ALL'))
+      .filter((p) => !eligiblePos || eligiblePos.has(p)),
+    [eligiblePos, gm?.sport]);
   const free = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => (showOwned || !rostered.has(p.slug))

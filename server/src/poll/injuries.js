@@ -144,7 +144,9 @@ export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
     // slugs into this same table; neither ESPN's NFL report nor Sleeper
     // will ever name them, so without this line every college designation
     // was deleted within hours of landing. Each poll prunes its own.
-    const gone = (held ?? []).map((r) => r.player_slug).filter((s) => !keep.has(s) && !s.startsWith('c-'));
+    const gone = (held ?? []).map((r) => r.player_slug).filter((s) => !keep.has(s) && !s.startsWith('c-') && !/^(nba|wnba|nhl|mlb)-\d+$/.test(s));
+    // 0425: the sport directories keep their own rows here too (nba-…, nhl-…);
+    // neither NFL source designates those, and this prune is not theirs either.
     // Chunked: a delete-in with a thousand slugs is one URL too long for PostgREST.
     for (let i = 0; i < gone.length; i += 200) {
       const chunk = gone.slice(i, i + 200);

@@ -23,6 +23,9 @@ import { tradeConfirm, expiryLine, reviewLine, type ConfirmLeg } from '@drip/cor
 import { ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
+import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
+import { sportLeagueSettings, currentSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
+import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
@@ -194,6 +197,34 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // until the game is chosen. Mocks are exempt: a mock is a draft with no
   // season behind it, so it drafts the drip shape without asking.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
+  // THE SPORT (0426). NFL is the default and everything below reads as it
+  // did; a daily sport (NBA / NHL / MLB / WNBA) is CLASSIC by construction,
+  // plays Mon–Sun periods from a start date, draws its pool from the sport
+  // directory, and skips the formats and continuities that are still
+  // football-only (guillotine, vampire, contracts, dynasty).
+  const [sport, setSport] = useState<Sport>('nfl');
+  // THE SPORTS FLAG (0432): the chips show for holders of the 'sports'
+  // feature and admins; the create RPC enforces the same gate.
+  const [sportsOn, setSportsOn] = useState(false);
+  useEffect(() => {
+    Promise.all([readMyFeatures().catch(() => ({} as Record<string, boolean>)), readIsAdmin().catch(() => false)])
+      .then(([f, a]) => setSportsOn(!!a || f.sports === true));
+  }, []);
+  const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+  const [sportWeeks, setSportWeeks] = useState<number | null>(null);
+  const [sportFormat, setSportFormat] = useState<SportFormat>('points');
+  const sportDef = SPORTS[sport];
+  const isSport = sport !== 'nfl';
+  const pickSport = (sp: Sport) => {
+    setSport(sp);
+    if (sp !== 'nfl') {
+      setGame('classic');
+      setFormat('standard');
+      if (continuity !== 'redraft' && continuity !== 'keeper') setContinuity('redraft');
+      setCopyFrom(null); setCopyBp(null); setCopyReport(null);
+      setSportWeeks(null);
+    }
+  };
   // CONTINUITY (0185): what carries into next season — an axis on top of
   // either game, not a third game. Keeper takes a keeper count; dynasty takes
   // rookie-draft rounds (keepers implied: everyone else) and deals three
@@ -311,9 +342,14 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // is a question on this form, so without this they would quietly revert to
   // the game-type default and the copy would be wrong in the one place nobody
   // looks until the draft. Mocks never copy, so they keep the derivation.
-  const rounds = copyBp && kind === 'league' ? copyBp.rounds
+  // A sport league's roster is its standard lineup plus the bench the
+  // platforms give it (sports/<sport>.ts); IR spots come later, on ROSTER.
+  const sportStarters = Object.values(sportDef.defaultRoster).reduce((a, b) => a + b, 0);
+  const rounds = isSport && kind === 'league' ? sportStarters + sportDef.benchDefault
+    : copyBp && kind === 'league' ? copyBp.rounds
     : contractType ? contractRosterDepth(teams, budget) : game === 'classic' ? 15 : 12;
-  const caps: PosCaps | null = copyBp && kind === 'league' ? copyBp.posCaps
+  const caps: PosCaps | null = isSport && kind === 'league' ? null
+    : copyBp && kind === 'league' ? copyBp.posCaps
     : game === 'classic'
       ? null
       : capsToPosCaps({ QB: 3, RB: CAP_UNLIMITED, WR: CAP_UNLIMITED, TE: 3, K: 1, DEF: 1 });
@@ -348,8 +384,23 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       // The busy note NAMES the game, so the moment of creation says what is
       // being created — the last chance to notice a wrong tap before it
       // freezes at the draft.
-      setNote(`Creating your ${contLabel}${chosenGame === 'classic' ? 'CLASSIC' : 'DRIP'} league…`);
+      setNote(`Creating your ${contLabel}${isSport ? sportDef.league : chosenGame === 'classic' ? 'CLASSIC' : 'DRIP'} league…`);
       const contN = continuity === 'keeper' ? keepN : dynastyType ? rookieN : null;
+      if (isSport) {
+        // A DAILY SPORT (0426): the server seeds the pool from its directory
+        // and the schedule is periods from the start date, so the two
+        // client-side steps the NFL path runs below have nothing to do here.
+        const weeks = sportWeeks ?? sportDef.regularSeasonWeeks;
+        const rs = await createNativeLeague(name, currentSeason(sport), teams, rounds, pickSecs, mode, budget, lotSecs,
+          mode === 'auction' ? maxLots : 1, null, null, null, 'classic', continuity, contN,
+          sport, sportLeagueSettings(sport, { periodStart, weeks, format: sportFormat }));
+        if (!rs.ok || !rs.league_id) { setErr(friendlyError(rs.error ?? 'Could not create the league.')); setBusy(false); return; }
+        setNote('Generating the season schedule…');
+        const ss = await nativeGenerateSchedule(rs.league_id, weeks);
+        if (!ss.ok) { setErr(friendlyError(ss.error ?? 'Could not build the schedule.')); setBusy(false); return; }
+        onLeague(rs.league_id);
+        return;
+      }
       const r = await createNativeLeague(name, '2026', teams, rounds, pickSecs, mode, budget, lotSecs,
         mode === 'auction' ? maxLots : 1,
         copyBp ? copyBp.nightStartMin : null, copyBp ? copyBp.nightEndMin : null, caps, chosenGame,
@@ -381,7 +432,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       }
       // DEVY before the pool: devy spots need college players IN the pool;
       // the market keeps them out of it (they are bought, not drafted).
-      const devyNow = chosenGame === 'classic' && !devyChoiceBlocked(devy, { classic: true, auction: mode === 'auction', contract: contractType }) ? devy : 'none';
+      const devyNow = chosenGame === 'classic' && !isSport && !devyChoiceBlocked(devy, { classic: true, auction: mode === 'auction', contract: contractType }) ? devy : 'none';
       if (devyNow !== 'none') {
         setNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
         const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
@@ -464,7 +515,24 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             continuity, format and game mode are readable only off the
             my_teams row, so a commish-only league would copy as a redraft
             drip league no matter what it really is. */}
-        {kind === 'league' && mine.length > 0 && (
+        {kind === 'league' && sportsOn && (
+          <>
+            <div className="mono" style={label}>WHICH SPORT?</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+              {SPORT_IDS.map((sp) => (
+                <Chip key={`sp-${sp}`} on={sport === sp} onClick={() => pickSport(sp)}>{SPORTS[sp].league}</Chip>
+              ))}
+            </div>
+            {isSport && (
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+                {sportDef.league} plays CLASSIC: a positional lineup, weekly head-to-head, and every player locking at his own tip-off.
+                The pool is the league's current rosters, ranked by last season's production.
+              </div>
+            )}
+            <div style={{ height: 18 }} />
+          </>
+        )}
+        {kind === 'league' && !isSport && mine.length > 0 && (
           <>
             <div className="mono" style={label}>COPY SETTINGS FROM</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
@@ -497,7 +565,39 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           </>
         )}
 
-        {kind === 'league' && (
+        {kind === 'league' && isSport && (
+          <>
+            <div className="mono" style={label}>SCORING</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+              <Chip on={sportFormat === 'points'} onClick={() => setSportFormat('points')}>POINTS</Chip>
+              <Chip on={sportFormat === 'cats'} onClick={() => setSportFormat('cats')}>CATEGORIES</Chip>
+              <Chip on={sportFormat === 'roto'} onClick={() => setSportFormat('roto')}>ROTO</Chip>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+              {sportFormat === 'points'
+                ? `Points: every stat is worth a set number (${Object.entries(sportDef.scoringDefault).slice(0, 4).map(([k, v]) => `${sportDef.stats.find((st) => st.id === k)?.short ?? k} ${v}`).join(', ')}…), tunable on the SCORING tab.`
+                : sportFormat === 'cats'
+                  ? `Head-to-head categories: each week is won category by category — ${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}.`
+                  : `Rotisserie: no weekly winner. Every game all season counts toward one ranking per category (${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}); best of ${teams} takes ${teams} points, the standings are the sum.`}
+            </div>
+            <div style={{ height: 14 }} />
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <div className="mono" style={label}>FIRST WEEK STARTS (MON)</div>
+                <input type="date" value={periodStart} onChange={(e) => { if (e.target.value) setPeriodStart(mondayOnOrBefore(e.target.value)); }}
+                  style={{ ...input, marginTop: 7, width: 170 }} />
+              </div>
+              <div>
+                <div className="mono" style={label}>WEEKS</div>
+                <div style={{ marginTop: 7 }}>{num(sportWeeks ?? sportDef.regularSeasonWeeks, setSportWeeks, 1, 30, 1)}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+              Weeks run Monday to Sunday. The {sportDef.league} regular season is about {sportDef.regularSeasonWeeks} of them; a league created mid-season plays the weeks that are left.
+            </div>
+          </>
+        )}
+        {kind === 'league' && !isSport && (
           <>
             <div className="mono" style={label}>WHICH GAME?</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
@@ -511,17 +611,22 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
                   : 'Classic: fantasy the way you already know it. A positional starting lineup, weekly point totals, scoring you tune knob by knob — every spot locking at its own kickoff.'}
             </div>
+          </>
+        )}
+        {kind === 'league' && (
+          <>
             {/* CONTINUITY (0185): redraft / keeper / dynasty. One selection;
                 the number it needs appears with it. Editable any time in
                 MODE & SEASON. */}
-            <div style={{ height: 14 }} />
+            {isSport && <div style={{ height: 14 }} />}
+            {!isSport && <div style={{ height: 14 }} />}
             <div className="mono" style={label}>NEXT SEASON</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
               <Chip on={continuity === 'redraft'} onClick={() => pickContinuity('redraft')}>REDRAFT</Chip>
               <Chip on={continuity === 'keeper'} onClick={() => pickContinuity('keeper')}>KEEPER</Chip>
-              <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>DYNASTY</Chip>
-              <Chip on={continuity === 'contract'} onClick={() => pickContinuity('contract')}>CONTRACT</Chip>
-              <Chip on={continuity === 'contract_dynasty'} onClick={() => pickContinuity('contract_dynasty')}>CONTRACT DYNASTY</Chip>
+              {!isSport && <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>DYNASTY</Chip>}
+              {!isSport && <Chip on={continuity === 'contract'} onClick={() => pickContinuity('contract')}>CONTRACT</Chip>}
+              {!isSport && <Chip on={continuity === 'contract_dynasty'} onClick={() => pickContinuity('contract_dynasty')}>CONTRACT DYNASTY</Chip>}
             </div>
             {continuity === 'keeper' && (
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
@@ -548,14 +653,15 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                       ? `Contracts AND dynasty: an auction startup where bids become salaries, plus a ${rookieN}-round rookie draft each season with rookies signing scale deals (4yr default — a SALARY setting) — and three seasons of tradeable picks dealt from day one.`
                       : `Teams keep everyone except ${rookieN} roster spot${rookieN === 1 ? '' : 's'} and draft rookies each year — with every team's picks for the NEXT THREE SEASONS dealt as tradeable assets from day one.`}
             </div>
-            {/* FORMAT (0221/0222): how the season is won. */}
-            <div style={{ height: 14 }} />
-            <div className="mono" style={label}>FORMAT</div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+            {/* FORMAT (0221/0222): how the season is won. A daily sport is
+                head-to-head only for now. */}
+            {!isSport && <div style={{ height: 14 }} />}
+            {!isSport && <div className="mono" style={label}>FORMAT</div>}
+            {!isSport && <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
               <Chip on={format === 'standard'} onClick={() => pickFormat('standard')}>HEAD-TO-HEAD</Chip>
               <Chip on={format === 'guillotine'} onClick={() => pickFormat('guillotine')}>GUILLOTINE</Chip>
               <Chip on={format === 'vampire'} onClick={() => pickFormat('vampire')}>VAMPIRE</Chip>
-            </div>
+            </div>}
             {format !== 'standard' && (
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
                 {format === 'guillotine'
@@ -609,8 +715,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           {mode === 'auction' && <div><div className="mono" style={label}>LOTS AT ONCE</div><div style={{ marginTop: 7 }}>{num(maxLots, setMaxLots, 1, 4, 1)}</div></div>}
         </div>
         {/* DEVY (0398) — its own question, because a devy league is a
-            different game and nothing else on this form says so. */}
-        {kind === 'league' && game === 'classic' && (() => {
+            different game and nothing else on this form says so. Not for a
+            daily sport (0426): college football players have no place in an
+            NBA or NHL pool. */}
+        {kind === 'league' && game === 'classic' && !isSport && (() => {
           const blk = (c: DevyChoice) => devyChoiceBlocked(c, { classic: true, auction: mode === 'auction', contract: contractType });
           return (
             <div style={{ marginTop: 16 }}>
@@ -654,7 +762,9 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             commissioner's ROSTER tab until the draft starts. Say what you're
             getting; don't make them configure it before the league exists. */}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5 }}>
-          {kind === 'league' && game === null
+          {kind === 'league' && isSport
+            ? `${rounds} roster spots per team: ${sportStarters} starters (${Object.entries(sportDef.defaultRoster).map(([t, n]) => (n > 1 ? `${n} ${t}` : t)).join(', ')}) and ${sportDef.benchDefault} bench. Lineups change any day; a player locks when his game tips off.`
+            : kind === 'league' && game === null
             ? 'The roster shape follows the game you pick above.'
             : game === 'classic' && kind === 'league'
               ? `${rounds} roster spots per team. You'll set the starting lineup — QB / RB / WR / TE / FLEX / K / D/ST, and any bench, taxi or IR spots — plus scoring on the league's ROSTER and SCORING tabs before the draft.`
@@ -691,6 +801,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
           {busy ? (note || 'CREATING…')
             : kind === 'mock' ? 'START THE MOCK →'
             : game === null ? 'PICK A GAME TO CREATE'
+            : isSport ? `CREATE ${contLabel}${sportDef.league} LEAGUE →`
             : `CREATE ${contLabel}${game === 'classic' ? 'CLASSIC' : 'DRIP'} LEAGUE →`}
         </button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
@@ -1313,9 +1424,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   const eligPos = useMemo(
     () => leagueEligiblePos({ roster: gm?.roster ?? null, slots: gm?.slots ?? null } as GameModeInfo),
     [gm]);
+  // A sport league's chips are its own positions (0426), in the sport's order.
   const posChips = useMemo(
-    () => POS_FILTERS.filter((p) => p !== 'ALL' && !bannedPos(p) && (!eligPos || eligPos.has(p))),
-    [st?.pos_caps, eligPos]);
+    () => (gm?.sport && gm.sport !== 'nfl' ? SPORTS[gm.sport].positions : POS_FILTERS.filter((p) => p !== 'ALL'))
+      .filter((p) => !bannedPos(p) && (!eligPos || eligPos.has(p))),
+    [st?.pos_caps, eligPos, gm?.sport]);
   const avail = useMemo(() => {
     const needle = q.trim().toLowerCase();
     // A player on an OPEN LOT is not in picks, so the taken filter missed him
@@ -3124,8 +3237,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
    *  canonical order. A league that can't roster a kicker doesn't get a K chip
    *  that would only ever return nothing. */
   const posChips = useMemo(
-    () => POS_FILTERS.filter((p) => p !== 'ALL' && (!eligiblePos || eligiblePos.has(p))),
-    [eligiblePos]);
+    () => (gm?.sport && gm.sport !== 'nfl' ? SPORTS[gm.sport].positions : POS_FILTERS.filter((p) => p !== 'ALL'))
+      .filter((p) => !eligiblePos || eligiblePos.has(p)),
+    [eligiblePos, gm?.sport]);
   /** WHO HOLDS HIM (0341). `nativeRosters` is league-wide and this screen
    *  already had it — the wire was throwing the answer away with
    *  `!rostered.has(slug)`. Roster id by slug, and the seat's name from the

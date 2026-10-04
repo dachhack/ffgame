@@ -1,6 +1,8 @@
 // Live-pilot client API: magic-link auth + invite-code redemption, on top of the
 // Supabase client. All table access is RLS-guarded; enrollment goes through the
 // redeem_invite RPC (migration 0002), never a direct membership write.
+import type { Sport } from '../sports/types';
+import { sportLeagueSettings } from '../sports/league';
 import { getSupabase } from './supabaseClient';
 import { platform, storeGet, storeRemove } from '../platform';
 import { track, Ev, type Props } from '../analytics';
@@ -2073,7 +2075,9 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean }
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean;
+  /** 0426: which sport the league plays ('nfl' for every league before it) and its sport block. */
+  sport?: Sport; sport_settings?: Record<string, unknown> | null }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -2466,12 +2470,18 @@ export const createNativeLeague = (
    *  Editable later in 🎮 MODE & SEASON (set_league_continuity). */
   continuity: LeagueContinuity = 'redraft',
   continuityN: number | null = null,
+  /** A daily sport (0426): the league is classic by construction, plays
+   *  periods from board week 301, and draws its pool from sport_player.
+   *  `sportSettings` is core's sportLeagueSettings() output. */
+  sport: Sport = 'nfl',
+  sportSettings: ReturnType<typeof sportLeagueSettings> | null = null,
 ) =>
   rpc<NativeCreateResult>('create_native_league', {
     p_name: name, p_season: season, p_teams: teams, p_rounds: rounds, p_pick_seconds: pickSeconds,
     p_mode: mode, p_budget: budget, p_lot_seconds: lotSeconds, p_max_lots: maxLots,
     p_night_start_min: nightStartMin, p_night_end_min: nightEndMin, p_pos_caps: posCaps,
-    p_game_mode: gameMode, p_continuity: continuity, p_continuity_n: continuityN,
+    p_game_mode: sport === 'nfl' ? gameMode : 'classic', p_continuity: continuity, p_continuity_n: continuityN,
+    p_sport: sport, p_sport_settings: sport === 'nfl' ? null : sportSettings,
   });
 /** OWNERSHIP % (0199): slug → the whole-percent share of this platform's
  *  drafted leagues rostering him. Platform-wide on purpose — a number that
@@ -3987,6 +3997,43 @@ export const setupLeagueDevy = (leagueId: string, mode: 'spots' | 'shares', spot
 
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });
+// ── SPORT LEAGUES (0426) ──────────────────────────────────────────────────────
+/** A matchup's locked slot-days with each player's line for the day — the
+ *  rows a sport league's board scores (core sports/score.ts). */
+export interface SportMatchupLine { app_user_id: string; roster_id: number; game_date: string; roster_slot: string; player_slug: string; game_id: string; status: string | null; line: Record<string, number> | null; full_name: string | null; team: string | null; pos: string | null }
+export const sportMatchupLines = (matchupId: string) =>
+  rpc<SportMatchupLine[]>('sport_matchup_lines', { p_matchup: matchupId });
+export interface SportGameRow { game_id: string; game_date: string; start_utc: string | null; status: string; away: string; home: string; away_score: number | null; home_score: number | null; clock: string | null }
+export const sportLeagueGames = (leagueId: string, from: string, to: string) =>
+  rpc<SportGameRow[]>('sport_league_games', { p_league_id: leagueId, p_from: from, p_to: to });
+/** ROTO (0427): the worker's season ranking per seat — total points and the
+ *  per-category value + place points. */
+export interface SportRotoRow { roster_id: number; points: number; totals: Record<string, number>; cats: Record<string, { value: number | null; points: number }>; updated_at: string }
+export const sportRotoStandings = (leagueId: string) =>
+  rpc<SportRotoRow[]>('sport_roto_standings', { p_league_id: leagueId });
+/** The commissioner's sport settings (0428): scoring any time; format,
+ *  categories and the calendar until the season is under way. */
+export const setSportSettings = (leagueId: string, patch: { scoring?: Record<string, number>; format?: 'points' | 'cats' | 'roto'; categories?: string[]; period_start?: string; weeks?: number }) =>
+  tracked(rpc<{ ok: boolean; error?: string; sport?: Record<string, unknown> }>('set_sport_settings',
+    { p_league_id: leagueId, p_patch: patch }),
+    Ev.commishAction, { tool: 'sport_settings', count: Object.keys(patch).length });
+/** A sport league's lineup (0431): the same spot spec classic uses, in the
+ *  sport's positions; commissioner, before the draft. */
+export const setSportLineup = (leagueId: string, slots: { pos: string[]; label?: string }[]) =>
+  tracked(rpc<{ ok: boolean; error?: string; slots?: { pos: string[]; label?: string }[]; starters?: number; rounds?: number }>('set_sport_lineup',
+    { p_league_id: leagueId, p_slots: slots }),
+    Ev.commishAction, { tool: 'sport_lineup', count: slots.length });
+/** A sport player's card (0431): the directory row and his last ten games. */
+export interface SportCardGame { game_id: string; game_date: string; status: string; team: string; opp: string; home: boolean; away_score: number | null; home_score: number | null; played: boolean; line: Record<string, number> | null }
+export interface SportCard {
+  player: { player_key: string; full_name: string; team: string; pos: string; eligible: string[]; feed_pos: string | null; jersey: string | null; headshot: string | null; injury_status: string | null; injury_note: string | null; rank: number | null; rank_pts: number | null; season: string | null; gp: number; season_line: Record<string, number> | null } | null;
+  games: SportCardGame[];
+}
+export const sportPlayerCard = (key: string) => rpc<SportCard>('sport_player_card', { p_key: key });
+/** Re-seed a sport league's pool from the directory (commissioner, pre-draft). */
+export const seedSportPool = (leagueId: string, limit = 600) =>
+  rpc<{ ok: boolean; error?: string; players?: number }>('seed_sport_pool', { p_league_id: leagueId, p_limit: limit });
+
 export const nativeGenerateSchedule = (leagueId: string, weeks = 14) =>
   rpc<{ ok: boolean; error?: string; weeks?: number; matchups?: number; first_week?: number; last_week?: number }>(
     'native_generate_schedule', { p_league_id: leagueId, p_weeks: weeks });

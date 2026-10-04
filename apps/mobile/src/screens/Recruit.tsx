@@ -20,13 +20,15 @@ import {
   type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat, setupLeagueDevy, setLeagueDevyOpen,
-  nativeGenerateSchedule, leagueTypeLine, type AdminLeague, type BoardListing,
+  nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
 import { scheduleWeeksFor } from '@drip/core/data/league';
+import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
+import { sportLeagueSettings, currentSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -175,6 +177,23 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // with a normie name; the choice freezes at the draft, so the mistake is
   // permanent. The form refuses to submit until the game is chosen.
   const [game, setGame] = useState<'drip' | 'classic' | null>(null);
+  // THE SPORT (0426) — the web's twin. A daily sport is CLASSIC by
+  // construction, plays Mon–Sun periods from a start date, and skips the
+  // football-only formats and continuities.
+  const [sport, setSport] = useState<Sport>('nfl');
+  // THE SPORTS FLAG (0432) — holders and admins see the chips; the RPC gates.
+  const [sportsOn, setSportsOn] = useState(false);
+  const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+  const [sportFormat, setSportFormat] = useState<SportFormat>('points');
+  const sportDef = SPORTS[sport];
+  const isSport = sport !== 'nfl';
+  const pickSport = (sp: Sport) => {
+    setSport(sp);
+    if (sp !== 'nfl') {
+      setGame('classic'); setFormat('standard');
+      setCopyFrom(null); setCopyBp(null);
+    }
+  };
   // CONTINUITY (0185): what carries into next season — redraft / keeper /
   // dynasty, an axis on top of either game.
   const [continuity, setContinuity] = useState<LeagueContinuity>('redraft');
@@ -247,6 +266,12 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     } catch (e) { setErr(friendlyError(e)); setRows([]); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // THE SPORTS FLAG (0432): the web’s twin — holders and admins see the
+  // WHICH SPORT chips; the RPC gates either way.
+  useEffect(() => {
+    Promise.all([myFeatures().catch(() => ({} as Record<string, boolean>)), isAdmin().catch(() => false)])
+      .then(([f, a]) => setSportsOn(!!a || f.sports === true));
+  }, []);
   // DRIP ON AN EXISTING LEAGUE (0422): find your Sleeper account, pick a
   // league of this season, bring it in. The server checks you're in it and
   // makes you its commissioner; the invite code is for the rest of the league.
@@ -453,9 +478,28 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     if (!nm || busy || !game) return;
     // The busy note NAMES the game — the last chance to notice a wrong tap
     // before it freezes at the draft.
-    setBusy(true); setErr(null); setMakeNote(`Creating your ${contLabel}${game === 'classic' ? 'CLASSIC' : 'DRIP'} league…`);
+    setBusy(true); setErr(null); setMakeNote(`Creating your ${contLabel}${isSport ? sportDef.league : game === 'classic' ? 'CLASSIC' : 'DRIP'} league…`);
     try {
       const secs = pace === 'slow' ? Math.max(1, Number(clockDraft) || 12) * 3600 : Math.max(15, Number(clockDraft) || 90);
+      if (isSport) {
+        // A DAILY SPORT (0426): the server seeds the pool from its directory
+        // and the schedule is periods from the start date.
+        const starters = Object.values(sportDef.defaultRoster).reduce((a, b) => a + b, 0);
+        const weeks = sportDef.regularSeasonWeeks;
+        const contN = continuity === 'keeper' ? keepN : null;
+        const rs = await createNativeLeague(nm, currentSeason(sport), teamCount, starters + sportDef.benchDefault, secs, draftMode,
+          200, 15, 1, null, null, null, 'classic', continuity === 'keeper' ? 'keeper' : 'redraft', contN,
+          sport, sportLeagueSettings(sport, { periodStart, weeks, format: sportFormat }));
+        if (!rs.ok || !rs.league_id) { warn(); setErr(friendlyError(rs.error ?? 'could not create the league')); return; }
+        setMakeNote('Generating the season schedule…');
+        const ss = await nativeGenerateSchedule(rs.league_id, weeks);
+        if (!ss.ok) { warn(); setErr(friendlyError(ss.error ?? 'league created, but the schedule failed — regenerate it from COMMISH')); return; }
+        commit();
+        setJoined(`${nm}, a ${contLabel}${sportDef.league} league — you're its commissioner`);
+        setNode('root'); setStepIx(0); setNameDraft('');
+        onCreated?.(rs.league_id, nm, rs.roster_id ?? null);
+        return;
+      }
       // Same defaults the web derives from the game type (v0.221.0): drip
       // keeps the pre-0071 position limits, classic takes none because its
       // shape is the starting-lineup spec.
@@ -500,7 +544,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       }
       // DEVY before the pool: devy spots need college players IN the pool;
       // the market keeps them out of it (they are bought, not drafted).
-      const devyNow = game === 'classic' && !devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? devy : 'none';
+      const devyNow = game === 'classic' && !isSport && !devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? devy : 'none';
       if (devyNow !== 'none') {
         setMakeNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
         const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
@@ -548,7 +592,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // The step list is COMPUTED: no copy step when there is nothing to copy
   // from, so a first league is never asked a question with one answer.
   const STEPS: Step[] = [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'season', 'format', 'name',
-    ...(game === 'classic' ? (['devy'] as Step[]) : []), 'draft', 'review'];
+    // No devy step for a daily sport (0426): college players have no place in an NBA or NHL pool.
+    ...(game === 'classic' && !isSport ? (['devy'] as Step[]) : []), 'draft', 'review'];
   const step: Step = STEPS[Math.min(stepIx, STEPS.length - 1)];
   // The two steps that can be WRONG rather than merely unfinished. Everything
   // else has a default that is a real answer, so NEXT is always allowed.
@@ -766,14 +811,48 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             )}
             {step === 'game' && (
               <View>
-                <LabelInfo label="WHICH GAME?"
-                  info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\nDRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\nCLASSIC — fantasy the way you already know it: a positional starting lineup, weekly point totals, scoring you tune knob by knob.'} />
-                <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
-                  <Chip label="DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
-                  <Chip label="CLASSIC" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
-                </View>
-                {game === null && (
-                  <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
+                {sportsOn && <LabelInfo label="WHICH SPORT?"
+                  info={'NFL plays DRIP or CLASSIC on the NFL week.\n\nNBA, NHL, MLB and WNBA play CLASSIC on Monday-to-Sunday weeks: a positional lineup you can change any day, with every player locking into his slot when his game tips off. The pool is the league\'s current rosters, ranked by last season\'s production.'} />}
+                {sportsOn && <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                  {SPORT_IDS.map((sp) => (
+                    <Chip key={`sp-${sp}`} label={SPORTS[sp].league} on={sport === sp} onPress={() => { tap(); pickSport(sp); }} />
+                  ))}
+                </View>}
+                {isSport ? (
+                  <View style={{ marginTop: 10, gap: 6 }}>
+                    <LabelInfo label="SCORING"
+                      info={'POINTS — every stat is worth a set number, tunable on the SCORING tab.\n\nCATEGORIES — each week is won category by category (9-cat, 5x5…).\n\nROTO — no weekly winner: the season is one ranking per category over every game played.'} />
+                    <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
+                      <Chip label="POINTS" on={sportFormat === 'points'} onPress={() => { tap(); setSportFormat('points'); }} />
+                      <Chip label="CATEGORIES" on={sportFormat === 'cats'} onPress={() => { tap(); setSportFormat('cats'); }} />
+                      <Chip label="ROTO" on={sportFormat === 'roto'} onPress={() => { tap(); setSportFormat('roto'); }} />
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                      <Mono size={8.5} tone="faint" track={0.1}>FIRST WEEK</Mono>
+                      <Pressable hitSlop={6} onPress={() => { tap(); setPeriodStart((d) => addDays(d, -7)); }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
+                      </Pressable>
+                      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>Mon {periodStart.slice(5).replace('-', '/')}</Text>
+                      <Pressable hitSlop={6} onPress={() => { tap(); setPeriodStart((d) => addDays(d, 7)); }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
+                      </Pressable>
+                    </View>
+                    <Mono size={8.5} tone="dim" style={{ marginTop: 3 }}>
+                      {sportDef.league} classic: {Object.entries(sportDef.defaultRoster).map(([ty, n]) => (n > 1 ? `${n} ${ty}` : ty)).join(', ')} + {sportDef.benchDefault} bench · {sportDef.regularSeasonWeeks} weeks
+                    </Mono>
+                  </View>
+                ) : (
+                  <View style={{ marginTop: 10 }}>
+                    <LabelInfo label="WHICH GAME?"
+                      info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\nDRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\nCLASSIC — fantasy the way you already know it: a positional starting lineup, weekly point totals, scoring you tune knob by knob.'} />
+                    <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
+                      <Chip label="DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
+                      <Chip label="CLASSIC" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
+                    </View>
+                    {game === null && (
+                      <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
+                    )}
+                  </View>
                 )}
               </View>
             )}
@@ -789,9 +868,9 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); pickContinuity('redraft'); }} />
                   <Chip label="KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
-                  <Chip label="DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />
-                  <Chip label="CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />
-                  <Chip label="CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />
+                  {!isSport && <Chip label="DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />}
+                  {!isSport && <Chip label="CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />}
+                  {!isSport && <Chip label="CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />}
                 </View>
                 {(continuity === 'keeper' || isDynastyContinuity(continuity)) && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
@@ -823,8 +902,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                   info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\nGUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins.\n\nIt plays all 17 weeks (no playoffs — the survivor IS the result) and defaults to 18 teams, which is exactly the field that reaches one survivor on the final week. Fewer teams simply finish earlier.\n\nVAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in COMMISH after creating, where you can also require your approval per steal.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                   <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); pickFormat('standard'); }} />
-                  <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); pickFormat('guillotine'); }} />
-                  <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); pickFormat('vampire'); }} />
+                  {!isSport && <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); pickFormat('guillotine'); }} />}
+                  {!isSport && <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); pickFormat('vampire'); }} />}
                 </View>
               </View>
             )}

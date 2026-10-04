@@ -325,20 +325,31 @@ export function Img({ src, size, radius, alt, fallback }: { src?: string | null;
 // Player image: ESPN headshot → team logo → position pill. `espnId` covers
 // players outside the baked slug→headshot map (2026 rookies — native-league
 // pools carry the directory's espn_id per player).
-export function PlayerImg({ playerId, espnId, team, pos, size = 30 }: { playerId: string; espnId?: string | null; team?: string | null; pos: Pos; size?: number }) {
+export function PlayerImg({ playerId, espnId, team, pos, size = 30 }: { playerId: string; espnId?: string | null; team?: string | null; pos: Pos | string; size?: number }) {
   return (
     <Img src={headshot(playerId) ?? espnHeadshot(espnId)} size={size} radius={Math.round(size * 0.3)} alt={playerId}
       fallback={<Img src={teamLogo(team, { slug: playerId })} size={size} radius={Math.round(size * 0.3)} fallback={<PosPill pos={pos} />} />} />
   );
 }
 
-export function PosPill({ pos, style }: { pos: Pos; style?: CSSProperties }) {
+// The theme colours the NFL's positions (theme.ts `pos`); a sport league's
+// codes (PG, LW, 1B…) borrow the nearest football family so a board stays
+// readable without a second palette per sport (0426).
+const POS_FAMILY: Record<string, Pos> = {
+  PG: 'QB', SG: 'WR', G: 'QB', SF: 'WR', PF: 'RB', F: 'RB', C: 'TE', UTIL: 'TE',
+  LW: 'WR', RW: 'WR', W: 'WR', D: 'RB',
+  '1B': 'RB', '2B': 'WR', '3B': 'RB', SS: 'WR', OF: 'QB', DH: 'TE', CI: 'RB', MI: 'WR', SP: 'K', RP: 'DEF', P: 'K',
+};
+export const posFamily = (pos: string): Pos => (POS_FAMILY[pos] ?? (pos as Pos));
+
+export function PosPill({ pos, style }: { pos: Pos | string; style?: CSSProperties }) {
+  const fam = posFamily(pos);
   return (
     <span
       style={{
         display: 'inline-flex', alignItems: 'center', padding: '2px 6px', borderRadius: 3,
         fontFamily: MONO, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
-        background: `var(--pos-${pos}-bg)`, color: `var(--pos-${pos}-fg)`, border: `1px solid var(--pos-${pos}-bd)`,
+        background: `var(--pos-${fam}-bg)`, color: `var(--pos-${fam}-fg)`, border: `1px solid var(--pos-${fam}-bd)`,
         ...style,
       }}
     >

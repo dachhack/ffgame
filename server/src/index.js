@@ -51,6 +51,10 @@ import { sweepVampireBites } from './vampireBite.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
+import { tickSports } from './poll/sportGames.js';
+import { syncSportDirectory } from './poll/sportDirectory.js';
+import { lockStartedGames, resolveSportLeagues } from './sportLeague.js';
+import { currentSeason } from '../../packages/core/src/sports/league.ts';
 import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 import { db } from './supabase.js';
 import { ensurePods } from './pods.js';
@@ -1140,6 +1144,46 @@ async function main() {
   };
   await trueup().catch((e) => log('true-up error', e.message));
   setInterval(() => trueup().catch((e) => log('true-up error', e.message)), 6 * 3600e3);
+
+  // THE DAILY SPORTS (v0.616.0): sport_game + game_stat_line for whatever
+  // SPORTS= names. Its own loop, never inside a play tick — an NHL box score
+  // that hangs must not stretch an NFL window. Self-paced: the next pass is
+  // scheduled when this one ends, tight while any game is live, relaxed when
+  // none is, and never overlapping.
+  if (config.sports.length) {
+    const sportsLoop = async () => {
+      let live = false, nextStartMs = null;
+      try {
+        const r = await tickSports(config.sports);
+        live = r.live; nextStartMs = r.nextStartMs;
+        // Then the leagues (0426): lock what just started, score what is live.
+        for (const sport of config.sports) {
+          try {
+            const locked = await lockStartedGames(sport, r.games[sport] ?? []);
+            const c = await resolveSportLeagues(sport);
+            if (locked || c.matchups) log(`sport leagues ${sport}: ${locked} slot-days locked, ${c.matchups} matchups scored, ${c.finals} final`);
+          } catch (e) { log(`sport leagues ${sport}:`, e.message); }
+        }
+      } catch (e) { log('sports tick error', e.message); }
+      // Wake for the next tip-off rather than sleep through it: the DB
+      // trigger keeps lineups honest either way, but a lock taken at the
+      // start is what a manager expects to see.
+      let wait = live ? config.sportsLivePollMs : config.sportsIdlePollMs;
+      if (!live && nextStartMs != null) wait = Math.max(config.sportsLivePollMs, Math.min(wait, nextStartMs - Date.now() + 5000));
+      setTimeout(() => { void sportsLoop(); }, wait);
+    };
+    log('daily sports:', config.sports.join(', '));
+    void sportsLoop();
+    // The directory (0425): at boot and daily, detached from the game loop.
+    const sweep = async () => {
+      for (const sport of config.sports) {
+        try { const r = await syncSportDirectory(sport, currentSeason(sport)); log(`sport directory ${sport}: ${r.players} players, ${r.retired} retired`); }
+        catch (e) { log(`sport directory ${sport}:`, e.message); }
+      }
+    };
+    void sweep();
+    setInterval(() => { void sweep(); }, 24 * 3600e3);
+  }
 
   // Weekly schedule + lineup auto-sync for every current-season Sleeper
   // league (separate, slower loop — a 100-league sync can outlast one play

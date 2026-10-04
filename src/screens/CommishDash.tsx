@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SportSettings } from './SportSettings';
+import type { GameModeInfo } from '@drip/core/data/liveApi';
+import { SportLineup } from './SportLineup';
+import { draftState } from '@drip/core/data/liveApi';
+import type { Sport } from '@drip/core/sports/index';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
@@ -435,6 +440,17 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // GOLF (v0.303.0): null until the mode load lands, so neither button lights
   // up on a guess.
   const [golf, setGolf] = useState<boolean | null>(null);
+  // A SPORT LEAGUE (0426/0428): its lineup is the sport's standard shape and
+  // its scoring page is SportSettings, not the football catalog.
+  const [sport, setSport] = useState<Sport>('nfl');
+  const [sportBlock, setSportBlock] = useState<Record<string, unknown> | null>(null);
+  const [gmInfo, setGmInfo] = useState<GameModeInfo | null>(null);
+  // The lineup freezes when the draft starts; the builder shows it frozen
+  // rather than letting a save discover it.
+  const [draftStarted, setDraftStarted] = useState(false);
+  useEffect(() => {
+    draftState(leagueId).then((d) => setDraftStarted(!!d && d.status !== 'pending')).catch(() => {});
+  }, [leagueId]);
   const saveGolf = async (on: boolean) => {
     if (busy) return;
     setBusy(true); setNote(null);
@@ -576,7 +592,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {});
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
         ? r.slots.map(toSpotDraft)
@@ -755,7 +771,14 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           Switch to CLASSIC under GAME MODE to shape a traditional {view === 'lineup' ? 'starting lineup' : 'scoring catalog'}.
         </div>
       )}
-      {view === 'lineup' && mode === 'classic' && spots && (() => {
+      {sport !== 'nfl' && view === 'lineup' && (
+        <SportLineup leagueId={leagueId} sport={sport} gm={gmInfo} locked={draftStarted}
+          onSaved={() => { leagueGameMode(leagueId).then((r) => { if (r.ok) setGmInfo(r); }).catch(() => {}); }} />
+      )}
+      {sport !== 'nfl' && view === 'scoring' && (
+        <SportSettings leagueId={leagueId} sport={sport} initial={sportBlock} locked={false} />
+      )}
+      {sport === 'nfl' && view === 'lineup' && mode === 'classic' && spots && (() => {
         // starters + the three stashes: what the draft's rounds will be.
         const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out + shape.devy;
         return (
@@ -1034,7 +1057,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
         </div>
         );
       })()}
-      {view === 'scoring' && (
+      {sport === 'nfl' && view === 'scoring' && (
         <div>
           <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>
             ⚖ SCORING <span style={{ fontWeight: 400 }}>every value is yours to set · changed values light up</span>

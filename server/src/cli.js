@@ -3,6 +3,9 @@
 //   node src/cli.js sync-week <leagueId> <wk>  mirror a week's schedule + lineups
 //   node src/cli.js poll-once                  one scoreboard+plays pass (current week)
 //   node src/cli.js inj-once                   one injury poll
+//   node src/cli.js sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force]  one day's games + box scores → sport_game/game_stat_line
+//   node src/cli.js sport-dir <sport> [season]   sweep the sport's directory → sport_player (ranked)
+//   node src/cli.js sport-leagues <sport> [YYYY-MM-DD]  one lock + resolve pass over the sport's leagues
 //   node src/cli.js simulate <lg> <wk> [..]    replay baked plays through the live feed
 //   node src/cli.js simulate --dry [--week=1]  feed round-trip check, no DB
 //   node src/cli.js simulate --check [lg]      read-only DB connectivity probe
@@ -16,6 +19,10 @@ import { config } from './config.js';
 import { importLeague, syncWeek, syncAllLeagues, cloneWeek, seedPreseasonPool } from './sync.js';
 import { buildPlayerIndex } from './playerIndex.js';
 import { pollInjuries } from './poll/injuries.js';
+import { pollSportDay, easternDate } from './poll/sportGames.js';
+import { syncSportDirectory } from './poll/sportDirectory.js';
+import { lockStartedGames, resolveSportLeagues } from './sportLeague.js';
+import { currentSeason } from '../../packages/core/src/sports/league.ts';
 import { gamesToPoll, espnCurrentWeek, getGames } from './poll/scoreboard.js';
 import { REGULAR_SEASON as REGULAR_SEASON_TYPE } from './seasonType.js';
 import { pollGame } from './poll/plays.js';
@@ -85,6 +92,28 @@ async function main() {
     case 'inj-once': {
       const idx = await buildPlayerIndex();
       console.log('injuries', await pollInjuries(idx));
+      break;
+    }
+    case 'sport-dir': {
+      const [sport, season] = args;
+      if (!sport) throw new Error('usage: sport-dir <nhl|mlb|nba|wnba> [season]');
+      console.log(await syncSportDirectory(sport, season || currentSeason(sport)));
+      break;
+    }
+    case 'sport-leagues': {
+      const [sport, dateArg] = args;
+      if (!sport) throw new Error('usage: sport-leagues <sport> [YYYY-MM-DD]');
+      const date = dateArg || easternDate();
+      const c = await pollSportDay(sport, date);
+      const locked = await lockStartedGames(sport, c.rows);
+      console.log({ polled: c.games, locked, ...(await resolveSportLeagues(sport)) });
+      break;
+    }
+    case 'sport-poll': {
+      const [sport, dateArg] = args.filter((a) => !a.startsWith('--'));
+      if (!sport) throw new Error('usage: sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force]');
+      const date = dateArg || easternDate();
+      console.log(await pollSportDay(sport, date, { force: args.includes('--force') }));
       break;
     }
     case 'poll-once': {
