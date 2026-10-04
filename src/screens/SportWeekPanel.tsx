@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SPORTS, eligibleFor, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryValue, categoryById } from '@drip/core/sports/score';
-import { sportPeriod, sportNow, type SportLeagueSettings } from '@drip/core/sports/league';
+import { sportPeriod, sportNow, isSeasonFormat, SPORT_FORMAT_LABEL, type SportLeagueSettings } from '@drip/core/sports/league';
 import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
 import { PosPill } from '../app/ui';
 
@@ -28,12 +28,16 @@ const fmtTip = (iso: string | null) => {
 };
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, homeRosterId, awayRosterId, myRosterId, names }: {
+export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, homeRosterId, awayRosterId, myRosterId, names, bestball }: {
   leagueId: string; matchupId: string; week: number; sport: Sport; settings: SportLeagueSettings;
   homeRosterId: number; awayRosterId: number; myRosterId: number | null;
   names?: Record<number, string>;
+  /** The league's best-ball slot names (0436): their slot-days are the fill's, marked 🎯. */
+  bestball?: string[];
 }) {
   const def = SPORTS[sport];
+  const bb = useMemo(() => new Set(bestball ?? []), [bestball]);
+  const seasonal = isSeasonFormat(settings.format);
   const period = useMemo(() => sportPeriod(week, settings.period_start), [week, settings.period_start]);
   const [rows, setRows] = useState<SportMatchupLine[]>([]);
   const [games, setGames] = useState<SportGameRow[]>([]);
@@ -45,7 +49,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
     let alive = true;
     sportMatchupLines(matchupId).then((r) => { if (alive) { setRows(r ?? []); setErr(null); } }).catch((e) => { if (alive) setErr(String(e?.message ?? e)); });
     if (period) sportLeagueGames(leagueId, period.from, period.to).then((g) => { if (alive) setGames(g ?? []); }).catch(() => {});
-    if (settings.format === 'roto') sportRotoStandings(leagueId).then((r) => { if (alive) setRoto(r ?? []); }).catch(() => {});
+    if (isSeasonFormat(settings.format)) sportRotoStandings(leagueId).then((r) => { if (alive) setRoto(r ?? []); }).catch(() => {});
     const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
     return () => { alive = false; window.clearInterval(id); };
   }, [matchupId, leagueId, period?.from, period?.to, tick, settings.format]);
@@ -74,7 +78,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
     <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 12, display: 'grid', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)' }}>
-          {def.league} · {period ? `${fmtDay(period.from)} – ${fmtDay(period.to)}` : `WEEK ${week}`} · {settings.format === 'cats' ? 'CATEGORIES' : settings.format === 'roto' ? 'ROTO' : 'POINTS'}
+          {def.league} · {period ? `${fmtDay(period.from)} – ${fmtDay(period.to)}` : `WEEK ${week}`} · {settings.format === 'cats' ? 'CATEGORIES' : SPORT_FORMAT_LABEL[settings.format]}{bb.size ? ` · ${bb.size} 🎯` : ''}
         </div>
         <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
           {cats ? `${cats.wins}-${cats.losses}-${cats.ties}` : `${home.total.toFixed(1)} – ${away.total.toFixed(1)}`}
@@ -84,9 +88,9 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
 
       {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>{err}</div>}
 
-      {settings.format === 'roto' && (
+      {seasonal && (
         <div>
-          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>ROTO STANDINGS · SEASON TO DATE</div>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 4 }}>{settings.format === 'season' ? 'SEASON POINTS' : 'ROTO STANDINGS'} · SEASON TO DATE</div>
           {roto.length === 0 ? (
             <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>No games counted yet — the table fills as lineups lock and play.</div>
           ) : (
@@ -96,7 +100,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
                   <tr style={{ color: 'var(--faint)' }}>
                     <th style={{ textAlign: 'left', padding: '2px 6px' }}>SEAT</th>
                     <th style={{ textAlign: 'right', padding: '2px 6px' }}>PTS</th>
-                    {settings.categories.map((c) => <th key={c} style={{ textAlign: 'right', padding: '2px 6px' }}>{categoryById(def, c)?.short ?? c}</th>)}
+                    {settings.format === 'roto' && settings.categories.map((c) => <th key={c} style={{ textAlign: 'right', padding: '2px 6px' }}>{categoryById(def, c)?.short ?? c}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -104,7 +108,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
                     <tr key={r.roster_id} style={{ color: r.roster_id === myRosterId ? 'var(--you)' : 'var(--text)', borderTop: '1px solid var(--bd)' }}>
                       <td style={{ padding: '3px 6px', fontWeight: 700 }}>{seatName(r.roster_id)}</td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', fontWeight: 700 }}>{Number(r.points).toFixed(1)}</td>
-                      {settings.categories.map((c) => {
+                      {settings.format === 'roto' && settings.categories.map((c) => {
                         const cat = categoryById(def, c), v = r.cats?.[c]?.value;
                         return <td key={c} style={{ padding: '3px 6px', textAlign: 'right' }}>{v == null ? '—' : cat?.ratio ? Number(v).toFixed(cat.ratio.decimals ?? 3) : String(v)}<span style={{ color: 'var(--faint)' }}> ({r.cats?.[c]?.points ?? 0})</span></td>;
                       })}
@@ -146,8 +150,8 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
                   <div key={`${d.game_date}-${d.roster_slot}`} className="mono" style={{ display: 'grid', gridTemplateColumns: '58px 34px minmax(0, 1fr) 44px', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
                     <span style={{ color: 'var(--faint)' }}>{fmtDay(d.game_date)}</span>
                     <PosPill pos={eligibleFor(sport, d.pos)[0] ?? d.roster_slot} />
-                    <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {d.full_name ?? d.player_slug} <span style={{ color: 'var(--faint)' }}>{d.team}</span>
+                    <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={bb.has(d.roster_slot) ? 'best ball — filled for the night from the roster' : undefined}>
+                      {bb.has(d.roster_slot) && <span style={{ color: 'var(--you)', marginRight: 3 }}>🎯</span>}{d.full_name ?? d.player_slug} <span style={{ color: 'var(--faint)' }}>{d.team}</span>
                       {d.status === 'live' && <span style={{ color: 'var(--you)', marginLeft: 4 }}>●</span>}
                     </span>
                     <span style={{ textAlign: 'right', fontWeight: 700, color: d.line ? 'var(--text)' : 'var(--faint)' }}>{d.line ? d.pts.toFixed(1) : 'DNP'}</span>
@@ -172,7 +176,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
         </div>
       )}
       <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-        Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day's line; a slot with no game today scores nothing until it has one.
+        Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day's line; a slot with no game today scores nothing until it has one.{bb.size ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}
         {settings.format === 'points' ? ` Points: ${Object.entries(scoring).filter(([, v]) => v).slice(0, 6).map(([k, v]) => `${def.stats.find((s) => s.id === k)?.short ?? k} ${v}`).join(', ')}.` : ''}
         {' '}Ratios: {def.categories.filter((c) => c.ratio && settings.categories.includes(c.id)).map((c) => `${c.short} ${categoryValue(c, home.totals) ?? '—'} · ${categoryValue(c, away.totals) ?? '—'}`).join('  ')}
       </div>

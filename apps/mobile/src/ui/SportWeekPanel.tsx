@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { SPORTS, eligibleFor, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryById } from '@drip/core/sports/score';
-import { sportPeriod, sportNow, type SportLeagueSettings } from '@drip/core/sports/league';
+import { sportPeriod, sportNow, isSeasonFormat, SPORT_FORMAT_LABEL, type SportLeagueSettings } from '@drip/core/sports/league';
 import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { Card, Mono, PosPill } from './prims';
@@ -19,12 +19,15 @@ const fmtTip = (iso: string | null) => {
 };
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, homeRosterId, awayRosterId, myRosterId }: {
+export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, homeRosterId, awayRosterId, myRosterId, bestball }: {
   leagueId: string; matchupId: string; week: number; sport: Sport; settings: SportLeagueSettings;
   homeRosterId: number; awayRosterId: number; myRosterId: number | null;
+  /** The league's best-ball slot names (0436): their slot-days are the fill's, marked 🎯. */
+  bestball?: string[];
 }) {
   const t = useTheme();
   const def = SPORTS[sport];
+  const bb = useMemo(() => new Set(bestball ?? []), [bestball]);
   const period = useMemo(() => sportPeriod(week, settings.period_start), [week, settings.period_start]);
   const [rows, setRows] = useState<SportMatchupLine[]>([]);
   const [games, setGames] = useState<SportGameRow[]>([]);
@@ -35,7 +38,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
     let alive = true;
     sportMatchupLines(matchupId).then((r) => { if (alive) setRows(r ?? []); }).catch(() => {});
     if (period) sportLeagueGames(leagueId, period.from, period.to).then((g) => { if (alive) setGames(g ?? []); }).catch(() => {});
-    if (settings.format === 'roto') sportRotoStandings(leagueId).then((r) => { if (alive) setRoto(r ?? []); }).catch(() => {});
+    if (isSeasonFormat(settings.format)) sportRotoStandings(leagueId).then((r) => { if (alive) setRoto(r ?? []); }).catch(() => {});
     const id = setInterval(() => setTick((x) => x + 1), 60_000);
     return () => { alive = false; clearInterval(id); };
   }, [matchupId, leagueId, period?.from, period?.to, settings.format, tick]);
@@ -57,22 +60,22 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
   return (
     <Card style={{ gap: 8 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
-        <Mono size={8.5} tone="dim" track={0.1}>{def.league} · {period ? `${fmtDay(period.from)} – ${fmtDay(period.to)}` : `WEEK ${week}`} · {settings.format === 'cats' ? 'CATEGORIES' : settings.format === 'roto' ? 'ROTO' : 'POINTS'}</Mono>
+        <Mono size={8.5} tone="dim" track={0.1}>{def.league} · {period ? `${fmtDay(period.from)} – ${fmtDay(period.to)}` : `WEEK ${week}`} · {settings.format === 'cats' ? 'CATEGORIES' : SPORT_FORMAT_LABEL[settings.format]}{bb.size ? ` · ${bb.size} 🎯` : ''}</Mono>
         <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text }}>
           {cats ? `${cats.wins}-${cats.losses}-${cats.ties}` : `${home.total.toFixed(1)} – ${away.total.toFixed(1)}`}
         </Text>
       </View>
 
-      {settings.format === 'roto' && (
+      {isSeasonFormat(settings.format) && (
         <View style={{ gap: 3 }}>
-          <Mono size={8.5} tone="dim" track={0.1}>ROTO STANDINGS · SEASON TO DATE</Mono>
+          <Mono size={8.5} tone="dim" track={0.1}>{settings.format === 'season' ? 'SEASON POINTS' : 'ROTO STANDINGS'} · SEASON TO DATE</Mono>
           {roto.length === 0
             ? <Mono size={9} tone="faint">No games counted yet — the table fills as lineups lock and play.</Mono>
             : roto.map((r) => (
               <View key={r.roster_id} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
                 <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: r.roster_id === myRosterId ? t.you : t.text }}>SEAT {r.roster_id}</Text>
                 <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.dim, flexShrink: 1 }} numberOfLines={1}>
-                  {settings.categories.map((c) => `${categoryById(def, c)?.short ?? c} ${r.cats?.[c]?.points ?? 0}`).join(' · ')}
+                  {settings.format === 'roto' ? settings.categories.map((c) => `${categoryById(def, c)?.short ?? c} ${r.cats?.[c]?.points ?? 0}`).join(' · ') : 'season total'}
                 </Text>
                 <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: t.text }}>{Number(r.points).toFixed(1)}</Text>
               </View>
@@ -104,7 +107,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
               <View key={`${d.game_date}-${d.roster_slot}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint, width: 56 }}>{fmtDay(d.game_date)}</Text>
                 <PosPill pos={eligibleFor(sport, d.pos)[0] ?? d.roster_slot} />
-                <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.text, flex: 1 }} numberOfLines={1}>{d.full_name ?? d.player_slug} <Text style={{ color: t.faint }}>{d.team}</Text>{d.status === 'live' ? ' ●' : ''}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.text, flex: 1 }} numberOfLines={1}>{bb.has(d.roster_slot) ? '🎯 ' : ''}{d.full_name ?? d.player_slug} <Text style={{ color: t.faint }}>{d.team}</Text>{d.status === 'live' ? ' ●' : ''}</Text>
                 <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', color: d.line ? t.text : t.faint }}>{d.line ? d.pts.toFixed(1) : 'DNP'}</Text>
               </View>
             ))}
@@ -125,7 +128,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
           </View>
         </View>
       )}
-      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day's line.</Mono>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day's line.{bb.size ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}</Mono>
     </Card>
   );
 }

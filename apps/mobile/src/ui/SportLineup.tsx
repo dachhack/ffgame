@@ -1,18 +1,26 @@
-// A SPORT LEAGUE'S LINEUP, on the phone (v0.625.0) — the web SportLineup's
-// twin. The app's ROSTER page showed a daily-sport league the NFL builder
-// (QB/RB/WR chips), and set_league_classic_slots refused every sport
-// position, so "I saved the roster and it didn't take" was exactly right:
-// only the bench and IR landed. This is counts per slot type (2 G, 2 F,
-// 1 C, 2 UTIL…) plus bench and IR, saved through set_sport_lineup until the
-// draft starts.
+// A SPORT LEAGUE'S LINEUP, on the phone (v0.625.0, v0.629.0) — the web
+// SportLineup's twin: counts per slot type (2 G, 2 F, 1 C, 2 UTIL…), then
+// each spot as built with what a football spot may carry — 🎯 BEST BALL (the
+// spot fills itself each night with the roster's top eligible scorer), a
+// TEAMS scope and a ROOKIES scope — plus bench and IR, saved through
+// set_sport_lineup until the draft starts.
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
-import { sportRosterSlots, slotCountsOf } from '@drip/core/sports/league';
-import { setSportLineup, setLeagueRosterShape, friendlyError, type GameModeInfo } from '@drip/core/data/liveApi';
+import { sportRosterSlots, sportRelabelSlots, sportAddSlot, sportRemoveSlot, sportSlotTypeOf, sportSpotScopeLabel, sportHasTenure, type SportSlotSpec } from '@drip/core/sports/league';
+import { setSportLineup, setLeagueRosterShape, leaguePool, friendlyError, type GameModeInfo } from '@drip/core/data/liveApi';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Chip, Mono } from './prims';
+
+const specOf = (def: (typeof SPORTS)[Sport], gm: GameModeInfo | null): SportSlotSpec[] => {
+  const raw = gm?.slots as (Partial<SportSlotSpec> & { pos: string[] })[] | null | undefined;
+  if (!raw?.length) return sportRosterSlots(def);
+  return sportRelabelSlots(def, raw.map((s) => ({
+    pos: [...(s.pos ?? [])], label: s.label ?? '', ...(s.bb ? { bb: true } : {}),
+    ...(s.teams?.length ? { teams: [...s.teams] } : {}), ...(s.min_exp != null ? { min_exp: s.min_exp } : {}), ...(s.max_exp != null ? { max_exp: s.max_exp } : {}),
+  })));
+};
 
 export function SportLineup({ leagueId, sport, gm, locked, onSaved }: {
   leagueId: string; sport: Sport; gm: GameModeInfo | null;
@@ -22,39 +30,57 @@ export function SportLineup({ leagueId, sport, gm, locked, onSaved }: {
 }) {
   const t = useTheme();
   const def = SPORTS[sport];
-  const [counts, setCounts] = useState<Record<string, number>>(() => slotCountsOf(def, gm?.slots ?? null));
+  const [spots, setSpots] = useState<SportSlotSpec[]>(() => specOf(def, gm));
   const [bench, setBench] = useState<number>(gm?.shape?.bench ?? def.benchDefault);
   const [ir, setIr] = useState<number>(gm?.shape?.ir ?? def.irDefault);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [teamsFor, setTeamsFor] = useState<number | null>(null);
+  const [teams, setTeams] = useState<string[] | null>(null);
   useEffect(() => {
-    setCounts(gm?.slots?.length ? slotCountsOf(def, gm.slots) : { ...def.defaultRoster });
+    setSpots(specOf(def, gm));
     setBench(gm?.shape?.bench ?? def.benchDefault);
     setIr(gm?.shape?.ir ?? def.irDefault);
   }, [gm, def]);
+  useEffect(() => {
+    if (teamsFor == null || teams) return;
+    leaguePool(leagueId).then((rows) => setTeams([...new Set(rows.map((r) => r.team).filter((x): x is string => !!x))].sort())).catch(() => setTeams([]));
+  }, [teamsFor, teams, leagueId]);
 
-  const starters = useMemo(() => Object.values(counts).reduce((a, b) => a + b, 0), [counts]);
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const s of spots) { const k = sportSlotTypeOf(def, s.pos)?.type ?? [...new Set(s.pos)].sort().join('/'); out[k] = (out[k] ?? 0) + 1; }
+    return out;
+  }, [spots, def]);
+  const starters = spots.length;
+  const bbCount = spots.filter((s) => s.bb).length;
+  const allBb = bbCount === starters && starters > 0;
   const custom = Object.keys(counts).filter((k) => !def.slotTypes.some((x) => x.type === k));
-  const bump = (type: string, d: number) => setCounts((c) => {
-    const n = Math.max(0, Math.min(6, (c[type] ?? 0) + d));
-    const next = { ...c, [type]: n };
-    if (n === 0) delete next[type];
+  const bump = (type: string, d: number) => {
+    if (d > 0 && starters >= 20) return;
+    setSpots((cur) => (d > 0 ? sportAddSlot(def, cur, type) : sportRemoveSlot(def, cur, type)));
+  };
+  const patch = (i: number, p: Partial<SportSlotSpec>) => setSpots((cur) => cur.map((s, j) => {
+    if (j !== i) return s;
+    const next: SportSlotSpec = { ...s, ...p };
+    if (!next.bb) delete next.bb;
+    if (!next.teams?.length) delete next.teams;
+    if (next.min_exp == null) delete next.min_exp;
+    if (next.max_exp == null) delete next.max_exp;
     return next;
-  });
+  }));
 
   const save = async () => {
     if (busy || locked) return;
     if (starters < 1 || starters > 20) { setNote('a lineup needs 1–20 starters'); return; }
     setBusy(true); setNote(null);
     try {
-      const known = Object.fromEntries(Object.entries(counts).filter(([k]) => def.slotTypes.some((x) => x.type === k)));
-      const slots = [...sportRosterSlots(def, known), ...custom.flatMap((k) => Array.from({ length: counts[k] }, () => ({ pos: k.split('/'), label: k })))];
-      const r = await setSportLineup(leagueId, slots);
+      const r = await setSportLineup(leagueId, spots);
       if (!r.ok) { warn(); setNote(friendlyError(r.error ?? 'failed')); return; }
       const sh = await setLeagueRosterShape(leagueId, bench, 0, ir, 0, 0);
       if (!sh.ok) { warn(); setNote(friendlyError(sh.error ?? 'lineup saved, but the bench/IR did not')); return; }
       commit();
-      setNote(`✓ ${r.starters} starters, ${bench} bench, ${ir} IR — the draft runs ${sh.draft_rounds ?? '?'} rounds`);
+      setNote(`✓ ${r.starters} starters${r.bestball ? ` (${r.bestball} best ball)` : ''}, ${bench} bench, ${ir} IR — the draft runs ${sh.draft_rounds ?? '?'} rounds`);
       onSaved?.();
     } catch (e) { warn(); setNote(friendlyError(e)); }
     finally { setBusy(false); }
@@ -76,23 +102,68 @@ export function SportLineup({ leagueId, sport, gm, locked, onSaved }: {
   return (
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Mono size={8.5} tone="faint" weight="700">{def.league} LINEUP · {starters} STARTERS{locked ? ' · FROZEN SINCE THE DRAFT' : ''}</Mono>
+        <Mono size={8.5} tone="faint" weight="700">{def.league} LINEUP · {starters} STARTERS{bbCount ? ` · ${bbCount} BEST BALL` : ''}{locked ? ' · FROZEN SINCE THE DRAFT' : ''}</Mono>
       </View>
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
         {def.slotTypes.map((x) => stepper(x.label, counts[x.type] ?? 0, (n) => bump(x.type, n - (counts[x.type] ?? 0)), 0, 6, (counts[x.type] ?? 0) > 0))}
         {custom.map((k) => stepper(`${k} (custom)`, counts[k], (n) => bump(k, n - counts[k]), 0, 6))}
       </View>
+
+      {/* EACH SPOT (0436): best ball and scope live on the spot. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <Mono size={8.5} tone="faint" weight="700" track={0.1}>SPOTS</Mono>
+        {!locked && (
+          <View style={{ marginLeft: 'auto' }}>
+            <Chip label={allBb ? '🎯 ALL BEST BALL — ON' : '🎯 ALL BEST BALL'} on={allBb} disabled={busy}
+              onPress={() => { tap(); setSpots((cur) => cur.map((s) => (allBb ? (({ bb: _bb, ...rest }) => rest)(s) : { ...s, bb: true }))); }} />
+          </View>
+        )}
+      </View>
+      <View style={{ gap: 4, marginTop: 6 }}>
+        {spots.map((s, i) => {
+          const scope = sportSpotScopeLabel(s);
+          return (
+            <View key={i} style={{ gap: 5, paddingHorizontal: 8, paddingVertical: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: s.bb ? t.you : t.bd, borderRadius: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Mono size={10} weight="700" tone={s.bb ? 'you' : undefined} style={{ minWidth: 44 }}>{s.label}</Mono>
+                <Mono size={8.5} tone="faint" numberOfLines={1} style={{ flex: 1 }}>{s.pos.join('/')}{scope ? ` · ${scope}` : ''}</Mono>
+              </View>
+              {!locked && (
+                <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+                  <Chip label="🎯 BEST BALL" on={!!s.bb} disabled={busy} onPress={() => { tap(); patch(i, { bb: !s.bb }); }} />
+                  <Chip label={`TEAMS${s.teams?.length ? ` · ${s.teams.length}` : ''}`} on={!!s.teams?.length || teamsFor === i} disabled={busy} onPress={() => { tap(); setTeamsFor(teamsFor === i ? null : i); }} />
+                  {sportHasTenure(sport) && (
+                    <Chip label="ROOKIES" on={s.max_exp === 0} disabled={busy} onPress={() => { tap(); patch(i, { max_exp: s.max_exp === 0 ? null : 0, min_exp: null }); }} />
+                  )}
+                </View>
+              )}
+              {teamsFor === i && !locked && (
+                <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+                  {teams == null ? <Mono size={8.5} tone="faint">loading teams…</Mono>
+                    : teams.length === 0 ? <Mono size={8.5} tone="faint">no pool yet — seed the player pool first</Mono>
+                    : teams.map((tm) => {
+                      const on = !!s.teams?.includes(tm);
+                      return <Chip key={tm} label={tm} on={on} disabled={busy} onPress={() => { tap(); patch(i, { teams: on ? (s.teams ?? []).filter((x) => x !== tm) : [...(s.teams ?? []), tm].slice(0, 8) }); }} />;
+                    })}
+                  {!!s.teams?.length && <Chip label="CLEAR" on={false} onPress={() => { tap(); patch(i, { teams: [] }); }} />}
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
+
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
         {stepper('BENCH', bench, setBench, 0, 15)}
         {stepper('IR / IL', ir, setIr, 0, 6)}
       </View>
       <Mono size={8.5} tone="faint" style={{ marginTop: 8, lineHeight: fs(12) }}>
-        Every spot names the positions it takes (UTIL takes anyone). Lineups change any day; a player locks into his spot at {def.vocab.start}. The draft runs starters + bench rounds; IR spots are stashed into, not drafted.
+        Every spot names the positions it takes (UTIL takes anyone). Lineups change any day; a player locks into his spot at {def.vocab.start}. A 🎯 best-ball spot is nobody's to set: each night it takes your top scorer among the players who played and fit it — one player, one spot — and the board shows it as the night goes. A TEAMS spot takes only those teams' players{sportHasTenure(sport) ? '; a ROOKIES spot only first-year players' : ''}. The draft runs starters + bench rounds; IR spots are stashed into, not drafted.
       </Mono>
       {!locked && (
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
           <Chip label={`${def.league} STANDARD`} on={false} disabled={busy}
-            onPress={() => { tap(); setCounts({ ...def.defaultRoster }); setBench(def.benchDefault); setIr(def.irDefault); }} />
+            onPress={() => { tap(); setSpots(sportRosterSlots(def)); setBench(def.benchDefault); setIr(def.irDefault); }} />
           <Chip label={busy ? 'SAVING…' : 'SAVE LINEUP'} on disabled={busy} onPress={() => void save()} />
         </View>
       )}

@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { normalizeScoring } from '@drip/core/sports/score';
-import { sportSettingsOf, type SportLeagueSettings, type SportFormat } from '@drip/core/sports/league';
+import { sportSettingsOf, SPORT_FORMATS, SPORT_FORMAT_LABEL, type SportLeagueSettings, type SportFormat } from '@drip/core/sports/league';
 import { setSportSettings, friendlyError } from '@drip/core/data/liveApi';
 
 const RADIUS = 8;
@@ -72,7 +72,7 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
     setBusy(true); setNote(null);
     try {
       const r = await setSportSettings(leagueId, { format: f, categories: [...c] });
-      if (r.ok) { setSettings(sportSettingsOf({ sport: r.sport })); setFormat(f); setCats(c); setNote(f === 'points' ? '✓ points — weekly totals head-to-head' : f === 'cats' ? `✓ categories — ${c.size} compared each week` : `✓ roto — one season ranking per category (${c.size})`); }
+      if (r.ok) { setSettings(sportSettingsOf({ sport: r.sport })); setFormat(f); setCats(c); setNote(f === 'points' ? '✓ points — weekly totals head-to-head' : f === 'cats' ? `✓ categories — ${c.size} compared each week` : f === 'season' ? '✓ season points — one total all season, no weekly winner' : `✓ roto — one season ranking per category (${c.size})`); }
       else setNote(friendlyError(r.error ?? 'failed'));
     } catch (e) { setNote(friendlyError(e)); }
     finally { setBusy(false); }
@@ -90,9 +90,9 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
           {def.league} FORMAT {locked && <span style={{ fontWeight: 400 }}>· locked once the season is under way</span>}
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-          {(['points', 'cats', 'roto'] as SportFormat[]).map((f) => (
+          {SPORT_FORMATS.map((f) => (
             <button key={f} disabled={busy || locked} onClick={() => void saveFormat(f, cats)} className="mono" style={{ ...pill(format === f), opacity: locked && format !== f ? 0.45 : 1 }}>
-              {f === 'points' ? 'POINTS' : f === 'cats' ? 'H2H CATEGORIES' : 'ROTO'}
+              {SPORT_FORMAT_LABEL[f]}
             </button>
           ))}
         </div>
@@ -101,9 +101,11 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
             ? 'Each week is the sum of every locked starter\'s points, head-to-head.'
             : format === 'cats'
               ? 'Each week is won category by category from both sides\' summed lines; ratios (FG%, ERA…) are made from the totals.'
-              : 'No weekly winner: every game all season sums into one line per team, each category ranks the league, best of N takes N points.'}
+              : format === 'season'
+                ? 'No weekly winner: every locked slot-day all season adds to one points total per team, and the standings are that total. Pairs naturally with 🎯 best-ball spots on the LINEUP page.'
+                : 'No weekly winner: every game all season sums into one line per team, each category ranks the league, best of N takes N points.'}
         </div>
-        {format !== 'points' && (
+        {format !== 'points' && format !== 'season' && (
           <>
             <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--faint)', marginTop: 10 }}>CATEGORIES · {cats.size} on</div>
             <div style={{ display: 'flex', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>

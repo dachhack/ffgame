@@ -2,8 +2,9 @@
 // side scores from its locked slot-days, the points and categories verdicts,
 // and when a period is done. Pure parts only. Run from server/:
 // `npx tsx test/sports-league.mjs`.
-import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable } from '../src/sportLeague.js';
+import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable, bbSlotsOf, dayCandidates, bestBallFill, seasonTable, bbDaysFor } from '../src/sportLeague.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
+import { normalizeScoring } from '../../packages/core/src/sports/score.ts';
 import { sportPeriod, sportWeekOf, sportRosterSlots, sportLeagueSettings, mondayOnOrBefore, currentSeason, sportSettingsOf, slotCountsOf, SPORT_WEEK_BASE } from '../../packages/core/src/sports/league.ts';
 
 let fails = 0;
@@ -87,6 +88,61 @@ ok(roto.find((r) => r.roster_id === 3).points === 1 + 1 + 3 && roto.find((r) => 
 const per = { from: '2026-10-19', to: '2026-10-25' };
 ok(!periodDone(per, '2026-10-25', []) && periodDone(per, '2026-10-26', []) && !periodDone(per, '2026-10-26', ['2026-10-25']) && periodDone(per, '2026-10-26', ['2026-10-26']), 'done the day after, unless a game from inside it is still live');
 ok(periodDone(per, '2026-10-26', ['2026-10-01']) && periodDone(per, '2026-11-09', ['2026-10-25']), 'a live game from before the period, or one stuck for days, does not hold it');
+
+// ── scoped spots (0436) ──────────────────────────────────────────────────────
+{
+  const specs = [{ pos: ['C'], teams: ['BOS', 'LAL'] }, { pos: ['PG', 'SG', 'SF', 'PF', 'C'], max_exp: 0 }, { pos: ['SF'], min_exp: 5 }, { pos: ['PG'] }];
+  const elig = { 'nba-1': ['C'], 'nba-2': ['C'], 'nba-3': ['SG'], 'nba-4': ['SF'], 'nba-5': ['SF'] };
+  const meta = { 'nba-1': { team: 'BOS', exp: 7 }, 'nba-2': { team: 'MIA', exp: 0 }, 'nba-3': { team: 'BOS', exp: 0 }, 'nba-4': { team: 'LAL', exp: null }, 'nba-5': { team: 'LAL', exp: 9 } };
+  const allows = slotAllowsFor(specs, (s) => elig[s], (s) => meta[s]);
+  ok(allows('S1', 'nba-1') && !allows('S1', 'nba-2') && !allows('S1', 'nba-3'), 'a team-scoped centre spot: the Celtic yes, the Heat man no, a guard no');
+  ok(allows('S2', 'nba-3') && allows('S2', 'nba-2') && !allows('S2', 'nba-1') && !allows('S2', 'nba-4'), 'rookies only: 0 years yes, 7 no, unknown tenure no');
+  ok(allows('S3', 'nba-5') && !allows('S3', 'nba-4') && allows('S4', 'nba-3') === false && allows('S4', 'nba-99'), 'a 5+ years spot; a plain spot keeps its eligibility rule; an unknown player allows');
+  ok(bbSlotsOf([{ pos: ['PG'] }, { pos: ['C'], bb: true }, { pos: ['SF'], bb: false }, { pos: ['UTIL'], bb: true }]).size === 2 && [...bbSlotsOf([{ pos: ['C'], bb: true }])][0] === 'S1' && bbSlotsOf(null).size === 0, 'best-ball slot names come off the bb flags');
+}
+
+// ── best ball (0436) ─────────────────────────────────────────────────────────
+{
+  const nba = SPORTS.nba;
+  const day = [
+    { player_slug: 'nba-1', game_id: 'g1', played: true, line: { pts: 30, reb: 10, ast: 10 } },   // C, 30+12+15 = 57
+    { player_slug: 'nba-2', game_id: 'g1', played: true, line: { pts: 20 } },                     // PG, 20
+    { player_slug: 'nba-3', game_id: 'g2', played: true, line: { pts: 25 } },                     // SG, 25
+    { player_slug: 'nba-4', game_id: 'g2', played: false, line: { pts: 0 } },                     // DNP
+    { player_slug: 'nba-5', game_id: 'g3', played: true, line: null },                            // game not posted
+    { player_slug: 'nba-6', game_id: 'g4', played: true, line: { pts: 10 } },                     // doubleheader-ish: two games
+    { player_slug: 'nba-6', game_id: 'g5', played: true, line: { pts: 12 } },
+  ];
+  const cands = dayCandidates(nba, normalizeScoring(nba, {}), day);
+  ok(cands.map((c) => c.slug).join() === 'nba-1,nba-3,nba-6,nba-2' && cands[2].value === 22 && cands[2].games.join() === 'g4,g5', `candidates by value: ${cands.map((c) => `${c.slug} ${c.value}`).join(', ')} — the DNP and the unposted game are out`);
+  ok(dayCandidates(nba, normalizeScoring(nba, {}), day, new Set(['nba-1'])).length === 3, 'a player started by hand is not a candidate');
+  const specs = [{ pos: ['PG'], bb: true }, { pos: ['C'], bb: true }, { pos: ['PG', 'SG', 'SF', 'PF', 'C'], bb: true }, { pos: ['SF'] }];
+  const elig = { 'nba-1': ['C'], 'nba-2': ['PG'], 'nba-3': ['SG'], 'nba-6': ['PG', 'SG'] };
+  const allows = slotAllowsFor(specs, (s) => elig[s]);
+  const rows = bestBallFill(bbSlotsOf(specs), cands, allows);
+  const at = (slot) => rows.filter((r) => r.roster_slot === slot).map((r) => r.player_slug).join();
+  // PG: the guard worth more goes to UTIL only if PG still fills — nba-6 (22) at PG, nba-2 (20) nowhere? No: fill every spot you can, then maximize:
+  // PG takes nba-6 (22) or nba-2 (20); UTIL takes nba-3 (25); C takes nba-1. Max total: PG nba-6 22 + C 57 + UTIL nba-3 25 = 104 over PG nba-2 20.
+  ok(at('S2') === 'nba-1' && at('S3') === 'nba-3' && at('S1') === 'nba-6,nba-6', `the fill: PG ${at('S1')}, C ${at('S2')}, UTIL ${at('S3')} (a two-game day writes two rows)`);
+  ok(rows.length === 4 && rows.filter((r) => r.player_slug === 'nba-6').map((r) => r.game_id).join() === 'g4,g5', 'one lock row per game the player had');
+  ok(bestBallFill(bbSlotsOf(specs), [], allows).length === 0 && bestBallFill(new Set(), cands, allows).length === 0, 'nothing to seat, nothing written');
+  // One player one spot: a lone centre fills C, not C and UTIL.
+  const lone = bestBallFill(bbSlotsOf(specs), dayCandidates(nba, normalizeScoring(nba, {}), [day[0]]), allows);
+  ok(lone.length === 1 && lone[0].roster_slot === 'S2', 'a lone candidate fills one spot');
+  // The scope rides into the fill: a rookies-only UTIL skips the veteran.
+  const scoped = [{ pos: ['PG', 'SG', 'SF', 'PF', 'C'], bb: true, max_exp: 0 }];
+  const sc = bestBallFill(bbSlotsOf(scoped), cands, slotAllowsFor(scoped, (s) => elig[s], (s) => ({ 'nba-1': { exp: 7 }, 'nba-3': { exp: 0 }, 'nba-6': { exp: 2 }, 'nba-2': { exp: 1 } })[s]));
+  ok(sc.length === 1 && sc[0].player_slug === 'nba-3', 'a rookies-only best-ball spot takes the best rookie, not the best player');
+  // the days to fill
+  ok(bbDaysFor([{ from: '2026-10-19', to: '2026-10-25' }], '2026-10-22', new Set(['2026-10-19', '2026-10-20'])).join() === '2026-10-21,2026-10-22', 'yesterday and today, with the settled days left alone');
+  ok(bbDaysFor([{ from: '2026-10-19', to: '2026-10-25' }], '2026-10-22', new Set()).length === 4 && bbDaysFor([{ from: '2026-10-19', to: '2026-10-25' }], '2026-10-18').length === 0, 'a never-filled day is filled; before the period nothing is');
+  ok(bbDaysFor([{ from: '2026-10-12', to: '2026-10-18' }], '2026-10-26', new Set(['2026-10-12'])).length === 6, 'a finished period fills only its never-filled days');
+  // the season table
+  const tbl = seasonTable(nba, { scoring: {} }, [
+    { roster_id: 1, line: { pts: 30 } }, { roster_id: 1, line: { pts: 10 } }, { roster_id: 2, line: { pts: 25 } }, { roster_id: 3, line: null },
+  ], [1, 2, 3]);
+  ok(tbl.length === 3 && tbl[0].roster_id === 1 && tbl[0].points === 40 && tbl[1].points === 25 && tbl[2].points === 0 && tbl[0].totals.pts === 40 && Object.keys(tbl[0].cats).length === 0, `season points: ${tbl.map((t) => `${t.roster_id} ${t.points}`).join(', ')}`);
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport league checks passed');
 process.exit(fails ? 1 : 0);

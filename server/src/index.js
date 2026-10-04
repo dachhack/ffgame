@@ -1169,7 +1169,7 @@ async function main() {
             let locked = await lockStartedGames(sport, r.games[sport] ?? []);
             for (const b of r.replays?.[sport] ?? []) locked += await lockStartedGames(sport, b.games, b.nowMs, b.offsetDays);
             const c = await resolveSportLeagues(sport);
-            if (locked || c.matchups) log(`sport leagues ${sport}: ${locked} slot-days locked, ${c.matchups} matchups scored, ${c.finals} final`);
+            if (locked || c.matchups || c.filled) log(`sport leagues ${sport}: ${locked} slot-days locked, ${c.filled ?? 0} best-ball seat-days filled, ${c.matchups} matchups scored, ${c.finals} final`);
           } catch (e) { log(`sport leagues ${sport}:`, e.message); }
         }
       } catch (e) { log('sports tick error', e.message); }

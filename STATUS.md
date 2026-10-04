@@ -22,6 +22,63 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.629.0 — best ball and scoped spots for a daily sport
+
+> - A daily-sport league's lineup spots can now be 🎯 BEST BALL: nobody sets them — each night the spot takes your top scorer among the rostered players who played and fit it, and the board shows the fill as the night goes.
+> - Spots can also be scoped to a few TEAMS, or to ROOKIES (NBA and MLB), as in football.
+> - A fourth format, SEASON POINTS: no weekly winner — one points total per team all season, standings by that total.
+
+Founder: "Let's keep the scoped roster spots and could we do bestball for leagues
+without weekly matchups like NBA and MLB? … Let's build it."
+
+- **Migration 0436.** `set_sport_lineup` v2 accepts `bb`, `teams` (≤ 8 feed
+  tricodes, checked against the directory) and `min_exp`/`max_exp` per spot,
+  stored flat on the spot with the NFL SlotSpec's keys — so `leagueBestball`,
+  `classicSlotsFromSpec`, `slotAllows` and `slotAcceptsLabel` read a sport spot
+  unchanged on both boards. `set_sport_settings` v2 accepts format `season`.
+  `sport_player.exp` (tenure in seasons) is written by the directory sweeps —
+  NBA from Sleeper's `years_exp`, MLB from `mlbDebutDate` (the players call now
+  asks for it); the NHL and WNBA feeds have none — and `seed_sport_pool` v3
+  copies it into `league_pool.exp`, where `leaguePoolExp` and the worker's lock
+  pass already read tenure. Pools seeded before are back-filled once.
+  `sport_league_day_lines_svc` (every rostered player's game and line on a date
+  range, active roster spots only) and `sport_bb_write_svc` (replace a seat's
+  best-ball locks for a day atomically) are the fill's I/O, service role only.
+- **The fill (worker `sportLeague.js`).** Each resolve pass, for every live
+  period, each seat and each day to fill: `dayCandidates` = the seat's players
+  with a line they PLAYED in (a DNP and an unposted game are not candidates),
+  valued at their points under the league's table (a doubleheader sums), minus
+  players started by hand or locked that day in a manual spot; `bestBallFill`
+  seats them with the NFL engine's `assignByValue` (fill every spot you can,
+  then maximize; one player, one spot; scope and eligibility via
+  `slotAllowsFor`) and writes one lock row per game. Yesterday and today are
+  recomputed every pass (the night moves); older days only where never filled
+  (`bbDaysFor`). Nothing is written when the held fill already matches. The
+  lock pass skips best-ball slots and now applies team and tenure scope
+  (`slotAllowsFor(specs, eligibleOf, metaOf)`; unknown team or tenure refused,
+  the football rule). Format `season` reuses the roto plumbing: `seasonTable`
+  writes points-only rows to `sport_roto`; the weekly matchups stay on the
+  schedule for the board's sake, as roto's do.
+- **Screens.** Web and mobile `SportLineup` are spot lists under the type
+  counters: each spot has 🎯 BEST BALL, TEAMS (picker from the league's pool)
+  and ROOKIES (NBA/MLB) chips plus an ALL BEST BALL toggle; `sportAddSlot`,
+  `sportRemoveSlot` and `sportRelabelSlots` keep labels (G1 G2) in step and
+  flags intact. `SportSettings` and the create flows offer SEASON POINTS;
+  `SportWeekPanel` (both) shows the season table for roto and season, marks
+  filled slot-days 🎯, and says what a 🎯 spot does. The boards pass their
+  best-ball set to the panel and preview a sport league's fill by projection
+  all week (it has no live points on the board; the panel shows the real fill).
+- **Checks.** `check-sports.mjs` pins the formats, the spot helpers, the
+  board's reading of a sport spot, `assignByValue`, and the migration's keys;
+  `sports-league.mjs` covers scoped `slotAllowsFor`, `dayCandidates`,
+  `bestBallFill` (optimal, one-per-spot, a two-game day, a rookies-only spot),
+  `bbDaysFor` and `seasonTable`; `sports-league-io.mjs` runs a best-ball league
+  through a night (a stale pick in a bb spot ignored, a late game moving the
+  fill, a settled day holding) and a season-points table;
+  `sports-directory.mjs` covers tenure from both feeds. Verified on the local
+  Postgres against 0424–0436 (lineup validation incl. an unknown team, the
+  season format, the day-lines RPC).
+
 ### v0.628.0 — replay and the sport scoring page, in the app
 
 > - The app's create flow offers SEASON: LIVE / REPLAY for a daily-sport league, and its COMMISH → SCORING page is the sport's own table — format, categories, points per stat.

@@ -832,11 +832,12 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 {isSport ? (
                   <View style={{ marginTop: 10, gap: 6 }}>
                     <LabelInfo label="SCORING"
-                      info={'POINTS — every stat is worth a set number, tunable on the SCORING tab.\n\nCATEGORIES — each week is won category by category (9-cat, 5x5…).\n\nROTO — no weekly winner: the season is one ranking per category over every game played.'} />
+                      info={'POINTS — every stat is worth a set number, tunable on the SCORING tab.\n\nCATEGORIES — each week is won category by category (9-cat, 5x5…).\n\nROTO — no weekly winner: the season is one ranking per category over every game played.\n\nSEASON POINTS — no weekly winner: one points total per team all season; the standings are that total. Flag spots 🎯 best ball under COMMISH → LINEUP and the lineup sets itself every night.'} />
                     <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                       <Chip label="POINTS" on={sportFormat === 'points'} onPress={() => { tap(); setSportFormat('points'); }} />
                       <Chip label="CATEGORIES" on={sportFormat === 'cats'} onPress={() => { tap(); setSportFormat('cats'); }} />
                       <Chip label="ROTO" on={sportFormat === 'roto'} onPress={() => { tap(); setSportFormat('roto'); }} />
+                      <Chip label="SEASON POINTS" on={sportFormat === 'season'} onPress={() => { tap(); setSportFormat('season'); }} />
                     </View>
                     {/* REPLAY (v0.628.0): last season, day by day, a year behind. */}
                     <LabelInfo label="SEASON"

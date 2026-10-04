@@ -4,7 +4,7 @@
 // crosswalk. Run: `npx tsx test/sports-directory.mjs` from server/.
 import { readFileSync } from 'node:fs';
 import { nhlSeasonLines, nhlStandingsTeams, nhlSeasonId, nhlRosterPlayers, nhlOffRoster } from '../src/sports/nhl.js';
-import { mlbSeasonLines, mlbFieldingGames, mlbEligibility, mlbRosterStatus, mlbBuildDirectory } from '../src/sports/mlb.js';
+import { mlbSeasonLines, mlbFieldingGames, mlbEligibility, mlbRosterStatus, mlbBuildDirectory, mlbExp } from '../src/sports/mlb.js';
 import { sleeperNbaPlayers, sleeperNbaSeasonLines, espnWnbaRoster, wnbaTeam } from '../src/sports/nba.js';
 import { directoryRow, rankDirectory, buildXref, resolveXref, normName, injuryRows, boardInjury } from '../src/poll/sportDirectory.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
@@ -81,12 +81,24 @@ const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).
   ok(dir2.length === dir.length, 'and the directory is the same size as with him listed');
   const rows = rankDirectory('mlb', dir).map((p, i) => directoryRow('mlb', p, i + 1));
   ok(rows[0].rank === 1 && rows[0].rank_pts >= rows[1].rank_pts && rows.every((r) => r.eligible.every((e) => SPORTS.mlb.positions.includes(e))), `ranked: #1 ${rows[0].full_name} ${rows[0].rank_pts} pts`);
+  // TENURE (0436): seasons since the debut year; this season's debut is a rookie; no debut, no tenure.
+  ok(mlbExp('2026-04-02', '2026') === 0 && mlbExp('2019-07-31', '2026') === 7 && mlbExp(null, '2026') === null && mlbExp('bogus', '2026') === null, 'MLB tenure from the debut date');
+  const dir3 = mlbBuildDirectory({
+    players: { people: people.slice(0, 3).map((p, i) => ({ ...p, mlbDebutDate: i === 0 ? '2026-05-01' : i === 1 ? '2020-08-01' : undefined })) }, teams: fx('mlb-teams-2026.json'),
+    cur: { hitting, pitching }, prior: { hitting: { stats: [{ splits: [] }] }, pitching: { stats: [{ splits: [] }] } },
+    fielding, rosters: [fx('mlb-roster-40man-147.json')], season: '2026',
+  });
+  const byId = new Map(dir3.map((p) => [p.extId, p]));
+  ok(byId.get(String(people[0].id))?.exp === 0 && byId.get(String(people[1].id))?.exp === 6 && byId.get(String(people[2].id))?.exp == null, 'a directory row carries the tenure; rows without a debut carry none');
+  ok(directoryRow('mlb', dir3.find((p) => p.extId === String(people[1].id)), 1).exp === 6 && directoryRow('mlb', dir3.find((p) => p.extId === String(people[2].id)), 2).exp === null, 'and the database row does too');
 }
 
 // ── NBA ──────────────────────────────────────────────────────────────────────
 {
   const dir = sleeperNbaPlayers(fx('sleeper-nba-sample.json'));
   ok(dir.length === 28 && dir.every((p) => /^\d+$/.test(p.extId) && p.team), `${dir.length} active rostered Sleeper players (inactive dropped)`);
+  // TENURE (0436): Sleeper's years_exp rides along; a rookie is 0.
+  ok(dir.every((p) => p.exp === null || Number.isInteger(p.exp)) && dir.some((p) => p.exp != null), `tenure from years_exp: ${dir.filter((p) => p.exp != null).length} of ${dir.length} known, ${dir.filter((p) => p.exp === 0).length} rookies`);
   const hurt = dir.filter((p) => p.injury);
   ok(hurt.length >= 3 && hurt.every((p) => ['O', 'GTD', 'OFS'].includes(p.injury.code)), `injuries mapped: ${hurt.map((p) => p.injury.code).join(',')}`);
   const lines = sleeperNbaSeasonLines(fx('sleeper-nba-stats-2025-sample.json'));

@@ -1216,7 +1216,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           if (e.state === 'done') return e.live;
           return Math.max(e.live, fillValue(p, d));
         };
-        const fills = bestballFillBy(manualPicks, bestball, ros, slotDefs, locked ? finalValue : fillValue);
+        // A DAILY SPORT (0436) has no live points on this board — its fill is
+        // the worker's, written nightly into the locks the week panel shows —
+        // so the spot previews by projection all week.
+        const fills = bestballFillBy(manualPicks, bestball, ros, slotDefs, locked && sport === 'nfl' ? finalValue : fillValue);
         for (const f of fills) out[f.slot] = f.player.id;
       }
       return out;
@@ -1225,7 +1228,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       mine: build(mine, pool.map((p) => p.slug), off(myRid)),
       theirs: build(theirs, oppPool.map((p) => p.slug), off(oppRid)),
     };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, ros?.rosterId]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, ros?.rosterId, sport]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
@@ -1665,7 +1668,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           board, not a replica, so what it proves is the thing that ships. */}
       {ros && matchup && sport !== 'nfl' && sportSettings && (
         <SportWeekPanel leagueId={ros.leagueId} matchupId={matchup.id} week={matchup.week} sport={sport} settings={sportSettings}
-          homeRosterId={matchup.home_roster_id} awayRosterId={matchup.away_roster_id} myRosterId={ros.rosterId} />
+          homeRosterId={matchup.home_roster_id} awayRosterId={matchup.away_roster_id} myRosterId={ros.rosterId} bestball={bestball} />
       )}
       {ros && matchup && testLive != null && <SimStrip leagueId={ros.leagueId} week={matchup.week} onChanged={() => setSimVer((v) => v + 1)} />}
 
@@ -1986,7 +1989,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                 {accepts && <div className="mono" title={accepts} style={{ fontSize: 8, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{accepts}</div>}
               </div>
               {auto && !locked ? (
-                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>BEST BALL — fills itself with your top scorer</span>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{sport !== 'nfl' ? 'BEST BALL — fills itself each night with your top scorer' : 'BEST BALL — fills itself with your top scorer'}</span>
               ) : !canEdit(d.slot) ? <PlayerCell slug={my} /> : (
                 <button onClick={() => setPickerSlot(pickerSlot === d.slot ? null : d.slot)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, color: 'inherit' }}>

@@ -1135,7 +1135,7 @@ function matchSpots(slots: ClassicSlotDef[], players: SpotPlayer[]): number[] {
  *  version is microseconds here. The epsilon on each relaxation stops float
  *  noise from re-improving a path forever; the round cap bounds it absolutely
  *  (a simple alternating path claims at most one new player per round). */
-function assignByValue(nSlots: number, nPlayers: number, w: number[][]): number[] {
+export function assignByValue(nSlots: number, nPlayers: number, w: number[][]): number[] {
   const heldBy: number[] = new Array(nSlots).fill(-1);   // spot → player
   const seatOf: number[] = new Array(nPlayers).fill(-1); // player → spot
   for (;;) {
