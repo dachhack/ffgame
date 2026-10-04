@@ -28,6 +28,10 @@ export interface AimRule {
   /** The word on the tap strip: "TAP TO SPY". */
   verb: string;
   follow?: AimFollow;
+  /** A CLUTCH play (v0.624.1): the spot has to have EARNED it — a first-half
+   *  TD, a 10+ halftime lead, a nuke just landed. The board asks core's
+   *  clutchOffersFor which of your live spots has, on top of this rule. */
+  clutch?: boolean;
 }
 
 export const AIM_RULES: Record<string, AimRule> = {
@@ -51,6 +55,25 @@ export const AIM_RULES: Record<string, AimRule> = {
   'cold-snap': { target: 'theirs', when: 'live', verb: 'FREEZE' },
   napalm: { target: 'theirs', when: 'live', verb: 'NAPALM' },
   emp: { target: 'window', when: 'live', verb: 'FIRE EMP' },
+  // CLUTCH plays (v0.624.1). Founder, Turf Warriors, Zay Flowers up 22.7 on
+  // a first-half TD: "I should be able to fire encore on Zay flowers" — and
+  // the app's hand read "The week has started — arms are closed." The three
+  // clutch cards had no aim rule, so the hand filed them with the pre-match
+  // buffs and closed them at lock; the web had offered them on the spot
+  // since v0.080. They land on YOUR live spot like Surge does, and only on a
+  // spot that has earned the offer (clutchOffersFor, the web's own rule).
+  'clutch-encore': { target: 'mine-filled', when: 'live', verb: 'ARM ENCORE', clutch: true },
+  'clutch-don': { target: 'mine-filled', when: 'live', verb: 'STAKE', clutch: true },
+  'clutch-counter': { target: 'mine-filled', when: 'live', verb: 'COUNTER', clutch: true },
+};
+
+export const isClutch = (id: string): boolean => !!AIM_RULES[id]?.clutch;
+
+/** What earns each clutch offer — the hand's line while no spot has. */
+export const CLUTCH_TRIGGER: Record<string, string> = {
+  'clutch-encore': 'Offered on a spot whose player scores a first-half touchdown; his next TD then banks +12.',
+  'clutch-don': 'Offered on a spot that leads its duel by 10+ at halftime, until the third quarter gets going.',
+  'clutch-counter': 'Offered on a spot right after an opponent nukes it, for a short window.',
 };
 
 export const isAimed = (id: string): boolean => id in AIM_RULES;
@@ -95,6 +118,7 @@ export const AIM_SELF_CONSUMING = new Set(['spy', 'unlock-underdog']);
 export function aimPrompt(id: string): string {
   const r = AIM_RULES[id];
   if (!r) return '';
+  if (r.clutch) return 'Tap one of your spots that has earned it, in a live window.';
   const where = r.target === 'window' ? 'a window'
     : r.target === 'theirs' ? 'one of their spots'
     : r.target === 'mine-empty' ? 'one of your EMPTY spots'

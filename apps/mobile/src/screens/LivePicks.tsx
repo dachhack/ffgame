@@ -37,10 +37,10 @@ import {
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames, windowFeedClock } from '@drip/core/data/gameFeed';
-import { AIM_RULES, AIM_SELF_CONSUMING, aimPrompt, aimSpotOk, aimWindowOk, isAimed, type AimPhase } from '@drip/core/data/aimRules';
+import { AIM_RULES, AIM_SELF_CONSUMING, CLUTCH_TRIGGER, aimPrompt, aimSpotOk, aimWindowOk, isAimed, isClutch, type AimPhase } from '@drip/core/data/aimRules';
 import { METRICS } from '@drip/core/data/metrics';
 import { projectedPoints } from '@drip/core/engine/projScoring';
-import { BYE_STEAL_CAP, swapMetricFor, buffsForWindow } from '@drip/core/engine/matchup';
+import { BYE_STEAL_CAP, swapMetricFor, buffsForWindow, clutchOffersFor, clutchArmClock, type ClutchOffer } from '@drip/core/engine/matchup';
 import { setLivePlays, liveRowsToPbp, LIVE_SEASON } from '@drip/core/data/realPbp';
 import { statlineAt, metricDriver, realTimeAt, GHOST_POINTS } from '@drip/core/engine/sim';
 import { pickFailureNote } from '@drip/core/data/pickSave';
@@ -505,6 +505,23 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logFor, revealedAll, matchup?.week, youAreHome, buffs, oppBuffs]);
 
+  // CLUTCH offers read the same duel streams (v0.624.1): the halftime banks
+  // for the Gamble and the nuke for Counter-Wipe come out of the engine's
+  // event capture. Encore needs only the player's own plays, so a hand
+  // holding just Encore never pays for a resolution here.
+  const clutchWantsEvents = (inventory['clutch-don'] ?? 0) > 0 || (inventory['clutch-counter'] ?? 0) > 0;
+  const clutchEvents = useMemo(() => {
+    if (!clutchWantsEvents || !matchup || matchup.status !== 'live') return null;
+    try {
+      return liveDuelEvents(
+        revealedAll.filter((p) => p.app_user_id === userId),
+        revealedAll.filter((p) => p.app_user_id !== userId),
+        matchup.week, youAreHome, [...buffs], oppBuffs,
+      );
+    } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clutchWantsEvents, revealedAll, matchup?.week, matchup?.status, youAreHome, buffs, oppBuffs]);
+
   /** The field(s) under one duel: the real NFL games the two players are in.
    *
    *  Deduped by team, because the pair is very often IN the same game — a QB
@@ -816,6 +833,28 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   };
   const theirsAt = (win: string, slot: string): boolean =>
     revealedAll.some((x) => x.app_user_id !== userId && x.game_window === win && String(x.roster_slot) === slot && !!x.player_slug);
+  /** The CLUTCH offers open on one of my spots right now (v0.624.1): owned,
+   *  not yet armed, the spot's own trigger met (core's clutchOffersFor — the
+   *  web's rule) and the window's clock inside the offer's arm window. */
+  const clutchOffersAt = (win: string, slot: string): ClutchOffer[] => {
+    if (!matchup || matchup.status !== 'live' || aimPhase(win) !== 'live') return [];
+    const mine = mineAt(win, slot);
+    const pl = mine ? playersBySlug[mine.slug] ?? (duelPool[mine.slug] ? poolToPlayer(duelPool[mine.slug]) : null) : null;
+    if (!mine || !pl) return [];
+    const k = `${win}|${slot}`;
+    let offers: ClutchOffer[];
+    try { offers = clutchOffersFor({ player: pl, metricId: mine.metric, events: clutchEvents?.get(k) ?? [], hasOpponent: theirsAt(win, slot) }, week, k); }
+    catch { return []; }
+    const clock = windowFeedClock(week, win);
+    return offers.filter((o) => {
+      const armed = o.id === 'clutch-don' ? !!targeted.clutchDon?.includes(k) : o.id === 'clutch-encore' ? targeted.clutchEncore?.[k] != null : targeted.clutchCounter?.[k] != null;
+      return !armed && (inventory[o.id] ?? 0) > 0 && clock >= o.armFrom && clock < o.armUntil;
+    });
+  };
+  /** aimSpotOk, plus the clutch gate: a clutch card lands only on a spot that
+   *  has earned its offer. */
+  const spotOk = (id: string, ph: AimPhase, side: 'you' | 'their', spot: { mine: boolean; theirs: boolean }, win: string, slot: string): boolean =>
+    aimSpotOk(id, ph, side, spot) && (!isClutch(id) || clutchOffersAt(win, slot).some((o) => o.id === id));
   /** Does this card have anywhere to land right now? */
   const aimAny = (id: string): boolean => {
     for (const w of winsX) {
@@ -824,7 +863,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       for (let i = 0; i < w.slots; i++) {
         const slot = String(i);
         const spot = { mine: !!mineAt(w.id, slot), theirs: theirsAt(w.id, slot) };
-        if (aimSpotOk(id, ph, 'you', spot) || aimSpotOk(id, ph, 'their', spot)) return true;
+        if (spotOk(id, ph, 'you', spot, w.id, slot) || spotOk(id, ph, 'their', spot, w.id, slot)) return true;
       }
     }
     return false;
@@ -941,8 +980,24 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       ]);
       return;
     }
+    if (rule.clutch) {
+      // The offer decides the clock it records (Counter-Wipe names its nuke).
+      const o = clutchOffersAt(win, slot).find((x) => x.id === id);
+      if (!o) { aimFail(`${powerupById(id)?.name ?? id} isn’t offered on that spot right now.`); endAim(); return; }
+      void playAimed(id, { win, slot, clock: clutchArmClock(o, windowFeedClock(week, win)) });
+      return;
+    }
     const live = rule.when === 'live';
     void playAimed(id, live ? { win, slot, clock: windowFeedClock(week, win) } : { win, slot });
+  };
+  /** Arm a CLUTCH offer straight from its strip on the spot (v0.624.1) — the
+   *  web's "TAP TO ARM" button — without first raising the card in the hand. */
+  const armClutchOffer = (o: ClutchOffer, win: string, slot: string) => {
+    if (!matchup || aimBusy) return;
+    if (!liveBuffsOn) { aimFail("Real-time power-ups are turned off in this league (commissioner's setting)."); return; }
+    if ((inventory[o.id] ?? 0) <= 0) { aimFail('You don’t own that card — buy it in the shop.'); return; }
+    setAiming(null);
+    void playAimed(o.id, { win, slot, clock: clutchArmClock(o, windowFeedClock(week, win)) });
   };
   const onAimWindow = (win: string) => {
     const id = aiming;
@@ -950,12 +1005,34 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     void playAimed(id, id === 'emp' ? { win, clock: windowFeedClock(week, win) } : { win });
   };
 
+  /** The CLUTCH offers lit on one of my spots (v0.624.1): one strip per open
+   *  offer, as the web's board shows it — tap to arm, no hand step. */
+  const clutchStrips = (win: string, slot: string) => {
+    const offers = clutchOffersAt(win, slot);
+    if (!offers.length) return null;
+    return (
+      <View style={{ gap: 6 }}>
+        {offers.map((o) => {
+          const pu = powerupById(o.id);
+          return (
+            <Pressable key={o.id} disabled={aimBusy} onPress={() => { tap(); armClutchOffer(o, win, slot); }}
+              style={({ pressed }) => ({ borderWidth: 1, borderColor: t.warn, backgroundColor: alpha(t.warn, pressed ? 30 : 18), borderRadius: 8, paddingVertical: 10, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, opacity: aimBusy ? 0.5 : 1 })}>
+              <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.5, color: t.warn, flexShrink: 1 }}>
+                {pu?.icon} CLUTCH · {(pu?.name ?? o.id).toUpperCase()} — {o.note}
+              </Text>
+              <Text style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.5, color: t.warn }}>TAP TO ARM →</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  };
   /** The tap strips for one spot — one per side the card can land on. */
   const aimStrips = (win: string, slot: string) => {
-    if (!aiming) return null;
+    if (!aiming) return clutchStrips(win, slot);
     const ph = aimPhase(win);
     const spot = { mine: !!mineAt(win, slot), theirs: theirsAt(win, slot) };
-    const sides = (['you', 'their'] as const).filter((sd) => aimSpotOk(aiming, ph, sd, spot));
+    const sides = (['you', 'their'] as const).filter((sd) => spotOk(aiming, ph, sd, spot, win, slot));
     if (!sides.length) return null;
     const pu = powerupById(aiming);
     return (
@@ -1069,11 +1146,15 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       if (isAimed(p.id)) {
         const any = aimAny(p.id);
         const liveOff = AIM_RULES[p.id].when === 'live' && !liveBuffsOn;
+        // A CLUTCH card (v0.624.1) says what EARNS it while no spot has — the
+        // old line here was "The week has started — arms are closed".
+        const clutch = isClutch(p.id);
         return {
           id: p.id, qty: inventory[p.id] ?? 0, armed: false, action: 'aim',
           usable: any && !liveOff,
           note: liveOff ? "Real-time power-ups are off in this league (commissioner's setting)."
-            : any ? aimPrompt(p.id)
+            : any ? (clutch ? 'Offered now — the spot that earned it is lit on the board. Tap it there, or play from here.' : aimPrompt(p.id))
+            : clutch ? `No spot has earned it yet. ${CLUTCH_TRIGGER[p.id] ?? ''}`.trim()
             : `Nowhere to play it right now. ${aimPrompt(p.id)}`,
         };
       }
