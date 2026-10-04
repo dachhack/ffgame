@@ -13,6 +13,7 @@ import { buildPlayerIndex } from './playerIndex.js';
 import { getGames, gamesToPollFrom, slateFromGames, espnCurrentWeek } from './poll/scoreboard.js';
 import { pollGame, nflWeekForKickoff, nflWeekWindows } from './poll/plays.js';
 import { pollInjuries } from './poll/injuries.js';
+import { pollCollegeAvailability } from './poll/collegeAvailability.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides, installTeamOverrides } from './poll/teamOverrides.js';
 import { syncDepthChart } from './poll/depthChart.js';
@@ -58,6 +59,7 @@ import { setRuntimeSlate, PRESEASON_BASE, PRESEASON_WEEKS } from '../../packages
 
 let playerIndex = null;
 let lastInjuryPoll = 0;
+let lastCollegeAvail = 0;
 // The roster sweep's own clock. Zero means "never run", so the first tick after
 // boot takes a census — a deploy is exactly when the table is most likely stale.
 let lastRosterPoll = 0;
@@ -902,6 +904,24 @@ async function tick() {
         '@', r.feedTimestamp);
     }
     catch (e) { log('injury poll error', e.message); }
+  }
+
+  // THE COLLEGE AVAILABILITY REPORTS (v0.615.0). Founder: "We need to know
+  // status BEFORE the game so people can make roster changes." The Power
+  // Four's conference availability reports, written into injury_status under
+  // c- slugs (see poll/collegeAvailability.js). Its own slow clock: four
+  // multi-megabyte reads, posted on a schedule no faster than hourly. The
+  // clock is set before the read so a failing publisher is retried on the
+  // cadence, not every tick.
+  const availEvery = cfb ? (gameDay(seen, Date.now()) ? config.collegeAvailGamedayMs : config.collegeAvailPollMs) : config.collegeAvailIdleMs;
+  if (Date.now() - lastCollegeAvail >= availEvery) {
+    lastCollegeAvail = Date.now();
+    try {
+      const r = await pollCollegeAvailability({ log });
+      const confs = Object.entries(r.conferences).map(([c, v]) => `${c} ${v.error ? 'ERR ' + v.error : `${v.reports} ${v.types.join('/') || '—'}`}`).join(', ');
+      log(`college availability: ${r.designated} designated (${r.carried} carried) across ${r.schools} schools — ${r.wrote} written, ${r.pruned} cleared${r.prunedSkipped ? ' (prune SKIPPED, a conference did not answer)' : ''}, ${r.unmatched.length} unmatched · ${confs}`);
+      for (const u of r.unmatched.slice(0, 8)) log(`  unmatched ${u.why}: ${u.conf} ${u.team} — ${u.pos} #${u.jersey} ${u.name} (${u.raw})`);
+    } catch (e) { log('college availability error', e.message); }
   }
 
   // WHERE EVERY PLAYER PLAYS (v0.305.0), on the tick rather than on the daily

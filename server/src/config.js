@@ -64,6 +64,14 @@ export const config = {
   injuryPollRampMs: Number(process.env.INJURY_POLL_MS_RAMP || 600000),       // 10m
   injuryRampNearMs: Number(process.env.INJURY_RAMP_NEAR_MS || 2700000),      // 45m
   injuryPollNearMs: Number(process.env.INJURY_POLL_MS_NEAR || 180000),       // 3m
+  // THE CONFERENCE AVAILABILITY REPORTS (v0.615.0): SEC / Big Ten / ACC /
+  // Big 12 reports, read from their publisher. Posted at ~8pm ET three, two
+  // and one day out and ~90 minutes before kickoff, so half an hour is plenty
+  // midweek; ten minutes on a college game day catches the final one before
+  // the lock. Three-hourly when no league is on the college calendar.
+  collegeAvailPollMs: Number(process.env.COLLEGE_AVAIL_MS || 1800000),            // 30m
+  collegeAvailGamedayMs: Number(process.env.COLLEGE_AVAIL_MS_GAMEDAY || 600000),  // 10m
+  collegeAvailIdleMs: Number(process.env.COLLEGE_AVAIL_MS_IDLE || 10800000),      // 3h
   // The ESPN roster sweep (32 small fetches): where every player currently
   // plays. Separate from the Sleeper DIRECTORY refresh below, which is 14MB and
   // stays daily because Sleeper asks for at most one pull a day — one feed

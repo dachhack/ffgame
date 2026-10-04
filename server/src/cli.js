@@ -686,12 +686,16 @@ async function main() {
         // v0.581.0: one pass of the NFL draft prospect pool (0409).
         argv.push('declared-sweep');
         if (req.year) argv.push(String(req.year));
+      } else if (req.mode === 'college-availability') {
+        // v0.615.0: one read of the conference availability reports; `dry` plans only.
+        argv.push('college-avail');
+        if (req.dry) argv.push('--dry');
       } else if (req.mode === 'college-report') {
         // v0.550.1: read-only — plays stored for rostered college players.
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | offboard-sweep`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | offboard-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -804,6 +808,30 @@ async function main() {
       const weeks = String(args[0] ?? '').split(',').map(Number).filter(Number.isFinite).filter(Boolean);
       const league = args.find((a) => a.startsWith('--league='))?.slice(9);
       await collegeReport({ weeks, leagues: league ? [league] : null });
+      break;
+    }
+    case 'college-avail': {
+      // ▶ THE CONFERENCE AVAILABILITY REPORTS, NOW (v0.615.0).
+      //   node src/cli.js college-avail [--dry]
+      //   Reads the SEC / Big Ten / ACC / Big 12 reports, prints every
+      //   designation it would write (and the rostered players among them)
+      //   and every row it could not match. --dry touches nothing.
+      const { pollCollegeAvailability } = await import('./poll/collegeAvailability.js');
+      const r = await pollCollegeAvailability({ dryRun: args.includes('--dry'), log: (...a) => console.log(...a) });
+      const { upserts, unmatched, ...summary } = r;
+      console.log(JSON.stringify(summary, null, 2));
+      const { data: rostered } = await db().from('native_roster').select('slug, league_id').like('slug', 'c-%').limit(5000);
+      const inLeague = new Set((rostered ?? []).map((x) => x.slug));
+      const ids = upserts.map((u) => u.player_slug.slice(2));
+      const names = new Map();
+      for (let i = 0; i < ids.length; i += 500) {
+        const { data } = await db().from('college_player').select('espn_id, full_name, pos, school_abbr').in('espn_id', ids.slice(i, i + 500));
+        for (const x of data ?? []) names.set(`c-${x.espn_id}`, `${x.full_name} (${x.pos}, ${x.school_abbr})`);
+      }
+      console.log(`\n${upserts.length} designation(s):`);
+      for (const u of upserts) console.log(`  ${inLeague.has(u.player_slug) ? '★' : ' '} ${u.status.padEnd(2)} ${u.player_slug.padEnd(11)} ${(names.get(u.player_slug) ?? '?').padEnd(36)} ${u.comment}`);
+      console.log(`\n★ = rostered in a league. ${unmatched.length} unmatched row(s):`);
+      for (const u of unmatched) console.log(`  ${u.why.padEnd(6)} ${u.conf} ${u.team} — ${u.pos} #${u.jersey} ${u.name} (${u.raw})`);
       break;
     }
     case 'offboard-sweep': {
