@@ -23,7 +23,7 @@ import { SimStrip } from './SimStrip';
 import { SportWeekPanel } from './SportWeekPanel';
 import { SPORTS } from '@drip/core/sports/index';
 import { sportGameFor, sportEntryState, sportKickLabel, sportOpponentLabel, sportToday, type SportSlateGame } from '@drip/core/sports/slate';
-import { sportPeriod } from '@drip/core/sports/league';
+import { sportPeriod, sportNow } from '@drip/core/sports/league';
 import { setSportNames, sportNameFor, type Sport } from '@drip/core/sports/index';
 import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/league';
 import { headshot } from '@drip/core/data/media';
@@ -920,8 +920,9 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       // A DAILY SPORT (v0.625.0): today's game for the player's team, else the
       // team's next one in the period — from sport_game, never the NFL slate.
       if (sport !== 'nfl') {
-        const sg = sportGameFor(team, sportGames, sportToday(new Date(nowTs)));
-        const sst = sportEntryState(sg, nowTs);
+        const vnow = sportNow(sportSettings, new Date(nowTs));
+        const sg = sportGameFor(team, sportGames, sportToday(vnow));
+        const sst = sportEntryState(sg, vnow.getTime());
         return {
           slug, name: prettySlug(slug), pos: meta.pos ?? '', team: team || null,
           live: pts(slug, slotPos),
@@ -980,7 +981,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue, sport, sportGames, vocab]);
+  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue, sport, sportGames, vocab, sportSettings]);
 
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
   // the engine's fills — the same bestballFill the worker scores with.
@@ -1094,13 +1095,14 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // the headline totals above it can only ever agree.
   const chips = useMemo(() => {
     // A daily sport's chip counts TODAY's games (v0.625.0).
+    const vToday = sportToday(sportNow(sportSettings, new Date(nowTs)));
     const chipSlate = sport !== 'nfl'
-      ? sportGames.filter((g) => g.game_date === sportToday(new Date(nowTs)) && g.status !== 'postponed' && g.status !== 'cancelled').map((g) => ({ home: g.home, away: g.away, kickoff: g.start_utc }))
+      ? sportGames.filter((g) => g.game_date === vToday && g.status !== 'postponed' && g.status !== 'cancelled').map((g) => ({ home: g.home, away: g.away, kickoff: g.start_utc }))
       : slate;
     const chipFinal = sport !== 'nfl'
-      ? new Set(sportGames.filter((g) => g.game_date === sportToday(new Date(nowTs)) && g.status === 'final').flatMap((g) => [g.home, g.away]))
+      ? new Set(sportGames.filter((g) => g.game_date === vToday && g.status === 'final').flatMap((g) => [g.home, g.away]))
       : finalTeams;
-    const base = board ? slateChips(board.starters, chipSlate, nowTs, chipFinal, liveScores) : [];
+    const base = board ? slateChips(board.starters, chipSlate, sport !== 'nfl' ? sportNow(sportSettings, new Date(nowTs)).getTime() : nowTs, chipFinal, liveScores) : [];
     // 🧪 REHEARSAL (v0.368.0): the chips' state comes from the slate clock,
     // which under a sim sits in the future — so the NFL SLATE chip kept saying
     // "9 starters to play" over a board of live rows. Same override rule as
@@ -1110,7 +1112,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     return base.map((c) => (simTeams.has(normTeam(c.home)) || simTeams.has(normTeam(c.away))
       ? { ...c, state: (matchup?.status === 'final' ? 'done' : 'live') as SlateChip['state'] }
       : c));
-  }, [board, slate, nowTs, finalTeams, liveScores, simTeams, matchup, sport, sportGames]);
+  }, [board, slate, nowTs, finalTeams, liveScores, simTeams, matchup, sport, sportGames, sportSettings]);
   // THE WEEK'S SCOREBOARD (v0.323.0), out of the feeds the board already has —
   // every game the worker has polled, not only the ones this matchup is in.
   const slateTotals = useMemo(() => slateSummary(chips), [chips]);

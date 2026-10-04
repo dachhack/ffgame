@@ -53,7 +53,7 @@ import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
 import { tickSports } from './poll/sportGames.js';
 import { syncSportDirectory } from './poll/sportDirectory.js';
-import { lockStartedGames, resolveSportLeagues } from './sportLeague.js';
+import { lockStartedGames, resolveSportLeagues, sportReplayClocks } from './sportLeague.js';
 import { currentSeason } from '../../packages/core/src/sports/league.ts';
 import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 import { db } from './supabase.js';
@@ -1154,12 +1154,19 @@ async function main() {
     const sportsLoop = async () => {
       let live = false, nextStartMs = null;
       try {
-        const r = await tickSports(config.sports);
+        // REPLAY LEAGUES (v0.626.0) read a past season on a shifted clock; the
+        // tick polls their virtual days beside the real ones.
+        const clocks = {};
+        for (const sport of config.sports) {
+          try { clocks[sport] = await sportReplayClocks(sport); } catch (e) { log(`sport replay clocks ${sport}:`, e.message); }
+        }
+        const r = await tickSports(config.sports, new Date(), clocks);
         live = r.live; nextStartMs = r.nextStartMs;
         // Then the leagues (0426): lock what just started, score what is live.
         for (const sport of config.sports) {
           try {
-            const locked = await lockStartedGames(sport, r.games[sport] ?? []);
+            let locked = await lockStartedGames(sport, r.games[sport] ?? []);
+            for (const b of r.replays?.[sport] ?? []) locked += await lockStartedGames(sport, b.games, b.nowMs, b.offsetDays);
             const c = await resolveSportLeagues(sport);
             if (locked || c.matchups) log(`sport leagues ${sport}: ${locked} slot-days locked, ${c.matchups} matchups scored, ${c.finals} final`);
           } catch (e) { log(`sport leagues ${sport}:`, e.message); }

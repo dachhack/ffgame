@@ -156,4 +156,19 @@ process.exit(fails ? 1 : 0);
   ok(sportEntryState(sportGameFor('NYY', games.slice(2, 3), today), Date.now()) === 'done' && sportEntryState(mtl, Date.now()) === 'pre', 'final is done; a later day is pre');
   ok(/^\d{4}-\d{2}-\d{2}$/.test(sportToday()), 'sportToday is an ISO date');
 }
+
+// ── v0.626.0: the replay clock ──────────────────────────────────────────────
+{
+  const { sportLeagueSettings, sportSettingsOf, sportNow, daysBetween, priorSeason } = await import('../packages/core/src/sports/league.ts');
+  ok(daysBetween('2025-08-04', '2026-08-03') === 364 && daysBetween('2026-10-05', '2026-10-01') === -4, 'daysBetween counts whole days, signed');
+  const live = sportLeagueSettings('mlb', { periodStart: '2026-10-07' });
+  ok(!live.sport.replay, 'a live league has no replay block');
+  const rp = sportLeagueSettings('mlb', { periodStart: '2025-08-04', replay: { season: '2025', anchor: '2026-10-07' } });
+  ok(rp.sport.replay?.season === '2025' && rp.sport.replay?.offset_days === daysBetween('2025-08-04', '2026-10-05'), `a replay stores the season and the offset to this week's Monday (${rp.sport.replay?.offset_days}d)`);
+  const parsed = sportSettingsOf(rp);
+  ok(parsed?.replay?.offset_days === rp.sport.replay?.offset_days && sportSettingsOf(live)?.replay === null, 'the block round-trips; absent reads null');
+  const real = new Date('2026-10-07T23:00:00Z');
+  ok(sportNow(parsed, real).getTime() === real.getTime() - rp.sport.replay.offset_days * 86400e3 && sportNow(sportSettingsOf(live), real).getTime() === real.getTime(), 'sportNow shifts a replay league and leaves a live one alone');
+  ok(priorSeason('mlb', new Date('2026-10-04T12:00:00Z')) === '2025' && priorSeason('nhl', new Date('2026-10-04T12:00:00Z')) === '2025' && priorSeason('nba', new Date('2026-03-01T12:00:00Z')) === '2024', 'priorSeason is the season before the current one');
+}
 console.log('ALL SPORT CHECKS PASSED');

@@ -22,6 +22,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.626.0 — a sport league can replay last season
+
+> - Start an MLB (or NHL) league on REPLAY and it plays the 2025 season day by day from the week you pick: first pitch, locks and finals land at the hour they did then.
+
+Founder, with the MLB season over: "Went into MLB league but no games
+scheduled. Maybe demo with MLB 2025 data for now."
+
+**The clock.** A replay league's `settings_json.sport.replay` is
+`{season, offset_days}` and its `league.season` is the replayed season;
+`offset_days` is how far behind the real clock it runs (this week's Monday
+− the first week's Monday), so week 301 opens this real week. Core:
+`sportNow(settings)`, `daysBetween`, `priorSeason`; `sportLeagueSettings`
+takes `replay: {season}`.
+
+**The worker** (`poll/sportGames.js`): `tickSports` polls, beside the real
+yesterday and today, each replay clock's virtual yesterday and today for
+its season; `replayGame` reads a past final through the clock — before its
+start it is `pre` with no score and no box fetch, for three hours after it
+is `live` with the final line written, then `final`. `sportReplayClocks`
+finds the clocks (drafted or not, so a league still drafting sees its
+slate); `lockStartedGames` takes the clock's offset and locks only the
+leagues on it; `resolveSportLeagues` reads each league's today off its
+own clock and only its season's live games. The next wake-up is a virtual
+start plus the offset. CLI: `sport-poll mlb 2025-08-04 --replay=2025`
+backfills a day already behind a replay league.
+
+**0434** — `sport_slug_started`, the lineup gate's "has his game started",
+shifts `now()` by the league's offset. Everything else already joined on
+`league.season`. Proven on the local Postgres: a 400-day-old final is "not
+today" on a live league and "started" on a league 400 days behind.
+
+**The boards** (web + app) and both week panels read today and a row's
+state off `sportNow(settings)`.
+
+**Creation (web).** SEASON: LIVE · 2026 / REPLAY · 2025. On REPLAY the
+first week defaults to the same calendar week a year back and the picker
+moves it; the copy says to pick a week when the season was in full swing
+(MLB: April to September). The app's form does not offer replay yet.
+
+Verified: `check:sports` (the clock, the block's round trip, replayGame's
+three states and the fetch rule); a dry run of MLB 2025-08-04 through a
+7:30pm clock against the live feed; typecheck, the app's tsc.
+
+Not for NBA/WNBA: their feed reads a past date off the current season's
+schedule file only.
+
 ### v0.625.0 — a sport league's board reads its own games; the NFL's controls stay the NFL's
 
 > - An NBA, NHL or MLB league's lineup now shows each player's game tonight (or next) with tip-off, puck drop or first pitch — not "no game listed" under an NFL slate.
