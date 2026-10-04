@@ -52,4 +52,5 @@ export const NFL: SportDef = {
   gamesPerTeam: 17,
   regularSeasonWeeks: 14,
   keyPrefix: 'nfl',
+  vocab: { start: 'kickoff', starts: 'kicks off', started: 'kicked off', slate: 'NFL SLATE', noGame: 'no game this week' },
 };

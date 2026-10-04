@@ -38,6 +38,21 @@ const lineRow = (g, l, key) => ({
   line: l.line, updated_at: new Date().toISOString(),
 });
 
+/** REPLAY (v0.626.0): a past season's game, as the league's shifted clock
+ *  sees it. Before its start: 'pre', no score, no clock, no box fetch. For
+ *  three hours after: 'live' — the box score (which is the final one) is
+ *  written, so points land the way a lock expects them to. Then 'final'.
+ *  Postponed and cancelled games stay what they were. */
+export const REPLAY_LIVE_MS = 3 * 3600e3;
+export function replayGame(g, vnowMs) {
+  if (g.status === 'postponed' || g.status === 'cancelled') return g;
+  const start = g.startUtc ? Date.parse(g.startUtc) : null;
+  if (start == null) return g;
+  if (start > vnowMs) return { ...g, status: 'pre', awayScore: null, homeScore: null, clock: null };
+  if (vnowMs < start + REPLAY_LIVE_MS) return { ...g, status: 'live', clock: null };
+  return { ...g, status: 'final', clock: null };
+}
+
 /** Which of the day's games get a box-score fetch: live ones always; finals
  *  only until they are stored as final (or when forced). */
 export function gamesToFetch(games, stored, force = false) {
@@ -49,9 +64,11 @@ export function gamesToFetch(games, stored, force = false) {
 }
 
 /** One pass for one sport and one date. Returns counts. */
-export async function pollSportDay(sport, date, { force = false } = {}) {
+export async function pollSportDay(sport, date, { force = false, replay = null } = {}) {
   const adapter = adapterFor(sport);
-  const games = await adapter.schedule(date);
+  let games = await adapter.schedule(date);
+  // A replay poll reads the past season's day through the league's clock.
+  if (replay) games = games.map((g) => replayGame({ ...g, season: replay.season }, replay.nowMs));
   // `live` is the SCHEDULE's word, not the box score's: a game the feed says
   // is on keeps the loop at its live cadence even while its box fetch fails.
   const counts = { sport, date, games: games.length, fetched: 0, lines: 0, live: games.filter((g) => g.status === 'live').length, errors: 0, rows: games };
@@ -71,6 +88,8 @@ export async function pollSportDay(sport, date, { force = false } = {}) {
       // The box score's own view of the game (score, clock, status) is fresher
       // than the schedule's — write it too.
       const merged = { ...g, ...game, gameDate: g.gameDate || game.gameDate };
+      // The replay clock, not the box score, says where the game is.
+      if (replay) Object.assign(merged, { season: replay.season, status: g.status, clock: null });
       const rows = [];
       for (const l of lines) {
         try { rows.push(lineRow(merged, l, await xrefKey(sport, l))); }
@@ -118,11 +137,12 @@ export async function repollStaleLive(sport, now = new Date()) {
  *  lands after ET midnight). Returns whether any game is live (the caller
  *  tightens its cadence), the next start still ahead (so it can wake for
  *  a tip-off), and the games seen per sport (for the league lock pass). */
-export async function tickSports(sports, now = new Date()) {
+export async function tickSports(sports, now = new Date(), clocks = {}) {
   let live = false, nextStartMs = null;
-  const games = {};
+  const games = {}, replays = {};
   for (const sport of sports) {
     games[sport] = [];
+    replays[sport] = [];
     for (const off of [-1, 0]) {
       const date = easternDate(now, off);
       try {
@@ -140,8 +160,33 @@ export async function tickSports(sports, now = new Date()) {
         log(`${sport} ${date}: ${e.message}`);
       }
     }
+    // REPLAY LEAGUES (v0.626.0): one batch per distinct clock — the past
+    // season's yesterday and today as that clock reads them. A game's real
+    // wake-up is its virtual start plus the offset.
+    for (const clock of clocks[sport] ?? []) {
+      const vnow = new Date(now.getTime() - clock.offsetDays * 86400e3);
+      const batch = { season: clock.season, offsetDays: clock.offsetDays, nowMs: vnow.getTime(), games: [] };
+      for (const off of [-1, 0]) {
+        const date = easternDate(vnow, off);
+        try {
+          const c = await pollSportDay(sport, date, { replay: { season: clock.season, nowMs: vnow.getTime() } });
+          if (c.games) log(`${sport} replay ${clock.season} ${date} (${clock.offsetDays}d behind): ${c.games} games, ${c.fetched} fetched, ${c.lines} lines${c.live ? `, ${c.live} live` : ''}`);
+          if (c.live) live = true;
+          batch.games.push(...c.rows);
+          for (const g of c.rows) {
+            if (g.status === 'pre' && g.startUtc) {
+              const t = Date.parse(g.startUtc) + clock.offsetDays * 86400e3;
+              if (t > now.getTime() && (nextStartMs == null || t < nextStartMs)) nextStartMs = t;
+            }
+          }
+        } catch (e) {
+          log(`${sport} replay ${clock.season} ${date}: ${e.message}`);
+        }
+      }
+      replays[sport].push(batch);
+    }
     try { const moved = await repollStaleLive(sport, now); if (moved) log(`${sport}: ${moved} stale live game(s) closed`); }
     catch (e) { log(`${sport} stale: ${e.message}`); }
   }
-  return { live, nextStartMs, games };
+  return { live, nextStartMs, games, replays };
 }

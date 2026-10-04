@@ -28,6 +28,8 @@
 // the source can't separate stay in the order the league already agreed on.
 
 import { adpValue } from './adp2026';
+import { parsePlayerKey } from '../sports/index';
+import { sportAdpFor, sportPpgFor, clearSportMarket } from '../sports/market';
 import { dynFor, setDynFormat } from './dyn2026';
 import { projectedPoints, hasProjection } from '../engine/projScoring';
 import { slugSleeperId } from './slugMeta';
@@ -162,7 +164,8 @@ export function adpLabel(bakedAsOf: string): string {
 }
 
 export const adpFor = (slug: string): number | null =>
-  liveAdp?.[slug] ?? adpValue(slug);
+  // A sport key (v0.627.0) prices off the sport market, never the NFL bake.
+  parsePlayerKey(slug) ? sportAdpFor(slug) : liveAdp?.[slug] ?? adpValue(slug);
 // THE PROJECTION IS THE LEAGUE'S, NOT THE BAKE'S (v0.310.0, founder: "so we
 // can apply scoring changes to the projections in waivers, drafts and the
 // matchup board by league and position?"). It could not: v0.308.0 built the
@@ -185,7 +188,9 @@ export const adpFor = (slug: string): number | null =>
 // from the skill positions, and asking the skill bake about them is how they'd
 // stay pinned to the bottom of the very list this was meant to lift them off.
 export const projFor = (slug: string, pos?: string | null): number | null =>
-  hasProjection(slug, slugSleeperId(slug))
+  // A sport key (v0.627.0): last season's per-game rate under the league's table.
+  parsePlayerKey(slug) ? sportPpgFor(slug)
+  : hasProjection(slug, slugSleeperId(slug))
     ? projectedPoints({ id: slug, pos: pos ?? '', team: null })
     : null;
 
@@ -267,5 +272,5 @@ export function installLiveMarket(r: LiveMarketPayload): void {
  *  screen calls this before it asks for its own market, and the store calls
  *  it when a league is closed, so nothing outlives the league it belongs to. */
 export function clearLiveMarket(): void {
-  clearLiveAdp(); _clearDyn(); _clearPicks(); _clearProj();
+  clearLiveAdp(); _clearDyn(); _clearPicks(); _clearProj(); clearSportMarket();
 }

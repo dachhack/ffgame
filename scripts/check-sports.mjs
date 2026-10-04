@@ -126,3 +126,77 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport checks passed');
 process.exit(fails ? 1 : 0);
+
+// ── v0.625.0: the vocabulary and the board's slate helper ───────────────────
+{
+  const { sportGameFor, sportEntryState, sportKickLabel, sportOpponentLabel, sportToday } = await import('../packages/core/src/sports/slate.ts');
+  for (const id of SPORT_IDS) {
+    const v = SPORTS[id].vocab;
+    ok(v && ['start', 'starts', 'started', 'slate', 'noGame'].every((k) => typeof v[k] === 'string' && v[k].length > 0), `${id}: a full vocabulary`);
+    ok(v.slate === `${SPORTS[id].league} SLATE`, `${id}: the slate chip names the league`);
+  }
+  ok(SPORTS.nfl.vocab.start === 'kickoff' && SPORTS.nba.vocab.start === 'tip-off' && SPORTS.nhl.vocab.start === 'puck drop' && SPORTS.mlb.vocab.start === 'first pitch', 'the four words');
+  const games = [
+    { game_id: 'a', game_date: '2026-10-06', start_utc: '2026-10-06T23:00:00Z', status: 'pre', away: 'BOS', home: 'TOR', away_score: null, home_score: null, clock: null },
+    { game_id: 'b', game_date: '2026-10-08', start_utc: '2026-10-08T23:30:00Z', status: 'pre', away: 'TOR', home: 'MTL', away_score: null, home_score: null, clock: null },
+    { game_id: 'c', game_date: '2026-10-06', start_utc: '2026-10-06T17:00:00Z', status: 'final', away: 'NYY', home: 'BOS', away_score: 3, home_score: 5, clock: null },
+    { game_id: 'd', game_date: '2026-10-06', start_utc: '2026-10-06T23:00:00Z', status: 'pre', away: 'NYY', home: 'BOS', away_score: null, home_score: null, clock: null },
+    { game_id: 'e', game_date: '2026-10-07', start_utc: null, status: 'postponed', away: 'CHI', home: 'DET', away_score: null, home_score: null, clock: null },
+  ];
+  const today = '2026-10-06';
+  const tor = sportGameFor('TOR', games, today);
+  ok(tor && tor.today && tor.home && tor.opponent === 'BOS' && sportOpponentLabel(tor) === 'vs BOS', 'today\'s game wins, home side read');
+  ok(sportKickLabel(tor) === '7p', `today's game prints the time (${sportKickLabel(tor)})`);
+  const mtl = sportGameFor('MTL', games, today);
+  ok(mtl && !mtl.today && mtl.date === '2026-10-08' && sportKickLabel(mtl) === 'Thu 7:30p', `no game today → the next one in the period (${sportKickLabel(mtl)})`);
+  const bos = sportGameFor('BOS', games, today);
+  ok(bos && bos.gameId === 'd', 'a doubleheader: the game not yet final is the one the row talks about');
+  ok(sportGameFor('CHI', games, today) === null && sportGameFor('', games, today) === null, 'postponed games and blank teams give nothing');
+  ok(sportEntryState(tor, Date.parse('2026-10-06T22:00:00Z')) === 'pre' && sportEntryState(tor, Date.parse('2026-10-06T23:01:00Z')) === 'live', 'pre until the start passes, then live even before the poll');
+  ok(sportEntryState(sportGameFor('NYY', games.slice(2, 3), today), Date.now()) === 'done' && sportEntryState(mtl, Date.now()) === 'pre', 'final is done; a later day is pre');
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(sportToday()), 'sportToday is an ISO date');
+}
+
+// ── v0.626.0: the replay clock ──────────────────────────────────────────────
+{
+  const { sportLeagueSettings, sportSettingsOf, sportNow, daysBetween, priorSeason } = await import('../packages/core/src/sports/league.ts');
+  ok(daysBetween('2025-08-04', '2026-08-03') === 364 && daysBetween('2026-10-05', '2026-10-01') === -4, 'daysBetween counts whole days, signed');
+  const live = sportLeagueSettings('mlb', { periodStart: '2026-10-07' });
+  ok(!live.sport.replay, 'a live league has no replay block');
+  const rp = sportLeagueSettings('mlb', { periodStart: '2025-08-04', replay: { season: '2025', anchor: '2026-10-07' } });
+  ok(rp.sport.replay?.season === '2025' && rp.sport.replay?.offset_days === daysBetween('2025-08-04', '2026-10-05'), `a replay stores the season and the offset to this week's Monday (${rp.sport.replay?.offset_days}d)`);
+  const parsed = sportSettingsOf(rp);
+  ok(parsed?.replay?.offset_days === rp.sport.replay?.offset_days && sportSettingsOf(live)?.replay === null, 'the block round-trips; absent reads null');
+  const real = new Date('2026-10-07T23:00:00Z');
+  ok(sportNow(parsed, real).getTime() === real.getTime() - rp.sport.replay.offset_days * 86400e3 && sportNow(sportSettingsOf(live), real).getTime() === real.getTime(), 'sportNow shifts a replay league and leaves a live one alone');
+  ok(priorSeason('mlb', new Date('2026-10-04T12:00:00Z')) === '2025' && priorSeason('nhl', new Date('2026-10-04T12:00:00Z')) === '2025' && priorSeason('nba', new Date('2026-03-01T12:00:00Z')) === '2024', 'priorSeason is the season before the current one');
+}
+
+// ── v0.627.0: the sport market on the client ────────────────────────────────
+{
+  const { installSportMarket, clearSportMarket, sportAdpFor, sportPpgFor, sportWeekProjFor, sportSeasonProjFor, sportGamesLeftThisWeek } = await import('../packages/core/src/sports/market.ts');
+  const { adpFor, projFor } = await import('../packages/core/src/data/poolSort.ts');
+  const nba = SPORTS.nba;
+  installSportMarket(nba, { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, tov: -1 }, {
+    ok: true, today: '2026-10-07',
+    rows: [
+      { slug: 'nba-1', adp: 1.6, gp: 70, season_line: { pts: 2100, reb: 840, ast: 700, stl: 70, blk: 70, tov: 210 }, team: 'DEN' },
+      { slug: 'nba-2', adp: null, gp: 0, season_line: null, team: 'LAL' },
+      { slug: 'nba-3', adp: 12.5, gp: 10, season_line: { pts: 100 }, team: 'BOS' },
+    ],
+    week_games: { DEN: ['2026-10-05', '2026-10-07', '2026-10-09'], LAL: ['2026-10-06'] },
+    season_left: { DEN: 80, LAL: 79 },
+    calendar: true, adp_at: '2026-10-04T00:00:00Z',
+  });
+  const ppg = (2100 + 840 * 1.2 + 700 * 1.5 + 70 * 3 + 70 * 3 - 210) / 70;
+  ok(Math.abs((sportPpgFor('nba-1') ?? 0) - ppg) < 1e-9, `per-game rate under the league's table (${ppg.toFixed(2)})`);
+  ok(sportGamesLeftThisWeek('nba-1').join() === '2026-10-07,2026-10-09' && Math.abs((sportWeekProjFor('nba-1') ?? 0) - 2 * ppg) < 1e-9, 'this week: the games on or after today');
+  ok(Math.abs((sportSeasonProjFor('nba-1') ?? 0) - 80 * ppg) < 1e-9, 'the season: games left × the rate');
+  ok(sportPpgFor('nba-2') === null && sportWeekProjFor('nba-2') === null && sportAdpFor('nba-2') === null, 'no line, no games: null, not 0');
+  ok(sportWeekProjFor('nba-3') === 0 && sportSeasonProjFor('nba-3') === null, 'a team with no dates left this week projects 0; no calendar row → null season');
+  ok(adpFor('nba-1') === 1.6 && Math.abs((projFor('nba-1', 'C') ?? 0) - ppg) < 1e-9, 'poolSort routes sport keys to the sport market');
+  ok(adpFor('josh-allen') !== 1.6, 'an NFL slug never reads the sport market');
+  clearSportMarket();
+  ok(sportAdpFor('nba-1') === null, 'cleared with the league');
+}
+console.log('ALL SPORT CHECKS PASSED');

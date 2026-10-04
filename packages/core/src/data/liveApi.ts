@@ -4006,6 +4006,10 @@ export const sportMatchupLines = (matchupId: string) =>
 export interface SportGameRow { game_id: string; game_date: string; start_utc: string | null; status: string; away: string; home: string; away_score: number | null; home_score: number | null; clock: string | null }
 export const sportLeagueGames = (leagueId: string, from: string, to: string) =>
   rpc<SportGameRow[]>('sport_league_games', { p_league_id: leagueId, p_from: from, p_to: to });
+/** THE SPORT MARKET (0435, v0.627.0): ADP, games played and the season line
+ *  per pool player, plus each team's dates this period and games left. */
+export const sportLeagueMarket = (leagueId: string) =>
+  rpc<import('../sports/market').SportMarketPayload>('sport_league_market', { p_league_id: leagueId });
 /** ROTO (0427): the worker's season ranking per seat — total points and the
  *  per-category value + place points. */
 export interface SportRotoRow { roster_id: number; points: number; totals: Record<string, number>; cats: Record<string, { value: number | null; points: number }>; updated_at: string }

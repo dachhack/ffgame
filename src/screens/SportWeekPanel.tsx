@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SPORTS, eligibleFor, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryValue, categoryById } from '@drip/core/sports/score';
-import { sportPeriod, type SportLeagueSettings } from '@drip/core/sports/league';
+import { sportPeriod, sportNow, type SportLeagueSettings } from '@drip/core/sports/league';
 import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
 import { PosPill } from '../app/ui';
 
@@ -62,7 +62,8 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
   const home = side(homeRosterId), away = side(awayRosterId);
   const cats = settings.format === 'cats' && settings.categories.length
     ? compareCategories(def, home.totals, away.totals, settings.categories) : null;
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  // The league's clock (v0.626.0): a replay league's today is a past date.
+  const today = sportNow(settings).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const slate = games.filter((g) => g.game_date === today);
   const lead = cats ? cats.winner : home.total === away.total ? 'tie' : home.total > away.total ? 'a' : 'b';
   const seatName = (rid: number) => names?.[rid] ?? `SEAT ${rid}`;

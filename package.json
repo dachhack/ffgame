@@ -27,7 +27,7 @@
     "check:injuries": "tsx scripts/check-injuries.mjs",
     "check:injurymerge": "tsx scripts/check-injury-merge.mjs",
     "check:markfree": "tsx scripts/check-mark-free.mjs",
-    "check:sports": "tsx scripts/check-sports.mjs && cd server && tsx test/sports-adapters.mjs && tsx test/sports-poller.mjs && tsx test/sports-directory.mjs && tsx test/sports-league.mjs && tsx test/sports-league-io.mjs",
+    "check:sports": "tsx scripts/check-sports.mjs && cd server && tsx test/sports-adapters.mjs && tsx test/sports-poller.mjs && tsx test/sports-directory.mjs && tsx test/sports-league.mjs && tsx test/sports-league-io.mjs && tsx test/sports-market.mjs",
     "check:seatfull": "tsx scripts/check-seat-full.mjs",
     "check:adjust": "tsx scripts/check-adjust.mjs",
     "check:lineupfix": "tsx scripts/check-lineup-fix.mjs",

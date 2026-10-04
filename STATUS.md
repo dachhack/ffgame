@@ -22,6 +22,171 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.627.1 — the ADP pages' team codes, read live
+
+> - Every NBA, NHL and MLB player on the ADP pages now lands on his real team in the draft room.
+
+A live read of the three pages after v0.627.0: the NBA page writes NOR and
+UTH (now NOP and UTA), and the MLB page's small print has no team for a
+free agent ("SP,DH"), so the first token — a position — was read as one,
+while SF was dropped as a small forward on a page where it is the Giants.
+The team is now the token LEFT of the dash only, and the position codes
+that are never a team are listed per sport. Live: 31/32/31 team sets, the
+feeds' codes exactly, FA blank.
+
+### v0.627.0 — ADP and projections for the daily sports
+
+> - NBA, NHL and MLB draft rooms sort by consensus pre-season ADP; a new league's pool opens in draft order.
+> - Lineups project this week from last season's per-game rate × the games ahead; the player card shows PROJ / G, THIS WEEK and SEASON.
+
+Founder: "Let's make weekly and season long projections for new sports from
+previous season actuals. Also pull in pre season ADP for these sports for
+draft testing."
+
+**ADP.** FantasyPros' overall ADP page per sport — the consensus of the
+sites it averages (Yahoo, ESPN, CBS, NFBC…), its AVG column. ESPN's own API
+was checked first: its NBA and NHL ADP is live for 2026-27, its MLB 2026
+ADP is a dead placeholder with the season over, so one page format for all
+three won. `poll/sportMarket.js` parses the three page shapes (the small
+print beside a name is "(DEN - C)", "COL" with a position column, or a
+linked "(LAD - SP,DH)"; rows have no closing `</tr>`), maps the pages' team
+codes to the feeds' (`TEAM_ALIAS`: TB→TBL, NJ→NJD, GS→GSW, ChW→CWS, Ari→AZ…),
+and matches names through the box scores' crosswalk rule plus a unique-name
+fallback for a player the page has on his old team. Written to
+`sport_player.adp` (0435 `sport_adp_upsert`). `seed_sport_pool` orders a
+new pool by ADP first, then the production rank — so RANK, which the
+autopick follows, drafts like the market.
+
+**The calendar.** ESPN's season payload (`proTeamSchedules_wl`): every pro
+team's games by date in one request per sport — the feeds serve a day at a
+time, and the NBA's season file refuses this container. `sport_calendar`
+(0435 `sport_calendar_upsert`), ET dates, feed tricodes. ESPN names an
+NBA/NHL season by the year it ends (`espnSeasonId`).
+
+**Projections.** No model and no feed: a player's per-game rate is his
+season line (the directory's) scored under THIS league's table over his
+games played, × the games his team has — the dates left in the period for
+THIS WEEK, the games left in the season for SEASON. `sport_league_market`
+(0435) returns each pool player's ADP, GP and line plus each team's dates
+this period and games left (a replay season has no calendar, so the polled
+games stand in). `core/sports/market.ts` holds it per league and prices
+`adpFor` / `projFor` for sport keys in `poolSort`, so the draft room's ADP
+and PROJ columns, the SORT chips and the wire fill in; the classic board's
+rows project this week's remaining games; the sport card adds ADP, PROJ / G,
+THIS WEEK and SEASON. Installed where the NFL market is (draft room, wire,
+board; the app's draft and team screens) and cleared with it.
+
+The worker sweeps the market daily after the directory (`sport market nhl:
+…` in the log); CLI `sport-market <sport> [season]`.
+
+Verified: `server/test/sports-market.mjs` on saved page and payload
+fixtures (40 rows per sport, the first players, the aliases, the calendar's
+dedupe, the match rule); `check-sports` pins the market math; the market
+RPC on the local Postgres with seeded ADP and calendar rows; typecheck and
+the app's tsc.
+
+Not yet: WNBA ADP (no page); ownership %; the app's card tiles.
+
+### v0.626.0 — a sport league can replay last season
+
+> - Start an MLB (or NHL) league on REPLAY and it plays the 2025 season day by day from the week you pick: first pitch, locks and finals land at the hour they did then.
+
+Founder, with the MLB season over: "Went into MLB league but no games
+scheduled. Maybe demo with MLB 2025 data for now."
+
+**The clock.** A replay league's `settings_json.sport.replay` is
+`{season, offset_days}` and its `league.season` is the replayed season;
+`offset_days` is how far behind the real clock it runs (this week's Monday
+− the first week's Monday), so week 301 opens this real week. Core:
+`sportNow(settings)`, `daysBetween`, `priorSeason`; `sportLeagueSettings`
+takes `replay: {season}`.
+
+**The worker** (`poll/sportGames.js`): `tickSports` polls, beside the real
+yesterday and today, each replay clock's virtual yesterday and today for
+its season; `replayGame` reads a past final through the clock — before its
+start it is `pre` with no score and no box fetch, for three hours after it
+is `live` with the final line written, then `final`. `sportReplayClocks`
+finds the clocks (drafted or not, so a league still drafting sees its
+slate); `lockStartedGames` takes the clock's offset and locks only the
+leagues on it; `resolveSportLeagues` reads each league's today off its
+own clock and only its season's live games. The next wake-up is a virtual
+start plus the offset. CLI: `sport-poll mlb 2025-08-04 --replay=2025`
+backfills a day already behind a replay league.
+
+**0434** — `sport_slug_started`, the lineup gate's "has his game started",
+shifts `now()` by the league's offset. Everything else already joined on
+`league.season`. Proven on the local Postgres: a 400-day-old final is "not
+today" on a live league and "started" on a league 400 days behind.
+
+**The boards** (web + app) and both week panels read today and a row's
+state off `sportNow(settings)`.
+
+**Creation (web).** SEASON: LIVE · 2026 / REPLAY · 2025. On REPLAY the
+first week defaults to the same calendar week a year back and the picker
+moves it; the copy says to pick a week when the season was in full swing
+(MLB: April to September). The app's form does not offer replay yet.
+
+Verified: `check:sports` (the clock, the block's round trip, replayGame's
+three states and the fetch rule); a dry run of MLB 2025-08-04 through a
+7:30pm clock against the live feed; typecheck, the app's tsc.
+
+Not for NBA/WNBA: their feed reads a past date off the current season's
+schedule file only.
+
+### v0.625.0 — a sport league's board reads its own games; the NFL's controls stay the NFL's
+
+> - An NBA, NHL or MLB league's lineup now shows each player's game tonight (or next) with tip-off, puck drop or first pitch — not "no game listed" under an NFL slate.
+> - Dynasty is open to daily-sport leagues; Drip, golf, guillotine, contracts, the NFL roster builder and the bracket are not.
+> - Deleting a league takes you back to My Leagues.
+
+Playtest, the founder: "Drip should only be available for NFL." "Roster
+settings… still NFL." "Made roster settings and saved, but didn't take."
+"Waivers are still NFL." "Kick off, Tip off, First pitch, puck drop." "Went
+into MLB league but no games scheduled." "After deleting a league it should
+take you back to my leagues." "MLB dynasty mode needed."
+
+**The board (web + app).** The classic board read every row's game off the
+NFL week slate, so a sport league's rows all said "no game listed" under a
+chip labelled COLLEGE SLATE (the week was over 200) — "no games scheduled".
+`core/sports/slate.ts`: a row's game is today's for the player's team, else
+the team's next in the period, from `sport_league_games`; the chip is the
+sport's slate for today; the week stepper runs 301 … 300 + weeks. Every
+SportDef carries a `vocab` (kickoff / tip-off / puck drop / first pitch,
+their verbs, the slate label, "no game today") and the board's strings use
+it. `check-sports` pins the vocabulary and the slate helper.
+
+**0433 — the NFL's controls do not reach a sport league.** Re-issued from
+their latest bodies with one guard each: `set_league_game_mode` (no Drip),
+`set_league_format` (head-to-head only), `set_league_continuity` (no
+contracts; redraft, keeper and dynasty stay open), `seed_league_pool` (the
+draft room's REFRESH PLAYER POOL had reseeded a sport league with NFL
+players), `set_league_classic_slots` (the app's NFL builder was the "didn't
+take": it refused every sport position and only the bench landed),
+`native_reschedule`, `set_playoff_rules`. `set_transaction_rules` accepts a
+trade deadline of 1–40 for a sport league and `trade_deadline_error`
+compares the league's own week (live week − 300), where before any deadline
+read as passed. `waiver_hold_until` skips the after-games hold for a sport
+league — it read `nfl_slate` and held every drop until Wednesday.
+`drop_lock_reason` uses the sport's own started-today rule.
+
+**The commissioner's pages.** Web: MODE shows "CLASSIC · NBA" with the
+sport's copy and no Drip or golf; the NFL scoring catalog and BY POSITION
+no longer render under SportSettings; the admin row hides SALARY, PLAYOFFS,
+ROSTER RULES (NFL position caps), K / D-ST FILL, the next-open-week shift,
+preseason practice, the contract chips and the after-games waiver chips for
+a sport league; LeagueInfo prints the sport's points table. App: the ROSTER
+page gets `ui/SportLineup` (counts per slot type, bench, IR — the web
+builder's twin), MODE hides Drip and golf, FORMAT and the contract chips are
+football's, SCORING points at the web console for now.
+
+**Delete → My Leagues.** `CommishDash` takes `onDeleted`; LiveOnboard
+clears the league and refreshes. The app's `CommishTools` takes
+`onLeagueDeleted`; App.tsx returns to the leagues list and remounts it.
+
+Not yet: the app's sport scoring page; a sport league's NEXT SEASON
+rollover (dynasty is selectable, the rollover path is untested for a sport
+calendar); waivers still process on the league's daily clear time, which
+is right for a daily sport, but the schedule copy is football's.
 ### v0.624.1 — the app arms Encore (and the other clutch plays) on the spot that earned it
 
 > - Founder, Turf Warriors, Zay Flowers on a first-half touchdown: "I should be able to fire encore on Zay flowers" — the app's hand said "The week has started — arms are closed." The app can now play Encore, Halftime Gamble and Counter-Wipe: the spot that earned one lights up with a CLUTCH strip on the live board (tap to arm), and the card in the hand plays onto it too.

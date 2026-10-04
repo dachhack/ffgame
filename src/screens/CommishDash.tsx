@@ -3,7 +3,7 @@ import { SportSettings } from './SportSettings';
 import type { GameModeInfo } from '@drip/core/data/liveApi';
 import { SportLineup } from './SportLineup';
 import { draftState } from '@drip/core/data/liveApi';
-import type { Sport } from '@drip/core/sports/index';
+import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
@@ -108,8 +108,11 @@ import { rosterRules, setTaxiRules, setIrRules, setOutRules, playerFlags } from 
 // run. Opened from a league card's "manage" (focusId → just that league), as
 // the landing screen for commish-only accounts (all your leagues), or right
 // after creating a league (defaultTab 'draft' → land on the draft room).
-export function CommishDash({ onBack, focusId, defaultTab }: {
+export function CommishDash({ onBack, focusId, defaultTab, onDeleted }: {
   onBack: () => void; focusId?: string | null; defaultTab?: LeagueTab;
+  /** After a league is deleted: where to go (v0.625.0, founder: "it should
+   *  take you back to my leagues"). Without it the list just refreshes. */
+  onDeleted?: () => void;
 }) {
   const [leagues, setLeagues] = useState<AdminLeague[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -168,7 +171,7 @@ export function CommishDash({ onBack, focusId, defaultTab }: {
                 scoring: <LeagueSettings leagueId={l.league_id} view="scoring" />,
                 activity: <LastSeenPanel leagueId={l.league_id} />,
                 buffs: <LiveBuffsPanel leagueId={l.league_id} />,
-                delete: <DeleteLeaguePanel leagueId={l.league_id} name={l.name} seats={l.rosters} onDeleted={load} />,
+                delete: <DeleteLeaguePanel leagueId={l.league_id} name={l.name} seats={l.rosters} onDeleted={() => { if (onDeleted) onDeleted(); else void load(); }} />,
               }} />
           </div>
         ))}
@@ -725,12 +728,14 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>🎮 GAME MODE</div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
-            DRIP is the full game — metrics, windows, power-ups. CLASSIC is traditional fantasy: standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups. Locks once the draft starts.
+            {sport !== 'nfl' ? `A ${SPORTS[sport].league} league plays classic: a daily lineup that locks player by player at ${SPORTS[sport].vocab.start}, scored on box-score stat lines under the table on the SCORING page. Drip is the NFL game.` : 'DRIP is the full game — metrics, windows, power-ups. CLASSIC is traditional fantasy: standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups. Locks once the draft starts.'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => void set('drip')} disabled={busy || mode === null} className="mono" style={pill(mode === 'drip')}>DRIP</button>
-          {(classicOk || mode === 'classic')
+          {/* DRIP IS THE NFL GAME (v0.625.0, founder: "Drip should only be available for NFL"). */}
+          {sport === 'nfl' && <button onClick={() => void set('drip')} disabled={busy || mode === null} className="mono" style={pill(mode === 'drip')}>DRIP</button>}
+          {sport !== 'nfl' && <span className="mono" style={pill(true)}>CLASSIC · {SPORTS[sport].league}</span>}
+          {sport === 'nfl' && (classicOk || mode === 'classic')
             ? <button onClick={() => void set('classic')} disabled={busy || mode === null} className="mono" style={pill(mode === 'classic')}>CLASSIC</button>
             : <span className="mono" style={{ fontSize: 11, color: 'var(--faint)', alignSelf: 'center' }}>CLASSIC not unlocked</span>}
         </div>
@@ -739,7 +744,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       {/* The RECEPTIONS pills used to live here (v0.213.1: removed). PPR is a
           scoring decision, so it rides the SCORING page's presets now — this
           tab is just "which game are we playing". */}
-      {view === 'mode' && mode === 'classic' && (<>
+      {view === 'mode' && mode === 'classic' && sport === 'nfl' && (<>
         {/* ── GOLF MODE (v0.303.0) ──────────────────────────────────────────
             One setting that inverts who wins. It belongs beside GAME MODE
             rather than under SCORING because it doesn't change a single
@@ -1100,7 +1105,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             style={{ margin: '8px 0 0' }} />
         </div>
       )}
-      {view === 'scoring' && mode === 'classic' && scTab === 'bypos' && (() => {
+      {sport === 'nfl' && view === 'scoring' && mode === 'classic' && scTab === 'bypos' && (() => {
         // BY POSITION (v0.532.0, founder: "a tackle for QB at 50 points and a
         // tackle for a WR at 20"). Pick a position, then type only the values
         // that differ for it; each box shows the league's value as its hint.
@@ -1149,7 +1154,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           </div>
         );
       })()}
-      {view === 'scoring' && mode === 'classic' && scTab !== 'adjust' && scTab !== 'bypos' && (
+      {sport === 'nfl' && view === 'scoring' && mode === 'classic' && scTab !== 'adjust' && scTab !== 'bypos' && (
         <div>
           <>
               {CLASSIC_SCORING_SECTIONS.filter((sec) =>
@@ -1187,7 +1192,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           yardage multiplier, turnover penalty, scoped bonuses — folded in from
           the commish kit. Applies to BOTH modes, which is why it isn't gated
           on classic: a drip league's only scoring controls are these. */}
-      {view === 'scoring' && (mode !== 'classic' || scTab === 'adjust') && (
+      {sport === 'nfl' && view === 'scoring' && (mode !== 'classic' || scTab === 'adjust') && (
         <div style={{ marginTop: 12 }}>
           {adjust
             ? <ScoringEditor leagueId={leagueId} initial={adjust} inline

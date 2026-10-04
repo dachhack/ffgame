@@ -24,7 +24,8 @@ import { ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
-import { sportLeagueSettings, currentSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
+import { installSportMarketFor } from '@drip/core/sports/market';
+import { sportLeagueSettings, currentSeason, priorSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
 import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
@@ -54,7 +55,7 @@ import {
   setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   rosterRules, injuryTags,
-  leagueMarket,
+  sportLeagueMarket, leagueMarket,
   keeperState, setKeepers, type KeeperState,
   pickAssets, type PickAssetRow, type LeagueContinuity, isDynastyContinuity,
   setLeagueFormat, type LeagueFormat,
@@ -212,6 +213,16 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   }, []);
   const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
   const [sportWeeks, setSportWeeks] = useState<number | null>(null);
+  // REPLAY (v0.626.0): play last season on a shifted clock — a demo when the
+  // live season is over (founder: "demo with MLB 2025 data for now").
+  const [replay, setReplay] = useState(false);
+  const pickReplay = (on: boolean) => {
+    setReplay(on);
+    // Week 301 opens this real week either way; a replay's first week is the
+    // same calendar week a year back, which the date picker can move.
+    const thisMon = mondayOnOrBefore(new Date().toISOString().slice(0, 10));
+    setPeriodStart(on ? addDays(thisMon, -364) : mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+  };
   const [sportFormat, setSportFormat] = useState<SportFormat>('points');
   const sportDef = SPORTS[sport];
   const isSport = sport !== 'nfl';
@@ -220,7 +231,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     if (sp !== 'nfl') {
       setGame('classic');
       setFormat('standard');
-      if (continuity !== 'redraft' && continuity !== 'keeper') setContinuity('redraft');
+      // Contracts are not built for a daily sport; dynasty is (v0.625.0, founder: "MLB dynasty mode needed").
+      if (continuity === 'contract' || continuity === 'contract_dynasty') setContinuity('redraft');
       setCopyFrom(null); setCopyBp(null); setCopyReport(null);
       setSportWeeks(null);
     }
@@ -391,9 +403,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         // and the schedule is periods from the start date, so the two
         // client-side steps the NFL path runs below have nothing to do here.
         const weeks = sportWeeks ?? sportDef.regularSeasonWeeks;
-        const rs = await createNativeLeague(name, currentSeason(sport), teams, rounds, pickSecs, mode, budget, lotSecs,
+        const season = replay ? priorSeason(sport) : currentSeason(sport);
+        const rs = await createNativeLeague(name, season, teams, rounds, pickSecs, mode, budget, lotSecs,
           mode === 'auction' ? maxLots : 1, null, null, null, 'classic', continuity, contN,
-          sport, sportLeagueSettings(sport, { periodStart, weeks, format: sportFormat }));
+          sport, sportLeagueSettings(sport, { periodStart, weeks, format: sportFormat, replay: replay ? { season } : null }));
         if (!rs.ok || !rs.league_id) { setErr(friendlyError(rs.error ?? 'Could not create the league.')); setBusy(false); return; }
         setNote('Generating the season schedule…');
         const ss = await nativeGenerateSchedule(rs.league_id, weeks);
@@ -581,9 +594,22 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   : `Rotisserie: no weekly winner. Every game all season counts toward one ranking per category (${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}); best of ${teams} takes ${teams} points, the standings are the sum.`}
             </div>
             <div style={{ height: 14 }} />
+            {/* REPLAY (v0.626.0): last season, day by day, on a clock that runs a
+                year behind — every lock, line and final lands as it did live. */}
+            <div className="mono" style={label}>SEASON</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+              <Chip on={!replay} onClick={() => pickReplay(false)}>LIVE · {currentSeason(sport)}</Chip>
+              <Chip on={replay} onClick={() => pickReplay(true)}>REPLAY · {priorSeason(sport)}</Chip>
+            </div>
+            {replay && (
+              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
+                The league replays the {priorSeason(sport)} season from the first week you pick below, one real day per replayed day: games tip off, lock and go final at the same hour they did then. Pick a week when the season was in full swing{sport === 'mlb' ? ' (April to September)' : ''}.
+              </div>
+            )}
+            <div style={{ height: 14 }} />
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
-                <div className="mono" style={label}>FIRST WEEK STARTS (MON)</div>
+                <div className="mono" style={label}>{replay ? `FIRST WEEK STARTS (MON, ${priorSeason(sport)})` : 'FIRST WEEK STARTS (MON)'}</div>
                 <input type="date" value={periodStart} onChange={(e) => { if (e.target.value) setPeriodStart(mondayOnOrBefore(e.target.value)); }}
                   style={{ ...input, marginTop: 7, width: 170 }} />
               </div>
@@ -624,7 +650,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
               <Chip on={continuity === 'redraft'} onClick={() => pickContinuity('redraft')}>REDRAFT</Chip>
               <Chip on={continuity === 'keeper'} onClick={() => pickContinuity('keeper')}>KEEPER</Chip>
-              {!isSport && <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>DYNASTY</Chip>}
+              <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>DYNASTY</Chip>
               {!isSport && <Chip on={continuity === 'contract'} onClick={() => pickContinuity('contract')}>CONTRACT</Chip>}
               {!isSport && <Chip on={continuity === 'contract_dynasty'} onClick={() => pickContinuity('contract_dynasty')}>CONTRACT DYNASTY</Chip>}
             </div>
@@ -1213,6 +1239,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       setOwn(r.own ?? {});
       installLiveMarket(r);
     }).catch(() => {});
+    // THE SPORT MARKET (v0.627.0): a daily-sport league's ADP and last-season
+    // rates ride their own call; the own-map bump re-prices the rows.
+    leagueGameMode(leagueId).then((g) => {
+      if (!alive || !g.ok || !g.sport || g.sport === 'nfl') return;
+      return sportLeagueMarket(leagueId).then((m) => { if (alive && installSportMarketFor(g, m)) setOwn((o) => ({ ...(o ?? {}) })); });
+    }).catch(() => {});
     return () => { alive = false; };
   }, [leagueId]);
   const [favs, setFavs] = useState<Set<string>>(new Set());
@@ -1698,7 +1730,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             );
           })()}
           {isCommish && <button onClick={() => run(() => startDraft(leagueId))} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT{st.start_at ? ' NOW' : ''}</button>}
-          {isCommish && <button onClick={() => run(async () => {
+          {isCommish && gm?.sport !== 'nfl' && gm?.sport && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>The {SPORTS[gm.sport].league} pool follows the worker's daily directory sweep — nothing to refresh by hand.</div>}
+          {isCommish && (gm?.sport ?? 'nfl') === 'nfl' && <button onClick={() => run(async () => {
             // 0171: reseed under the league's enabled positions + player filter.
             const gm = await leagueGameMode(leagueId).catch(() => null);
             const r = await seedLeaguePool(leagueId, await buildDraftPool(undefined, { positions: gm?.positions ?? null, filter: gm?.pool_filter ?? null }));
@@ -3006,6 +3039,12 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       setOwn(r.own ?? {});
       setTrend(r.trend ?? {});
       installLiveMarket(r);
+    }).catch(() => {});
+    // THE SPORT MARKET (v0.627.0): a daily-sport league's ADP and last-season
+    // rates ride their own call; the own-map bump re-prices the rows.
+    leagueGameMode(leagueId).then((g) => {
+      if (!alive || !g.ok || !g.sport || g.sport === 'nfl') return;
+      return sportLeagueMarket(leagueId).then((m) => { if (alive && installSportMarketFor(g, m)) setOwn((o) => ({ ...(o ?? {}) })); });
     }).catch(() => {});
     return () => { alive = false; };
   }, [leagueId]);

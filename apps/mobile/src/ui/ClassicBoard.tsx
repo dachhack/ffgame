@@ -21,6 +21,11 @@ import { shortName } from '@drip/core/data/players';
 import { collegeNameFor, boardTeamFor, isCollegeSlug } from '@drip/core/data/college';
 import { SimStrip } from './SimStrip';
 import { SportWeekPanel } from './SportWeekPanel';
+import { SPORTS } from '@drip/core/sports/index';
+import { sportGameFor, sportEntryState, sportKickLabel, sportOpponentLabel, sportToday, type SportSlateGame } from '@drip/core/sports/slate';
+import { sportPeriod, sportNow } from '@drip/core/sports/league';
+import { installSportMarket, sportWeekProjFor } from '@drip/core/sports/market';
+import { normalizeScoring } from '@drip/core/sports/score';
 import { setSportNames, sportNameFor, type Sport } from '@drip/core/sports/index';
 import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/league';
 import { headshot } from '@drip/core/data/media';
@@ -32,7 +37,7 @@ import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
+  leagueGameMode, sportLeagueGames, sportLeagueMarket, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides, loadDepthChart,
   vampireState, feedingBell, bittenNotice, type VampireState,
@@ -364,6 +369,21 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [golf, setGolf] = useState(false);
   const [sport, setSport] = useState<Sport>('nfl');
   const [sportSettings, setSportSettings] = useState<SportLeagueSettings | null>(null);
+  // THE SPORT'S OWN SLATE (v0.625.0) — the web twin's: the period's games.
+  const [sportGames, setSportGames] = useState<SportSlateGame[]>([]);
+  const vocab = SPORTS[sport].vocab;
+  // THE SPORT MARKET (v0.627.0): the rows project this week's remaining games.
+  const [marketVer, setMarketVer] = useState(0);
+  useEffect(() => {
+    if (sport === 'nfl' || !sportSettings) return;
+    let alive = true;
+    sportLeagueMarket(leagueId).then((m) => {
+      if (!alive || !m?.ok) return;
+      installSportMarket(SPORTS[sport], normalizeScoring(SPORTS[sport], sportSettings.scoring), m);
+      setMarketVer((v) => v + 1);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId, sport, sportSettings]);
   const [slotsSpec, setSlotsSpec] = useState<SlotSpec[] | null>(null);
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
@@ -515,7 +535,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           // reads at scoring time, installed like the scoring adjustments.
           if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm)); setGolf(gm.golf === true); }
           // A SPORT LEAGUE (0426) draws its week from locked slot-days.
-          if (gm.ok) { setSport(gm.sport ?? 'nfl'); setSportSettings(gm.sport && gm.sport !== 'nfl' ? sportSettingsOf({ sport: gm.sport_settings }) : null); }
+          if (gm.ok) {
+            setSport(gm.sport ?? 'nfl'); setSportSettings(gm.sport && gm.sport !== 'nfl' ? sportSettingsOf({ sport: gm.sport_settings }) : null);
+            const ss = gm.sport && gm.sport !== 'nfl' ? sportSettingsOf({ sport: gm.sport_settings }) : null;
+            const per = ss ? sportPeriod(m.week, ss.period_start) : null;
+            if (per) sportLeagueGames(leagueId, per.from, per.to).then((g) => setSportGames(g ?? [])).catch(() => {});
+            if (ss) setLastRegWeek(300 + ss.weeks);
+          }
           // A spot with a tenure window (0172) needs years_exp from league_pool.
           // Awaited rather than fired-and-forgotten so the auto-slot below can't
           // run against an empty tenure map and leave every filtered spot blank.
@@ -905,6 +931,26 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       // chips and feeds never mistake a school code for an NFL one.
       const cg = isCollegeSlug(slug) && (matchup?.week ?? 0) <= 100
         ? gameFor(collegeNameFor(slug)?.school, collegeSlate) : null;
+      // A DAILY SPORT (v0.625.0): today's game for the player's team, else the
+      // team's next one in the period — from sport_game, never the NFL slate.
+      if (sport !== 'nfl') {
+        const vnow = sportNow(sportSettings, new Date(nowTs));
+        const sg = sportGameFor(team, sportGames, sportToday(vnow));
+        const sst = sportEntryState(sg, vnow.getTime());
+        return {
+          slug, name: prettySlug(slug), pos: meta.pos ?? '', team: team || null,
+          live: pts(slug, slotPos),
+          // This week's remaining games × last season's rate (v0.627.0); 0 until the market lands.
+          proj: sportWeekProjFor(slug, sportToday(vnow)) ?? 0,
+          state: sst,
+          kickoff: sportKickLabel(sg),
+          clock: sst === 'live' ? (sg?.clock ?? null) : null,
+          statline: sst === 'done' && sg ? `${sg.awayScore ?? ''}–${sg.homeScore ?? ''}` : null,
+          opponent: sportOpponentLabel(sg) ?? vocab.noGame,
+          injury: injuryFor(matchup?.week ?? 1, slug),
+          roof: null, primetime: false,
+        };
+      }
       const g = cg ?? gameFor(team, slate);
       const simLive = simTeams.size > 0 && simTeams.has(normTeam(team));
       const st: BoardEntry['state'] = simLive ? (matchup?.status === 'final' ? 'done' : 'live')
@@ -950,7 +996,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- marketVer: the sport market landed
+  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue, sport, sportGames, vocab, sportSettings, marketVer]);
 
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
   // the engine's fills — the same bestballFill the worker scores with.
@@ -1063,7 +1110,15 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // Derived from the board rather than from the pool, so a chip's points and
   // the headline totals above it can only ever agree.
   const chips = useMemo(() => {
-    const base = board ? slateChips(board.starters, slate, nowTs, finalTeams, liveScores) : [];
+    // A daily sport's chip counts TODAY's games (v0.625.0).
+    const vToday = sportToday(sportNow(sportSettings, new Date(nowTs)));
+    const chipSlate = sport !== 'nfl'
+      ? sportGames.filter((g) => g.game_date === vToday && g.status !== 'postponed' && g.status !== 'cancelled').map((g) => ({ home: g.home, away: g.away, kickoff: g.start_utc }))
+      : slate;
+    const chipFinal = sport !== 'nfl'
+      ? new Set(sportGames.filter((g) => g.game_date === vToday && g.status === 'final').flatMap((g) => [g.home, g.away]))
+      : finalTeams;
+    const base = board ? slateChips(board.starters, chipSlate, sport !== 'nfl' ? sportNow(sportSettings, new Date(nowTs)).getTime() : nowTs, chipFinal, liveScores) : [];
     // 🧪 REHEARSAL (v0.368.0): the chips' state comes from the slate clock,
     // which under a sim sits in the future — so the NFL SLATE chip kept saying
     // "9 starters to play" over a board of live rows. Same override rule as
@@ -1073,7 +1128,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     return base.map((c) => (simTeams.has(normTeam(c.home)) || simTeams.has(normTeam(c.away))
       ? { ...c, state: (matchup?.status === 'final' ? 'done' : 'live') as SlateChip['state'] }
       : c));
-  }, [board, slate, nowTs, finalTeams, liveScores, simTeams, matchup]);
+  }, [board, slate, nowTs, finalTeams, liveScores, simTeams, matchup, sport, sportGames, sportSettings]);
   // THE WEEK'S SCOREBOARD (v0.323.0), out of the feeds the board already has —
   // every game the worker has polled, not only the ones this matchup is in.
   const slateTotals = useMemo(() => slateSummary(chips), [chips]);
@@ -1136,7 +1191,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     const w = byeWeek ?? matchup?.week;
     if (w == null) return false;
     const next = w + d;
-    if (next < 1) return false;
+    if (next < (sport !== 'nfl' ? 301 : 1)) return false;
     if (lastRegWeek != null && next > lastRegWeek) return false;
     return true;
   };
@@ -1438,7 +1493,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                 accessibilityRole="button"
                 accessibilityLabel={`Open the ${(matchup?.week ?? 0) > 200 ? 'college' : 'NFL'} slate. ${lineChip.label}${lineChip.detail ? `. ${lineChip.detail}` : ''}`}
                 style={{ width: '100%', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 4, borderRadius: 5, borderWidth: 1, borderColor: lineChip.tone === 'live' ? t.you : t.bd, backgroundColor: t.bg }}>
-                <Mono size={7.5} tone="faint" weight="700" track={0.1}>{(matchup?.week ?? 0) > 200 ? 'COLLEGE SLATE' : 'NFL SLATE'}</Mono>
+                <Mono size={7.5} tone="faint" weight="700" track={0.1}>{sport !== 'nfl' ? vocab.slate : (matchup?.week ?? 0) > 200 ? 'COLLEGE SLATE' : 'NFL SLATE'}</Mono>
                 <Mono size={10.5} weight="700" style={{ color: lineChip.tone === 'live' ? t.you : t.text }}>
                   {lineChip.tone === 'live' ? '⏵ ' : ''}{lineChip.label}
                 </Mono>
@@ -1557,7 +1612,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
       <Overlay
         visible={!!board && slateOpen}
-        title={(matchup?.week ?? 0) > 200 ? 'COLLEGE SLATE' : 'NFL SLATE'}
+        title={sport !== 'nfl' ? vocab.slate : (matchup?.week ?? 0) > 200 ? 'COLLEGE SLATE' : 'NFL SLATE'}
         subtitle={`${slateTotals.games} ${slateTotals.games === 1 ? 'game' : 'games'}${slateTotals.live ? ` · ${slateTotals.live} live` : ''} · ${slateTotals.involved} with a starter from this matchup`}
         onClose={() => setSlateOpen(false)}>
         {!!board && (
@@ -1584,7 +1639,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               <Mono size={8.5} tone="faint" weight="700" track={0.1}>STARTERS</Mono>
               {/* 0178: both lineups are open all week, each spot locking at its
                   own player's kickoff. The rule of the screen, said once. */}
-              {!locked && <Mono size={8} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>open · each spot locks at its own kickoff</Mono>}
+              {!locked && <Mono size={8} tone="faint" numberOfLines={1} style={{ flexShrink: 1 }}>open · each spot locks at its own {vocab.start}</Mono>}
             </View>
             {board.starters.map((row) => {
               const auto = bb.has(row.slot);
@@ -1805,7 +1860,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
               )}
               {eligible.length === 0 && (
                 <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
-                  Nobody on your roster can fill this spot right now — everyone eligible has already kicked off.
+                  Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
                 </Mono>
               )}
               {eligible.map((p) => (
@@ -1924,8 +1979,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
 
       <Mono size={8.5} tone="faint" style={{ lineHeight: 14 }}>
         CLASSIC MODE — standard scoring across every stat ({ppr === 1 ? '1 pt' : ppr === 0.5 ? '½ pt' : 'no points'} per catch), live play by play.
-        LINEUPS ARE OPEN: everyone in the league can see them, and each spot locks when THAT player's game kicks off —
-        so a Thursday game never freezes your Sunday picks. No windows, no power-ups, no bonuses.
+        LINEUPS ARE OPEN: everyone in the league can see them, and each spot locks when THAT player's game {vocab.starts} —
+        {sport === 'nfl' ? 'so a Thursday game never freezes your Sunday picks.' : 'so an early game never freezes the rest of your night.'} No windows, no power-ups, no bonuses.
         {bb.size > 0 ? (bb.size >= slotDefs.length
           ? ' FULL BEST BALL: every slot takes your highest scorer automatically — nothing to set.'
           : " 🎯 slots are BEST BALL: they automatically take your highest-scoring player who isn't already started.") : ''}

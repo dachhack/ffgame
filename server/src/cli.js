@@ -3,7 +3,8 @@
 //   node src/cli.js sync-week <leagueId> <wk>  mirror a week's schedule + lineups
 //   node src/cli.js poll-once                  one scoreboard+plays pass (current week)
 //   node src/cli.js inj-once                   one injury poll
-//   node src/cli.js sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force]  one day's games + box scores → sport_game/game_stat_line
+//   node src/cli.js sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force] [--replay=2025]  one day's games + box scores → sport_game/game_stat_line
+//   node src/cli.js sport-market <nhl|mlb|nba|wnba> [season]  ADP + the season calendar → sport_player.adp / sport_calendar
 //   node src/cli.js sport-dir <sport> [season]   sweep the sport's directory → sport_player (ranked)
 //   node src/cli.js sport-leagues <sport> [YYYY-MM-DD]  one lock + resolve pass over the sport's leagues
 //   node src/cli.js simulate <lg> <wk> [..]    replay baked plays through the live feed
@@ -109,11 +110,23 @@ async function main() {
       console.log({ polled: c.games, locked, ...(await resolveSportLeagues(sport)) });
       break;
     }
+    case 'sport-market': {
+      // v0.627.0: ADP (FantasyPros) + the season calendar (ESPN) for one sport.
+      const [sport, season] = args.filter((a) => !a.startsWith('--'));
+      if (!sport) throw new Error('usage: sport-market <nhl|mlb|nba|wnba> [season]');
+      const { sweepSportMarket } = await import('./poll/sportMarket.js');
+      console.log(JSON.stringify(await sweepSportMarket(sport, season || currentSeason(sport)), null, 1));
+      break;
+    }
     case 'sport-poll': {
       const [sport, dateArg] = args.filter((a) => !a.startsWith('--'));
       if (!sport) throw new Error('usage: sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force]');
       const date = dateArg || easternDate();
-      console.log(await pollSportDay(sport, date, { force: args.includes('--force') }));
+      // --replay=<season> (v0.626.0): read a past season's day as a replay
+      // league would at this real moment — every game of that day is final,
+      // so this backfills a replay league's days already behind it.
+      const rp = args.find((a) => a.startsWith('--replay='))?.slice('--replay='.length);
+      console.log(await pollSportDay(sport, date, { force: args.includes('--force'), replay: rp ? { season: rp, nowMs: Date.now() } : null }));
       break;
     }
     case 'poll-once': {

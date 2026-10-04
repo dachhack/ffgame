@@ -129,6 +129,25 @@ export async function sportLeagues(sport) {
   return all.filter((l) => done.has(l.id));
 }
 
+/** REPLAY (v0.626.0): the distinct shifted clocks among this sport's replay
+ *  leagues, drafted or not — a league still drafting still wants its board's
+ *  slate to fill. Each is {season, offsetDays}. */
+export async function sportReplayClocks(sport) {
+  const { data, error } = await db().from('league').select('id, season, settings_json')
+    .eq('sport', sport).eq('provider', 'native');
+  if (error) throw new Error(`league read: ${error.message}`);
+  const seen = new Map();
+  for (const l of data ?? []) {
+    const r = sportSettingsOf(l.settings_json)?.replay;
+    if (!r || !r.offset_days) continue;
+    seen.set(`${r.season}|${r.offset_days}`, { season: r.season, offsetDays: r.offset_days });
+  }
+  return [...seen.values()];
+}
+
+/** The league's clock (v0.626.0): the real one, or its replay's. */
+export const leagueNow = (lg, now = Date.now()) => now - (lg.sportSettings?.replay?.offset_days ?? 0) * 86400e3;
+
 /** Slot 'S<i>' may hold a player whose eligibility meets roster_slots[i-1].pos.
  *  Unknown slot names and players allow — nothing here may lock a lineup
  *  the platform never shaped. */
@@ -146,10 +165,12 @@ export function slotAllowsFor(rosterSlots, eligibleOf) {
 
 /** Lock the started games' players across every league of the sport.
  *  Returns the number of slot-days locked. */
-export async function lockStartedGames(sport, games, now = Date.now()) {
+export async function lockStartedGames(sport, games, now = Date.now(), offsetDays = 0) {
   const started = startedGames(games, now);
   if (!started.length) return 0;
-  const leagues = await sportLeagues(sport);
+  // The games are one clock's (real, or a replay's); only leagues on that
+  // clock lock from them.
+  const leagues = (await sportLeagues(sport)).filter((lg) => (lg.sportSettings.replay?.offset_days ?? 0) === offsetDays);
   let locked = 0;
   const teams = [...new Set(started.flatMap((g) => [g.home, g.away]))];
   const dates = [...new Set(started.map((g) => g.gameDate))];
@@ -199,14 +220,16 @@ export async function lockStartedGames(sport, games, now = Date.now()) {
 /** Resolve every live matchup in every league of the sport; finalize the
  *  ones whose period is over. Returns counts. */
 export async function resolveSportLeagues(sport, now = new Date()) {
-  const today = easternDate(now);
   const leagues = await sportLeagues(sport);
   const counts = { sport, matchups: 0, finals: 0 };
   if (!leagues.length) return counts;
   const def = SPORTS[sport];
-  const { data: liveGames } = await db().from('sport_game').select('game_date').eq('sport', sport).eq('status', 'live');
-  const liveDates = (liveGames ?? []).map((g) => g.game_date);
+  const { data: liveGames } = await db().from('sport_game').select('season, game_date').eq('sport', sport).eq('status', 'live');
   for (const lg of leagues) {
+    // Each league on its own clock (v0.626.0): a replay's today is a past
+    // date, and only its season's live games can hold its period open.
+    const today = easternDate(new Date(leagueNow(lg, now.getTime())));
+    const liveDates = (liveGames ?? []).filter((g) => g.season === lg.season).map((g) => g.game_date);
     const { data: matchups } = await db().from('matchup').select('id, week, status, home_roster_id, away_roster_id')
       .eq('league_id', lg.id).eq('status', 'live');
     for (const m of matchups ?? []) {

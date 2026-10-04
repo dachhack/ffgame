@@ -530,6 +530,9 @@ export function App() {
             // A seatless commissioner has nowhere else in the league to land —
             // back means back to the leagues list.
             onBack={() => { setToolsSection(null); if (open.rosterId == null) { setOpen(null); setView('picks'); } else setView('home'); }}
+            // A deleted league has no home (v0.625.0, founder: "it should take you
+            // back to my leagues"): the leagues list, remounted.
+            onLeagueDeleted={() => { setToolsSection(null); setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }}
             // Vacating your own seat invalidates open.rosterId — leave the
             // league view entirely; Leagues remounts with the fresh shape.
             onSelfUnassigned={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>

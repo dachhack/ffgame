@@ -128,4 +128,5 @@ export const NHL: SportDef = {
   gamesPerTeam: 84,
   regularSeasonWeeks: 27,
   keyPrefix: 'nhl',
+  vocab: { start: 'puck drop', starts: 'drops the puck', started: 'dropped the puck', slate: 'NHL SLATE', noGame: 'no game today' },
 };

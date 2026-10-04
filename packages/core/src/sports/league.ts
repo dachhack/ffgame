@@ -30,9 +30,29 @@ export interface SportLeagueSettings {
   weeks: number;                        // regular-season periods
   bench: number;
   ir: number;
+  /** REPLAY (v0.626.0): the league plays a past season on a shifted clock.
+   *  `season` is the one replayed; `offset_days` is how far behind the real
+   *  clock the league runs (real Monday of week 301 − period_start). The
+   *  worker fetches that season's games for the league's virtual today and
+   *  reveals each one when its start passes on the virtual clock, so locks,
+   *  lines and finals progress day by day as they would live. */
+  replay?: { season: string; offset_days: number } | null;
 }
 
 export interface SportSlotSpec { pos: string[]; label: string }
+
+/** Whole days from `a` to `b` (YYYY-MM-DD each); negative when b is earlier. */
+export const daysBetween = (a: string, b: string): number =>
+  Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 86400e3);
+
+/** The league's clock: the real one, or the replay's shifted one. */
+export function sportNow(settings: Pick<SportLeagueSettings, 'replay'> | null | undefined, now: Date = new Date()): Date {
+  const off = settings?.replay?.offset_days ?? 0;
+  return off ? new Date(now.getTime() - off * 86400e3) : now;
+}
+
+/** The season before the one a sport is in now, as its starting year. */
+export const priorSeason = (sport: Sport, now: Date = new Date()): string => String(Number(currentSeason(sport, now)) - 1);
 
 /** The `roster_slots` array for a sport's standard lineup. */
 export function sportRosterSlots(def: SportDef, roster: Record<string, number> = def.defaultRoster): SportSlotSpec[] {
@@ -78,16 +98,23 @@ export const addDays = (date: string, n: number): string => {
 
 /** What create_native_league stores for a sport league: the lineup, and the
  *  sport block. `periodStart` defaults to the Monday of the given date. */
-export function sportLeagueSettings(sport: Sport, opts: { periodStart: string; weeks?: number; format?: SportFormat; categories?: string[]; roster?: Record<string, number>; scoring?: Record<string, number> }) {
+export function sportLeagueSettings(sport: Sport, opts: { periodStart: string; weeks?: number; format?: SportFormat; categories?: string[]; roster?: Record<string, number>; scoring?: Record<string, number>;
+  /** Replay a past season: its starting year, and the real date week 301 opens on (default today). */
+  replay?: { season: string; anchor?: string } | null }) {
   const def = SPORTS[sport];
+  const start = mondayOnOrBefore(opts.periodStart);
+  const replay = opts.replay
+    ? { season: opts.replay.season, offset_days: daysBetween(start, mondayOnOrBefore(opts.replay.anchor ?? new Date().toISOString().slice(0, 10))) }
+    : null;
   const sportBlock: SportLeagueSettings = {
     format: opts.format ?? 'points',
     categories: opts.categories ?? def.categoriesDefault,
     scoring: opts.scoring ?? {},
-    period_start: mondayOnOrBefore(opts.periodStart),
+    period_start: start,
     weeks: opts.weeks ?? def.regularSeasonWeeks,
     bench: def.benchDefault,
     ir: def.irDefault,
+    ...(replay ? { replay } : {}),
   };
   return { roster_slots: sportRosterSlots(def, opts.roster), sport: sportBlock };
 }
@@ -120,6 +147,9 @@ export function sportSettingsOf(settings: Record<string, unknown> | null | undef
     weeks: typeof s.weeks === 'number' ? s.weeks : 0,
     bench: typeof s.bench === 'number' ? s.bench : 0,
     ir: typeof s.ir === 'number' ? s.ir : 0,
+    replay: s.replay && typeof s.replay === 'object' && typeof (s.replay as { season?: unknown }).season === 'string'
+      ? { season: (s.replay as { season: string }).season, offset_days: Number((s.replay as { offset_days?: unknown }).offset_days ?? 0) || 0 }
+      : null,
   };
 }
 

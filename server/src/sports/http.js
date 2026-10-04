@@ -27,3 +27,29 @@ export async function getJson(url, { tries = 3, timeoutMs = 15000, headers = {} 
   }
   throw lastErr;
 }
+
+/** The same fetch for an HTML page (v0.627.0, the ADP tables): browser
+ *  headers, timeout, the same retry rule, text back. */
+export async function getText(url, { tries = 3, timeoutMs = 20000, headers = {} } = {}) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        signal: ac.signal, redirect: 'follow',
+        headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8', 'Accept-Language': 'en-US,en;q=0.9', ...headers },
+      });
+      if (res.ok) return await res.text();
+      lastErr = new Error(`${res.status} ${url}`);
+      if (res.status < 500 && res.status !== 429) throw lastErr;
+    } catch (e) {
+      lastErr = e;
+      if (e?.message?.startsWith('4')) throw e;
+    } finally {
+      clearTimeout(t);
+    }
+    await new Promise((r) => setTimeout(r, 500 * 2 ** i));
+  }
+  throw lastErr;
+}

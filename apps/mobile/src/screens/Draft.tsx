@@ -11,9 +11,10 @@
 // Self-driving: any member's poll calls draft_tick when a clock is overdue or
 // the acting seat is auto. That's what lets a phone-only league draft with no
 // worker awake — the room advances as long as ANYONE has it open.
+import { installSportMarketFor } from '@drip/core/sports/market';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import {
+import { sportLeagueMarket,
   draftState, draftTick, leaguePool, makeDraftPick, myDraftQueue, nativeTeamState, nominate, placeBid,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
@@ -141,6 +142,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
       installLiveMarket(r);
+    }).catch(() => {});
+    // THE SPORT MARKET (v0.627.0): a daily-sport league's ADP and last-season
+    // rates ride their own call; the own-map bump re-prices the rows.
+    leagueGameMode(leagueId).then((g) => {
+      if (!alive || !g.ok || !g.sport || g.sport === 'nfl') return;
+      return sportLeagueMarket(leagueId).then((m) => { if (alive && installSportMarketFor(g, m)) setOwn((o) => ({ ...(o ?? {}) })); });
     }).catch(() => {});
     return () => { alive = false; };
   }, [leagueId]);
