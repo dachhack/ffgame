@@ -15,14 +15,14 @@
 // directly — no deep link, nothing to intercept, and it works even if the mail
 // app opens the link on a different device. Core already labelled that function
 // "magic-link fallback for mobile".
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useKeyboardInset } from '../ui/keyboard';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import {
   signInPassword, signUpPassword, sendMagicLink, verifyEmailOtp, ensureAppUser, getSession, friendlyError,
-  oauthAuthorizeUrl, completeOAuthCallback,
+  oauthAuthorizeUrl, completeOAuthCallback, signupOpen,
 } from '@drip/core/data/liveApi';
 import { nativeGoogleReady, signInWithGoogleNative } from '../auth/googleNative';
 import { useTheme, MONO } from '../theme.native';
@@ -40,6 +40,11 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // THE DOOR (0422): is there a spot? A full house reads the waitlist line
+  // and the create button stays off; existing accounts sign in as usual.
+  const [door, setDoor] = useState<{ open: boolean; count: number; cap: number } | null>(null);
+  useEffect(() => { let dead = false; signupOpen().then((d) => { if (!dead) setDoor(d); }); return () => { dead = true; }; }, []);
+  const full = door != null && !door.open;
 
   /** Every path ends here: make sure the app_user row exists (it is the FK
    *  target for enrollment, and the web does the same on its first load) before
@@ -66,6 +71,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   });
 
   const submitSignup = () => run(async () => {
+    if (full) throw new Error('drip is full');   // friendlyError says the rest
     const { needsConfirm } = await signUpPassword(email, password);
     if (needsConfirm) {
       // The project requires email confirmation, so there is no session yet.
@@ -150,7 +156,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <View style={{ gap: 4, marginBottom: 6 }}>
           <Display size={24}>Drip Fantasy</Display>
           <Mono size={10.5} tone="faint">
-            {mode === 'signup' ? 'Create an account.'
+            {mode === 'signup' ? (full ? `Drip is full right now — all ${door!.cap.toLocaleString()} spots are taken. Join the waitlist at dripfantasy.com.` : 'Create an account. Any account can start a league, bring a Sleeper league in, or join a friend’s.')
               : mode === 'code-entry' ? 'Enter the code from your email.'
               : 'Sign in to your league.'}
           </Mono>
@@ -192,8 +198,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
               style={input}
             />
             <PrimaryButton
-              label={busy ? 'WORKING…' : mode === 'signup' ? 'CREATE ACCOUNT' : 'SIGN IN'}
-              disabled={busy || !email.trim() || password.length < 6}
+              label={busy ? 'WORKING…' : mode === 'signup' ? (full ? 'DRIP IS FULL' : 'CREATE ACCOUNT') : 'SIGN IN'}
+              disabled={busy || !email.trim() || password.length < 6 || (mode === 'signup' && full)}
               onPress={mode === 'signup' ? submitSignup : submitPassword}
             />
 

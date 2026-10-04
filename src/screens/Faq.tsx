@@ -191,8 +191,9 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Is there a waitlist for the live pilot?',
-          a: <>The live head-to-head pilot is invite-only and intentionally small while we tune it, so we onboard leagues in batches.
-            Use <b>request an invite</b> and we'll bring your league in as spots open — you'll get a code to redeem by email.</>,
+          a: <>Anyone can sign up: start a fresh league, add Drip to a Sleeper league you're in, or join a friend's with their invite code.
+            The pilot holds 1,000 accounts while we tune it. When it's full, <b>request an invite</b> leaves your email and we'll let you know when a spot opens —
+            accounts that go quiet for two months are told, then retired, which is how spots come back.</>,
         },
         {
           q: 'Is there a mobile app?',

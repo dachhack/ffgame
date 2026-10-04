@@ -20,7 +20,7 @@ import {
   type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat, setupLeagueDevy, setLeagueDevyOpen,
-  nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
+  nativeGenerateSchedule, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
 import {
@@ -31,6 +31,8 @@ import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { devyChoiceBlocked, devyChoiceLine, DEVY_CHOICE_INFO, type DevyChoice } from '@drip/core/data/devyShares';
+import { myLeaguesOnSleeper, importMyLeague, importSeason } from '@drip/core/data/sleeperAdmin';
+import { sleeperAvatarUrl, type SleeperLeague, type SleeperUser } from '@drip/core/data/sleeper';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
@@ -56,15 +58,16 @@ function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | 
 const MAX_TEAMS = 32;
 
 /** The board's branches. 'root' is the menu; the rest are one question each. */
-type Node = 'root' | 'browse' | 'create' | 'join' | 'post' | 'commish';
+type Node = 'root' | 'browse' | 'create' | 'sleeper' | 'join' | 'post' | 'commish';
 const NODE_TITLE: Record<Node, string> = {
-  root: 'League board', browse: 'Open leagues', create: 'Start a league',
+  root: 'League board', browse: 'Open leagues', create: 'Start a league', sleeper: 'Add Drip to my Sleeper league',
   join: 'Join with a code', post: 'Post & recruit', commish: 'Commissioner code',
 };
 const NODE_SUB: Record<Node, string> = {
-  root: 'Find one, start one, or join with a code.',
+  root: 'Find one, start one, bring one in, or join with a code.',
   browse: 'Open leagues looking for managers.',
   create: 'Six or seven questions, one at a time.',
+  sleeper: 'Your league stays on Sleeper; Drip runs the game on top.',
   join: "Paste the code a friend sent you.",
   post: 'List a league you run, or share its code.',
   commish: 'Run a league without holding a seat.',
@@ -135,7 +138,12 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // only what has NO setter after creation gets asked here — game type, name,
   // teams, draft type, pace, clock. Roster size and position limits are
   // defaults the game type picks, adjustable from COMMISH until the draft.
-  const [canCreate, setCanCreate] = useState(false);
+  // EVERY ACCOUNT MAY CREATE (0422, v0.612.0) — the 'native' flag this used
+  // to wait on is read by nothing now. The Sleeper branch's own state:
+  const [slUser, setSlUser] = useState('');
+  const [slMe, setSlMe] = useState<SleeperUser | null>(null);
+  const [slLeagues, setSlLeagues] = useState<SleeperLeague[] | null>(null);
+  const [slBusy, setSlBusy] = useState<string | null>(null); // 'find' | a league id
   // WHERE IN THE TREE. The collapse-and-scroll this replaced was the old
   // shape's apology for a screen that answered five questions at once: open
   // the right card, then jump the scroll to it. A branch you can navigate to
@@ -224,13 +232,34 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     } catch (e) { setErr(friendlyError(e)); setRows([]); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  // Same entitlement the web's create button checks — admins always qualify
-  // (has_native() is `is_admin() or the flag`), so both are asked here rather
-  // than advertising a door the server would shut.
-  useEffect(() => {
-    Promise.all([myFeatures().catch(() => ({} as Record<string, boolean>)), isAdmin().catch(() => false)])
-      .then(([f, a]) => setCanCreate(!!a || f.native === true));
-  }, []);
+  // DRIP ON AN EXISTING LEAGUE (0422): find your Sleeper account, pick a
+  // league of this season, bring it in. The server checks you're in it and
+  // makes you its commissioner; the invite code is for the rest of the league.
+  const slFind = async () => {
+    const u = slUser.trim().replace(/^@/, '');
+    if (!u || slBusy) return;
+    setSlBusy('find'); setErr(null); setSlLeagues(null); setSlMe(null);
+    try {
+      const r = await myLeaguesOnSleeper(u, importSeason());
+      if (!r) { warn(); setErr(`No Sleeper account called “${u}”. It's the username, not the display name.`); return; }
+      setSlMe(r.me); setSlLeagues(r.leagues);
+      if (!r.leagues.length) setErr(`${r.me.displayName} isn't in any ${importSeason()} NFL league on Sleeper.`);
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setSlBusy(null); }
+  };
+  const slBring = async (lg: SleeperLeague) => {
+    if (!slMe || slBusy) return;
+    setSlBusy(lg.leagueId); setErr(null);
+    try {
+      const r = await importMyLeague(lg.leagueId, slMe, importSeason());
+      if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not bring that league in')); return; }
+      commit();
+      setJoined(`${r.name ?? lg.name} — it's on Drip and you're its commissioner. Invite code ${r.invite_code ?? '—'}: your league-mates type their Sleeper username and land on their own team.`);
+      onJoined();
+      onCreated?.(r.league_id, r.name ?? lg.name, r.roster_id ?? null);
+    } catch (e) { warn(); setErr(friendlyError(e)); }
+    finally { setSlBusy(null); await load(); }
+  };
   const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const listedIds = new Set((rows ?? []).filter((r) => r.commish).map((r) => r.league_id));
@@ -531,11 +560,12 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           <MenuRow title="Browse open leagues"
             sub={rows.length ? `${rows.length} looking for managers` : 'nothing listed right now'}
             onPress={() => { tap(); setNode('browse'); }} />
-          {canCreate && (
           <MenuRow title="Start a league"
               sub="name · game · season · format · draft"
               onPress={() => { tap(); setNode('create'); setStepIx(0); }} />
-          )}
+          <MenuRow title="Add Drip to my Sleeper league"
+              sub="your Sleeper username · pick the league · you're its commissioner here"
+              onPress={() => { tap(); setNode('sleeper'); }} />
           <MenuRow title="Join with an invite code"
             sub="invite code · team name" onPress={() => { tap(); setNode('join'); }} />
           {myLeagues.length > 0 && (
@@ -612,7 +642,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           league is not asked a question with one possible answer. That is why
           the step list is computed rather than constant — and why the counter
           says "of 6" for that founder and "of 7" for this one. */}
-      {node === 'create' && canCreate && (
+      {node === 'create' && (
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
             <Mono size={9} tone="faint" track={0.12}>STEP {stepIx + 1} OF {STEPS.length} · {STEP_TITLE[step]}</Mono>
@@ -909,6 +939,43 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       </Card>
 
         </>
+      )}
+
+      {/* ── ADD DRIP TO MY SLEEPER LEAGUE (0422) ───────────────────────── */}
+      {node === 'sleeper' && (
+        <Card>
+          <LabelInfo label="YOUR SLEEPER USERNAME"
+            info={'Your league keeps living on Sleeper — rosters, waivers, trades. Drip reads it and runs the game on top. You become the league\'s commissioner here; your league-mates join with the invite code. Only leagues you\'re a manager in, and only this season\'s.'} />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <TextInput value={slUser} autoCapitalize="none" autoCorrect={false} maxLength={40}
+              placeholder="the name you log in with" placeholderTextColor={t.faint}
+              onChangeText={(v) => { setSlUser(v); setErr(null); }} onSubmitEditing={() => void slFind()}
+              style={{ flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontFamily: MONO, fontSize: 13, color: t.text, backgroundColor: t.bg }} />
+            <Chip label={slBusy === 'find' ? '…' : 'FIND'} on disabled={!!slBusy || !slUser.trim()} onPress={() => void slFind()} />
+          </View>
+          {slMe && slLeagues && slLeagues.length > 0 && (
+            <View style={{ marginTop: 12, gap: 6 }}>
+              <Mono size={9} tone="faint" track={0.12}>{slMe.displayName.toUpperCase()}'S {importSeason()} LEAGUES — PICK ONE</Mono>
+              {slLeagues.map((lg) => {
+                const la = sleeperAvatarUrl(lg.avatar);
+                const on = slBusy === lg.leagueId;
+                return (
+                  <Pressable key={lg.leagueId} onPress={() => void slBring(lg)} disabled={!!slBusy}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, opacity: slBusy && !on ? 0.6 : 1 }}>
+                    {la
+                      ? <Image source={{ uri: la }} style={{ width: 32, height: 32, borderRadius: 6 }} />
+                      : <View style={{ width: 32, height: 32, borderRadius: 6, backgroundColor: alpha(t.you, 14), alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontWeight: '700', color: t.you }}>{lg.name.slice(0, 1).toUpperCase()}</Text></View>}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{lg.name}</Text>
+                      <Mono size={8.5} tone="faint">{`${lg.totalRosters}-TEAM · ${lg.format.toUpperCase()} · ${lg.scoring.toUpperCase()} · ${lg.starters} STARTERS`}</Mono>
+                    </View>
+                    <Mono size={9} tone="you" weight="700">{on ? '…' : 'BRING IT IN →'}</Mono>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </Card>
       )}
 
       {/* ── POST & RECRUIT ─────────────────────────────────────────────── */}

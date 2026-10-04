@@ -672,6 +672,10 @@ async function main() {
         argv.push('seal-audit', need('week'));
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
+      } else if (req.mode === 'offboard-sweep') {
+        // v0.612.0: one pass of the daily offboarding sweep; `dry` reports only.
+        argv.push('offboard-sweep');
+        if (req.dry) argv.push('--dry');
       } else if (req.mode === 'computer-recard') {
         // v0.599.0: rewrite a posted close line as the closed-issue card.
         argv.push('computer-recard', need('issue'));
@@ -687,7 +691,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | offboard-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -800,6 +804,20 @@ async function main() {
       const weeks = String(args[0] ?? '').split(',').map(Number).filter(Number.isFinite).filter(Boolean);
       const league = args.find((a) => a.startsWith('--league='))?.slice(9);
       await collegeReport({ weeks, leagues: league ? [league] : null });
+      break;
+    }
+    case 'offboard-sweep': {
+      // ▶ THE OFFBOARDING SWEEP, ON DEMAND (v0.612.0, 0422).
+      //   node src/cli.js offboard-sweep [--dry] [--days=60] [--grace=14]
+      //   --dry prints who would be told and who would be removed, touching
+      //   nothing. Without mail credentials the live run tells and removes
+      //   nobody either (see src/offboard.js). A dry run prints emails — run
+      //   it where the log is private.
+      const { sweepOffboard } = await import('./offboard.js');
+      const num = (k, d) => { const a = args.find((x) => x.startsWith(`--${k}=`)); return a ? Number(a.slice(k.length + 3)) : d; };
+      const r = await sweepOffboard({ dryRun: args.includes('--dry'), inactiveDays: num('days', undefined), graceDays: num('grace', undefined), log: (...a) => console.log(...a) });
+      console.log(JSON.stringify(r, null, 2));
+      if (r.errors.length) process.exitCode = 1;
       break;
     }
     case 'seed-test-users': {

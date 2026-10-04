@@ -81,7 +81,13 @@ export function friendlyError(x: unknown): string {
   if (m.includes('unable to validate email') || m.includes('invalid format') || m.includes('invalid email'))
     return 'That doesn’t look like a valid email address.';
   if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups disabled'))
-    return 'Sign-ups are closed right now. Reach out to your commissioner.';
+    return 'Sign-ups are closed right now.';
+  // THE CAP (0422). The database refuses the account that would pass it, and
+  // Supabase Auth reports any refused insert as this one line — the reason
+  // never reaches the client. The sign-up form asks signup_open() first, so
+  // this is the rare race (or a magic link / Google sign-up from a full house).
+  if (m.includes('database error saving new user') || m.includes('drip is full'))
+    return 'Drip is full right now — every spot is taken. Join the waitlist from the demo page and we’ll email you when one opens.';
   if (m.includes('not a manager'))
     return 'That Sleeper account isn’t a manager in this league. Double-check your handle — or ask your commissioner to confirm you’re in the Sleeper league.';
   if (m.includes('already linked to another login'))
@@ -513,6 +519,37 @@ export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: 
 // ── Feature gates + commissioner DFS leagues (migration 0094) ───────────────
 /** The caller's per-account feature flags ({} when none). Known keys:
  *  solo (standalone pods/showdowns) · dfs_commish (may create DFS leagues). */
+/** THE DOOR (0422): is there a spot? {open, count, cap}. Signed out or in.
+ *  A failed read answers "open" — the database still refuses past the cap,
+ *  and a form that locks itself over a hiccup turns nobody away correctly. */
+export async function signupOpen(): Promise<{ open: boolean; count: number; cap: number }> {
+  try {
+    const { data } = await (await client()).rpc('signup_open');
+    const d = data as { open?: boolean; count?: number; cap?: number } | null;
+    return { open: d?.open !== false, count: d?.count ?? 0, cap: d?.cap ?? 0 };
+  } catch { return { open: true, count: 0, cap: 0 }; }
+}
+/** Admin: the cap itself (0422). */
+export const adminSetUserCap = (cap: number) =>
+  rpc<{ ok: boolean; error?: string; cap?: number; count?: number }>('admin_set_user_cap', { p_cap: cap });
+
+/** LEAVE (0422): remove your own account. The email typed back is the
+ *  confirmation. A commissioner of a league with other members is refused
+ *  until the league has another commissioner or is deleted. */
+export const deleteMyAccount = (confirmEmail: string) =>
+  rpc<{ ok: boolean; error?: string }>('delete_my_account', { p_confirm: confirmEmail });
+
+/** DRIP ON AN EXISTING LEAGUE (0422): the persisting half of
+ *  sleeperAdmin.importMyLeague — a member brings their Sleeper league in and
+ *  becomes its commissioner here. */
+export const importMyLeagueRpc = (input: {
+  sleeperId: string; season: string; name: string; settings: unknown; avatar: string | null;
+  members: MemberRow[]; sleeperUserId: string; sleeperUsername: string;
+}) => rpc<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; seats?: number; roster_id?: number | null }>('import_my_league', {
+  p_sleeper_id: input.sleeperId, p_season: input.season, p_name: input.name, p_settings: input.settings, p_avatar: input.avatar,
+  p_members: input.members, p_sleeper_user_id: input.sleeperUserId, p_sleeper_username: input.sleeperUsername,
+});
+
 export async function myFeatures(): Promise<Record<string, boolean>> {
   const { data } = await (await client()).rpc('my_features');
   return (data as Record<string, boolean>) ?? {};

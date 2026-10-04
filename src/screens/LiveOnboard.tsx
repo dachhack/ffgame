@@ -6,7 +6,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
@@ -36,6 +36,7 @@ import { GuillotinePanel } from './GuillotinePanel';
 import { InvitePreviewCard } from './InvitePreviewCard';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
+import { SleeperImport } from './SleeperImport';
 import { mobileOs } from '../app/pwa';
 import { PodBuilder } from './PodBuilder';
 import type { Session } from '@supabase/supabase-js';
@@ -69,7 +70,7 @@ function GoogleG() {
  *  us while it is up (v0.356.11). 'admin' is not one: it needs no league. */
 const ROOM_VIEWS = ['leaguehome', 'team', 'draft'];
 
-type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass';
+type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper';
 
 export function LiveOnboard() {
   const { navigate, route, viewAs, setViewAs } = useStore();
@@ -304,6 +305,11 @@ function AuthForm() {
     return () => { dead = true; };
   }, []);
   const [mode, setMode] = useState<AuthMode>('signin');
+  // THE DOOR (0422): is there a spot? Asked once, so a full house reads the
+  // waitlist line instead of a failed form. null = not answered yet (open).
+  const [door, setDoor] = useState<{ open: boolean; count: number; cap: number } | null>(null);
+  useEffect(() => { let dead = false; signupOpen().then((d) => { if (!dead) setDoor(d); }); return () => { dead = true; }; }, []);
+  const full = door != null && !door.open;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
@@ -330,7 +336,10 @@ function AuthForm() {
   const submit = () => {
     if (!email.trim()) return;
     if (mode === 'signin') return run(() => signInPassword(email, password));
-    if (mode === 'signup') return run(async () => { const r = await signUpPassword(email, password); if (r.needsConfirm) { setInfo('Account created — check your email to confirm, then sign in.'); setSignupPending(true); } });
+    if (mode === 'signup') return run(async () => {
+      if (full) throw new Error('drip is full');   // friendlyError says the rest
+      const r = await signUpPassword(email, password); if (r.needsConfirm) { setInfo('Account created — check your email to confirm, then sign in.'); setSignupPending(true); }
+    });
     if (mode === 'forgot') return run(async () => { await sendPasswordReset(email); setInfo('If that email has an account, a reset link is on its way.'); });
     return run(async () => { await sendMagicLink(email); setSent(true); });
   };
@@ -450,13 +459,24 @@ function AuthForm() {
         {/* Invite expectations belong ABOVE the form, not in the fine print below
             it — an un-invited visitor shouldn't discover the wall after typing a
             password. */}
-        {mode === 'signin' && !commishCtx && !playerCtx && (
-          <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
-            The live game is invite-only for now — you’ll need an <span style={{ color: 'var(--dim)' }}>invite code</span>.{' '}
-            <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ background: 'none', border: 'none', padding: 0, fontSize: 10, fontWeight: 700, color: 'var(--you)', cursor: 'pointer', textDecoration: 'underline' }}>
-              No invite yet? Play the demo &amp; request one →
-            </button>
-          </div>
+        {/* THE DOOR IS OPEN (0422): anyone may make an account and start or
+            bring in a league — while there's a spot. Full → the waitlist. */}
+        {(mode === 'signin' || mode === 'signup') && !commishCtx && !playerCtx && (
+          full ? (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--warn, #c96)', marginTop: 8, lineHeight: 1.5 }}>
+              Drip is full right now — all {door!.cap.toLocaleString()} spots are taken. Existing accounts sign in as usual.{' '}
+              <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ background: 'none', border: 'none', padding: 0, fontSize: 10, fontWeight: 700, color: 'var(--you)', cursor: 'pointer', textDecoration: 'underline' }}>
+                Join the waitlist from the demo →
+              </button>
+            </div>
+          ) : (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
+              New here? <span style={{ color: 'var(--dim)' }}>Create an account</span> — any account can start a league, bring a Sleeper league in, or join a friend’s with their code.{' '}
+              <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ background: 'none', border: 'none', padding: 0, fontSize: 10, fontWeight: 700, color: 'var(--you)', cursor: 'pointer', textDecoration: 'underline' }}>
+                Not sure yet? Play the demo →
+              </button>
+            </div>
+          )
         )}
       </div>
       {/* A sign-in that came back FAILED. Captured at boot before the URL was
@@ -872,12 +892,20 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // claim with a commish code), then return home refreshed.
   if (view === 'add') return (
     <>
-      {/* "Start a fresh league" needs the founder-granted 'native' flag (0095;
-          admins always pass — the create RPC enforces the same gate server-side). */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      {/* EVERY ACCOUNT MAY CREATE (0422, v0.612.0). "Start a fresh league"
+          and "Add Drip to my Sleeper league" are for everyone now; the
+          'native' flag that gated the first is read by nothing. */}
+      <RoleChooser onPlayer={() => setView('join')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
+  );
+  // Drip on an existing Sleeper league, self-serve (0422). Done → the new
+  // commissioner's desk, where the game (Drip/Classic) and the rest are set.
+  if (view === 'sleeper') return (
+    <SleeperImport userId={viewAs?.userId ?? session.user.id}
+      onDone={(leagueId) => { setManageId(leagueId); setManageTab(undefined); refresh(); setView('commishdash'); }}
+      onBack={() => setView('add')} />
   );
   // Native leagues: create in-app → draft room → team management.
   if (view === 'create') return (
@@ -984,7 +1012,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={effAdmin || !!features.native ? () => setView('create') : undefined} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -1707,34 +1735,47 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
 // chip beside ＋ ADD A LEAGUE now, rather than a card three-deep inside the
 // add flow. This chooser is for people who already know how they are getting
 // in: with a code, as a commissioner, or by making one.
-function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
+function RoleChooser({ onPlayer, onCreate, onSleeper, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onSleeper?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
-  // Everyone sees the platform-league paths; everything below the divider only
-  // renders because THIS account holds a feature flag (or is admin) — the chip
-  // names the flag so the founder can tell at a glance who else would see it.
+  // Everyone sees the league paths — join, create, bring a Sleeper league in,
+  // commission (0422). Everything below the divider only renders because
+  // THIS account holds a feature flag (or is admin) — the chip names the flag
+  // so the founder can tell at a glance who else would see it.
   const gate = (label: string) => (
     <span className="mono" style={{ fontSize: 7.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', border: '1px dashed var(--bd)', borderRadius: 4, padding: '2px 6px', marginLeft: 8, verticalAlign: 'middle' }}>{label}</span>
   );
-  const anyGated = !!(onWeekly || onSolo || onDfsJoin || onDfsCreate || onCreate);
+  const anyGated = !!(onWeekly || onSolo || onDfsJoin || onDfsCreate);
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
         <div className="grotesk" style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>You’re signed in.</div>
-        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>How are you joining the pilot?</div>
+        <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>How are you getting in?</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button onClick={onPlayer} style={choice}>
-          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I’m a player →</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>I have a league invite code. Link my Sleeper team and set my lineup.</div>
+          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>I have an invite code →</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>A friend’s league. Link my team and set my lineup.</div>
         </button>
+        {onCreate && (
+          <button onClick={onCreate} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Start a fresh league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No existing league needed — create one here, invite friends, and draft your teams right in the app.</div>
+          </button>
+        )}
+        {onSleeper && (
+          <button onClick={onSleeper} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Add Drip to my Sleeper league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Your league stays on Sleeper; Drip runs the game on top. Type your Sleeper username, pick the league, and you’re its commissioner here.</div>
+          </button>
+        )}
         <button onClick={onCommish} style={choice}>
-          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I run this league →</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Verify as commissioner with the code you were given, then share a player invite code with your league.</div>
+          <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I have a commissioner code →</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Take over a league that was set up for you, then share its invite code with your league.</div>
         </button>
         {onRequest && (
           <button onClick={onRequest} style={choice}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>My league isn’t in the pilot yet →</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No code? Request one — we’ll set your league up. Sleeper · ESPN · Yahoo · Fleaflicker · MFL.</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>My league is on ESPN, Yahoo, MFL or Fleaflicker →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Those still come in by hand — tell us the league and we’ll set it up and send you the commissioner code.</div>
           </button>
         )}
 
@@ -1775,12 +1816,6 @@ function RoleChooser({ onPlayer, onCreate, onCommish, onRequest, onSolo, onWeekl
           <button onClick={onDfsCreate} style={{ ...choice, borderLeft: '3px solid var(--warn)' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--warn)' }}>🏈 Start a DFS league →{gate('DFS COMMISH')}</div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>You’re an approved DFS commissioner. Found a private league and share its invite link.</div>
-          </button>
-        )}
-        {onCreate && (
-          <button onClick={onCreate} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Start a fresh league →{gate('NATIVE')}</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No existing league needed — create one here, invite friends, and draft your teams right in the app.</div>
           </button>
         )}
       </div>
