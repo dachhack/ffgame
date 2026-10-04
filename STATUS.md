@@ -22,6 +22,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.610.0 — the league card says how the league is set up
+
+> - Founder's list: "More descriptive league descriptions on my leagues page. (Devy, Drip, other league settings?)" The card's one line said season, size, continuity and the game ("2026 12-Team Dynasty Drip") and nothing else; an imported league's line was the one word "Sleeper".
+> - Each card now carries a second line with the settings behind it, printing only what is news: **Devy** or **Devy Shares**, **College** (college calendar), **Superflex**, reception scoring (**Full PPR**, **Half PPR**, **Standard scoring**; classic leagues), **Best Ball**, the salary cap (**$200 cap**), keepers (**3 keepers**), dues (**$50 dues**) and **Custom scoring**. Nothing extra is printed for a plain drip league, so most cards look unchanged.
+> - An imported league reads its own platform's settings as they were stored at import: **Dynasty** or **Keeper**, **Superflex**, scoring, **Best Ball** and the starter count ("Dynasty · Superflex · Full PPR · 10 starters").
+
+- 0421: `_league_details(league_id)` gathers the block (native: `league_is_superflex` and `ppr` for classic only, `bestball`, `_league_has_college` + `devy_mode`, `league_is_college_calendar`, `contracts_on` + `league_salary_cap`, `keeper_count`, `dues_amount`, custom scoring; imported: Sleeper's `settings.type`, `settings.best_ball`, `scoring.rec`, `roster_positions`), and `my_teams` serves it as `league.details`. Respun from 0242's body with the one added key.
+- Core `liveApi.ts`: `LeagueDetails`, `leagueDetailLine(e)` (empty when there is nothing to add, so the card leaves the line out). Web `LeagueCard` and the app's `Leagues` card print it under the type line. check:leagueline covers it.
+
+### v0.609.0 — an imported league opens on the matchup too
+
+> - Founder's list: "League opens to match view post draft." The rule (v0.356.16) opened the matchup once a league's draft was complete — but an imported Sleeper league has no draft of ours at all (it drafted on Sleeper before it got here), so the rule never saw it as drafted and every imported league opened on the hub.
+> - An imported league with a seat now opens on the matchup, like any drafted league. A native league still opens the draft room while its draft runs and the hub before it; a seatless commissioner still lands on the hub.
+> - Not confirmed against a live league: if a NATIVE league of yours still opens on the hub after its draft, say which one — on the web, a board that fails to build silently leaves you on the hub, and that would be a different cause.
+
+- Core `leagueLandingRoom`: `draft_status == null` + a seat + `provider !== 'native'` → `'matchup'`. Both clients read it. check:leagueline covers the cases.
+
+### v0.608.0 — the room bar at every width, and on the matchup board
+
+> - Founder's list: "No icons on desktop web nav.. keep the nav bar up like on app and mobile web. Disappears on match up screen currently."
+> - Desktop web now has the same words-only room bar the app and phone web have (LEAGUE · MATCHUP · DRAFT · MY TEAM · CHAT), fixed to the foot of the page in a centred band. The old chip row with icons under the league name is gone. On a phone the bar still ducks as you scroll down; on a wide screen it stays up.
+> - The matchup board carries the bar at every width now. It was phones-only there because above 720px the strip drew the chip row, which the board didn't want stacked over it; the phone-only parts of the board (the brand top rail in place of the header's chips) stay phone-only.
+
+- Web `LeagueStrip.tsx`: the chip row, `railIcon` and `themeIsLight` are gone; the `<nav>` renders at every width, body padding always reserved, the scroll duck only below 720px. `Matchup.tsx`: `barOn` (the bar exists) split from `railed` (the phone layout); `BoardRoomBar` and the board's bottom padding follow `barOn`. Web only.
+
+### v0.607.0 — bigger team names, score and clock on the fields
+
+> - Founder: "A lot larger team names, score and time on the fields view." The line over each field — away team, score, clock, score, home team — was 9px whatever the size of the tile, the smallest text on the card for the three things you glance for.
+> - It is now 14px team codes with 20px logos, 17px scores and a 12px clock, on the web and in the app. The enlarged game view's line (tap a field) grows the same way: 15px teams, a 22px score, a 12px clock.
+
+- Web `FieldView.tsx` (`Field` strip, `GameView` line); app `ui/FieldView.tsx` (strip, `GameViewBody` line). Sizes only.
+
 ### v0.606.0 — the player card reads StatHead's new hit % and draft outlook
 
 > - StatHead 1.0.110 (Oct 3) replaced its career PPG with **hit %**, the chance of a fantasy-starter season in a player's first four NFL years, per format, and added a **draft outlook** (round 1 / 2–3 / 4–7 / undrafted). The college card's NFL OUTLOOK line read the removed field, so it would have gone blank on the next board load.

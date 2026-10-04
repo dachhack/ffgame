@@ -9,7 +9,7 @@ import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { crestInitial } from '@drip/core/data/crest';
 import {
   myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, setLeagueArchived,
-  leagueTypeLine, leagueLandingRoom, myLeagueSlate,
+  leagueDetailLine, leagueTypeLine, leagueLandingRoom, myLeagueSlate,
   type AdminLeague, type Enrollment, type WaitlistRow, type LeagueSlateRow,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
@@ -312,6 +312,11 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
                     as the type, and a loaded league runs past one line on a
                     phone. Most read on one and look unchanged. */}
                 <Text numberOfLines={2} style={{ fontSize: 13, color: t.mid, lineHeight: 17 }}>{leagueTypeLine(e)}</Text>
+                {/* The settings line (0421): devy, superflex, PPR, best ball,
+                    cap, keepers, dues — left out when there is nothing to add. */}
+                {!!leagueDetailLine(e) && (
+                  <Text numberOfLines={2} style={{ fontSize: 12, color: t.faint, lineHeight: 16 }}>{leagueDetailLine(e)}</Text>
+                )}
                 {lg?.draft_status === 'live' && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.opp }} />

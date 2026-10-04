@@ -11,7 +11,7 @@ import {
   myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
   type LeagueSlateRow,
-  leagueTouch, leagueTypeLine, leagueLandingRoom,
+  leagueTouch, leagueDetailLine, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
@@ -1506,6 +1506,13 @@ function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
           <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>
             {leagueTypeLine(e)}
           </div>
+          {/* The settings line (0421): devy, superflex, PPR, best ball, cap,
+              keepers, dues — left out when there is nothing to add. */}
+          {leagueDetailLine(e) && (
+            <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1, lineHeight: 1.4 }}>
+              {leagueDetailLine(e)}
+            </div>
+          )}
           {drafting && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
               <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--opp)' }} />
