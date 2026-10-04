@@ -306,7 +306,9 @@ function AuthForm() {
       .catch(() => { if (!dead) setPreview({ st: 'error' }); });
     return () => { dead = true; };
   }, []);
-  const [mode, setMode] = useState<AuthMode>('signin');
+  // v0.614.0: the landing's GET ACCOUNT opens straight onto the sign-up form.
+  const { route } = useStore();
+  const [mode, setMode] = useState<AuthMode>(() => (route.name === 'live' && route.view === 'signup' ? 'signup' : 'signin'));
   // THE DOOR (0422): is there a spot? Asked once, so a full house reads the
   // waitlist line instead of a failed form. null = not answered yet (open).
   const [door, setDoor] = useState<{ open: boolean; count: number; cap: number } | null>(null);
@@ -1016,14 +1018,16 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     </div>
   );
 
-  // Genuinely new (no leagues at all) → fork by role.
-  if (enrollments.length === 0) return (
+  // Arrived with an invite code stashed (no leagues yet) → straight to the
+  // join form. Anyone else with no leagues gets MY LEAGUES itself, empty,
+  // with "Open a league or join one above" under the ＋ ADD / 🔎 FIND chips
+  // (v0.614.0, founder) — the role chooser lives behind ＋ ADD A LEAGUE.
+  if (enrollments.length === 0 && choice === 'player') return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
-      {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onProvider={() => setView('provider')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
-        : <RedeemForm userId={session.user.id} onJoined={refresh} />}
+      <RedeemForm userId={session.user.id} onJoined={refresh} />
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
+        <button onClick={() => setChoice('none')} className="mono" style={linkBtn}>← my leagues</button>
+        <button onClick={() => setView('commish')} className="mono" style={linkBtn}>I actually run this league</button>
         {/* The only route back to the dashboard for a commissioner who holds no
             seat: with no enrollments there's no league card to carry a "manage"
             button, so without this the player side is a one-way door. */}
@@ -1241,6 +1245,17 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
           border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
         }}>＋ ADD A LEAGUE</button>
       </div>
+      {/* NO LEAGUES YET (v0.614.0, founder: "No leagues: Open a league or
+          join one above"). The chips above are the two doors. */}
+      {total === 0 && (
+        <div style={{ background: 'var(--surface)', border: '1px dashed var(--bd)', borderRadius: 10, padding: '28px 18px', textAlign: 'center' }}>
+          <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Open a league or join one above.</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.6 }}>
+            ＋ ADD A LEAGUE starts a fresh one, brings your Sleeper, ESPN, Fleaflicker, MFL or Yahoo league in, or takes an invite code.<br />
+            🔎 FIND A LEAGUE lists leagues looking for managers.
+          </div>
+        </div>
+      )}
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}

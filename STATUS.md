@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.614.0 — the front door: get an account, the feature board, the demo as a picture
+
+> - Founder's revamp of the web flow. Signed out: **Get account** (or **Get on the waiting list** when the 1,000 spots are taken — the button reads the live count), then **Features** in five groups — League types (Redraft · Dynasty · Keeper · Contract · Devy), Competitive modes (Vampire · Guillotine · Golf), Positions (QB/RB/WR/TE · K/D/ST · DL/DE/LB/DB · RET/FB/PUNT/HC · scoped positions), Scoring options (single-spot best ball · scoped bonuses · others), Matchup style (Drip · Classic) — each chip opening one line; then the **Drip demo as a picture** that clicks into the demo.
+> - Signed in: My Leagues as before; with no leagues it now says **"Open a league or join one above"** under the ＋ ADD A LEAGUE and 🔎 FIND A LEAGUE chips, instead of dropping you into the role chooser.
+> - The demo keeps its own route and explainer, one click from the landing ("demo" in the header, the picture, the ▶ button). GET ACCOUNT opens the sign-in page on the create-account form.
+
+- Web `Landing.tsx` (route `landing`, the boot default for a stranger; `#/landing`); `#/live/signup` opens AuthForm in sign-up mode. Core `LANDING_FEATURES` in `leagueTagline.ts`, reusing the continuity / format / game notes where they exist (Devy, positions and scoring lines are new). `public/brand/demo-board.png` is a headless-Chromium shot of the real demo board. `LeagueHome` empty state. Web only.
+
 ### v0.613.0 — Drip on your ESPN, Fleaflicker, MFL or Yahoo league, self-serve
 
 > - Founder, after Sleeper went self-serve: "Any player works for the sleeper import. Let's do the same for the other league providers (ESPN, Yahoo, etc). Current season inputs only."

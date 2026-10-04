@@ -665,7 +665,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
                 try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
                 setSleeperUser(null);
                 markBootSessionChecked(); // don't let the demo's boot check race the async signOut
-                navigate({ name: 'demo' });
+                navigate({ name: 'landing' });
               }}
               className="mono"
               title={session.user.email ?? 'Sign out'}
@@ -699,7 +699,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
             setSleeperUser(null);
             markBootSessionChecked();
-            navigate({ name: 'demo' });
+            navigate({ name: 'landing' });
           }} />
       )}
     </div>

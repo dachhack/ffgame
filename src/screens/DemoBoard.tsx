@@ -665,6 +665,9 @@ export function DemoBoard() {
           marketing landing. Settings menu is minimal (no theme/deck customizer)
           until sign-in. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {/* v0.614.0: the demo is one click off the front door, and one back. */}
+        <button onClick={() => navigate({ name: 'landing' })} className="mono" style={linkBtn}>← home</button>
+        <span style={{ color: 'var(--faint)' }}>·</span>
         <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>sign in</button>
         <span style={{ color: 'var(--faint)' }}>·</span>
         <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>FAQ</button>
