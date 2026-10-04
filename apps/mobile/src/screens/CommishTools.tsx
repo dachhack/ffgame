@@ -22,7 +22,7 @@ import {
   setTeamAvatar, setTeamController, setTeamDivision, setTeamName, teamManagers,
   type AdminMember, type LeagueJoiner, type NativeTeamState, type TeamManagerRow,
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
-  leagueGameMode, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter,
+  leagueGameMode, type GameModeInfo, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter,
   setLeagueGolf,
   setTaxiRules, setIrRules, setOutRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
@@ -71,6 +71,8 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { InfoChip, LabelInfo } from '../ui/InfoChip';
+import { SportLineup } from '../ui/SportLineup';
+import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
 import { CommishPlayers } from '../ui/LeagueExtras';
@@ -164,6 +166,14 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
  *  It reads the current values from my_teams rather than taking props: this
  *  sheet can be opened from a commissioner who has no seat, and my_teams
  *  answers for every league the caller is in either way. */
+/** THE LEAGUE'S SPORT (v0.625.0): a daily-sport league hides the NFL-only
+ *  controls — Drip, golf, guillotine/vampire, contracts, the NFL builder. */
+function useLeagueSport(leagueId: string): Sport {
+  const [sport, setSport] = useState<Sport>('nfl');
+  useEffect(() => { leagueGameMode(leagueId).then((g) => { if (g.ok && g.sport) setSport(g.sport); }).catch(() => {}); }, [leagueId]);
+  return sport;
+}
+
 function LeagueIdentityCard({ leagueId }: { leagueId: string }) {
   const t = useTheme();
   const [name, setName] = useState('');
@@ -254,8 +264,10 @@ function LeagueIdentityCard({ leagueId }: { leagueId: string }) {
   );
 }
 
-export function CommishTools({ leagueId, native, rosterId, initialSection, onBack, onSelfUnassigned }: {
+export function CommishTools({ leagueId, native, rosterId, initialSection, onBack, onSelfUnassigned, onLeagueDeleted }: {
   leagueId: string;
+  /** After the league is deleted — somewhere that is not the league (v0.625.0). */
+  onLeagueDeleted?: () => void;
   /** Open on a destination rather than the map — creating a league lands on
    *  ROSTER (v0.296.6), because the draft drafts the roster the league is
    *  SHAPED for and both freeze when it starts. */
@@ -291,6 +303,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
   // destinations (v0.297.3). False until the read lands — a menu that pops
   // items IN reads worse than one that briefly offers a room you don't need.
   const [classic, setClassic] = useState(false);
+  const sport = useLeagueSport(leagueId);
   // Does this league run a salary cap? Same shape as `classic` above, and
   // false until the read lands for the same reason: a menu that pops an item
   // IN reads worse than one that briefly omits a room you may not need.
@@ -463,7 +476,8 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             )}
             {section === 'faab' && native && <FaabWalletsCard leagueId={leagueId} />}
             {section === 'contracts' && native && <ContractRulesCard leagueId={leagueId} />}
-            {section === 'format' && native && <FormatCard leagueId={leagueId} />}
+            {section === 'format' && native && sport === 'nfl' && <FormatCard leagueId={leagueId} />}
+            {section === 'format' && native && sport !== 'nfl' && <Card><Mono size={9.5} tone="faint" style={{ lineHeight: fs(13) }}>A {SPORTS[sport].league} league plays head-to-head. Points, categories or roto is a SCORING setting on the web console.</Mono></Card>}
             {section === 'players' && native && <><TopUpPoolCard leagueId={leagueId} /><CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} /></>}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
             {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
@@ -474,7 +488,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
             {section === 'scores' && native && <ScoresCard leagueId={leagueId} />}
             {section === 'report' && native && <><WeeklyReportCard leagueId={leagueId} /><ScheduleCard leagueId={leagueId} /><PlayedWeeksCard leagueId={leagueId} /></>}
             {section === 'dues' && native && <DuesCard leagueId={leagueId} />}
-            {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onBack} />}
+            {section === 'delete' && <DeleteLeagueCard leagueId={leagueId} onDeleted={onLeagueDeleted ?? onBack} />}
           </ScrollView>
         </Overlay>
       )}
@@ -1758,6 +1772,7 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
 // appears beside it; dynasty deals three seasons of tradeable picks on save.
 function ContinuityRow({ leagueId }: { leagueId: string }) {
   const t = useTheme();
+  const sport = useLeagueSport(leagueId);
   const [st, setSt] = useState<KeeperState | null>(null);
   const [cmode, setCmode] = useState<LeagueContinuity>('redraft');
   const [n, setN] = useState('');
@@ -1803,8 +1818,8 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
         <Chip on={cmode === 'redraft'} label="REDRAFT" disabled={busy || rolled} onPress={() => pick('redraft')} />
         <Chip on={cmode === 'keeper'} label="KEEPER" disabled={busy || rolled} onPress={() => pick('keeper')} />
         <Chip on={cmode === 'dynasty'} label="DYNASTY" disabled={busy || rolled} onPress={() => pick('dynasty')} />
-        <Chip on={cmode === 'contract'} label="CONTRACT" disabled={busy || rolled} onPress={() => pick('contract')} />
-        <Chip on={cmode === 'contract_dynasty'} label="CONTRACT DYNASTY" disabled={busy || rolled} onPress={() => pick('contract_dynasty')} />
+        {sport === 'nfl' && <Chip on={cmode === 'contract'} label="CONTRACT" disabled={busy || rolled} onPress={() => pick('contract')} />}
+        {sport === 'nfl' && <Chip on={cmode === 'contract_dynasty'} label="CONTRACT DYNASTY" disabled={busy || rolled} onPress={() => pick('contract_dynasty')} />}
         {needsN && (
           <TextInput value={n} onChangeText={(v) => setN(v.replace(/\D/g, ''))} keyboardType="number-pad"
             editable={!busy && !rolled}
@@ -1842,6 +1857,10 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // GOLF (v0.303.0): null until the mode load lands, so neither pill lights up
   // on a guess.
   const [golf, setGolf] = useState<boolean | null>(null);
+  // A DAILY SPORT (v0.625.0): classic only, its own lineup builder, no golf.
+  const [sport, setSport] = useState<Sport>('nfl');
+  const [gmInfo, setGmInfo] = useState<GameModeInfo | null>(null);
+  const [drafted, setDrafted] = useState(false);
   const saveGolf = async (on: boolean) => {
     if (busy) return;
     setBusy(true); setNote(null);
@@ -2005,7 +2024,9 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
+    draftStateOf(leagueId).then((d) => setDrafted(!!d.status && d.status !== 'pending')).catch(() => {});
     leagueGameMode(leagueId).then((r) => { if (r.ok) {
+      setSport(r.sport ?? 'nfl'); setGmInfo(r);
       setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {});
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
@@ -2171,8 +2192,10 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             info={'DRIP is the full game: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.\n\nCLASSIC is traditional fantasy — standard scoring, one weekly QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses or power-ups.\n\nThe mode locks once the draft starts: it decides what the league drafts FOR, so it can\'t be a decide-later.'} />
         </View>
         <View style={{ flexDirection: 'row', gap: 6 }}>
-          <Pill on={mode === 'drip'} label="DRIP" onPress={() => void set('drip')} />
-          {(classicOk || mode === 'classic')
+          {/* DRIP IS THE NFL GAME (v0.625.0). */}
+          {sport === 'nfl' && <Pill on={mode === 'drip'} label="DRIP" onPress={() => void set('drip')} />}
+          {sport !== 'nfl' && <Pill on label={`CLASSIC · ${SPORTS[sport].league}`} onPress={() => {}} />}
+          {sport === 'nfl' && (classicOk || mode === 'classic')
             ? <Pill on={mode === 'classic'} label="CLASSIC" onPress={() => void set('classic')} />
             : <Mono size={8} tone="faint" style={{ alignSelf: 'center' }}>CLASSIC{'\n'}not unlocked</Mono>}
         </View>
@@ -2183,7 +2206,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           catalog says — it changes which end of the leaderboard you aim at,
           which is a fact about the GAME. Frozen at the draft for the same
           reason the mode is: you draft a golf league inside out. */}
-      {mode === 'classic' && (
+      {mode === 'classic' && sport === 'nfl' && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -2241,7 +2264,11 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under MODE for the full scoring editor.
         </Mono>
       )}
-      {view === 'lineup' && mode === 'classic' && spots && (() => {
+      {view === 'lineup' && mode === 'classic' && sport !== 'nfl' && (
+        <SportLineup leagueId={leagueId} sport={sport} gm={gmInfo} locked={drafted}
+          onSaved={() => { leagueGameMode(leagueId).then((r) => { if (r.ok) { setGmInfo(r); setRounds(r.rounds ?? null); } }).catch(() => {}); }} />
+      )}
+      {view === 'lineup' && mode === 'classic' && sport === 'nfl' && spots && (() => {
         // starters + the three stashes: what the draft's rounds will be.
         const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out + shape.devy;
         return (
@@ -2692,7 +2719,12 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
         </View>
         );
       })()}
-      {view === 'scoring' && mode === 'classic' && (
+      {view === 'scoring' && mode === 'classic' && sport !== 'nfl' && (
+        <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
+          A {SPORTS[sport].league} league scores box-score stat lines — points per stat, categories or roto. Its table is on the web console's SCORING page for now.
+        </Mono>
+      )}
+      {view === 'scoring' && mode === 'classic' && sport === 'nfl' && (
         <View>
           <Mono size={8.5} tone="faint" weight="700">⚖ SCORING  every value is yours to set</Mono>
           {/* START FROM: the recognised systems, so a standard league isn't 155

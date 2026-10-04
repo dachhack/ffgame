@@ -45,4 +45,5 @@ export const WNBA: SportDef = {
   gamesPerTeam: 44,
   regularSeasonWeeks: 20,
   keyPrefix: 'wnba',
+  vocab: { start: 'tip-off', starts: 'tips off', started: 'tipped off', slate: 'WNBA SLATE', noGame: 'no game today' },
 };

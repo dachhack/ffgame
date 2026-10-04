@@ -22,6 +22,61 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.625.0 — a sport league's board reads its own games; the NFL's controls stay the NFL's
+
+> - An NBA, NHL or MLB league's lineup now shows each player's game tonight (or next) with tip-off, puck drop or first pitch — not "no game listed" under an NFL slate.
+> - Dynasty is open to daily-sport leagues; Drip, golf, guillotine, contracts, the NFL roster builder and the bracket are not.
+> - Deleting a league takes you back to My Leagues.
+
+Playtest, the founder: "Drip should only be available for NFL." "Roster
+settings… still NFL." "Made roster settings and saved, but didn't take."
+"Waivers are still NFL." "Kick off, Tip off, First pitch, puck drop." "Went
+into MLB league but no games scheduled." "After deleting a league it should
+take you back to my leagues." "MLB dynasty mode needed."
+
+**The board (web + app).** The classic board read every row's game off the
+NFL week slate, so a sport league's rows all said "no game listed" under a
+chip labelled COLLEGE SLATE (the week was over 200) — "no games scheduled".
+`core/sports/slate.ts`: a row's game is today's for the player's team, else
+the team's next in the period, from `sport_league_games`; the chip is the
+sport's slate for today; the week stepper runs 301 … 300 + weeks. Every
+SportDef carries a `vocab` (kickoff / tip-off / puck drop / first pitch,
+their verbs, the slate label, "no game today") and the board's strings use
+it. `check-sports` pins the vocabulary and the slate helper.
+
+**0433 — the NFL's controls do not reach a sport league.** Re-issued from
+their latest bodies with one guard each: `set_league_game_mode` (no Drip),
+`set_league_format` (head-to-head only), `set_league_continuity` (no
+contracts; redraft, keeper and dynasty stay open), `seed_league_pool` (the
+draft room's REFRESH PLAYER POOL had reseeded a sport league with NFL
+players), `set_league_classic_slots` (the app's NFL builder was the "didn't
+take": it refused every sport position and only the bench landed),
+`native_reschedule`, `set_playoff_rules`. `set_transaction_rules` accepts a
+trade deadline of 1–40 for a sport league and `trade_deadline_error`
+compares the league's own week (live week − 300), where before any deadline
+read as passed. `waiver_hold_until` skips the after-games hold for a sport
+league — it read `nfl_slate` and held every drop until Wednesday.
+`drop_lock_reason` uses the sport's own started-today rule.
+
+**The commissioner's pages.** Web: MODE shows "CLASSIC · NBA" with the
+sport's copy and no Drip or golf; the NFL scoring catalog and BY POSITION
+no longer render under SportSettings; the admin row hides SALARY, PLAYOFFS,
+ROSTER RULES (NFL position caps), K / D-ST FILL, the next-open-week shift,
+preseason practice, the contract chips and the after-games waiver chips for
+a sport league; LeagueInfo prints the sport's points table. App: the ROSTER
+page gets `ui/SportLineup` (counts per slot type, bench, IR — the web
+builder's twin), MODE hides Drip and golf, FORMAT and the contract chips are
+football's, SCORING points at the web console for now.
+
+**Delete → My Leagues.** `CommishDash` takes `onDeleted`; LiveOnboard
+clears the league and refreshes. The app's `CommishTools` takes
+`onLeagueDeleted`; App.tsx returns to the leagues list and remounts it.
+
+Not yet: the app's sport scoring page; a sport league's NEXT SEASON
+rollover (dynasty is selectable, the rollover path is untested for a sport
+calendar); waivers still process on the league's daily clear time, which
+is right for a daily sport, but the schedule copy is football's.
+
 ### v0.624.0 — daily-sport leagues meet main
 
 > - NBA, NHL, MLB and WNBA leagues skip the devy question — college football players have no place in their pools.

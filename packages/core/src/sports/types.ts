@@ -112,4 +112,23 @@ export interface SportDef {
    *  rule college uses (`c-<espn_id>`) so a key never collides with an NFL
    *  name slug. */
   keyPrefix: string;
+  /** The words a board uses for this sport (v0.625.0): a game "kicks off" in
+   *  the NFL, "tips off" in the NBA, and a lineup screen that says kickoff
+   *  to a hockey league reads as somebody else's product. */
+  vocab: SportVocab;
+}
+
+/** The sport's words for the moment a game starts and for its slate. Every
+ *  string is lower-case prose except `slate`, which is a chip label. */
+export interface SportVocab {
+  /** the noun: "kickoff", "tip-off", "puck drop", "first pitch" */
+  start: string;
+  /** the verb, present: "kicks off", "tips off", "drops the puck", "throws its first pitch" */
+  starts: string;
+  /** the verb, past: "kicked off", "tipped off", "dropped the puck", "thrown its first pitch" */
+  started: string;
+  /** the chip label over the day's games: "NFL SLATE", "NBA SLATE" */
+  slate: string;
+  /** what a slot with nobody playing says: "no game this week" / "no game today" */
+  noGame: string;
 }

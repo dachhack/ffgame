@@ -47,6 +47,7 @@ import { FeedSheet } from './FeedSheet';
 import { WINDOWS, defaultMetric } from '@drip/core/data/metrics';
 import { NFL_CODES } from '@drip/core/data/kdst';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
+import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier, markFreeState, adminSetGlobalMarkFree, syncMarkFree, setMyMarkFree } from '@drip/core/data/liveApi';
 import { personalMarkFree } from '@drip/core/data/markFree';
 import { POWERUPS } from '@drip/core/data/powerups';
@@ -522,7 +523,7 @@ interface TxnRules {
    *  day), the trade deadline week (null = none). */
   minBid: number; deadline: number | null;
 }
-function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
+function TransactionRulesEditor({ leagueId, sport = 'nfl' }: { leagueId: string; sport?: Sport }) {
   const [init, setInit] = useState<TxnRules | null>(null);
   const [mode, setMode] = useState<WaiverMode>('rolling');
   const [budget, setBudget] = useState(100);
@@ -668,7 +669,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
             {toggle(deadline === null, 'NONE', () => setDeadline(null))}
             {toggle(deadline !== null, deadline === null ? 'WEEK…' : `THROUGH WEEK ${deadline}`, () => setDeadline(deadline ?? 11))}
             {deadline !== null && <button onClick={() => setDeadline(Math.max(1, deadline - 1))} className="mono" style={stepBtnStyle}>−</button>}
-            {deadline !== null && <button onClick={() => setDeadline(Math.min(18, deadline + 1))} className="mono" style={stepBtnStyle}>＋</button>}
+            {deadline !== null && <button onClick={() => setDeadline(Math.min(sport === 'nfl' ? 18 : 40, deadline + 1))} className="mono" style={stepBtnStyle}>＋</button>}
           </div>
           {deadlinePassed && init.deadline === deadline && (
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--warn)', marginTop: 5 }}>passed — trades are closed for the season</div>
@@ -784,7 +785,7 @@ function TransactionRulesEditor({ leagueId }: { leagueId: string }) {
           <div className="mono" title="A player dropped after the week's games start stays on waivers until this morning's run." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>AFTER GAMES, WAIVERS CLEAR</div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
             {toggle(gameHold === null, 'NONE', () => setGameHold(null))}
-            {[2, 3, 4].map((d) => (
+            {(sport === 'nfl' ? [2, 3, 4] : []).map((d) => (
               <span key={d}>{toggle(gameHold === d, DAY_LABEL[d].slice(0, 3), () => setGameHold(d))}</span>
             ))}
           </div>
@@ -1221,6 +1222,12 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const [practiceWeek, setPracticeWeek] = useState<number | null>(null);
   const [audit, setAudit] = useState<AdminAudit[] | null>(null);
   const [tab, setTab] = useState<LeagueTab>(defaultTab || 'overview');
+  // THE LEAGUE'S SPORT (v0.625.0): a daily-sport league hides the NFL-only
+  // controls (K/D-ST fill, the next-open-week shift, the bracket, contracts,
+  // the after-games waiver hold) and its week counts are its own.
+  const [sport, setSport] = useState<Sport>('nfl');
+  useEffect(() => { leagueGameMode(l.league_id).then((g) => { if (g.ok && g.sport) setSport(g.sport); }).catch(() => {}); }, [l.league_id]);
+  const nflOnly = sport === 'nfl';
   // HUB-FIRST on phones (v0.259.0), and the hub NEVER LEAVES (v0.296.3): a
   // narrow screen shows the whole map of destinations and pops the one you
   // picked up over it, so the map is always one dismiss away. It used to be a
@@ -1538,7 +1545,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         ...(native ? [{ id: 'waivers', label: 'WAIVERS & TRADES' } as TabDef<LeagueTab>] : []),
         // 📜 SALARY (0217–0220): the contract rulebook. Native only — and the
         // panel says how to make this a contract league when it isn't one yet.
-        ...(native ? [{ id: 'salary', label: '📜 SALARY' } as TabDef<LeagueTab>] : []),
+        ...(native && nflOnly ? [{ id: 'salary', label: '📜 SALARY' } as TabDef<LeagueTab>] : []),
       ],
     },
     {
@@ -1551,7 +1558,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         { id: 'matchups', label: 'MATCHUPS' },
         ...(native ? [
           { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
-          { id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>,
+          ...(nflOnly ? [{ id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>] : []),
           { id: 'dynasty', label: '🔁 NEXT SEASON' } as TabDef<LeagueTab>,
         ] : []),
       ],
@@ -1724,7 +1731,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {tab === 'lineup' && l.provider === 'native' && (
         <div style={{ marginTop: 14, borderTop: panels?.lineup ? '1px solid var(--bd)' : 'none', paddingTop: panels?.lineup ? 14 : 0 }}>
           <div style={subhead}>ROSTER RULES</div>
-          <RosterRulesEditor leagueId={l.league_id} />
+          {nflOnly ? <RosterRulesEditor leagueId={l.league_id} /> : <Muted text={`Position maximums are not built for a ${SPORTS[sport].league} league yet — the lineup above is the roster rule.`} />}
         </div>
       )}
 
@@ -1732,7 +1739,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       {tab === 'waivers' && l.provider === 'native' && (
         <div style={{ marginTop: 12 }}>
           <div style={subhead}>WAIVERS &amp; TRADES</div>
-          <TransactionRulesEditor leagueId={l.league_id} />
+          <TransactionRulesEditor leagueId={l.league_id} sport={sport} />
           <WaiverOrderPanel leagueId={l.league_id} />
           <WaiverHoldsPanel leagueId={l.league_id} />
           <TxnLimitsPanel leagueId={l.league_id} />
@@ -1806,7 +1813,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
               rewritten to the live player. */}
           {/* THE CALENDAR (0280): only shows for a native league, and says no
               when there is nothing to move. */}
-          {l.provider === 'native' && (
+          {l.provider === 'native' && nflOnly && (
           <div>
             <div style={subhead}>SCHEDULE</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1827,10 +1834,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {/* CONTINUITY (0185): redraft / keeper / dynasty — what carries into
               next season. Lives here per the founder ("put it in mode and
               season"); the 🔁 NEXT SEASON panel shows the consequences. */}
-          {l.provider === 'native' && <ContinuityEditor leagueId={l.league_id} />}
+          {l.provider === 'native' && <ContinuityEditor leagueId={l.league_id} sport={sport} />}
           {/* Practice is a commissioner tool, not an admin errand — it's how a
               league's players get to rehearse the live loop before Week 1. */}
-          <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />
+          {nflOnly && <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />}
         </div>
       )}
 
@@ -1982,7 +1989,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       )}
       {/* K/DST fill (v0.216.2) — a setup decision about what the league
           rosters, so it lives with MODE & SEASON rather than under DIAGNOSE. */}
-      {tab === 'mode' && (
+      {tab === 'mode' && nflOnly && (
         <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
           <div style={subhead}>K / D-ST FILL</div>
           {!kdst ? <Muted text="Loading…" /> : (
@@ -4219,7 +4226,7 @@ function SalaryPanel({ leagueId }: { leagueId: string }) {
   );
 }
 
-function ContinuityEditor({ leagueId }: { leagueId: string }) {
+function ContinuityEditor({ leagueId, sport = 'nfl' }: { leagueId: string; sport?: Sport }) {
   const [st, setSt] = useState<KeeperState | null>(null);
   const [mode, setMode] = useState<LeagueContinuity>('redraft');
   const [n, setN] = useState('');
@@ -4272,8 +4279,8 @@ function ContinuityEditor({ leagueId }: { leagueId: string }) {
         {chipBtn('redraft', 'REDRAFT')}
         {chipBtn('keeper', '★ KEEPER')}
         {chipBtn('dynasty', '🏰 DYNASTY')}
-        {chipBtn('contract', '📜 CONTRACT')}
-        {chipBtn('contract_dynasty', '📜🏰 CONTRACT DYNASTY')}
+        {sport === 'nfl' && chipBtn('contract', '📜 CONTRACT')}
+        {sport === 'nfl' && chipBtn('contract_dynasty', '📜🏰 CONTRACT DYNASTY')}
         {mode === 'keeper' && <>
           <input value={n} onChange={(e) => setN(e.target.value.replace(/\D/g, ''))} inputMode="numeric"
             disabled={busy || rolled} style={{ ...inp, width: 48, textAlign: 'center' }} />

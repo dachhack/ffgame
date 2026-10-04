@@ -191,6 +191,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
     setSport(sp);
     if (sp !== 'nfl') {
       setGame('classic'); setFormat('standard');
+      // Contracts are not built for a daily sport; dynasty is (v0.625.0).
+      if (continuity === 'contract' || continuity === 'contract_dynasty') setContinuity('redraft');
       setCopyFrom(null); setCopyBp(null);
     }
   };
@@ -868,7 +870,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Chip label="REDRAFT" on={continuity === 'redraft'} onPress={() => { tap(); pickContinuity('redraft'); }} />
                   <Chip label="KEEPER" on={continuity === 'keeper'} onPress={() => { tap(); pickContinuity('keeper'); }} />
-                  {!isSport && <Chip label="DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />}
+                  <Chip label="DYNASTY" on={continuity === 'dynasty'} onPress={() => { tap(); pickContinuity('dynasty'); }} />
                   {!isSport && <Chip label="CONTRACT" on={continuity === 'contract'} onPress={() => { tap(); pickContinuity('contract'); }} />}
                   {!isSport && <Chip label="CONTRACT DYNASTY" on={continuity === 'contract_dynasty'} onPress={() => { tap(); pickContinuity('contract_dynasty'); }} />}
                 </View>

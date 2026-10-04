@@ -220,7 +220,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     if (sp !== 'nfl') {
       setGame('classic');
       setFormat('standard');
-      if (continuity !== 'redraft' && continuity !== 'keeper') setContinuity('redraft');
+      // Contracts are not built for a daily sport; dynasty is (v0.625.0, founder: "MLB dynasty mode needed").
+      if (continuity === 'contract' || continuity === 'contract_dynasty') setContinuity('redraft');
       setCopyFrom(null); setCopyBp(null); setCopyReport(null);
       setSportWeeks(null);
     }
@@ -624,7 +625,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
               <Chip on={continuity === 'redraft'} onClick={() => pickContinuity('redraft')}>REDRAFT</Chip>
               <Chip on={continuity === 'keeper'} onClick={() => pickContinuity('keeper')}>KEEPER</Chip>
-              {!isSport && <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>DYNASTY</Chip>}
+              <Chip on={continuity === 'dynasty'} onClick={() => pickContinuity('dynasty')}>DYNASTY</Chip>
               {!isSport && <Chip on={continuity === 'contract'} onClick={() => pickContinuity('contract')}>CONTRACT</Chip>}
               {!isSport && <Chip on={continuity === 'contract_dynasty'} onClick={() => pickContinuity('contract_dynasty')}>CONTRACT DYNASTY</Chip>}
             </div>
@@ -1698,7 +1699,8 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             );
           })()}
           {isCommish && <button onClick={() => run(() => startDraft(leagueId))} disabled={busy} className="mono" style={{ ...btn, width: '100%', marginTop: 12, opacity: busy ? 0.6 : 1 }}>▶ START THE DRAFT{st.start_at ? ' NOW' : ''}</button>}
-          {isCommish && <button onClick={() => run(async () => {
+          {isCommish && gm?.sport !== 'nfl' && gm?.sport && <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>The {SPORTS[gm.sport].league} pool follows the worker's daily directory sweep — nothing to refresh by hand.</div>}
+          {isCommish && (gm?.sport ?? 'nfl') === 'nfl' && <button onClick={() => run(async () => {
             // 0171: reseed under the league's enabled positions + player filter.
             const gm = await leagueGameMode(leagueId).catch(() => null);
             const r = await seedLeaguePool(leagueId, await buildDraftPool(undefined, { positions: gm?.positions ?? null, filter: gm?.pool_filter ?? null }));

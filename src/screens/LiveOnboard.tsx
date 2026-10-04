@@ -889,7 +889,9 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'commishdash') return (
     <>
       {stripFor(null)}
-      <CommishDash focusId={manageId} defaultTab={manageTab} onBack={() => { setManageId(null); setManageTab(undefined); setView(homeFor ? 'leaguehome' : 'home'); }} />
+      <CommishDash focusId={manageId} defaultTab={manageTab} onBack={() => { setManageId(null); setManageTab(undefined); setView(homeFor ? 'leaguehome' : 'home'); }}
+        // A deleted league has no home to go back to (v0.625.0): My Leagues, refreshed.
+        onDeleted={() => { setManageId(null); setManageTab(undefined); setHomeFor(null); setView('home'); void refresh(); }} />
     </>
   );
   // Add another league from My Leagues: fork by role (join with an invite code, or

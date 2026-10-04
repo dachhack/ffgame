@@ -18,6 +18,9 @@ import { CopyId } from './CommishDesk';
 import { parseScoring, scopedRuleLabel, scoringIsDefault, type LeagueScoring } from '@drip/core/engine/leagueScoring';
 import { CLASSIC_SCORING_SECTIONS, normalizeClassicScoring, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, scoresDelayedStats as CLASSIC_SCORING_FIELDS_DELAYED, leagueSlotDefs, slotDisplayNames, leagueBestball, slotFilterLabel } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
+import { SPORTS } from '@drip/core/sports/index';
+import { sportSettingsOf } from '@drip/core/sports/league';
+import { normalizeScoring } from '@drip/core/sports/score';
 import { shortName } from '@drip/core/data/players';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
 
@@ -90,6 +93,28 @@ export function ScoringPanel({ leagueId, bare }: { leagueId: string; bare?: bool
   // Through leagueCatalogOf (0209) — it owns which of the two `ppr` homes
   // wins, and an inline spread here is exactly how that decision drifts.
   const sc = normalizeClassicScoring(leagueCatalogOf(gm));
+  // A DAILY SPORT (v0.625.0): its table is the sport's, not the NFL catalog.
+  const sport = gm.sport && gm.sport !== 'nfl' ? gm.sport : null;
+  if (sport) {
+    const def = SPORTS[sport];
+    const ss = sportSettingsOf({ sport: gm.sport_settings });
+    const table = normalizeScoring(def, ss?.scoring ?? {});
+    const fmt = ss?.format ?? 'points';
+    return (
+      <div style={box(bare)}>
+        <Row k="GAME MODE" v={`${def.league} · CLASSIC`} accent />
+        <Row k="FORMAT" v={fmt === 'cats' ? 'head-to-head categories' : fmt === 'roto' ? 'rotisserie' : 'head-to-head points'} />
+        {fmt !== 'points' && ss?.categories?.length ? <Row k="CATEGORIES" v={ss.categories.map((c) => def.categories.find((x) => x.id === c)?.label ?? c.toUpperCase()).join(' · ')} /> : null}
+        {fmt === 'points' && (<>
+          <Head>POINTS PER STAT</Head>
+          {def.stats.filter((st) => Number(table[st.id] ?? 0) !== 0).map((st) => (
+            <Row key={st.id} k={st.label} v={`${Number(table[st.id]) > 0 ? '+' : ''}${Number(table[st.id])}`} />
+          ))}
+          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 12 }}>Anything not listed scores 0 in this league. Lineups lock player by player at {def.vocab.start}.</div>
+        </>)}
+      </div>
+    );
+  }
   return (
     <div style={box(bare)}>
       <Row k="GAME MODE" v={classic ? '🏈 NORMAL' : '◈ DRIP'} accent />

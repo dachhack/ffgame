@@ -126,3 +126,34 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport checks passed');
 process.exit(fails ? 1 : 0);
+
+// ── v0.625.0: the vocabulary and the board's slate helper ───────────────────
+{
+  const { sportGameFor, sportEntryState, sportKickLabel, sportOpponentLabel, sportToday } = await import('../packages/core/src/sports/slate.ts');
+  for (const id of SPORT_IDS) {
+    const v = SPORTS[id].vocab;
+    ok(v && ['start', 'starts', 'started', 'slate', 'noGame'].every((k) => typeof v[k] === 'string' && v[k].length > 0), `${id}: a full vocabulary`);
+    ok(v.slate === `${SPORTS[id].league} SLATE`, `${id}: the slate chip names the league`);
+  }
+  ok(SPORTS.nfl.vocab.start === 'kickoff' && SPORTS.nba.vocab.start === 'tip-off' && SPORTS.nhl.vocab.start === 'puck drop' && SPORTS.mlb.vocab.start === 'first pitch', 'the four words');
+  const games = [
+    { game_id: 'a', game_date: '2026-10-06', start_utc: '2026-10-06T23:00:00Z', status: 'pre', away: 'BOS', home: 'TOR', away_score: null, home_score: null, clock: null },
+    { game_id: 'b', game_date: '2026-10-08', start_utc: '2026-10-08T23:30:00Z', status: 'pre', away: 'TOR', home: 'MTL', away_score: null, home_score: null, clock: null },
+    { game_id: 'c', game_date: '2026-10-06', start_utc: '2026-10-06T17:00:00Z', status: 'final', away: 'NYY', home: 'BOS', away_score: 3, home_score: 5, clock: null },
+    { game_id: 'd', game_date: '2026-10-06', start_utc: '2026-10-06T23:00:00Z', status: 'pre', away: 'NYY', home: 'BOS', away_score: null, home_score: null, clock: null },
+    { game_id: 'e', game_date: '2026-10-07', start_utc: null, status: 'postponed', away: 'CHI', home: 'DET', away_score: null, home_score: null, clock: null },
+  ];
+  const today = '2026-10-06';
+  const tor = sportGameFor('TOR', games, today);
+  ok(tor && tor.today && tor.home && tor.opponent === 'BOS' && sportOpponentLabel(tor) === 'vs BOS', 'today\'s game wins, home side read');
+  ok(sportKickLabel(tor) === '7p', `today's game prints the time (${sportKickLabel(tor)})`);
+  const mtl = sportGameFor('MTL', games, today);
+  ok(mtl && !mtl.today && mtl.date === '2026-10-08' && sportKickLabel(mtl) === 'Thu 7:30p', `no game today → the next one in the period (${sportKickLabel(mtl)})`);
+  const bos = sportGameFor('BOS', games, today);
+  ok(bos && bos.gameId === 'd', 'a doubleheader: the game not yet final is the one the row talks about');
+  ok(sportGameFor('CHI', games, today) === null && sportGameFor('', games, today) === null, 'postponed games and blank teams give nothing');
+  ok(sportEntryState(tor, Date.parse('2026-10-06T22:00:00Z')) === 'pre' && sportEntryState(tor, Date.parse('2026-10-06T23:01:00Z')) === 'live', 'pre until the start passes, then live even before the poll');
+  ok(sportEntryState(sportGameFor('NYY', games.slice(2, 3), today), Date.now()) === 'done' && sportEntryState(mtl, Date.now()) === 'pre', 'final is done; a later day is pre');
+  ok(/^\d{4}-\d{2}-\d{2}$/.test(sportToday()), 'sportToday is an ISO date');
+}
+console.log('ALL SPORT CHECKS PASSED');

@@ -173,4 +173,5 @@ export const MLB: SportDef = {
   gamesPerTeam: 162,
   regularSeasonWeeks: 26,
   keyPrefix: 'mlb',
+  vocab: { start: 'first pitch', starts: 'throws its first pitch', started: 'thrown its first pitch', slate: 'MLB SLATE', noGame: 'no game today' },
 };

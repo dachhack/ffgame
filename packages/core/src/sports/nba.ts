@@ -113,4 +113,5 @@ export const NBA: SportDef = {
   gamesPerTeam: 82,
   regularSeasonWeeks: 24,
   keyPrefix: 'nba',
+  vocab: { start: 'tip-off', starts: 'tips off', started: 'tipped off', slate: 'NBA SLATE', noGame: 'no game today' },
 };
