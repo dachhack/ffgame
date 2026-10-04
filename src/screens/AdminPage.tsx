@@ -33,7 +33,7 @@ import { DAY_LABEL, DEFAULT_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
   holdLine, waiverConflicts, etTime, type WaiverDayMode } from '@drip/core/data/waiverDays';
 import { PRESEASON_BOARD_WEEKS } from '@drip/core/data/nflSlate';
 import { importLeague, syncWeek, syncMembers } from '@drip/core/data/sleeperAdmin';
-import { importEspnSeason, syncEspnSeason, stripProvider } from '@drip/core/data/providerAdmin';
+import { importEspnSeason, syncProviderSeason, stripProvider, type ImportProvider } from '@drip/core/data/providerAdmin';
 import { buildDraftPool, diagnosePoolGhosts } from '@drip/core/data/nativeLeague';
 import { loadPlayerDirectory } from '@drip/core/data/sleeperPlayers';
 import { forceResolve } from '@drip/core/data/forceResolve';
@@ -1363,8 +1363,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
     if (busy === 'sync') return;
     setBusy('sync');
     try {
-      const r = l.provider === 'espn'
-        ? await syncEspnSeason(l.league_id, stripProvider(l.sleeper_league_id), l.season)
+      // 0423: every platform the self-serve import knows, not ESPN alone.
+      const r = l.provider && l.provider !== 'sleeper' && l.provider !== 'native'
+        ? await syncProviderSeason(l.league_id, l.provider as ImportProvider, stripProvider(l.sleeper_league_id), l.season)
         : await (async () => { let pairs = 0; for (let w = 1; w <= 14; w++) pairs += (await syncWeek(l.league_id, l.sleeper_league_id, w)).pairs; return { weeks: 14, pairs }; })();
       setBusy(`✓ ${r.weeks} weeks · ${r.pairs} matchups`); setTab('matchups'); await loadM();
     } catch (e) { setBusy(errMsg(e, 'sync failed')); }

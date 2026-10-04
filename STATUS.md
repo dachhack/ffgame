@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.613.0 — Drip on your ESPN, Fleaflicker, MFL or Yahoo league, self-serve
+
+> - Founder, after Sleeper went self-serve: "Any player works for the sleeper import. Let's do the same for the other league providers (ESPN, Yahoo, etc). Current season inputs only."
+> - ＋ ADD A LEAGUE now has **Add Drip to my ESPN, Fleaflicker, MFL or Yahoo league**: pick the platform, paste the league id (a private ESPN league takes your SWID and espn_s2 cookies, used once in your browser), read the league, **pick your team from its list**, and it's on Drip with you as its commissioner and every published week scheduled. Yahoo asks you to sign in with Yahoo first. This season only.
+> - Why you pick: Sleeper is the one platform that gives us a user id to match a seat with. On the others, the person bringing the league in picks their team, and so does everyone who follows: the invite form shows the league's teams and you take yours. A taken team can't be taken twice; the commissioner reassigns from the desk if someone picked wrong.
+> - The commissioner's **⟳ sync season** now works for all four platforms (it was ESPN-only). Lineups and pairings on these platforms are a snapshot until it's pressed — the worker mirrors Sleeper leagues on its own, not these yet.
+> - The app's league board has the same branch (Yahoo points at the website, where the sign-in lives), and a platform invite code entered in the app shows the teams to pick from instead of failing.
+
+- 0423: `import_provider_league(provider, ref, season, name, settings, members, my_roster_id)` — provider-keyed row (`'<provider>-<ref>'`, as the admin import keys it), caller as commissioner, seats via `_upsert_membership_rows`, caller seated on the team they picked unless another member holds it. `invite_seats(code)` and `claim_platform_seat(code, roster_id)` for the invite form on non-native, non-Sleeper leagues. Season = current year.
+- Core `providerAdmin.ts`: `IMPORT_PROVIDERS`, `normalizeProviderLeague` (ESPN / Fleaflicker / MFL via the proxies, Yahoo via its client), `providerMembers`, `importMyProviderLeague` (RPC, then `syncNormalizedWeek` per week, a week with no pairings yet tolerated), `syncProviderSeason`. `liveApi`: `importProviderLeagueRpc`, `inviteSeats`, `claimPlatformSeat`.
+- Web: `ProviderImport.tsx` (view `provider`), RoleChooser item, `RedeemForm` pick-your-team branch for platform leagues, AdminPage/CommishDash sync for every platform, `PlatformTeam` names MFL and Yahoo. App: Recruit `provider` branch; join-by-code falls through to the team list for a platform code.
+- Still open: a worker sync for non-Sleeper leagues (lineups go stale between the commissioner's syncs); Yahoo's Fantasy API is gated behind Yahoo's app approval (docs/multi-league-integration-research.md), so that path depends on it.
+
 ### v0.612.0 — the door is open: any account creates, 1,000 spots, a daily sweep, and Drip on your Sleeper league
 
 > - Founder: "Let's drop the requirement for me to approve user accounts. Just set a cap of 1000 users and do a daily sweep for inactive users and make an off boarding process. Any account can add a native league or add drip to an existing league." Then: "Inactive is 30 days with the 14 day grace period."

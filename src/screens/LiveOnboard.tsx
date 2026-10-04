@@ -7,6 +7,7 @@ import {
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, ensureAppUser,
   previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
+  inviteSeats, claimPlatformSeat, type InviteSeat,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
@@ -37,6 +38,7 @@ import { InvitePreviewCard } from './InvitePreviewCard';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { RequestCodeModal } from './RequestCode';
 import { SleeperImport } from './SleeperImport';
+import { ProviderImport } from './ProviderImport';
 import { mobileOs } from '../app/pwa';
 import { PodBuilder } from './PodBuilder';
 import type { Session } from '@supabase/supabase-js';
@@ -70,7 +72,7 @@ function GoogleG() {
  *  us while it is up (v0.356.11). 'admin' is not one: it needs no league. */
 const ROOM_VIEWS = ['leaguehome', 'team', 'draft'];
 
-type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper';
+type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper' | 'provider';
 
 export function LiveOnboard() {
   const { navigate, route, viewAs, setViewAs } = useStore();
@@ -895,7 +897,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       {/* EVERY ACCOUNT MAY CREATE (0422, v0.612.0). "Start a fresh league"
           and "Add Drip to my Sleeper league" are for everyone now; the
           'native' flag that gated the first is read by nothing. */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onProvider={() => setView('provider')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -904,6 +906,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // commissioner's desk, where the game (Drip/Classic) and the rest are set.
   if (view === 'sleeper') return (
     <SleeperImport userId={viewAs?.userId ?? session.user.id}
+      onDone={(leagueId) => { setManageId(leagueId); setManageTab(undefined); refresh(); setView('commishdash'); }}
+      onBack={() => setView('add')} />
+  );
+  // …and the other platforms (0423): ESPN, Fleaflicker, MFL, Yahoo.
+  if (view === 'provider') return (
+    <ProviderImport
       onDone={(leagueId) => { setManageId(leagueId); setManageTab(undefined); refresh(); setView('commishdash'); }}
       onBack={() => setView('add')} />
   );
@@ -1012,7 +1020,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (enrollments.length === 0) return (
     <div style={{ maxWidth: 440, margin: '0 auto' }}>
       {choice === 'none'
-        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+        ? <RoleChooser onPlayer={() => setChoice('player')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onProvider={() => setView('provider')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
         : <RedeemForm userId={session.user.id} onJoined={refresh} />}
       <div style={{ textAlign: 'center', marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {choice === 'player' && <button onClick={() => setView('commish')} className="mono" style={linkBtn}>← I actually run this league</button>}
@@ -1735,7 +1743,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
 // chip beside ＋ ADD A LEAGUE now, rather than a card three-deep inside the
 // add flow. This chooser is for people who already know how they are getting
 // in: with a code, as a commissioner, or by making one.
-function RoleChooser({ onPlayer, onCreate, onSleeper, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onSleeper?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
+function RoleChooser({ onPlayer, onCreate, onSleeper, onProvider, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onSleeper?: () => void; onProvider?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   // Everyone sees the league paths — join, create, bring a Sleeper league in,
   // commission (0422). Everything below the divider only renders because
@@ -1772,10 +1780,16 @@ function RoleChooser({ onPlayer, onCreate, onSleeper, onCommish, onRequest, onSo
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>I have a commissioner code →</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Take over a league that was set up for you, then share its invite code with your league.</div>
         </button>
+        {onProvider && (
+          <button onClick={onProvider} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Add Drip to my ESPN, Fleaflicker, MFL or Yahoo league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Paste the league id, pick your team from the list, and you’re its commissioner here. This season only.</div>
+          </button>
+        )}
         {onRequest && (
           <button onClick={onRequest} style={choice}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>My league is on ESPN, Yahoo, MFL or Fleaflicker →</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Those still come in by hand — tell us the league and we’ll set it up and send you the commissioner code.</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Something else →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>A platform not listed, or a league that won’t read in — tell us and we’ll set it up by hand.</div>
           </button>
         )}
 
@@ -2045,6 +2059,27 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
   // The check() retry loop can outlive the component; don't set state after unmount.
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
+  // PICK YOUR TEAM (0423): an ESPN / Fleaflicker / MFL / Yahoo league has no
+  // username to match, so the invite shows the league's teams and you take
+  // yours. Sleeper keeps the username match; native keeps native_join.
+  const platform = !!preview && preview.provider !== 'native' && preview.provider !== 'sleeper';
+  const [seats, setSeats] = useState<InviteSeat[] | null>(null);
+  useEffect(() => {
+    if (!platform || !preview) { setSeats(null); return; }
+    let dead = false;
+    inviteSeats(code).then((r) => { if (!dead) setSeats(r.ok ? (r.seats ?? []) : []); }).catch(() => { if (!dead) setSeats([]); });
+    return () => { dead = true; };
+  }, [platform, preview?.league_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const claimPlatform = async (rosterId: number) => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await claimPlatformSeat(code, rosterId);
+      if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not take that team.')); setBusy(false); return; }
+      try { localStorage.removeItem('dripInviteCode'); } catch { /* ignore */ }
+      onJoined();
+    } catch (x) { setErr(friendlyError(x)); setBusy(false); }
+  };
 
   // Returning player: pre-fill the Sleeper username they linked on a prior join
   // so they don't have to type it again (still editable via "not me").
@@ -2218,7 +2253,34 @@ function RedeemForm({ userId, onJoined }: { userId: string; onJoined: () => void
           </div>
         )}
 
-        {preview && !team && preview.provider !== 'native' && (
+        {preview && !team && platform && (
+          <div style={{ marginTop: 14 }}>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 10 }}>
+              Joining <span style={{ color: 'var(--text)', fontWeight: 700 }}>{preview.name}</span> · {preview.season} — which team is yours?
+            </div>
+            {seats == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading the teams…</div>}
+            {seats && seats.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>No teams have been read in for this league yet — ask your commissioner to press ⟳ sync season.</div>}
+            {seats && seats.length > 0 && (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {seats.map((s) => (
+                  <button key={s.roster_id} onClick={() => claimPlatform(s.roster_id)} disabled={busy || (s.taken && !s.mine)}
+                    style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg)', border: `1px solid ${s.mine ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 6, padding: '9px 12px', cursor: s.taken && !s.mine ? 'default' : 'pointer', opacity: s.taken && !s.mine ? 0.5 : 1 }}>
+                    <span className="grotesk" style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{s.team_name}</span>
+                    <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: s.mine ? 'var(--you)' : s.taken ? 'var(--faint)' : 'var(--you)' }}>{s.mine ? 'YOURS' : s.taken ? 'TAKEN' : 'THIS IS ME →'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0 10px' }}>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', letterSpacing: '0.08em' }}>NOT SURE?</span>
+              <span style={{ flex: 1, height: 1, background: 'var(--bd)' }} />
+            </div>
+            <button onClick={joinPool} disabled={busy} className="mono" style={{ ...btn, width: '100%', padding: '10px 0', background: 'var(--bg)', color: 'var(--text)', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'JOIN & LET THE COMMISH ASSIGN ME'}</button>
+          </div>
+        )}
+
+        {preview && !team && !platform && preview.provider !== 'native' && (
           <div style={{ marginTop: 14 }}>
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 10 }}>
               Joining <span style={{ color: 'var(--text)', fontWeight: 700 }}>{preview.name}</span> · {preview.season}

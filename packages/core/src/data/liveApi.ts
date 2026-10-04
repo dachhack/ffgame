@@ -550,6 +550,22 @@ export const importMyLeagueRpc = (input: {
   p_members: input.members, p_sleeper_user_id: input.sleeperUserId, p_sleeper_username: input.sleeperUsername,
 });
 
+/** EVERY PLATFORM, SELF-SERVE (0423): the persisting half of
+ *  providerAdmin.importMyProviderLeague. The caller picks their own team. */
+export const importProviderLeagueRpc = (input: {
+  provider: 'espn' | 'yahoo' | 'mfl' | 'fleaflicker'; ref: string; season: string; name: string; settings: unknown;
+  members: MemberRow[]; myRosterId: number;
+}) => rpc<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; seats?: number; roster_id?: number }>('import_provider_league', {
+  p_provider: input.provider, p_ref: input.ref, p_season: input.season, p_name: input.name, p_settings: input.settings,
+  p_members: input.members, p_my_roster_id: input.myRosterId,
+});
+/** The teams behind an invite code on a platform league (0423). */
+export interface InviteSeat { roster_id: number; team_name: string; taken: boolean; mine: boolean }
+export const inviteSeats = (code: string) =>
+  rpc<{ ok: boolean; error?: string; league?: string; provider?: string; seats?: InviteSeat[] }>('invite_seats', { p_code: code });
+export const claimPlatformSeat = (code: string, rosterId: number) =>
+  rpc<{ ok: boolean; error?: string; league?: string; league_id?: string; roster_id?: number; team?: string; status?: string }>('claim_platform_seat', { p_code: code, p_roster_id: rosterId });
+
 export async function myFeatures(): Promise<Record<string, boolean>> {
   const { data } = await (await client()).rpc('my_features');
   return (data as Record<string, boolean>) ?? {};
