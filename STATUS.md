@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.614.1 — pictures from the site on the front door
+
+> - Founder: "Include pictures from the site." The landing now shows four real screens under the features — **Sealed picks** (the opponent's card backs before kickoff), **Live duels** (a Thursday-night duel dripping points), the **Classic board** (two lineups with live totals), and **Every game on a field** (a live field with the ball spot) — each a tap into the demo or the classic simulator. The demo card's picture is the Drip board live (the window battle bar, three duels, a nuke caption) instead of the setup screen.
+> - All shot from the running app with headless Chromium; team logos and headshots are hidden in them because the shots were taken offline.
+
+- Web `Landing.tsx`: `SITE_SHOTS` gallery; `public/brand/shot-*.{png,jpg}` (the earlier `demo-board.png` is gone). Web only.
+
 ### v0.614.0 — the front door: get an account, the feature board, the demo as a picture
 
 > - Founder's revamp of the web flow. Signed out: **Get account** (or **Get on the waiting list** when the 1,000 spots are taken — the button reads the live count), then **Features** in five groups — League types (Redraft · Dynasty · Keeper · Contract · Devy), Competitive modes (Vampire · Guillotine · Golf), Positions (QB/RB/WR/TE · K/D/ST · DL/DE/LB/DB · RET/FB/PUNT/HC · scoped positions), Scoring options (single-spot best ball · scoped bonuses · others), Matchup style (Drip · Classic) — each chip opening one line; then the **Drip demo as a picture** that clicks into the demo.

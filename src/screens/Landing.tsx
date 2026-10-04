@@ -27,6 +27,15 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 
 let sessionChecked = false;
 
+/** Real screens from the running app (headless Chromium, v0.614.1). The
+ *  ratio keeps every tile the same shape whatever the crop. */
+const SITE_SHOTS: { file: string; title: string; line: string; alt: string; ratio: string; route: { name: 'demo'; view?: 'board' } | { name: 'classicSim' } }[] = [
+  { file: 'shot-sealed.jpg', title: 'Sealed picks', line: 'Your opponent’s cards stay face-down until kickoff. Scout their pool, not their picks.', alt: 'A Drip lineup before kickoff: open spots on your side, the opponent’s picks shown as card backs', ratio: '4 / 3', route: { name: 'demo' } },
+  { file: 'shot-duel.png', title: 'Live duels', line: 'Each spot is a head-to-head duel; every real NFL play drips points onto one side or the other.', alt: 'A Thursday-night duel: J. Jacobs against D. Samuel, the play log dripping points as the game runs', ratio: '4 / 3', route: { name: 'demo', view: 'board' } },
+  { file: 'shot-classic.png', title: 'Classic board', line: 'A positional lineup and weekly totals, scored live. PPR, half, standard and best ball at a tap.', alt: 'The Classic board: two nine-man lineups side by side with live totals', ratio: '4 / 3', route: { name: 'classicSim' } },
+  { file: 'shot-fields.png', title: 'Every game on a field', line: 'Each real game drawn live: the ball spot, the drive, the last play — one field per game on the slate.', alt: 'A live field: Jaguars at Bengals, the ball at the Cincinnati 16, second and fourteen', ratio: '4 / 3', route: { name: 'classicSim' } },
+];
+
 export function Landing() {
   const { navigate } = useStore();
   const [door, setDoor] = useState<{ open: boolean; count: number; cap: number } | null>(null);
@@ -129,12 +138,33 @@ export function Landing() {
           </div>
         </section>
 
+        {/* ── PICTURES FROM THE SITE (founder: "Include pictures from the
+            site") — real screens, shot from the running app, each one a door
+            into the demo. ──────────────────────────────────────────────── */}
+        <section style={{ marginTop: 26 }}>
+          <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)', marginBottom: 10 }}>FROM THE SITE · TAP ONE TO PLAY IT</div>
+          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+            {SITE_SHOTS.map((s) => (
+              <button key={s.file} onClick={() => navigate(s.route)} title={s.title}
+                style={{ padding: 0, textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ aspectRatio: s.ratio, overflow: 'hidden', background: 'var(--bg)' }}>
+                  <img src={`${base}brand/${s.file}`} alt={s.alt} loading="lazy" style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
+                </div>
+                <div style={{ padding: '10px 12px 12px' }}>
+                  <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{s.title}</div>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, marginTop: 3 }}>{s.line}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
         {/* ── THE DEMO ────────────────────────────────────────────────── */}
         <section style={{ marginTop: 26 }}>
           <button onClick={() => navigate({ name: 'demo' })} title="Play a week of Drip — free, no sign-in"
             style={{ display: 'block', width: '100%', padding: 0, textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}>
             <div style={{ position: 'relative' }}>
-              <img src={`${base}brand/demo-board.png`} alt="The Drip demo board: three sealed picks in the Sunday 1pm window, a power-up armed, ready to kick off" style={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto' }} />
+              <img src={`${base}brand/shot-drip-live.png`} alt="The Drip demo board live: the Sunday 1pm window battle, three duels dripping points, and a nuke caption" style={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto' }} />
               {!narrow && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--surface) 92%, transparent) 100%)' }} />}
               {/* The caption rides the picture on a wide screen and sits under
                   it on a phone, where the picture is too small to carry it. */}
