@@ -20,7 +20,7 @@
 // personIds. `xrefKey` resolves a box-score row to a directory key by
 // normalised name + team, remembers the answer in sport_player.alt_ids, and
 // falls back to the feed's own id so a line is never dropped.
-import { db } from '../supabase.js';
+import { db, allRows } from '../supabase.js';
 import { adapterFor } from '../sports/index.js';
 import { SPORTS, eligibleFor, playerKey } from '../../../packages/core/src/sports/index.ts';
 import { linePoints } from '../../../packages/core/src/sports/score.ts';
@@ -178,9 +178,9 @@ export function resolveXref(x, feed, line) {
 async function loadXref(sport) {
   const cached = xref.get(sport);
   if (cached && Date.now() - cached.at < XREF_TTL_MS) return cached;
-  const { data, error } = await db().from('sport_player').select('player_key,full_name,team,alt_ids').eq('sport', sport);
-  if (error) throw new Error(`sport_player read: ${error.message}`);
-  const x = buildXref(data ?? []);
+  // Every row (v0.627.3), page by page — the directory is past 1000.
+  const data = await allRows((from, to) => db().from('sport_player').select('player_key,full_name,team,alt_ids').eq('sport', sport).order('player_key').range(from, to));
+  const x = buildXref(data);
   xref.set(sport, x);
   return x;
 }
