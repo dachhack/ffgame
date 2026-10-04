@@ -25,9 +25,9 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 ### v0.614.2 — "Final · In progress" on the app's classic board, and a read-back for two quiet college players
 
 > - Founder's screenshot (Devy Test 1): T. Green (TE, LSU) and J. Dwyer (WR, TCU) read **"Final · In progress"** at 0.00. The two words contradict each other: the app printed "In progress" whenever a player had no counted play, even after his game went final. The web board already printed a dash there; the app does too now.
-> - Whether those two really recorded nothing is a separate question the label can't answer. Dwyer is TCU's lead receiver and Green starts at LSU, so ops 030 reads back what the worker stored for every rostered college player in college week 5 and NFL week 4 (`college-report`, read-only). If their plays are missing rather than empty, that is a feed gap to fix next; this note stays open until the read-back says which.
+> - **Confirmed: the zeros were right.** Ops 030 (`college-report`, read-only) showed the worker stored plays from both games for other rostered players (LSU 63–14 McNeese, event 401856706; TCU 10–17 BYU, 401856818), and ESPN's own box scores list neither Green nor Dwyer, nor does any play's text name them — both sat out. So nothing was missing from the feed; the app's label was the whole bug.
 
-- App `ui/ClassicBoard.tsx`: a final game with no statline prints `—`, as the web does. `ops/run/030-college-report-wk205.json`. Unconfirmed cause for the zeros themselves.
+- App `ui/ClassicBoard.tsx`: a final game with no statline prints `—`, as the web does. `ops/run/030-college-report-wk205.json` is the read-back. Cause confirmed against ESPN's box scores.
 
 ### v0.614.1 — pictures from the site on the front door
 
