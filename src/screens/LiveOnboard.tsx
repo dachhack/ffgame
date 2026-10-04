@@ -15,7 +15,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupReport, lineupReportLine } from '@drip/core/data/widgetExtras';
+import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
@@ -1402,6 +1402,7 @@ function SlateStrip({ row, glance }: { row?: LeagueSlateRow; glance?: WidgetSnap
   const word = v === 'won' ? 'WON' : v === 'lost' ? 'LOST' : v === 'tied' ? 'TIED'
     : v === 'leading' ? 'LEADING' : v === 'trailing' ? 'TRAILING' : v === 'level' ? 'LEVEL' : null;
   const live = !!(g.me?.live || g.opp?.live);
+  const wb = cardWinBar(glance);
   const line = (side: typeof g.me, mine: boolean) => {
     const rec = recordLabel(side?.record);
     const p = projOf(mine);
@@ -1436,6 +1437,20 @@ function SlateStrip({ row, glance }: { row?: LeagueSlateRow; glance?: WidgetSnap
       </div>
       {line(g.me, true)}
       {line(g.opp, false)}
+      {wb && (
+        // The win bar (v0.611.0): the classic board's own number, my colour
+        // on the left, the opponent's on the right.
+        <div style={{ marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 3, height: 4 }}>
+            <div style={{ flex: wb.fill, background: 'var(--you)', borderRadius: 2 }} />
+            <div style={{ flex: 100 - wb.fill, background: 'var(--opp)', borderRadius: 2 }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3 }}>
+            <span className="mono" title="chance to win, on the projected finals" style={{ fontSize: 10, fontWeight: 700, color: 'var(--you)' }}>{wb.me}% WIN</span>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--opp)' }}>{wb.them}%</span>
+          </div>
+        </div>
+      )}
       {glance ? <LineupLine snap={glance} /> : null}
     </div>
   );

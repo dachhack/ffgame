@@ -14,7 +14,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupReport, lineupReportLine } from '@drip/core/data/widgetExtras';
+import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
@@ -483,6 +483,7 @@ function MatchupStrip({ row, glance }: { row: LeagueSlateRow | undefined; glance
   const live = !!(g.me?.live || g.opp?.live);
   const word = v === 'won' ? 'WON' : v === 'lost' ? 'LOST' : v === 'tied' ? 'TIED'
     : v === 'leading' ? 'LEADING' : v === 'trailing' ? 'TRAILING' : v === 'level' ? 'LEVEL' : null;
+  const wb = cardWinBar(glance);
   return (
     <View style={{ marginTop: 8, paddingTop: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, gap: 2 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -495,6 +496,20 @@ function MatchupStrip({ row, glance }: { row: LeagueSlateRow | undefined; glance
       </View>
       <SlateLine side={g.me} mine points={g.me?.points} tone={tone} proj={proj ? proj.me.score : null} />
       <SlateLine side={g.opp} points={g.opp?.points} tone={t.mid} proj={proj && !proj.themLive ? proj.them!.score : null} />
+      {wb && (
+        // The win bar (v0.611.0, web parity): the classic board's own number,
+        // my colour on the left, the opponent's on the right.
+        <View style={{ marginTop: 4 }}>
+          <View style={{ flexDirection: 'row', gap: 3, height: 4 }}>
+            <View style={{ flex: wb.fill, backgroundColor: t.you, borderRadius: 2 }} />
+            <View style={{ flex: 100 - wb.fill, backgroundColor: t.opp, borderRadius: 2 }} />
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>{wb.me}% WIN</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.opp }}>{wb.them}%</Text>
+          </View>
+        </View>
+      )}
       {glance ? <LineupLine snap={glance} /> : null}
     </View>
   );

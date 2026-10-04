@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.611.0 — win probability on the league card, classic leagues
+
+> - Founder: "Add win probability to the league cards for classic leagues." The card's glance already carried the classic board's own win probability (v0.501.0, for the home-screen widget) and never printed it.
+> - A classic league's card now shows a thin two-colour bar under the two score lines with "62% WIN" on your side and "38%" on the opponent's, on the web and in the app. It uses the same number as the matchup board, so the two never disagree. It shows while the week is open (before lock too, like the widget, since the card's projected finals already show then) and goes away once the week is final.
+> - Nothing changes on a drip league's card (there is no model yet), or when the opponent's lineup can't be read (no number).
+
+- Core `widgetExtras.ts`: `cardWinBar(snap)` — the one rule for both clients; check:leagueline covers it. Web `SlateStrip` and the app's `MatchupStrip` draw it.
+
 ### v0.610.0 — the league card says how the league is set up
 
 > - Founder's list: "More descriptive league descriptions on my leagues page. (Devy, Drip, other league settings?)" The card's one line said season, size, continuity and the game ("2026 12-Team Dynasty Drip") and nothing else; an imported league's line was the one word "Sleeper".

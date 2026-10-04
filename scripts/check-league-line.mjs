@@ -8,6 +8,7 @@
 // line prints only what is news and drops what it doesn't know. Offline.
 // Run: npx tsx scripts/check-league-line.mjs
 import { leagueLandingRoom, leagueTypeLine, leagueDetailLine } from '../packages/core/src/data/liveApi.ts';
+import { cardWinBar } from '../packages/core/src/data/widgetExtras.ts';
 
 let fails = 0;
 const ok = (cond, msg) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${msg}`); if (!cond) fails++; };
@@ -52,6 +53,17 @@ ok(leagueDetailLine(seat(sleeper({ details: { continuity: 'dynasty', superflex: 
 ok(leagueDetailLine(seat(sleeper({ details: { continuity: null, superflex: false, ppr: 0.5, bestball: true, starters: 9 } }))) === 'Half PPR · Best Ball · 9 starters',
   'an imported redraft league prints no continuity word');
 ok(leagueDetailLine(seat(native({ details: { starters: 9, continuity: 'dynasty' } }))) === '', 'starters and the platform type are imported-only words');
+
+// ── The win bar on the card (v0.611.0) ───────────────────────────────────────
+const snap = (over = {}) => ({ projected: true, phase: 'live', winPct: 0.62, ...over });
+ok(JSON.stringify(cardWinBar(snap())) === JSON.stringify({ me: 62, them: 38, fill: 62 }), 'a live classic week: 62% WIN, 38% the other way');
+ok(cardWinBar(snap({ phase: 'pre' }))?.me === 62, 'shown before lock too, as the widget does');
+ok(cardWinBar(snap({ phase: 'final' })) === null, 'nothing once the week is final — the verdict word says it');
+ok(cardWinBar(snap({ projected: false, winPct: undefined })) === null, 'nothing for a drip league (no model)');
+ok(cardWinBar(snap({ winPct: undefined })) === null, 'nothing when the opponent\'s lineup could not be read');
+ok(cardWinBar(undefined) === null && cardWinBar(null) === null, 'no glance yet → nothing, no throw');
+ok(cardWinBar(snap({ winPct: 0.995 }))?.fill === 98 && cardWinBar(snap({ winPct: 0.995 }))?.me === 100, 'a near-certain win keeps a sliver of the other colour');
+ok(cardWinBar(snap({ winPct: 0.004 }))?.fill === 2, '…and so does a near-certain loss');
 
 console.log(fails ? `\n${fails} FAILED` : '\nall ok');
 process.exit(fails ? 1 : 0);
