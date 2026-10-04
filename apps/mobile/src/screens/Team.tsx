@@ -9,11 +9,12 @@
 // Everything the web TeamManage does lives here now — waivers/FAAB, trades
 // (ui/TradeCenter), the avatar grid (ui/AvatarGrid), and the commissioner's
 // whole kit. The old "web only for now" list is empty.
+import { installSportMarketFor } from '@drip/core/sports/market';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { clearsOn } from '@drip/core/data/waiverDays';
 import { SPORTS } from '@drip/core/sports/index';
-import {
+import { sportLeagueMarket,
   addFreeAgent, cancelWaiverClaim,
   friendlyError, leaguePool, nativeRosters, setRosterSpot,
   rosterRules, injuryTags, leagueMarket,
@@ -356,6 +357,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       setOwn(r.own ?? {});
       setTrend(r.trend ?? {});
       installLiveMarket(r);
+    }).catch(() => {});
+    // THE SPORT MARKET (v0.627.0): a daily-sport league's ADP and last-season
+    // rates ride their own call; the own-map bump re-prices the rows.
+    leagueGameMode(leagueId).then((g) => {
+      if (!alive || !g.ok || !g.sport || g.sport === 'nfl') return;
+      return sportLeagueMarket(leagueId).then((m) => { if (alive && installSportMarketFor(g, m)) setOwn((o) => ({ ...(o ?? {}) })); });
     }).catch(() => {});
     return () => { alive = false; };
   }, [leagueId]);

@@ -171,4 +171,32 @@ process.exit(fails ? 1 : 0);
   ok(sportNow(parsed, real).getTime() === real.getTime() - rp.sport.replay.offset_days * 86400e3 && sportNow(sportSettingsOf(live), real).getTime() === real.getTime(), 'sportNow shifts a replay league and leaves a live one alone');
   ok(priorSeason('mlb', new Date('2026-10-04T12:00:00Z')) === '2025' && priorSeason('nhl', new Date('2026-10-04T12:00:00Z')) === '2025' && priorSeason('nba', new Date('2026-03-01T12:00:00Z')) === '2024', 'priorSeason is the season before the current one');
 }
+
+// ── v0.627.0: the sport market on the client ────────────────────────────────
+{
+  const { installSportMarket, clearSportMarket, sportAdpFor, sportPpgFor, sportWeekProjFor, sportSeasonProjFor, sportGamesLeftThisWeek } = await import('../packages/core/src/sports/market.ts');
+  const { adpFor, projFor } = await import('../packages/core/src/data/poolSort.ts');
+  const nba = SPORTS.nba;
+  installSportMarket(nba, { pts: 1, reb: 1.2, ast: 1.5, stl: 3, blk: 3, tov: -1 }, {
+    ok: true, today: '2026-10-07',
+    rows: [
+      { slug: 'nba-1', adp: 1.6, gp: 70, season_line: { pts: 2100, reb: 840, ast: 700, stl: 70, blk: 70, tov: 210 }, team: 'DEN' },
+      { slug: 'nba-2', adp: null, gp: 0, season_line: null, team: 'LAL' },
+      { slug: 'nba-3', adp: 12.5, gp: 10, season_line: { pts: 100 }, team: 'BOS' },
+    ],
+    week_games: { DEN: ['2026-10-05', '2026-10-07', '2026-10-09'], LAL: ['2026-10-06'] },
+    season_left: { DEN: 80, LAL: 79 },
+    calendar: true, adp_at: '2026-10-04T00:00:00Z',
+  });
+  const ppg = (2100 + 840 * 1.2 + 700 * 1.5 + 70 * 3 + 70 * 3 - 210) / 70;
+  ok(Math.abs((sportPpgFor('nba-1') ?? 0) - ppg) < 1e-9, `per-game rate under the league's table (${ppg.toFixed(2)})`);
+  ok(sportGamesLeftThisWeek('nba-1').join() === '2026-10-07,2026-10-09' && Math.abs((sportWeekProjFor('nba-1') ?? 0) - 2 * ppg) < 1e-9, 'this week: the games on or after today');
+  ok(Math.abs((sportSeasonProjFor('nba-1') ?? 0) - 80 * ppg) < 1e-9, 'the season: games left × the rate');
+  ok(sportPpgFor('nba-2') === null && sportWeekProjFor('nba-2') === null && sportAdpFor('nba-2') === null, 'no line, no games: null, not 0');
+  ok(sportWeekProjFor('nba-3') === 0 && sportSeasonProjFor('nba-3') === null, 'a team with no dates left this week projects 0; no calendar row → null season');
+  ok(adpFor('nba-1') === 1.6 && Math.abs((projFor('nba-1', 'C') ?? 0) - ppg) < 1e-9, 'poolSort routes sport keys to the sport market');
+  ok(adpFor('josh-allen') !== 1.6, 'an NFL slug never reads the sport market');
+  clearSportMarket();
+  ok(sportAdpFor('nba-1') === null, 'cleared with the league');
+}
 console.log('ALL SPORT CHECKS PASSED');

@@ -53,6 +53,7 @@ import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
 import { tickSports } from './poll/sportGames.js';
 import { syncSportDirectory } from './poll/sportDirectory.js';
+import { sweepSportMarket } from './poll/sportMarket.js';
 import { lockStartedGames, resolveSportLeagues, sportReplayClocks } from './sportLeague.js';
 import { currentSeason } from '../../packages/core/src/sports/league.ts';
 import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
@@ -1186,6 +1187,11 @@ async function main() {
       for (const sport of config.sports) {
         try { const r = await syncSportDirectory(sport, currentSeason(sport)); log(`sport directory ${sport}: ${r.players} players, ${r.retired} retired`); }
         catch (e) { log(`sport directory ${sport}:`, e.message); }
+        // THE MARKET (v0.627.0): ADP and the season's calendar, after the directory it matches against.
+        try {
+          const m = await sweepSportMarket(sport, currentSeason(sport));
+          log(`sport market ${sport}: ${m.adp ? `${m.adp.matched}/${m.adp.parsed} ADP matched` : `ADP: ${m.adpError}`}; ${m.calendar ? `${m.calendar.games} games ${m.calendar.from}→${m.calendar.to}` : `calendar: ${m.calendarError}`}`);
+        } catch (e) { log(`sport market ${sport}:`, e.message); }
       }
     };
     void sweep();

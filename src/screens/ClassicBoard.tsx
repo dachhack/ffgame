@@ -31,7 +31,7 @@ import { boardStatline } from '@drip/core/engine/sim';
 import {
   myRoster, myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, sportLeagueGames, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
+  leagueGameMode, sportLeagueGames, sportLeagueMarket, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState,
   vampireState, feedingBell, bittenNotice, type VampireState,
@@ -42,6 +42,8 @@ import { SportWeekPanel } from './SportWeekPanel';
 import { setSportNames, sportNameFor, SPORTS, type Sport } from '@drip/core/sports/index';
 import { sportGameFor, sportEntryState, sportKickLabel, sportOpponentLabel, sportToday, type SportSlateGame } from '@drip/core/sports/slate';
 import { sportPeriod, sportNow } from '@drip/core/sports/league';
+import { installSportMarket, sportWeekProjFor } from '@drip/core/sports/market';
+import { normalizeScoring } from '@drip/core/sports/score';
 import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/league';
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
@@ -902,6 +904,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     }).catch(() => {});
     return () => { alive = false; };
   }, [rateLeague]);
+  // THE SPORT MARKET (v0.627.0): a daily-sport league's rows project this
+  // week's remaining games at last season's rate under the league's table.
+  useEffect(() => {
+    if (!rateLeague || sport === 'nfl' || !sportSettings) return;
+    let alive = true;
+    sportLeagueMarket(rateLeague).then((m) => {
+      if (!alive || !m?.ok) return;
+      installSportMarket(SPORTS[sport], normalizeScoring(SPORTS[sport], sportSettings.scoring), m);
+      setProjVer((v) => v + 1);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [rateLeague, sport, sportSettings]);
 
   // College players' projections (0373) for this matchup's week — their
   // per-game lines and who has a game — so the board prices them like anyone.
@@ -1076,7 +1090,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         return {
           slug, name: sportNameFor(slug)?.full ?? prettySlug(slug), pos: m.pos ?? '', team: team || null,
           live: pts(slug, slotPos),
-          proj: showValue({ id: slug, pos: m.pos ?? '', team: m.team }, slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
+          // This week's remaining games × last season's rate (v0.627.0); 0 until the market lands.
+          proj: sportWeekProjFor(slug, sportToday(vnow)) ?? 0,
           state: sst,
           kickoff: sportKickLabel(sg),
           clock: sst === 'live' ? (sg?.clock ?? null) : null,
@@ -1134,7 +1149,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue, sport, sportGames, vocab, sportSettings]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- projVer: the sport market landed
+  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue, sport, sportGames, vocab, sportSettings, projVer]);
 
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots, plus
   // the engine's fills — the same bestballFill the worker scores with. Fills

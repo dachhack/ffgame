@@ -22,6 +22,59 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.627.0 — ADP and projections for the daily sports
+
+> - NBA, NHL and MLB draft rooms sort by consensus pre-season ADP; a new league's pool opens in draft order.
+> - Lineups project this week from last season's per-game rate × the games ahead; the player card shows PROJ / G, THIS WEEK and SEASON.
+
+Founder: "Let's make weekly and season long projections for new sports from
+previous season actuals. Also pull in pre season ADP for these sports for
+draft testing."
+
+**ADP.** FantasyPros' overall ADP page per sport — the consensus of the
+sites it averages (Yahoo, ESPN, CBS, NFBC…), its AVG column. ESPN's own API
+was checked first: its NBA and NHL ADP is live for 2026-27, its MLB 2026
+ADP is a dead placeholder with the season over, so one page format for all
+three won. `poll/sportMarket.js` parses the three page shapes (the small
+print beside a name is "(DEN - C)", "COL" with a position column, or a
+linked "(LAD - SP,DH)"; rows have no closing `</tr>`), maps the pages' team
+codes to the feeds' (`TEAM_ALIAS`: TB→TBL, NJ→NJD, GS→GSW, ChW→CWS, Ari→AZ…),
+and matches names through the box scores' crosswalk rule plus a unique-name
+fallback for a player the page has on his old team. Written to
+`sport_player.adp` (0435 `sport_adp_upsert`). `seed_sport_pool` orders a
+new pool by ADP first, then the production rank — so RANK, which the
+autopick follows, drafts like the market.
+
+**The calendar.** ESPN's season payload (`proTeamSchedules_wl`): every pro
+team's games by date in one request per sport — the feeds serve a day at a
+time, and the NBA's season file refuses this container. `sport_calendar`
+(0435 `sport_calendar_upsert`), ET dates, feed tricodes. ESPN names an
+NBA/NHL season by the year it ends (`espnSeasonId`).
+
+**Projections.** No model and no feed: a player's per-game rate is his
+season line (the directory's) scored under THIS league's table over his
+games played, × the games his team has — the dates left in the period for
+THIS WEEK, the games left in the season for SEASON. `sport_league_market`
+(0435) returns each pool player's ADP, GP and line plus each team's dates
+this period and games left (a replay season has no calendar, so the polled
+games stand in). `core/sports/market.ts` holds it per league and prices
+`adpFor` / `projFor` for sport keys in `poolSort`, so the draft room's ADP
+and PROJ columns, the SORT chips and the wire fill in; the classic board's
+rows project this week's remaining games; the sport card adds ADP, PROJ / G,
+THIS WEEK and SEASON. Installed where the NFL market is (draft room, wire,
+board; the app's draft and team screens) and cleared with it.
+
+The worker sweeps the market daily after the directory (`sport market nhl:
+…` in the log); CLI `sport-market <sport> [season]`.
+
+Verified: `server/test/sports-market.mjs` on saved page and payload
+fixtures (40 rows per sport, the first players, the aliases, the calendar's
+dedupe, the match rule); `check-sports` pins the market math; the market
+RPC on the local Postgres with seeded ADP and calendar rows; typecheck and
+the app's tsc.
+
+Not yet: WNBA ADP (no page); ownership %; the app's card tiles.
+
 ### v0.626.0 — a sport league can replay last season
 
 > - Start an MLB (or NHL) league on REPLAY and it plays the 2025 season day by day from the week you pick: first pitch, locks and finals land at the hour they did then.

@@ -24,6 +24,8 @@ import { SportWeekPanel } from './SportWeekPanel';
 import { SPORTS } from '@drip/core/sports/index';
 import { sportGameFor, sportEntryState, sportKickLabel, sportOpponentLabel, sportToday, type SportSlateGame } from '@drip/core/sports/slate';
 import { sportPeriod, sportNow } from '@drip/core/sports/league';
+import { installSportMarket, sportWeekProjFor } from '@drip/core/sports/market';
+import { normalizeScoring } from '@drip/core/sports/score';
 import { setSportNames, sportNameFor, type Sport } from '@drip/core/sports/index';
 import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/league';
 import { headshot } from '@drip/core/data/media';
@@ -35,7 +37,7 @@ import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, sportLeagueGames, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
+  leagueGameMode, sportLeagueGames, sportLeagueMarket, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides, loadDepthChart,
   vampireState, feedingBell, bittenNotice, type VampireState,
@@ -370,6 +372,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // THE SPORT'S OWN SLATE (v0.625.0) — the web twin's: the period's games.
   const [sportGames, setSportGames] = useState<SportSlateGame[]>([]);
   const vocab = SPORTS[sport].vocab;
+  // THE SPORT MARKET (v0.627.0): the rows project this week's remaining games.
+  const [marketVer, setMarketVer] = useState(0);
+  useEffect(() => {
+    if (sport === 'nfl' || !sportSettings) return;
+    let alive = true;
+    sportLeagueMarket(leagueId).then((m) => {
+      if (!alive || !m?.ok) return;
+      installSportMarket(SPORTS[sport], normalizeScoring(SPORTS[sport], sportSettings.scoring), m);
+      setMarketVer((v) => v + 1);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId, sport, sportSettings]);
   const [slotsSpec, setSlotsSpec] = useState<SlotSpec[] | null>(null);
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
@@ -926,7 +940,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
         return {
           slug, name: prettySlug(slug), pos: meta.pos ?? '', team: team || null,
           live: pts(slug, slotPos),
-          proj: showValue({ id: slug, pos: meta.pos ?? '', team: meta.team }, slot ? { slot, type: '', pos: (slotPos ?? []) as Pos[] } : undefined),
+          // This week's remaining games × last season's rate (v0.627.0); 0 until the market lands.
+          proj: sportWeekProjFor(slug, sportToday(vnow)) ?? 0,
           state: sst,
           kickoff: sportKickLabel(sg),
           clock: sst === 'live' ? (sg?.clock ?? null) : null,
@@ -981,7 +996,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       };
     };
     // injuryVer: the live report is a module cache, so its arrival is a version bump.
-  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue, sport, sportGames, vocab, sportSettings]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- marketVer: the sport market landed
+  }, [slate, collegeSlate, pts, nowTs, finalTeams, matchup, playsAt, flagsVer, injuryVer, simTeams, showValue, sport, sportGames, vocab, sportSettings, marketVer]);
 
   // The EFFECTIVE lineup per side: manual picks in non-best-ball slots plus
   // the engine's fills — the same bestballFill the worker scores with.

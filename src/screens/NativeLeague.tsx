@@ -24,6 +24,7 @@ import { ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
+import { installSportMarketFor } from '@drip/core/sports/market';
 import { sportLeagueSettings, currentSeason, priorSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
 import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
 import {
@@ -54,7 +55,7 @@ import {
   setContractYears, franchiseTag, extendContract, rfaTender, rfaBid, rfaResolve, lockContracts,
   myFavorites, tradeSignals, setTradeSignal, playerFlags, leaguePoolExp,
   rosterRules, injuryTags,
-  leagueMarket,
+  sportLeagueMarket, leagueMarket,
   keeperState, setKeepers, type KeeperState,
   pickAssets, type PickAssetRow, type LeagueContinuity, isDynastyContinuity,
   setLeagueFormat, type LeagueFormat,
@@ -1237,6 +1238,12 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       if (!alive || !r?.ok) return;
       setOwn(r.own ?? {});
       installLiveMarket(r);
+    }).catch(() => {});
+    // THE SPORT MARKET (v0.627.0): a daily-sport league's ADP and last-season
+    // rates ride their own call; the own-map bump re-prices the rows.
+    leagueGameMode(leagueId).then((g) => {
+      if (!alive || !g.ok || !g.sport || g.sport === 'nfl') return;
+      return sportLeagueMarket(leagueId).then((m) => { if (alive && installSportMarketFor(g, m)) setOwn((o) => ({ ...(o ?? {}) })); });
     }).catch(() => {});
     return () => { alive = false; };
   }, [leagueId]);
@@ -3032,6 +3039,12 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       setOwn(r.own ?? {});
       setTrend(r.trend ?? {});
       installLiveMarket(r);
+    }).catch(() => {});
+    // THE SPORT MARKET (v0.627.0): a daily-sport league's ADP and last-season
+    // rates ride their own call; the own-map bump re-prices the rows.
+    leagueGameMode(leagueId).then((g) => {
+      if (!alive || !g.ok || !g.sport || g.sport === 'nfl') return;
+      return sportLeagueMarket(leagueId).then((m) => { if (alive && installSportMarketFor(g, m)) setOwn((o) => ({ ...(o ?? {}) })); });
     }).catch(() => {});
     return () => { alive = false; };
   }, [leagueId]);

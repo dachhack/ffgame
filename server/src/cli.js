@@ -4,6 +4,7 @@
 //   node src/cli.js poll-once                  one scoreboard+plays pass (current week)
 //   node src/cli.js inj-once                   one injury poll
 //   node src/cli.js sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force] [--replay=2025]  one day's games + box scores → sport_game/game_stat_line
+//   node src/cli.js sport-market <nhl|mlb|nba|wnba> [season]  ADP + the season calendar → sport_player.adp / sport_calendar
 //   node src/cli.js sport-dir <sport> [season]   sweep the sport's directory → sport_player (ranked)
 //   node src/cli.js sport-leagues <sport> [YYYY-MM-DD]  one lock + resolve pass over the sport's leagues
 //   node src/cli.js simulate <lg> <wk> [..]    replay baked plays through the live feed
@@ -107,6 +108,14 @@ async function main() {
       const c = await pollSportDay(sport, date);
       const locked = await lockStartedGames(sport, c.rows);
       console.log({ polled: c.games, locked, ...(await resolveSportLeagues(sport)) });
+      break;
+    }
+    case 'sport-market': {
+      // v0.627.0: ADP (FantasyPros) + the season calendar (ESPN) for one sport.
+      const [sport, season] = args.filter((a) => !a.startsWith('--'));
+      if (!sport) throw new Error('usage: sport-market <nhl|mlb|nba|wnba> [season]');
+      const { sweepSportMarket } = await import('./poll/sportMarket.js');
+      console.log(JSON.stringify(await sweepSportMarket(sport, season || currentSeason(sport)), null, 1));
       break;
     }
     case 'sport-poll': {

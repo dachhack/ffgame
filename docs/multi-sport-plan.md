@@ -63,6 +63,14 @@ posture as ESPN today.
   (`server/src/poll/sportGames.js`) gated on `SPORTS=nhl,mlb` so the NFL
   worker is unchanged when unset; CLI `sport-poll <sport> [date] [--force]`.
 
+**v0.625.0 → v0.627.0 (after the first playtest)**: the board reads the
+sport's own slate with the sport's words; 0433 keeps the NFL's controls
+(Drip, golf, guillotine, contracts, the NFL builder, the bracket, the
+after-games waiver hold) off a sport league and opens dynasty to it; the app
+gets `ui/SportLineup`; delete returns to My Leagues; REPLAY leagues (0434)
+play a past season on a shifted clock; the market (0435): FantasyPros ADP,
+ESPN's season calendar, projections from last season's rate × games ahead.
+
 **v0.622.0**: the lineup builder (0431 `set_sport_lineup`) and the sport player card.
 
 **v0.621.0**: ten fixes from a code review (see STATUS.md).

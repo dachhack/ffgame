@@ -12,6 +12,7 @@ import { sportSettingsOf } from '@drip/core/sports/league';
 import { sportPlayerCard, leagueGameMode, myFavorites, setFavorite, type SportCard } from '@drip/core/data/liveApi';
 import { ModalBackdrop, PlayerImg, PosPill, Img } from './ui';
 import type { PlayerCardReq } from './playerCard';
+import { sportAdpFor, sportPpgFor, sportWeekProjFor, sportSeasonProjFor, sportGamesLeftThisWeek, sportSeasonGamesLeft, sportMarketInstalled } from '@drip/core/sports/market';
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'UTC' });
 
@@ -87,6 +88,29 @@ export function SportCardModal({ req, onClose }: { req: PlayerCardReq; onClose: 
           ))}
         </div>
 
+        {/* THE MARKET (v0.627.0): ADP and the projections — last season's
+            rate under this league's table × the games ahead — when the
+            screen that opened this card installed its league's market. */}
+        {sportMarketInstalled() && (() => {
+          const adp = sportAdpFor(slug), ppg = sportPpgFor(slug), wk = sportWeekProjFor(slug), ssn = sportSeasonProjFor(slug);
+          const wkGames = sportGamesLeftThisWeek(slug).length, left = sportSeasonGamesLeft(slug);
+          return (
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--bd)', paddingBottom: 9 }}>
+              {([
+                ['ADP', adp != null ? adp.toFixed(1) : '—', 'consensus average draft position'],
+                ['PROJ / G', ppg != null ? ppg.toFixed(1) : '—', `last season's per-game rate under this league's scoring`],
+                ['THIS WEEK', wk != null ? `${wk.toFixed(1)}` : '—', `${wkGames} game${wkGames === 1 ? '' : 's'} left this week`],
+                ['SEASON', ssn != null ? Math.round(ssn).toString() : '—', left != null ? `${left} games left` : 'no calendar yet'],
+              ] as [string, string, string][]).map(([k, v, hint]) => (
+                <div key={k} style={{ flex: 1, textAlign: 'center' }} title={hint}>
+                  <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>{k}</div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginTop: 2 }}>{v}</div>
+                  <div className="mono" style={{ fontSize: 7.5, color: 'var(--faint)', marginTop: 1 }}>{k === 'THIS WEEK' ? `${wkGames} g` : k === 'SEASON' && left != null ? `${left} g` : ''}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {err && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>{err}</div>}
         {!card && !err && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>reading…</div>}
 
