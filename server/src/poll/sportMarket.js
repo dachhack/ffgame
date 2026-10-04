@@ -17,7 +17,7 @@
 // Projections need no feed: a player's per-game rate is his season line
 // over his games played (the directory already carries both), times the
 // games his team has — computed where it is shown (core sports/market.ts).
-import { db } from '../supabase.js';
+import { db, allRows } from '../supabase.js';
 import { getJson, getText } from '../sports/http.js';
 import { buildXref, resolveXref, normName } from './sportDirectory.js';
 
@@ -154,9 +154,9 @@ export async function sweepSportAdp(sport) {
   const html = await fetchFantasyProsAdp(sport);
   const parsed = parseFantasyProsAdp(html, sport);
   if (!parsed.length) throw new Error(`${sport}: the ADP page had no rows`);
-  const { data: dir, error } = await db().from('sport_player').select('player_key, full_name, team, alt_ids').eq('sport', sport);
-  if (error) throw new Error(`sport_player read: ${error.message}`);
-  const { rows, unmatched } = matchAdp(parsed, dir ?? []);
+  // Every row (v0.627.3): the directory is past PostgREST's 1000-row page.
+  const dir = await allRows((from, to) => db().from('sport_player').select('player_key, full_name, team, alt_ids').eq('sport', sport).order('player_key').range(from, to));
+  const { rows, unmatched } = matchAdp(parsed, dir);
   const { data, error: wErr } = await db().rpc('sport_adp_upsert', { p_sport: sport, p_rows: rows });
   if (wErr) throw new Error(`sport_adp_upsert: ${wErr.message}`);
   for (const u of unmatched.slice(0, 6)) log(`${sport}: no directory match for ${u.name} (${u.team})`);

@@ -19,7 +19,7 @@
 //
 // Pure functions first (tested in test/sports-league.mjs); the I/O at the
 // bottom is thin.
-import { db } from './supabase.js';
+import { db, allRows } from './supabase.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, rotoStandings } from '../../packages/core/src/sports/score.ts';
 import { sportPeriod, sportWeekOf, sportSettingsOf } from '../../packages/core/src/sports/league.ts';
@@ -186,7 +186,8 @@ export async function lockStartedGames(sport, games, now = Date.now(), offsetDay
     const ids = matchups.map((m) => m.id);
     const [{ data: picks }, { data: pool }, { data: existing }] = await Promise.all([
       db().from('sealed_pick').select('matchup_id, app_user_id, game_window, roster_slot, player_slug').in('matchup_id', ids).eq('game_window', 'wk'),
-      db().from('league_pool').select('slug, team, pos, eligible').eq('league_id', lg.id).in('team', teams),
+      // A 2000-player pool on a busy night can pass the 1000-row page (v0.627.3).
+      allRows((from, to) => db().from('league_pool').select('slug, team, pos, eligible').eq('league_id', lg.id).in('team', teams).order('slug').range(from, to)).then((rows) => ({ data: rows })),
       db().from('sport_slot_lock').select('matchup_id, app_user_id, game_date, roster_slot, game_id').in('matchup_id', ids).in('game_date', dates),
     ]);
     const teamOf = new Map((pool ?? []).map((p) => [p.slug, p.team]));

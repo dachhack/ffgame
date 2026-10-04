@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.627.3 — the whole directory, page by page
+
+> - The MLB draft pool's ADP covers every player again: the worker read only the first 1,000 of the directory's 1,662.
+
+The v0.627.2 worker's first sweep: NHL 269/269 ADP matched, MLB 310/597 —
+worse than before the injured came in, with the players plainly in the
+directory. PostgREST answers at most 1,000 rows to one select, silently;
+the MLB directory passed that line (1,509 before, 1,662 now) and the match,
+the box scores' crosswalk and a busy night's pool read all saw the first
+thousand. `allRows` (server/src/supabase.js) pages a select by its key;
+the three reads use it. The same cap explains the 519 of the first sweep.
+
 ### v0.627.2 — the injured are in the directory
 
 > - Injured NHL and MLB players (Larkin, Barzal, Westburg…) are back in the player pool and the ADP match; the Ohtani batter/pitcher rows are one man.

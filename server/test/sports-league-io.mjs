@@ -29,17 +29,19 @@ const lines = { 'nba-1': { pts: 20, reb: 5, ast: 5, stl: 1, blk: 1, tov: 2 }, 'n
 function query(table) {
   const rows = tables[table];
   const filters = [];
-  let op = 'select', payload = null, opts = null;
+  let op = 'select', payload = null, opts = null, page = null;
   const q = {
     select() { return q; },
     eq(k, v) { filters.push((r) => r[k] === v); return q; },
     in(k, vs) { filters.push((r) => vs.includes(r[k])); return q; },
     lte(k, v) { filters.push((r) => r[k] <= v); return q; },
+    order() { return q; },
+    range(from, to) { page = [from, to]; return q; },
     update(p) { op = 'update'; payload = p; return q; },
     upsert(p, o) { op = 'upsert'; payload = p; opts = o; return q; },
     then(res) {
       const match = (r) => filters.every((f) => f(r));
-      if (op === 'select') return res({ data: rows.filter(match), error: null });
+      if (op === 'select') { const all = rows.filter(match); return res({ data: page ? all.slice(page[0], page[1] + 1) : all, error: null }); }
       if (op === 'update') { for (const r of rows) if (match(r)) Object.assign(r, payload); return res({ data: null, error: null }); }
       const keys = (opts?.onConflict ?? '').split(',');
       for (const p of Array.isArray(payload) ? payload : [payload]) {
