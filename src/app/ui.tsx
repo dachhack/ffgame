@@ -14,6 +14,7 @@ import { Rulebook } from '../screens/Rulebook';
 import { markBootSessionChecked } from '../screens/DemoBoard';
 import { Faq } from '../screens/Faq';
 import { DevyValuesSheet } from './DevyValues';
+import { DeleteAccountSheet } from './DeleteAccount';
 import { GameIcon, UI_ART, ICON_SETS } from './gameIcons';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { getSession, onAuth, signOut, isAdmin } from '@drip/core/data/liveApi';
@@ -438,6 +439,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
   const [rules, setRules] = useState(false);
   const [faq, setFaq] = useState(false);
   const [devy, setDevy] = useState(false);
+  const [delAcct, setDelAcct] = useState(false); // 0422: delete my account
   const [session, setSession] = useState<Session | null>(null);
   const [admin, setAdmin] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -663,7 +665,7 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
                 try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
                 setSleeperUser(null);
                 markBootSessionChecked(); // don't let the demo's boot check race the async signOut
-                navigate({ name: 'demo' });
+                navigate({ name: 'landing' });
               }}
               className="mono"
               title={session.user.email ?? 'Sign out'}
@@ -672,11 +674,34 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
               ⏻ Sign out
             </button>
           )}
+          {/* 0422: the way out. Below sign-out, quieter than it. */}
+          {session && (
+            <button
+              onClick={() => { setOpen(false); setDelAcct(true); }}
+              className="mono"
+              style={{ width: '100%', border: 'none', paddingTop: 8, textAlign: 'left', background: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--faint)', cursor: 'pointer' }}
+            >
+              Delete my account
+            </button>
+          )}
         </div>
       )}
       {rules && <Rulebook onClose={() => setRules(false)} />}
       {faq && <Faq onClose={() => setFaq(false)} onOpenRulebook={() => setRules(true)} />}
       {devy && <DevyValuesSheet onClose={() => setDevy(false)} />}
+      {delAcct && session && (
+        <DeleteAccountSheet email={session.user.email ?? ''} onClose={() => setDelAcct(false)}
+          onDeleted={() => {
+            // The row is gone server-side; drop the session the same way
+            // sign-out does and land on the front door.
+            setDelAcct(false);
+            signOut().catch(() => {});
+            try { localStorage.removeItem('dripLive'); } catch { /* ignore */ }
+            setSleeperUser(null);
+            markBootSessionChecked();
+            navigate({ name: 'landing' });
+          }} />
+      )}
     </div>
   );
 }

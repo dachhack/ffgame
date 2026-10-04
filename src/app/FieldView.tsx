@@ -423,28 +423,33 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const ezFill = (tc: ReturnType<typeof teamColor>) => tc ? `color-mix(in srgb, ${tc.c} 72%, var(--surface))` : 'color-mix(in srgb, var(--dim) 16%, var(--surface))';
   const ezText = (tc: ReturnType<typeof teamColor>) => tc ? tc.t : 'var(--dim)';
   const awayLogo = teamLogo(away, { week }), homeLogo = teamLogo(home, { week });
+  // THE STRIP READS FROM ACROSS THE ROOM (v0.607.0). Founder: "A lot larger
+  // team names, score and time on the fields view." The field itself scales
+  // with its tile, but this line was 9px whatever the tile's width, so on a
+  // wall of fields the one thing you want at a glance — who, what score,
+  // how long left — was the smallest text on the card.
   const stripTeam = (abbr: string, lg: string | null, hasBall: boolean) => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: hasBall ? 'var(--text)' : 'var(--dim)' }}>
-      {lg && <img src={lg} alt="" width={13} height={13} style={{ display: 'block' }} />}
-      {abbr}{hasBall && !over ? <span title="has the ball" style={{ fontSize: 8 }}>🏈</span> : null}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: hasBall ? 'var(--text)' : 'var(--dim)' }}>
+      {lg && <img src={lg} alt="" width={20} height={20} style={{ display: 'block' }} />}
+      {abbr}{hasBall && !over ? <span title="has the ball" style={{ fontSize: 11 }}>🏈</span> : null}
     </span>
   );
 
   return (
     <div style={{ marginTop: 5, background: 'var(--bg)', border: `1px solid ${accent ? `color-mix(in srgb, ${accent} 55%, var(--bd))` : 'var(--bd)'}`, boxShadow: accent ? `0 0 12px color-mix(in srgb, ${accent} 18%, transparent)` : undefined, borderRadius: 4, padding: '6px 8px 7px', transition: 'border-color .3s ease, box-shadow .3s ease' }}>
       {/* score + clock strip — logos + a football on the possession side */}
-      <div className="mono" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 10, alignItems: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--dim)', marginBottom: 3 }}>
+      <div className="mono" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center', fontSize: 14, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', marginBottom: 5, paddingRight: 30 }}>
         {stripTeam(away, awayLogo, ballTm === away)}
-        <span style={{ color: 'var(--text)' }}>{score.a}</span>
+        <span style={{ color: 'var(--text)', fontSize: 17, fontWeight: 800 }}>{score.a}</span>
         {/* the LAST PLAY's clock, not the playback clock — the live window clock
             can overshoot the real game (slot bookkeeping past regulation), which
             read a Q4 game as "OT" during the first live-fire. */}
-        <span style={{ color: 'var(--faint)', fontWeight: 400 }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</span>
-        <span style={{ color: 'var(--text)' }}>{score.h}</span>
+        <span style={{ color: 'var(--faint)', fontWeight: 600, fontSize: 12 }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</span>
+        <span style={{ color: 'var(--text)', fontSize: 17, fontWeight: 800 }}>{score.h}</span>
         {stripTeam(home, homeLogo, ballTm === home)}
         {/* mirror the field to match your TV broadcast (remembered per game) */}
         <button onClick={toggleFlip} title="flip the field to match your TV" aria-pressed={flip}
-          style={{ position: 'absolute', right: 0, top: -2, fontSize: 9, fontWeight: 700, color: flip ? 'var(--you)' : 'var(--faint)', background: 'none', border: `1px solid ${flip ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '1px 5px', cursor: 'pointer', lineHeight: 1.4 }}>↔</button>
+          style={{ position: 'absolute', right: 0, top: 2, fontSize: 9, fontWeight: 700, color: flip ? 'var(--you)' : 'var(--faint)', background: 'none', border: `1px solid ${flip ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 3, padding: '1px 5px', cursor: 'pointer', lineHeight: 1.4 }}>↔</button>
       </div>
       {plays.length > 0 && (
         <div className="mono" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 3, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em' }}>
@@ -1052,16 +1057,16 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
         )}
         {/* The selected game's own line: teams, score, where its clock stands. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginBottom: 10 }}>
-          <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>
-            {teamLogo(cur.away, { week }) && <img src={teamLogo(cur.away, { week })!} alt="" width={16} height={16} style={{ display: 'block' }} />}{cur.away}
+          <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+            {teamLogo(cur.away, { week }) && <img src={teamLogo(cur.away, { week })!} alt="" width={22} height={22} style={{ display: 'block' }} />}{cur.away}
           </span>
           {last
-            ? <span className="mono" style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>{last.as} — {last.hs}</span>
-            : <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)' }}>@</span>}
-          <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>
-            {cur.home}{teamLogo(cur.home, { week }) && <img src={teamLogo(cur.home, { week })!} alt="" width={16} height={16} style={{ display: 'block' }} />}
+            ? <span className="mono" style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)' }}>{last.as} — {last.hs}</span>
+            : <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--faint)' }}>@</span>}
+          <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+            {cur.home}{teamLogo(cur.home, { week }) && <img src={teamLogo(cur.home, { week })!} alt="" width={22} height={22} style={{ display: 'block' }} />}
           </span>
-          <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: cur.state === 'live' ? '#FF4F62' : 'var(--faint)' }}>
+          <span className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: cur.state === 'live' ? '#FF4F62' : 'var(--faint)' }}>
             {cur.state === 'final' ? 'FINAL' : cur.state === 'live' ? (last ? fmtQClock(Math.min(last.c, effClock)) : 'LIVE') : cur.kickoff ? kickoffLabel(cur.kickoff) : 'UPCOMING'}
           </span>
         </div>

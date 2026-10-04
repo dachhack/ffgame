@@ -9,10 +9,15 @@
 // Non-Sleeper leagues use a namespaced key ("espn-<id>") so ids never collide.
 import { normName } from './players';
 import {
-  adminUpsertLeague, adminUpsertMemberships, adminUpsertMatchups, adminUpsertLineups,
+  adminUpsertLeague, adminUpsertMemberships, adminUpsertMatchups, adminUpsertLineups, importProviderLeagueRpc,
   type MemberRow, type MatchupRow, type LineupRow,
 } from './liveApi';
 import { espnNormalize } from './espn';
+import { fleaflickerNormalize } from './fleaflicker';
+import { mflNormalize } from './mfl';
+import { yahooNormalize } from './yahoo';
+import { proxyGetJson } from './providers/proxy';
+import { yahooApi } from './providers/yahooClient';
 import type { NormalizedLeague, NormPlayer } from './normalized';
 
 // Slug a normalized player onto the play-by-play key space (matches the ESPN
@@ -113,4 +118,76 @@ export async function importEspnSeason(leagueId: string, season: string, creds?:
     pairs += (await syncNormalizedWeek(dbId, norm, w)).pairs;
   }
   return { leagueId: dbId, rosters, weeks: norm.weeks, pairs };
+}
+
+// ── EVERY PLATFORM, SELF-SERVE (0423, v0.613.0) ──────────────────────────────
+// Founder: "Let's do the same for the other league providers (ESPN, Yahoo,
+// etc). Current season inputs only." The admin path above persists through an
+// admin-only RPC; this one persists through import_provider_league, which
+// makes the member the league's commissioner and seats them on the team THEY
+// PICK (no platform but Sleeper gives us a user id to match). The schedule
+// and lineups follow through the same writers the admin path uses, which
+// already admit a league's commissioner.
+
+export type ImportProvider = 'espn' | 'yahoo' | 'mfl' | 'fleaflicker';
+export const IMPORT_PROVIDERS: { id: ImportProvider; name: string; refLabel: string; refHint: string }[] = [
+  { id: 'espn', name: 'ESPN', refLabel: 'ESPN LEAGUE ID', refHint: 'the number after leagueId= in your league URL' },
+  { id: 'fleaflicker', name: 'Fleaflicker', refLabel: 'FLEAFLICKER LEAGUE ID', refHint: 'the number in your league URL (…/leagues/12345)' },
+  { id: 'mfl', name: 'MFL', refLabel: 'MFL LEAGUE ID', refHint: 'the 5-digit number in your league URL (L=12345)' },
+  { id: 'yahoo', name: 'Yahoo', refLabel: 'YAHOO LEAGUE KEY', refHint: 'e.g. 449.l.12345 — sign in with Yahoo first' },
+];
+
+/** The season a league must be in to come over (the database insists). */
+export const providerImportSeason = (now = new Date()): string => String(now.getUTCFullYear());
+
+/** Read a platform league into the normalized shape. ESPN takes optional
+ *  cookies for a private league; Yahoo needs a connected account. */
+export async function normalizeProviderLeague(provider: ImportProvider, ref: string, season: string, creds?: EspnImportCreds, onProgress?: (note: string) => void): Promise<NormalizedLeague> {
+  const id = ref.trim();
+  switch (provider) {
+    case 'espn': return espnNormalize({ leagueId: id, season, swid: creds?.swid, s2: creds?.s2 }, undefined, onProgress);
+    case 'fleaflicker': return fleaflickerNormalize({ leagueId: id, season }, proxyGetJson, onProgress);
+    case 'mfl': return mflNormalize({ leagueId: id, season }, proxyGetJson, onProgress);
+    case 'yahoo': return yahooNormalize(id, yahooApi, onProgress);
+  }
+}
+
+/** The seats as import_provider_league wants them, namespaced like the admin
+ *  import so a later admin re-import lands on the same rows. */
+export const providerMembers = (provider: ImportProvider, norm: NormalizedLeague): MemberRow[] =>
+  norm.teams.map((t) => ({
+    roster_id: t.rosterId,
+    owner_id: t.ownerId ? providerKey(provider, t.ownerId) : null,
+    team_name: t.teamName || `Roster ${t.rosterId}`,
+  }));
+
+/** Bring a platform league in as its commissioner, seated on `myRosterId`,
+ *  then schedule every week the platform published. */
+export async function importMyProviderLeague(provider: ImportProvider, ref: string, season: string, norm: NormalizedLeague, myRosterId: number, onProgress?: (note: string) => void) {
+  const r = await importProviderLeagueRpc({
+    provider, ref: ref.trim(), season, name: norm.name,
+    settings: { format: norm.format, source: provider, sourceLeagueId: ref.trim() },
+    members: providerMembers(provider, norm), myRosterId,
+  });
+  if (!r.ok || !r.league_id) return { ...r, weeks: 0, pairs: 0 };
+  let pairs = 0;
+  for (let w = 1; w <= norm.weeks; w++) {
+    onProgress?.(`Scheduling week ${w}/${norm.weeks}…`);
+    try { pairs += (await syncNormalizedWeek(r.league_id, norm, w)).pairs; }
+    catch { /* a week without pairings yet (MFL publishes as it goes) is not a failed import */ }
+  }
+  return { ...r, weeks: norm.weeks, pairs };
+}
+
+/** The commissioner's "sync season" for any platform (the desk had it for
+ *  ESPN only). Re-reads the platform and rewrites every week's pairings and
+ *  lineups. */
+export async function syncProviderSeason(dbLeagueId: string, provider: ImportProvider, ref: string, season: string, creds?: EspnImportCreds, onProgress?: (note: string) => void): Promise<{ weeks: number; pairs: number }> {
+  const norm = await normalizeProviderLeague(provider, ref, season, creds, onProgress);
+  let pairs = 0;
+  for (let w = 1; w <= norm.weeks; w++) {
+    onProgress?.(`Week ${w}/${norm.weeks}…`);
+    try { pairs += (await syncNormalizedWeek(dbLeagueId, norm, w)).pairs; } catch { /* see above */ }
+  }
+  return { weeks: norm.weeks, pairs };
 }

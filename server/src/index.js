@@ -27,6 +27,7 @@ import { sweepDevyBoard } from './poll/statheadDevy.js';
 import { writeCollegeScores } from './poll/collegeScores.js';
 import { sweepGraduation } from './poll/graduate.js';
 import { sweepDeclared } from './poll/declared.js';
+import { sweepOffboardDaily } from './offboard.js';
 import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS, BOWL_BASE, bowlSchedule, etTuesdayStart } from './poll/collegeSlate.js';
 import { setCollegeProjections } from '../../packages/core/src/engine/projScoring.ts';
 import { sweepDynasty } from './poll/dynasty.js';
@@ -324,8 +325,23 @@ function gameDay(games, now = Date.now()) {
  *  tick — every kickoff for the previous week is in the past, so the ramp goes
  *  quiet and the hourly rung fires. Rollover happens midweek, far from any
  *  kickoff, which is precisely when an hour of lag costs nothing. */
+/** Every current-season Sleeper league (0422's sleeper_leagues_for_sync),
+ *  plus whatever PILOT_LEAGUE_IDS still names. Before 0422 the env list was
+ *  the whole set, so a league nobody added to fly.toml never synced; a league
+ *  anyone can now bring in on their own must sync without a deploy. The RPC
+ *  missing (migration not yet applied) falls back to the env list alone. */
+async function leagueIdsToSync(season) {
+  const ids = new Set(config.leagueIds);
+  try {
+    const { data, error } = await db().rpc('sleeper_leagues_for_sync', { p_season: season });
+    if (error) throw error;
+    for (const r of data ?? []) if (r.sleeper_league_id) ids.add(String(r.sleeper_league_id));
+  } catch (e) { log('sync: league list from db unavailable —', e.message); }
+  return [...ids];
+}
+
 async function syncTick() {
-  if (syncing || !config.leagueIds.length) return;
+  if (syncing) return;
   const now = Date.now();
 
   // ── THE CADENCE DECISION (v0.319.0), BEFORE ANY NETWORK CALL ────────────
@@ -358,10 +374,12 @@ async function syncTick() {
   }
 
   const season = config.season;
+  const ids = await leagueIdsToSync(season);
+  if (!ids.length) { lastSyncAt = now; return; }
   const week = await regularWeek(season);
   syncing = true;
   try {
-    const r = await syncAllLeagues(week, season, playerIndex, config.leagueIds);
+    const r = await syncAllLeagues(week, season, playerIndex, ids);
     const took = Date.now() - now;
     lastSyncedWeek = week; lastSyncAt = Date.now();
     log('weekly sync: week', week, '—', `${r.ok}/${r.total} leagues`,
@@ -964,6 +982,11 @@ async function tick() {
   // year's NFL draft prospect pool by college ESPN id, for the DECLARED tag.
   try { sweepDeclared(log); }
   catch (e) { log('declared sweep error', e.message); }
+  // OFFBOARDING (0422, v0.612.0). Daily, detached: tell an inactive account
+  // it will be removed, remove one whose notice has run out. Fails closed
+  // without mail credentials (nothing told, nothing removed).
+  try { sweepOffboardDaily(log); }
+  catch (e) { log('offboard sweep error', e.message); }
 
   // THE DYNASTY BOARD (0335). Weekly, gated inside the sweep: a dynasty value
   // is a long-horizon opinion of a career and does not move on a Tuesday.
@@ -1098,26 +1121,24 @@ async function main() {
   await trueup().catch((e) => log('true-up error', e.message));
   setInterval(() => trueup().catch((e) => log('true-up error', e.message)), 6 * 3600e3);
 
-  // Weekly schedule + lineup auto-sync for all configured leagues (separate, slower
-  // loop — a 100-league sync can outlast one play tick).
-  if (config.leagueIds.length) {
-    await syncTick().catch((e) => log('sync tick error', e.message));
-    setInterval(() => syncTick().catch((e) => log('sync tick error', e.message)), config.syncCheckMs);
-    // Public pods (0089): deal rosters + pair matchups for the current week.
-    // Own cadence, independent of PILOT_LEAGUE_IDS. Always the REGULAR-season
-    // week — pods are a regular-season product, and preseason no longer switches
-    // them off (it used to, purely because both keyed off the same single week).
-    const podTick = async () => {
-      const season = config.season;
-      const week = await regularWeek(season);
-      const r = await ensurePods(week, season, playerIndex);
-      if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
-    };
-    await podTick().catch((e) => log('pod tick error', e.message));
-    setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.podCheckMs);
-  } else {
-    log('no PILOT_LEAGUE_IDS set — weekly auto-sync disabled');
-  }
+  // Weekly schedule + lineup auto-sync for every current-season Sleeper
+  // league (separate, slower loop — a 100-league sync can outlast one play
+  // tick). Since 0422 the list comes from the database each pass, so this
+  // runs whether or not PILOT_LEAGUE_IDS is set; an empty list is a no-op.
+  await syncTick().catch((e) => log('sync tick error', e.message));
+  setInterval(() => syncTick().catch((e) => log('sync tick error', e.message)), config.syncCheckMs);
+  // Public pods (0089): deal rosters + pair matchups for the current week.
+  // Own cadence. Always the REGULAR-season week — pods are a regular-season
+  // product, and preseason no longer switches them off (it used to, purely
+  // because both keyed off the same single week).
+  const podTick = async () => {
+    const season = config.season;
+    const week = await regularWeek(season);
+    const r = await ensurePods(week, season, playerIndex);
+    if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
+  };
+  await podTick().catch((e) => log('pod tick error', e.message));
+  setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.podCheckMs);
 }
 
 // Only when run as the entrypoint. `contextsFor` is exported for its test, and

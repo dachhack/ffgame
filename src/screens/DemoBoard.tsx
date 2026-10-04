@@ -665,6 +665,9 @@ export function DemoBoard() {
           marketing landing. Settings menu is minimal (no theme/deck customizer)
           until sign-in. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        {/* v0.614.0: the demo is one click off the front door, and one back. */}
+        <button onClick={() => navigate({ name: 'landing' })} className="mono" style={linkBtn}>← home</button>
+        <span style={{ color: 'var(--faint)' }}>·</span>
         <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}>sign in</button>
         <span style={{ color: 'var(--faint)' }}>·</span>
         <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>FAQ</button>
@@ -1043,7 +1046,7 @@ export function DemoBoard() {
               audiences: league players and the solo traffic the ads bring in. */}
           <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14, textAlign: 'center' }}>
             <div className="grotesk" style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>Want in — with your league, or solo?</div>
-            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>The pilot is invite-only; we onboard new players every week. Leagues: Sleeper · ESPN · Yahoo · MFL · Fleaflicker. No league? Solo pods &amp; weekly showdowns.</div>
+            <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 4, lineHeight: 1.5 }}>Sign up and start a league, or bring your Sleeper league in yourself. ESPN · Yahoo · MFL · Fleaflicker we set up for you — ask below. The pilot holds 1,000 accounts.</div>
             <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, marginTop: 10 }}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Request an invite</button>
           </div>
 

@@ -60,7 +60,10 @@ export type Route =
   // its own top-level route) and comes back with no memory of which league you
   // were in. Neither is written to the hash by routeToHash: they are in-memory
   // intents for an in-app navigation, so a reload lands on the leagues list.
-  | { name: 'live'; view?: 'admin' | 'leaguehome' | 'team' | 'draft'; leagueId?: string }
+  | { name: 'live'; view?: 'admin' | 'leaguehome' | 'team' | 'draft' | 'signup'; leagueId?: string }
+  // THE FRONT DOOR (v0.614.0): the signed-out landing — get an account, the
+  // feature board, the demo card. The demo itself stays its own route below.
+  | { name: 'landing' }
   | { name: 'demo'; view?: 'clean' | 'board' } // narrated guided demo: 'clean' explainer (default) or the real in-game board
   | { name: 'leagues' }
   | { name: 'sleeperLeague'; leagueId: string; leagueName: string }
@@ -86,7 +89,8 @@ function routeToHash(r: Route): string {
   switch (r.name) {
     case 'splash': return '#/';
     case 'leagues': return '#/leagues';
-    case 'live': return '#/live';
+    case 'live': return r.view === 'signup' ? '#/live/signup' : '#/live';
+    case 'landing': return '#/landing';
     case 'demo': return r.view === 'board' ? '#/demo/board' : '#/demo';
     case 'sleeperLeague': return `#/sleeper/${encodeURIComponent(r.leagueId)}`;
     case 'connect': return `#/connect/${encodeURIComponent(r.provider)}`;
@@ -108,7 +112,8 @@ function hashToRoute(hash: string): Route | null {
   const seg = h.split('/');
   switch (seg[0]) {
     case 'leagues': return { name: 'leagues' };
-    case 'live': return { name: 'live' };
+    case 'live': return seg[1] === 'signup' ? { name: 'live', view: 'signup' } : { name: 'live' };
+    case 'landing': return { name: 'landing' };
     case 'demo': return { name: 'demo', view: seg[1] === 'board' ? 'board' : 'clean' };
     case 'connect': return seg[1] ? { name: 'connect', provider: decodeURIComponent(seg[1]) as ProviderId } : null;
     case 'classic-sim': return { name: 'classicSim' };
@@ -126,7 +131,9 @@ function bootRoute(): Route {
   const r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '');
   if (r) return r;
   try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
-  return { name: 'demo' };
+  // v0.614.0: a stranger lands on the front door, not in the demo; the demo
+  // is one click from it.
+  return { name: 'landing' };
 }
 
 /** The three switchable icon skins: classic emoji, the Football Factory art
@@ -340,7 +347,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try { if (!hasAuthTokensInUrl()) window.history.replaceState({ __route: route }, '', routeToHash(route)); } catch { /* ignore */ }
     // Back/forward: re-read the route from the (now-updated) hash; a hash that
     // doesn't name a restorable screen falls back to the demo landing.
-    const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'demo' }); };
+    const onPop = () => { setRoute(hashToRoute(window.location.hash) ?? { name: 'landing' }); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
     // eslint-disable-next-line react-hooks/exhaustive-deps

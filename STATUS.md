@@ -22,6 +22,89 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.614.1 — pictures from the site on the front door
+
+> - Founder: "Include pictures from the site." The landing now shows four real screens under the features — **Sealed picks** (the opponent's card backs before kickoff), **Live duels** (a Thursday-night duel dripping points), the **Classic board** (two lineups with live totals), and **Every game on a field** (a live field with the ball spot) — each a tap into the demo or the classic simulator. The demo card's picture is the Drip board live (the window battle bar, three duels, a nuke caption) instead of the setup screen.
+> - All shot from the running app with headless Chromium; team logos and headshots are hidden in them because the shots were taken offline.
+
+- Web `Landing.tsx`: `SITE_SHOTS` gallery; `public/brand/shot-*.{png,jpg}` (the earlier `demo-board.png` is gone). Web only.
+
+### v0.614.0 — the front door: get an account, the feature board, the demo as a picture
+
+> - Founder's revamp of the web flow. Signed out: **Get account** (or **Get on the waiting list** when the 1,000 spots are taken — the button reads the live count), then **Features** in five groups — League types (Redraft · Dynasty · Keeper · Contract · Devy), Competitive modes (Vampire · Guillotine · Golf), Positions (QB/RB/WR/TE · K/D/ST · DL/DE/LB/DB · RET/FB/PUNT/HC · scoped positions), Scoring options (single-spot best ball · scoped bonuses · others), Matchup style (Drip · Classic) — each chip opening one line; then the **Drip demo as a picture** that clicks into the demo.
+> - Signed in: My Leagues as before; with no leagues it now says **"Open a league or join one above"** under the ＋ ADD A LEAGUE and 🔎 FIND A LEAGUE chips, instead of dropping you into the role chooser.
+> - The demo keeps its own route and explainer, one click from the landing ("demo" in the header, the picture, the ▶ button). GET ACCOUNT opens the sign-in page on the create-account form.
+
+- Web `Landing.tsx` (route `landing`, the boot default for a stranger; `#/landing`); `#/live/signup` opens AuthForm in sign-up mode. Core `LANDING_FEATURES` in `leagueTagline.ts`, reusing the continuity / format / game notes where they exist (Devy, positions and scoring lines are new). `public/brand/demo-board.png` is a headless-Chromium shot of the real demo board. `LeagueHome` empty state. Web only.
+
+### v0.613.0 — Drip on your ESPN, Fleaflicker, MFL or Yahoo league, self-serve
+
+> - Founder, after Sleeper went self-serve: "Any player works for the sleeper import. Let's do the same for the other league providers (ESPN, Yahoo, etc). Current season inputs only."
+> - ＋ ADD A LEAGUE now has **Add Drip to my ESPN, Fleaflicker, MFL or Yahoo league**: pick the platform, paste the league id (a private ESPN league takes your SWID and espn_s2 cookies, used once in your browser), read the league, **pick your team from its list**, and it's on Drip with you as its commissioner and every published week scheduled. Yahoo asks you to sign in with Yahoo first. This season only.
+> - Why you pick: Sleeper is the one platform that gives us a user id to match a seat with. On the others, the person bringing the league in picks their team, and so does everyone who follows: the invite form shows the league's teams and you take yours. A taken team can't be taken twice; the commissioner reassigns from the desk if someone picked wrong.
+> - The commissioner's **⟳ sync season** now works for all four platforms (it was ESPN-only). Lineups and pairings on these platforms are a snapshot until it's pressed — the worker mirrors Sleeper leagues on its own, not these yet.
+> - The app's league board has the same branch (Yahoo points at the website, where the sign-in lives), and a platform invite code entered in the app shows the teams to pick from instead of failing.
+
+- 0423: `import_provider_league(provider, ref, season, name, settings, members, my_roster_id)` — provider-keyed row (`'<provider>-<ref>'`, as the admin import keys it), caller as commissioner, seats via `_upsert_membership_rows`, caller seated on the team they picked unless another member holds it. `invite_seats(code)` and `claim_platform_seat(code, roster_id)` for the invite form on non-native, non-Sleeper leagues. Season = current year.
+- Core `providerAdmin.ts`: `IMPORT_PROVIDERS`, `normalizeProviderLeague` (ESPN / Fleaflicker / MFL via the proxies, Yahoo via its client), `providerMembers`, `importMyProviderLeague` (RPC, then `syncNormalizedWeek` per week, a week with no pairings yet tolerated), `syncProviderSeason`. `liveApi`: `importProviderLeagueRpc`, `inviteSeats`, `claimPlatformSeat`.
+- Web: `ProviderImport.tsx` (view `provider`), RoleChooser item, `RedeemForm` pick-your-team branch for platform leagues, AdminPage/CommishDash sync for every platform, `PlatformTeam` names MFL and Yahoo. App: Recruit `provider` branch; join-by-code falls through to the team list for a platform code.
+- Still open: a worker sync for non-Sleeper leagues (lineups go stale between the commissioner's syncs); Yahoo's Fantasy API is gated behind Yahoo's app approval (docs/multi-league-integration-research.md), so that path depends on it.
+
+### v0.612.0 — the door is open: any account creates, 1,000 spots, a daily sweep, and Drip on your Sleeper league
+
+> - Founder: "Let's drop the requirement for me to approve user accounts. Just set a cap of 1000 users and do a daily sweep for inactive users and make an off boarding process. Any account can add a native league or add drip to an existing league." Then: "Inactive is 30 days with the 14 day grace period."
+> - **Anyone can create.** Start a fresh league from ＋ ADD A LEAGUE on the web or the app's league board — no flag, no approval. The pilot copy ("invite-only", "how are you joining the pilot?") is gone from the sign-in page, the add flow, the demo, the FAQ and the request form.
+> - **Add Drip to your Sleeper league yourself.** New on both: type your Sleeper username, pick one of your leagues this season, and it's on Drip with you as its commissioner. The database checks with Sleeper that you're really in it. Everyone else joins with the invite code it hands you, and the schedule and rosters mirror from Sleeper on their own from then on (before, only leagues named in the worker's config synced). ESPN, Yahoo, MFL and Fleaflicker still come in by request.
+> - **1,000 spots.** The database refuses the account that would pass the cap, however it signs up; the sign-up form asks first and shows the waitlist line when the house is full. The admin console shows the count and sets the cap.
+> - **The daily sweep.** An account that is not an admin, not a seat agent, not a commissioner, has no seat in this season, and has shown no sign of life for 30 days (no sign-in, no league opened, no app check-in, no chat) is emailed: "your account will be removed on <date> — sign in to keep it". Fourteen days later, if still silent, it is removed and told so. Any sign-in in between cancels the notice. Nothing is removed that wasn't told first, so a worker without mail credentials removes nobody.
+> - **Leave on your own.** Settings → Delete my account (web gear; app Settings → Account): type your email back to confirm. A commissioner of a league with other members hands it off or deletes it first. Leagues keep their results with the seat shown by team name, as the privacy page says.
+
+- 0422: `has_native()` → any signed-in user. `site_pref.user_cap` (1000), `account_count()`, `signup_open()` (anon), trigger `cap_new_account` on `auth.users`, `admin_set_user_cap`. Offboarding: `offboard_notice`, `offboard_log`, `_user_last_active`, `_offboard_blockers`, `offboard_candidates` / `offboard_notice_set` / `offboard_cancel_revived` / `offboard_delete` (service role), `_offboard_prep` (clears `solo_pass.claimed_by` and `league_listing.created_by`, the two FKs that would block), `delete_my_account(p_confirm)`. Import: `import_my_league(…)` (member check via `_sleeper_users`, caller becomes commissioner, `_upsert_membership_rows`), `sleeper_leagues_for_sync(season)`.
+- Worker: `mail.js` (Gmail API via the send-invite service account; `GOOGLE_SA_EMAIL`, `GOOGLE_SA_PRIVATE_KEY`, `GMAIL_SENDER`, optional `GMAIL_FROM`/`GMAIL_FROM_NAME`), `offboard.js` (`planOffboard` pure; `sweepOffboard`; daily `sweepOffboardDaily` from the tick; `OFFBOARD_INACTIVE_DAYS`, `OFFBOARD_GRACE_DAYS`, `OFFBOARD_MAX_NOTICES`, `OFFBOARD_DRY_RUN`). CLI `offboard-sweep [--dry]`, ops-run mode `offboard-sweep`. `syncTick` reads the league list from the database each pass (plus `PILOT_LEAGUE_IDS`) and the sync and pod loops run regardless of that env. Test `server/test/offboard.mjs`.
+- **Not done here (needs the founder):** staging the Gmail secrets on Fly — add `GOOGLE_SA_EMAIL`, `GOOGLE_SA_PRIVATE_KEY`, `GMAIL_SENDER` (and `GMAIL_FROM`) as repo secrets and a "stage offboarding mail credentials" step in `deploy-worker.yml` on the FCM pattern, plus the same lines in `server/.env.example`. Until then the sweep logs what it would tell and removes nobody.
+- Core: `signupOpen`, `adminSetUserCap`, `deleteMyAccount`, `importMyLeagueRpc`; `sleeperAdmin.myLeaguesOnSleeper` / `importMyLeague` / `importSeason`; friendlyError maps Supabase's "Database error saving new user" (how a refused insert reaches the client) to the full-house line.
+- Web: `SleeperImport.tsx` (view `sleeper`), RoleChooser (create + Sleeper for everyone, copy), AuthForm door check, `DeleteAccount.tsx` from the gear, AdminPage `UserCap`. App: Recruit `sleeper` branch and ungated create, SignIn door check, Settings → Account → delete. check:settingsmenu covers the new section.
+
+### v0.611.0 — win probability on the league card, classic leagues
+
+> - Founder: "Add win probability to the league cards for classic leagues." The card's glance already carried the classic board's own win probability (v0.501.0, for the home-screen widget) and never printed it.
+> - A classic league's card now shows a thin two-colour bar under the two score lines with "62% WIN" on your side and "38%" on the opponent's, on the web and in the app. It uses the same number as the matchup board, so the two never disagree. It shows while the week is open (before lock too, like the widget, since the card's projected finals already show then) and goes away once the week is final.
+> - Nothing changes on a drip league's card (there is no model yet), or when the opponent's lineup can't be read (no number).
+
+- Core `widgetExtras.ts`: `cardWinBar(snap)` — the one rule for both clients; check:leagueline covers it. Web `SlateStrip` and the app's `MatchupStrip` draw it.
+
+### v0.610.0 — the league card says how the league is set up
+
+> - Founder's list: "More descriptive league descriptions on my leagues page. (Devy, Drip, other league settings?)" The card's one line said season, size, continuity and the game ("2026 12-Team Dynasty Drip") and nothing else; an imported league's line was the one word "Sleeper".
+> - Each card now carries a second line with the settings behind it, printing only what is news: **Devy** or **Devy Shares**, **College** (college calendar), **Superflex**, reception scoring (**Full PPR**, **Half PPR**, **Standard scoring**; classic leagues), **Best Ball**, the salary cap (**$200 cap**), keepers (**3 keepers**), dues (**$50 dues**) and **Custom scoring**. Nothing extra is printed for a plain drip league, so most cards look unchanged.
+> - An imported league reads its own platform's settings as they were stored at import: **Dynasty** or **Keeper**, **Superflex**, scoring, **Best Ball** and the starter count ("Dynasty · Superflex · Full PPR · 10 starters").
+
+- 0421: `_league_details(league_id)` gathers the block (native: `league_is_superflex` and `ppr` for classic only, `bestball`, `_league_has_college` + `devy_mode`, `league_is_college_calendar`, `contracts_on` + `league_salary_cap`, `keeper_count`, `dues_amount`, custom scoring; imported: Sleeper's `settings.type`, `settings.best_ball`, `scoring.rec`, `roster_positions`), and `my_teams` serves it as `league.details`. Respun from 0242's body with the one added key.
+- Core `liveApi.ts`: `LeagueDetails`, `leagueDetailLine(e)` (empty when there is nothing to add, so the card leaves the line out). Web `LeagueCard` and the app's `Leagues` card print it under the type line. check:leagueline covers it.
+
+### v0.609.0 — an imported league opens on the matchup too
+
+> - Founder's list: "League opens to match view post draft." The rule (v0.356.16) opened the matchup once a league's draft was complete — but an imported Sleeper league has no draft of ours at all (it drafted on Sleeper before it got here), so the rule never saw it as drafted and every imported league opened on the hub.
+> - An imported league with a seat now opens on the matchup, like any drafted league. A native league still opens the draft room while its draft runs and the hub before it; a seatless commissioner still lands on the hub.
+> - Not confirmed against a live league: if a NATIVE league of yours still opens on the hub after its draft, say which one — on the web, a board that fails to build silently leaves you on the hub, and that would be a different cause.
+
+- Core `leagueLandingRoom`: `draft_status == null` + a seat + `provider !== 'native'` → `'matchup'`. Both clients read it. check:leagueline covers the cases.
+
+### v0.608.0 — the room bar at every width, and on the matchup board
+
+> - Founder's list: "No icons on desktop web nav.. keep the nav bar up like on app and mobile web. Disappears on match up screen currently."
+> - Desktop web now has the same words-only room bar the app and phone web have (LEAGUE · MATCHUP · DRAFT · MY TEAM · CHAT), fixed to the foot of the page in a centred band. The old chip row with icons under the league name is gone. On a phone the bar still ducks as you scroll down; on a wide screen it stays up.
+> - The matchup board carries the bar at every width now. It was phones-only there because above 720px the strip drew the chip row, which the board didn't want stacked over it; the phone-only parts of the board (the brand top rail in place of the header's chips) stay phone-only.
+
+- Web `LeagueStrip.tsx`: the chip row, `railIcon` and `themeIsLight` are gone; the `<nav>` renders at every width, body padding always reserved, the scroll duck only below 720px. `Matchup.tsx`: `barOn` (the bar exists) split from `railed` (the phone layout); `BoardRoomBar` and the board's bottom padding follow `barOn`. Web only.
+
+### v0.607.0 — bigger team names, score and clock on the fields
+
+> - Founder: "A lot larger team names, score and time on the fields view." The line over each field — away team, score, clock, score, home team — was 9px whatever the size of the tile, the smallest text on the card for the three things you glance for.
+> - It is now 14px team codes with 20px logos, 17px scores and a 12px clock, on the web and in the app. The enlarged game view's line (tap a field) grows the same way: 15px teams, a 22px score, a 12px clock.
+
+- Web `FieldView.tsx` (`Field` strip, `GameView` line); app `ui/FieldView.tsx` (strip, `GameViewBody` line). Sizes only.
+
 ### v0.606.0 — the player card reads StatHead's new hit % and draft outlook
 
 > - StatHead 1.0.110 (Oct 3) replaced its career PPG with **hit %**, the chance of a fantasy-starter season in a player's first four NFL years, per format, and added a **draft outlook** (round 1 / 2–3 / 4–7 / undrafted). The college card's NFL OUTLOOK line read the removed field, so it would have gone blank on the next board load.

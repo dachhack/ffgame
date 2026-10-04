@@ -115,8 +115,8 @@ export function RequestCodeModal({ initialPlatform, onClose, initialNote }: { in
           )
         ) : (
           <>
-            <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>Get in the pilot</div>
-            <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>The live pilot is invite-only, and we onboard new players every week. Your email is all we need — the rest just helps your invite land sooner.</div>
+            <div className="grotesk" style={{ fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>Get on the list</div>
+            <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>Anyone can sign up and start a league or bring a Sleeper league in — while there’s a spot (the pilot holds 1,000 accounts). Leave your email and we’ll tell you when one opens, or set up an ESPN, Yahoo, MFL or Fleaflicker league for you.</div>
             <Field label="EMAIL">
               <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(null); }} type="email" inputMode="email" placeholder="you@example.com"
                 spellCheck={false} autoCapitalize="none" autoCorrect="off" style={input} />

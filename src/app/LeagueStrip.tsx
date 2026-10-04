@@ -1,17 +1,23 @@
-// THE LEAGUE STRIP (v0.288.0) — and, on a phone, THE ROOM BAR (v0.356.8).
+// THE LEAGUE STRIP (v0.288.0) — THE ROOM BAR (v0.356.8), at every width
+// since v0.608.0.
 //
 // Founder: "can we make the same UI changes to mobile web?" — the app moved
-// its rooms to a LinkedIn-style bottom bar with the picked icon set
-// (v0.356.0/.6), so on narrow screens this component now renders that bar:
-// fixed to the bottom, icon over label, the active room on an accent pill,
-// ducking out of the way as the page scrolls down and returning on any pull
-// up. Wide screens keep the top chip row (de-emoji'd with the v0.356.7
-// sweep), because a desktop has no thumb to reach for.
+// its rooms to a LinkedIn-style bottom bar (v0.356.0/.6), so on narrow
+// screens this component rendered that bar: fixed to the bottom, the active
+// room on an accent pill, ducking out of the way as the page scrolls down and
+// returning on any pull up. Wide screens kept a top chip row, with icons,
+// because a desktop has no thumb to reach for.
+//
+// ONE BAR, EVERY WIDTH (v0.608.0). Founder: "No icons on desktop web nav..
+// keep the nav bar up like on app and mobile web." The chip row is gone: the
+// desktop gets the same words-only bar the app and the phone web have, fixed
+// to the foot of the page. It stays put on a wide screen (no thumb to make
+// room for) and still ducks with the scroll on a phone.
 //
 // It sits inside LiveOnboard's shell, so it is present on every league room
 // the web has: the hub, the team desk, the draft room, results, and the
-// commissioner's console. THE ONE ROOM WITHOUT IT is the matchup board —
-// its own full-bleed route; the MATCHUP chip is the way in.
+// commissioner's console — and the matchup board carries it too (its own
+// full-bleed route, which draws BoardRoomBar at every width since v0.608.0).
 //
 // WHICH ROOMS EXIST is the app's rule set, not a second one:
 //   LEAGUE    always — the hub is the league's front door
@@ -31,23 +37,6 @@ export type StripRoom = 'home' | 'matchup' | 'draft' | 'team';
  *  otherwise start from nothing and reshuffle the bar under the thumb. Written
  *  only from a real answer, so a miss means "not asked yet", never "no". */
 const DRAFT_DONE = new Map<string, boolean>();
-
-/** The founder's picked set (sheet C1 + C2's clipboard), same files the app
- *  bundles: bare stickers for light themes, halo-backed for dark so the VS
- *  mark's navy half doesn't sink into a dark rail. */
-const railIcon = (name: string, light: boolean) =>
-  `${import.meta.env.BASE_URL}icons/rail/${name}${light ? '' : '-halo'}.png`;
-
-/** Is the current theme a light one? Read off the page's own ground token —
- *  no theme name plumbed in. Unparseable → dark (the halo set works on any
- *  ground; the bare set fails only on dark). */
-function themeIsLight(): boolean {
-  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-  const m = /^#([0-9a-f]{6})/i.exec(bg);
-  if (!m) return false;
-  const h = m[1];
-  return (parseInt(h.slice(0, 2), 16) + parseInt(h.slice(2, 4), 16) + parseInt(h.slice(4, 6), 16)) / 3 > 140;
-}
 
 export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hideName }: {
   leagueId: string;
@@ -78,11 +67,11 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
   // renders it inside each view's own return) and so re-guessed every time.
   // Nothing is lost by waiting: the hub's tile is the other way into the room.
   const [draftDone, setDraftDone] = useState<boolean | null>(() => DRAFT_DONE.get(leagueId) ?? null);
-  const [light] = useState(themeIsLight);
   // The room bar ducks on scroll-down and returns on any pull up — the same
   // two-state hysteresis the app runs (v0.356.1): ~28px of accumulated
   // downward travel hides it, ~12px up shows it, the page top always shows
-  // it, and a route jump (a big offset delta) is ignored.
+  // it, and a route jump (a big offset delta) is ignored. Phones only: on a
+  // wide screen the bar stays up (v0.608.0, founder: "keep the nav bar up").
   const [hidden, setHidden] = useState(false);
   useEffect(() => {
     if (wide) return;
@@ -104,11 +93,10 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
   // The bar overlays the page bottom — the page reserves the space so no
   // content ends its life underneath it.
   useEffect(() => {
-    if (wide) return;
     const prev = document.body.style.paddingBottom;
     document.body.style.paddingBottom = '78px';
     return () => { document.body.style.paddingBottom = prev; };
-  }, [wide]);
+  }, []);
 
   useEffect(() => {
     let dead = false;
@@ -136,15 +124,15 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
     return () => { dead = true; };
   }, [leagueId, native]);
 
-  const rooms: { id: StripRoom | 'chat'; icon: string; label: string; show: boolean }[] = [
-    { id: 'home', icon: 'league', label: 'LEAGUE', show: true },
-    { id: 'matchup', icon: 'matchup', label: 'MATCHUP', show: rosterId != null },
-    { id: 'draft', icon: 'draft', label: 'DRAFT', show: native && draftDone === false },
+  const rooms: { id: StripRoom | 'chat'; label: string; show: boolean }[] = [
+    { id: 'home', label: 'LEAGUE', show: true },
+    { id: 'matchup', label: 'MATCHUP', show: rosterId != null },
+    { id: 'draft', label: 'DRAFT', show: native && draftDone === false },
     // ANY SEAT (v0.356.17): native gets the full desk, an imported league the
     // read-only page the web finally has. The `native &&` here was the gate —
     // it is off, and the room is the app's rule again.
-    { id: 'team', icon: 'team', label: 'MY TEAM', show: rosterId != null },
-    { id: 'chat', icon: 'chat', label: 'CHAT', show: true },
+    { id: 'team', label: 'MY TEAM', show: rosterId != null },
+    { id: 'chat', label: 'CHAT', show: true },
   ];
   const go = (id: StripRoom | 'chat') => {
     if (id === 'chat') { setChatOpen(true); setUnread({ n: 0, mention: false }); return; }
@@ -153,42 +141,14 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
 
   return (
     <>
-      <div style={{ marginBottom: hideName && !wide ? 0 : 12 }}>
-        {!hideName && (
-          <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {name}
-          </div>
-        )}
-        {/* Wide screens keep the chip row under the name — words, no emoji. */}
-        {wide && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 7 }}>
-            {rooms.filter((c) => c.show).map((c) => {
-              const on = c.id === 'chat' ? chatOpen : here === c.id;
-              return (
-                <button key={c.id} onClick={() => go(c.id)}
-                  aria-current={on ? 'page' : undefined}
-                  aria-label={c.id === 'chat' && unread.n > 0 ? `Chat — ${unread.n} unread${unread.mention ? ', you were mentioned' : ''}` : undefined}
-                  className="mono"
-                  style={{
-                    position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6,
-                    border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 6,
-                    background: on ? 'color-mix(in srgb, var(--you) 12%, var(--surface))' : 'var(--surface)',
-                    color: on ? 'var(--you)' : 'var(--dim)',
-                    padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer',
-                  }}>
-                  <img src={railIcon(c.icon, light)} alt="" style={{ width: 15, height: 15 }} />
-                  {c.label}
-                  {c.id === 'chat' && unread.n > 0 && (
-                    <span aria-hidden style={{ position: 'absolute', top: -3, right: -3, minWidth: 8, height: 8, borderRadius: 999, background: 'var(--opp)' }} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      {/* THE ROOM BAR — phones only. Fixed, active on an accent pill; ducks
-          with the scroll and returns on a pull up.
+      {!hideName && (
+        <div className="grotesk" style={{ marginBottom: 12, fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {name}
+        </div>
+      )}
+      {/* THE ROOM BAR — every width since v0.608.0. Fixed, active on an
+          accent pill; ducks with the scroll on a phone and returns on a pull
+          up; stays put on a wide screen.
 
           WORDS, NOT PICTURES (v0.468.0). The app's rail dropped its icons in
           v0.465.0 — founder: "ditch the navigation icons at the bottom in
@@ -205,13 +165,15 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
 
           The unread dot stays. It is the one mark here that says something no
           word on the rail does, and it rides the label now. */}
-      {!wide && (
-        <nav style={{
-          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60, display: 'flex',
+      <nav style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 60, display: 'flex', justifyContent: 'center',
           background: 'var(--surface)', borderTop: '1px solid var(--bd)',
           padding: '5px 2px max(8px, env(safe-area-inset-bottom))',
-          transform: hidden ? 'translateY(110%)' : 'translateY(0)', transition: 'transform 190ms ease',
+          transform: hidden && !wide ? 'translateY(110%)' : 'translateY(0)', transition: 'transform 190ms ease',
         }}>
+        {/* On a wide screen the rooms sit in a centred band rather than
+            spreading five words across a whole monitor. */}
+        <div style={{ display: 'flex', width: '100%', maxWidth: 720 }}>
           {rooms.filter((c) => c.show).map((c) => {
             const on = c.id === 'chat' ? chatOpen : here === c.id;
             return (
@@ -231,8 +193,8 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
               </button>
             );
           })}
-        </nav>
-      )}
+        </div>
+      </nav>
       {chatOpen && <ChatPanel leagueId={leagueId} onClose={() => setChatOpen(false)} />}
     </>
   );

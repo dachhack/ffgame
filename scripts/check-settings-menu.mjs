@@ -14,7 +14,7 @@ const src = readFileSync(new URL('../apps/mobile/src/ui/SettingsModal.tsx', impo
 
 ok(/useState<Section \| null>\(null\)/.test(src), 'the sheet opens on the category menu, not on any options');
 ok(/useEffect\(\(\) => \{ if \(visible\) setSection\(null\); \}, \[visible\]\)/.test(src), '…every time it opens');
-for (const id of ['notifications', 'theme', 'cards', 'voice', 'devy', 'rehearsal']) {
+for (const id of ['notifications', 'theme', 'cards', 'voice', 'devy', 'rehearsal', 'account']) {
   ok(new RegExp(`\\{ id: '${id}'`).test(src) && new RegExp(`section === '${id}'`).test(src),
     `category "${id}" is listed AND opens its options`);
 }
@@ -31,6 +31,8 @@ for (const a of ['Admin', "What's new", 'Sign out']) {
 // v0.503.0: the widget's league picker — Android only, where the widget is.
 ok(/section === 'widget' && <WidgetLeaguesPicker \/>/.test(src) && /Platform\.OS === 'android' \? \[\{ id: 'widget'/.test(src),
   'the widget league picker is on the menu, on Android only');
+// 0422: delete my account lives in the Account section and asks for the email back.
+ok(/section === 'account' && <DeleteAccount/.test(src) && /deleteMyAccount\(typed\)/.test(src), 'delete my account is reachable and confirms by typed email');
 // v0.502.0: the demo board left with the 2025 bake it replayed.
 ok(!src.includes('label="Demo board"'), 'the retired "Demo board" action is gone');
 

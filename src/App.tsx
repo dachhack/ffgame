@@ -4,6 +4,7 @@ import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { useStore, PHOTO_SKINS } from './app/store';
 import { THEMES, themeVars } from '@drip/core/theme';
 import { DemoBoard } from './screens/DemoBoard';
+import { Landing } from './screens/Landing';
 import { yahooExchange } from '@drip/core/data/providers/yahooClient';
 import { getSession, hasAuthTokensInUrl, captureAuthUrlError, onAuth, syncMarkFree } from '@drip/core/data/liveApi';
 import { liveConfigured } from '@drip/core/data/liveConfig';
@@ -168,7 +169,7 @@ export function App() {
 
   // Is the request-a-code FAB on screen? It owns the bottom-left corner, so the
   // install banner has to sit above it (see the comment on the FAB below).
-  const fab = !['live', 'splash', 'demo', 'matchup', 'final'].includes(route.name) && !liveCtx && !loggedIn;
+  const fab = !['live', 'splash', 'demo', 'landing', 'matchup', 'final'].includes(route.name) && !liveCtx && !loggedIn;
 
   return (
     <div
@@ -186,6 +187,7 @@ export function App() {
       <Suspense fallback={null}>
         {/* 'splash' is retired — legacy navigations land on the demo landing. */}
         {route.name === 'splash' && <DemoBoard />}
+        {route.name === 'landing' && <Landing />}
         {route.name === 'live' && <LiveOnboard />}
         {route.name === 'demo' && (route.view === 'board'
           ? <Matchup key="demo-board" week={DEMO_WEEK} initialPhase="setup" demo />

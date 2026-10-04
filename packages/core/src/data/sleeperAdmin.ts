@@ -5,9 +5,10 @@ import { normName } from './players';
 import { sleeperAvatarUrl } from './sleeper';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import {
-  adminUpsertLeague, adminUpsertMemberships, adminUpsertMatchups, adminUpsertLineups,
+  adminUpsertLeague, adminUpsertMemberships, adminUpsertMatchups, adminUpsertLineups, importMyLeagueRpc,
   type MemberRow, type MatchupRow, type LineupRow,
 } from './liveApi';
+import { resolveUser, getLeagues, type SleeperLeague, type SleeperUser as SleeperAccount } from './sleeper';
 
 const BASE = 'https://api.sleeper.app/v1';
 async function sj<T>(path: string): Promise<T> {
@@ -72,6 +73,40 @@ export async function importLeague(sleeperId: string, season: string): Promise<s
 
   await adminUpsertMemberships(res.league_id, members);
   return res.league_id;
+}
+
+// ── DRIP ON AN EXISTING LEAGUE, SELF-SERVE (0422, v0.612.0) ──────────────────
+// Founder: "Any account can … add drip to an existing league." The admin
+// import above stays for the console; this is the same shape for a member:
+// find your Sleeper account, pick one of its leagues this season, bring it in.
+// The database checks you are in it (against Sleeper, from its side) and makes
+// you its commissioner; everyone else joins with the invite code it returns.
+
+/** The season a league must be in to come over: the current calendar year,
+ *  which is what the database insists on too (and what the worker syncs). */
+export const importSeason = (now = new Date()): string => String(now.getUTCFullYear());
+
+/** Step one: who are you on Sleeper, and which of your leagues can come in. */
+export async function myLeaguesOnSleeper(username: string, season = importSeason()): Promise<{ me: SleeperAccount; leagues: SleeperLeague[] } | null> {
+  const me = await resolveUser(username);
+  if (!me) return null;
+  const leagues = await getLeagues(me.userId, season);
+  return { me, leagues };
+}
+
+/** Step two: bring one in. Fetches the league and its seats from Sleeper in
+ *  the browser (as the admin import does) and hands them to import_my_league. */
+export async function importMyLeague(leagueId: string, me: SleeperAccount, season = importSeason()) {
+  const [lg, members] = await Promise.all([
+    sj<{ name?: string; avatar?: string | null; season?: string; settings?: unknown; scoring_settings?: unknown; roster_positions?: unknown }>(`/league/${leagueId}`),
+    fetchMembers(leagueId),
+  ]);
+  return importMyLeagueRpc({
+    sleeperId: leagueId, season: String(lg.season ?? season), name: lg.name ?? 'League',
+    settings: { settings: lg.settings, scoring: lg.scoring_settings, roster_positions: lg.roster_positions },
+    avatar: sleeperAvatarUrl(lg.avatar ?? null), members,
+    sleeperUserId: me.userId, sleeperUsername: me.username,
+  });
 }
 
 /** Mirror a week: matchup pairings + pick pools (rosters resolved via directory). */

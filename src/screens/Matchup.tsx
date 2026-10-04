@@ -236,18 +236,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // were two back-chips in its header. It carries the same bar every other
   // room does now, with MATCHUP lit.
   //
-  // `useWide(720)` is the strip's OWN breakpoint, not `isMobile` (760): above
-  // it the strip draws a chip row instead of a bar, which is not what this
-  // screen wants stacked over a board. Between the two the header keeps its
-  // existing mobile shape — the band is 40px wide and needs no third layout.
+  // AT EVERY WIDTH (v0.608.0). Founder: "keep the nav bar up like on app and
+  // mobile web. Disappears on match up screen currently." The bar used to be
+  // phones-only here because above 720px the strip drew a chip row, which
+  // this screen did not want stacked over a board; the strip draws the bar at
+  // every width now, so the board carries it at every width too. `barOn` is
+  // whether the bar exists; `railed` keeps the PHONE layout (the brand top
+  // rail in place of the header's chip row) below the strip's breakpoint.
   const wide = useWide(720);
-  const railed = !wide && !!liveCtx && !demo;
+  const barOn = !!liveCtx && !demo;
+  const railed = !wide && barOn;
   // The bar needs the league's NAME and whether it is native (which rooms
   // exist). `liveCtx` carries neither, so read the seat — the same my_teams
   // call LiveOnboard runs, and only when the bar is actually on screen.
   const [barLeague, setBarLeague] = useState<{ name: string; native: boolean } | null>(null);
   useEffect(() => {
-    if (!railed || !liveCtx) { setBarLeague(null); return; }
+    if (!barOn || !liveCtx) { setBarLeague(null); return; }
     let dead = false;
     myEnrollments(liveCtx.userId)
       .then((rows) => {
@@ -257,7 +261,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       })
       .catch(() => {});
     return () => { dead = true; };
-  }, [railed, liveCtx?.leagueId, liveCtx?.userId]); // eslint-disable-line react-hooks/exhaustive-deps -- the ids are the identity of the seat
+  }, [barOn, liveCtx?.leagueId, liveCtx?.userId]); // eslint-disable-line react-hooks/exhaustive-deps -- the ids are the identity of the seat
   // League switcher state (v0.388.0) — HOOKS LIVE UP HERE, above every
   // conditional return of this component (the demo board, the classic board,
   // the no-game screen); v0.388.0 first declared them beside the chip they
@@ -1583,7 +1587,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         {railed && <BoardTopRail />}
         <ClassicBoard userId={liveCtx.userId} leagueId={liveCtx.leagueId} rosterId={liveCtx.rosterId}
           onBack={back} hideBack={railed} switcher={liveSwitchChip} />
-        {railed && barLeague && (
+        {barOn && barLeague && (
           <BoardRoomBar ctx={liveCtx} league={barLeague} navigate={navigate} />
         )}
       </>
@@ -2008,7 +2012,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         // reserves the space on <body>, which covers the window scroll; this
         // covers the case where THIS box is the one scrolling, so the last
         // window's card can never end its life under the bar.
-        ...(railed ? { paddingBottom: 86 } : {}) }}>
+        ...(barOn ? { paddingBottom: 86 } : {}) }}>
         {cardHand && <div className="ct-feltlayers" aria-hidden />}
         {!isMobile && <RosterAside side="you" pools={youPools} picks={picks} onPlayer={assignFromRoster} phase={phase} winEditable={liveCtx ? (id) => winRt(id) === 'setup' : undefined} collapsed={!rosterOpen.you} onToggle={() => toggleRoster('you')} bye={byeYou} week={week} />}
 
@@ -2494,7 +2498,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           wrong set of rooms in it. MATCHUP itself is a no-op that returns you
           to the top — you are already here, and the bar's job on the room you
           are standing in is to say so. */}
-      {railed && liveCtx && barLeague && <BoardRoomBar ctx={liveCtx} league={barLeague} navigate={navigate} />}
+      {barOn && liveCtx && barLeague && <BoardRoomBar ctx={liveCtx} league={barLeague} navigate={navigate} />}
     </>
   );
 }

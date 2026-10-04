@@ -81,7 +81,13 @@ export function friendlyError(x: unknown): string {
   if (m.includes('unable to validate email') || m.includes('invalid format') || m.includes('invalid email'))
     return 'That doesn’t look like a valid email address.';
   if (m.includes('signups not allowed') || m.includes('signup is disabled') || m.includes('signups disabled'))
-    return 'Sign-ups are closed right now. Reach out to your commissioner.';
+    return 'Sign-ups are closed right now.';
+  // THE CAP (0422). The database refuses the account that would pass it, and
+  // Supabase Auth reports any refused insert as this one line — the reason
+  // never reaches the client. The sign-up form asks signup_open() first, so
+  // this is the rare race (or a magic link / Google sign-up from a full house).
+  if (m.includes('database error saving new user') || m.includes('drip is full'))
+    return 'Drip is full right now — every spot is taken. Join the waitlist from the demo page and we’ll email you when one opens.';
   if (m.includes('not a manager'))
     return 'That Sleeper account isn’t a manager in this league. Double-check your handle — or ask your commissioner to confirm you’re in the Sleeper league.';
   if (m.includes('already linked to another login'))
@@ -513,6 +519,53 @@ export async function joinWeekly(teamName?: string): Promise<PodJoin & { week?: 
 // ── Feature gates + commissioner DFS leagues (migration 0094) ───────────────
 /** The caller's per-account feature flags ({} when none). Known keys:
  *  solo (standalone pods/showdowns) · dfs_commish (may create DFS leagues). */
+/** THE DOOR (0422): is there a spot? {open, count, cap}. Signed out or in.
+ *  A failed read answers "open" — the database still refuses past the cap,
+ *  and a form that locks itself over a hiccup turns nobody away correctly. */
+export async function signupOpen(): Promise<{ open: boolean; count: number; cap: number }> {
+  try {
+    const { data } = await (await client()).rpc('signup_open');
+    const d = data as { open?: boolean; count?: number; cap?: number } | null;
+    return { open: d?.open !== false, count: d?.count ?? 0, cap: d?.cap ?? 0 };
+  } catch { return { open: true, count: 0, cap: 0 }; }
+}
+/** Admin: the cap itself (0422). */
+export const adminSetUserCap = (cap: number) =>
+  rpc<{ ok: boolean; error?: string; cap?: number; count?: number }>('admin_set_user_cap', { p_cap: cap });
+
+/** LEAVE (0422): remove your own account. The email typed back is the
+ *  confirmation. A commissioner of a league with other members is refused
+ *  until the league has another commissioner or is deleted. */
+export const deleteMyAccount = (confirmEmail: string) =>
+  rpc<{ ok: boolean; error?: string }>('delete_my_account', { p_confirm: confirmEmail });
+
+/** DRIP ON AN EXISTING LEAGUE (0422): the persisting half of
+ *  sleeperAdmin.importMyLeague — a member brings their Sleeper league in and
+ *  becomes its commissioner here. */
+export const importMyLeagueRpc = (input: {
+  sleeperId: string; season: string; name: string; settings: unknown; avatar: string | null;
+  members: MemberRow[]; sleeperUserId: string; sleeperUsername: string;
+}) => rpc<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; seats?: number; roster_id?: number | null }>('import_my_league', {
+  p_sleeper_id: input.sleeperId, p_season: input.season, p_name: input.name, p_settings: input.settings, p_avatar: input.avatar,
+  p_members: input.members, p_sleeper_user_id: input.sleeperUserId, p_sleeper_username: input.sleeperUsername,
+});
+
+/** EVERY PLATFORM, SELF-SERVE (0423): the persisting half of
+ *  providerAdmin.importMyProviderLeague. The caller picks their own team. */
+export const importProviderLeagueRpc = (input: {
+  provider: 'espn' | 'yahoo' | 'mfl' | 'fleaflicker'; ref: string; season: string; name: string; settings: unknown;
+  members: MemberRow[]; myRosterId: number;
+}) => rpc<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; seats?: number; roster_id?: number }>('import_provider_league', {
+  p_provider: input.provider, p_ref: input.ref, p_season: input.season, p_name: input.name, p_settings: input.settings,
+  p_members: input.members, p_my_roster_id: input.myRosterId,
+});
+/** The teams behind an invite code on a platform league (0423). */
+export interface InviteSeat { roster_id: number; team_name: string; taken: boolean; mine: boolean }
+export const inviteSeats = (code: string) =>
+  rpc<{ ok: boolean; error?: string; league?: string; provider?: string; seats?: InviteSeat[] }>('invite_seats', { p_code: code });
+export const claimPlatformSeat = (code: string, rosterId: number) =>
+  rpc<{ ok: boolean; error?: string; league?: string; league_id?: string; roster_id?: number; team?: string; status?: string }>('claim_platform_seat', { p_code: code, p_roster_id: rosterId });
+
 export async function myFeatures(): Promise<Record<string, boolean>> {
   const { data } = await (await client()).rpc('my_features');
   return (data as Record<string, boolean>) ?? {};
@@ -727,7 +780,34 @@ export interface Enrollment {
     game_mode?: 'drip' | 'classic';
     format?: LeagueFormat;
     golf?: boolean;
+    /** 0421: the card's second line (leagueDetailLine). Absent on rows from
+     *  builds older than the migration. */
+    details?: LeagueDetails | null;
   } | null;
+}
+
+/** What else the league card can say about a league (0421) — the settings
+ *  behind the type line. Native leagues fill the first group; an imported
+ *  league fills the second from its platform's own settings as stored at
+ *  import. Every field is optional: the printer drops what it doesn't know. */
+export interface LeagueDetails {
+  /** Classic only on native (a drip lineup has no fixed QB count). */
+  superflex?: boolean | null;
+  /** Reception scoring, classic only on native: 0, 0.5, 1 … */
+  ppr?: number | null;
+  bestball?: boolean | null;
+  devy?: boolean;
+  devy_mode?: 'spots' | 'shares' | null;
+  college_calendar?: boolean;
+  contracts?: boolean;
+  salary_cap?: number | null;
+  keepers?: number | null;
+  dues?: number | null;
+  scoring_custom?: boolean;
+  /** Imported only: what the platform's league type says. */
+  continuity?: 'dynasty' | 'keeper' | null;
+  /** Imported only: starting lineup size. */
+  starters?: number | null;
 }
 
 /** Every seat the caller can act for — owned AND co-managed (0125's my_teams).
@@ -2242,6 +2322,43 @@ export function leagueTypeLine(e: Enrollment): string {
   return parts.join(' ');
 }
 
+/** THE CARD'S SECOND LINE (0421, founder: "More descriptive league
+ *  descriptions on my leagues page. (Devy, Drip, other league settings?)").
+ *  The type line above says what kind of league it is; this one says how it
+ *  is set up — devy, superflex, reception scoring, best ball, the cap,
+ *  keepers, dues — and for an imported league, the platform's own type,
+ *  superflex, scoring and starters, which the type line's one word
+ *  ("Sleeper") never carried. Only what is NEWS is printed: "Superflex" but
+ *  not "1QB", "Best Ball" but not "lineups", a cap and dues only when set.
+ *  Empty string when there is nothing to add, so the card can leave the line
+ *  out entirely. */
+export function leagueDetailLine(e: Enrollment): string {
+  const lg = e.league;
+  const d = lg?.details;
+  if (!lg || !d) return '';
+  const parts: string[] = [];
+  const imported = !!lg.provider && lg.provider !== 'native';
+  if (imported) {
+    if (d.continuity === 'dynasty') parts.push('Dynasty');
+    else if (d.continuity === 'keeper') parts.push('Keeper');
+  }
+  if (d.college_calendar) parts.push('College');
+  if (d.devy) parts.push(d.devy_mode === 'shares' ? 'Devy Shares' : 'Devy');
+  if (d.superflex) parts.push('Superflex');
+  if (d.ppr != null) parts.push(pprWord(d.ppr));
+  if (d.bestball) parts.push('Best Ball');
+  if (d.contracts && d.salary_cap) parts.push(`$${d.salary_cap} cap`);
+  if (d.keepers) parts.push(`${d.keepers} keeper${d.keepers === 1 ? '' : 's'}`);
+  if (imported && d.starters) parts.push(`${d.starters} starters`);
+  if (d.dues) parts.push(`$${d.dues} dues`);
+  if (d.scoring_custom) parts.push('Custom scoring');
+  return parts.join(' · ');
+}
+
+/** Reception scoring in the words managers use. */
+const pprWord = (ppr: number): string =>
+  ppr === 0 ? 'Standard scoring' : ppr === 0.5 ? 'Half PPR' : ppr === 1 ? 'Full PPR' : `${ppr} PPR`;
+
 /** WHICH GAME this league plays (0242, founder: "let's have drip or classic
  *  vampire, golf etc on the chips in my leagues") — the continuity word above
  *  says what CARRIES OVER, which is a different question from what you play on
@@ -2293,11 +2410,21 @@ const titleWord = (s: string) =>
  *  ours to open. */
 export type LandingRoom = 'matchup' | 'draft' | 'home';
 export function leagueLandingRoom(e: Enrollment): LandingRoom {
-  const st = e.league?.draft_status;
+  const lg = e.league;
+  const st = lg?.draft_status;
   if (st === 'live') return 'draft';
   // No seat, no lineup: the matchup room cannot render for a commissioner who
   // does not play, so the hub is the only honest landing.
-  if (st === 'complete') return e.sleeper_roster_id != null ? 'matchup' : 'home';
+  const seated = e.sleeper_roster_id != null;
+  if (st === 'complete') return seated ? 'matchup' : 'home';
+  // AN IMPORTED LEAGUE IS POST-DRAFT FROM THE DAY IT ARRIVES (v0.609.0,
+  // founder: "League opens to match view post draft"). It has no draft row of
+  // ours — NULL here, not 'pending' — because it drafted on its own platform
+  // before anyone brought it here, so the rule above never saw it as drafted
+  // and every Sleeper league opened on the hub. With a seat it lands on the
+  // matchup like any drafted league; a pod, showdown or DFS league is native
+  // and keeps the hub.
+  if (st == null && seated && !!lg?.provider && lg.provider !== 'native') return 'matchup';
   return 'home';
 }
 /** Contract leagues preset a DEEP roster (v0.352.0, founder: "auto set the
