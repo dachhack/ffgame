@@ -257,6 +257,28 @@ export function nhlOffRoster(rosterIds, cur, prior, season) {
   return out;
 }
 
+/** TENURE (v0.629.1). The stats REST "bios" reports carry each player's
+ *  first NHL regular season (`firstSeasonForGameType`, e.g. 20152016) under
+ *  the same player id the directory keys on; asked without a season filter
+ *  they return one row per player who has played since the cut-off, so two
+ *  calls cover every veteran on a roster. Returns id → first season id. */
+export function nhlFirstSeasons(skaterBios, goalieBios) {
+  const out = new Map();
+  for (const r of [...(skaterBios?.data ?? []), ...(goalieBios?.data ?? [])]) {
+    const f = Number(r.firstSeasonForGameType);
+    if (r.playerId != null && Number.isFinite(f) && f > 0) out.set(String(r.playerId), f);
+  }
+  return out;
+}
+
+/** Seasons since the first NHL season: 0 in the first. A rostered player
+ *  with no bios row has never played an NHL regular-season game, so he is
+ *  in his first season too (`rostered` true); off a roster, unknown. */
+export function nhlExp(first, season, rostered = true) {
+  if (first != null && Number.isFinite(Number(first)) && Number(first) > 0) return Math.max(0, Number(season) - Math.floor(Number(first) / 10000));
+  return rostered ? 0 : null;
+}
+
 export const nhlStandingsTeams = (standings) =>
   (standings?.standings ?? []).map((t) => t.teamAbbrev?.default ?? t.teamAbbrev).filter(Boolean);
 
@@ -268,6 +290,12 @@ export const fetchNhlSeason = async (season) => {
   const id = nhlSeasonId(season);
   const [skaters, goalies, realtime] = await Promise.all([report('skater/summary', id), report('goalie/summary', id), report('skater/realtime', id).catch(() => null)]);
   return nhlSeasonLines(skaters, goalies, realtime);
+};
+/** Every player's bio since 2010-11, skaters and goalies: ~3k rows, two calls. */
+export const fetchNhlBios = async () => {
+  const bios = (kind) => getJson(`${STATS}/${kind}/bios?cayenneExp=gameTypeId=2%20and%20seasonId%3E=20102011&limit=-1`, { timeoutMs: 60000 });
+  const [sk, g] = await Promise.all([bios('skater'), bios('goalie')]);
+  return nhlFirstSeasons(sk, g);
 };
 export const fetchNhlBox = (gameId) => getJson(`${BASE}/gamecenter/${gameId}/boxscore`);
 export const fetchNhlLanding = (gameId) => getJson(`${BASE}/gamecenter/${gameId}/landing`);
@@ -281,10 +309,12 @@ export const nhl = {
     return nhlBoxToGame(box, landing);
   },
   /** Every rostered player with a season line for ranking: this season's
-   *  once he has 20 games in it, else last season's. ~35 requests. */
+   *  once he has 20 games in it, else last season's — and his tenure off
+   *  the bios (v0.629.1). ~37 requests. A bios failure costs the tenure,
+   *  not the directory. */
   async directory(season) {
     const teams = nhlStandingsTeams(await fetchNhlStandings());
-    const [cur, prior] = await Promise.all([fetchNhlSeason(season), fetchNhlSeason(String(Number(season) - 1))]);
+    const [cur, prior, first] = await Promise.all([fetchNhlSeason(season), fetchNhlSeason(String(Number(season) - 1)), fetchNhlBios().catch(() => null)]);
     const out = [];
     for (const team of teams) {
       let roster;
@@ -293,11 +323,12 @@ export const nhl = {
         const c = cur.get(p.extId), pr = prior.get(p.extId);
         const played = (l) => (l?.gp ?? 0) + (l?.gapp ?? 0);
         const use = played(c) >= 20 ? c : (pr ?? c ?? null);
-        out.push({ ...p, injury: null, season: use, seasonId: use === c && c ? season : pr ? String(Number(season) - 1) : season, gp: played(use) });
+        out.push({ ...p, injury: null, season: use, seasonId: use === c && c ? season : pr ? String(Number(season) - 1) : season, gp: played(use),
+          exp: first ? nhlExp(first.get(p.extId), season, true) : null });
       }
     }
     // The injured and the scratched (v0.627.2): off the season reports.
-    out.push(...nhlOffRoster(out.map((p) => p.extId), cur, prior, season));
+    out.push(...nhlOffRoster(out.map((p) => p.extId), cur, prior, season).map((p) => ({ ...p, exp: first ? nhlExp(first.get(p.extId), season, false) : null })));
     return out;
   },
 };

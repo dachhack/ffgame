@@ -69,8 +69,8 @@ the boards read it unchanged; the worker's resolve pass seats each best-ball
 spot nightly from the roster's players who played (`sport_league_day_lines_svc`
 → `dayCandidates` → `bestBallFill` via the engine's `assignByValue` →
 `sport_bb_write_svc`), recomputing yesterday and today and holding older days.
-Tenure (`sport_player.exp` → `league_pool.exp`) comes from Sleeper (NBA) and
-the MLB debut date. A fourth format, `season` (season points, standings by
+Tenure (`sport_player.exp` → `league_pool.exp`) comes from Sleeper (NBA),
+the MLB debut date and, since v0.629.1, the NHL stats bios' first season. A fourth format, `season` (season points, standings by
 total), rides the roto plumbing.
 
 **v0.625.0 → v0.627.0 (after the first playtest)**: the board reads the

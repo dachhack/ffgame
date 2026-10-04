@@ -3,7 +3,7 @@
 // directory + season stats), WNBA (ESPN rosters); the rank; the basketball
 // crosswalk. Run: `npx tsx test/sports-directory.mjs` from server/.
 import { readFileSync } from 'node:fs';
-import { nhlSeasonLines, nhlStandingsTeams, nhlSeasonId, nhlRosterPlayers, nhlOffRoster } from '../src/sports/nhl.js';
+import { nhlSeasonLines, nhlStandingsTeams, nhlSeasonId, nhlRosterPlayers, nhlOffRoster, nhlFirstSeasons, nhlExp } from '../src/sports/nhl.js';
 import { mlbSeasonLines, mlbFieldingGames, mlbEligibility, mlbRosterStatus, mlbBuildDirectory, mlbExp } from '../src/sports/mlb.js';
 import { sleeperNbaPlayers, sleeperNbaSeasonLines, espnWnbaRoster, wnbaTeam } from '../src/sports/nba.js';
 import { directoryRow, rankDirectory, buildXref, resolveXref, normName, injuryRows, boardInjury } from '../src/poll/sportDirectory.js';
@@ -40,6 +40,14 @@ const onlyKnown = (sport, line) => Object.keys(line).every((k) => rawIds(sport).
   ok(nhlOffRoster(roster.map((p) => p.extId), nhlSeasonLines({ data: [{ playerId: 1, skaterFullName: 'Cup O. Coffee', teamAbbrevs: 'BOS', positionCode: 'C', gamesPlayed: 3 }] }, { data: [] }), new Map(), '2025').length === 0, 'three games is not an established line');
   const traded = nhlSeasonLines({ data: [{ playerId: 2, skaterFullName: 'Moved Midseason', teamAbbrevs: 'NYI,NJD', positionCode: 'L', gamesPlayed: 60 }] }, { data: [] });
   ok(nhlOffRoster([], traded, new Map(), '2025')[0]?.team === 'NJD', 'a traded player lands on the team he ended with');
+  // TENURE (v0.629.1): first NHL season off the bios reports; a rostered man with no row has never played.
+  const first = nhlFirstSeasons(fx('nhl-bios-skaters-sample.json'), fx('nhl-bios-goalies-sample.json'));
+  ok(first.size === 22 && [...first.values()].every((f) => f >= 20000000 && f <= 20262027), `${first.size} first seasons off the bios`);
+  ok(nhlExp(20152016, '2026') === 11 && nhlExp(20262027, '2026') === 0 && nhlExp(20252026, '2025') === 0 && nhlExp(null, '2026', true) === 0 && nhlExp(null, '2026', false) === null && nhlExp('bogus', '2026', false) === null, 'tenure: seasons since the first; a rostered unknown is a rookie, an off-roster unknown is unknown');
+  const exps = roster.map((p) => ({ name: p.name, exp: nhlExp(first.get(p.extId), '2025', true) }));
+  ok(exps.every((e) => Number.isInteger(e.exp)) && exps.filter((e) => e.exp === 0).map((e) => e.name).sort().join() === 'James Hagens,Jonathan Aspirot' && Math.max(...exps.map((e) => e.exp)) === 7, `the fixture Bruins' tenure: ${exps.map((e) => `${e.name} ${e.exp}`).join(', ')}`);
+  ok(nhlExp(first.get('8477956'), '2025', true) === 0, 'a rostered man the bios never list (the fixture drops Pastrnak) reads as first-year');
+  ok(directoryRow('nhl', { ...roster[0], exp: nhlExp(first.get(roster[0].extId), '2025') }, 1).exp === nhlExp(first.get(roster[0].extId), '2025'), 'the database row carries it');
 }
 
 // ── MLB ──────────────────────────────────────────────────────────────────────

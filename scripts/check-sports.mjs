@@ -137,7 +137,7 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
   ok(defs[1].flt?.teams?.join() === 'BOS,LAL' && defs[2].flt?.max_exp === 0 && !defs[0].flt, 'classicSlotsFromSpec carries the team and tenure scope');
   ok(slotAllows(defs[1], { pos: 'C', team: 'BOS' }) && !slotAllows(defs[1], { pos: 'C', team: 'MIA' }) && slotAllows(defs[2], { pos: 'SF', team: 'MIA', exp: 0 }) && !slotAllows(defs[2], { pos: 'SF', team: 'MIA', exp: 3 }) && !slotAllows(defs[2], { pos: 'SF', team: 'MIA', exp: null }), 'the board\'s slotAllows applies the scope to a sport player (unknown tenure refused)');
   ok(sportSpotScopeLabel(spec[1]) === 'BOS/LAL' && sportSpotScopeLabel(spec[2]) === 'ROOKIES ONLY' && sportSpotScopeLabel({ min_exp: 5 }) === '5+ YRS' && sportSpotScopeLabel({ min_exp: 1, max_exp: 3 }) === '1–3 YRS' && sportSpotScopeLabel(spec[0]) === '', 'scope labels');
-  ok(sportHasTenure('nba') && sportHasTenure('mlb') && !sportHasTenure('nhl') && !sportHasTenure('wnba'), 'tenure is known for the NBA and MLB only');
+  ok(sportHasTenure('nba') && sportHasTenure('mlb') && sportHasTenure('nhl') && !sportHasTenure('wnba'), 'tenure is known for the NBA, MLB and NHL (v0.629.1), not the WNBA');
   // the builder's spot list
   const nba = SPORTS.nba;
   ok(sportSlotTypeOf(nba, ['SG', 'PG'])?.type === 'G' && sportSlotTypeOf(nba, ['PG', 'C']) === null, 'a spot\'s slot type by its eligibility set');
