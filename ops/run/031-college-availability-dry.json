@@ -1,0 +1,5 @@
+{
+  "mode": "college-availability",
+  "dry": true,
+  "why": "v0.615.0: first read of the SEC / Big Ten / ACC / Big 12 availability reports against the live college_player table — print every designation it would write (rostered players starred) and every row it cannot match, before the worker's scheduled poll writes them. Touches nothing."
+}
