@@ -1209,7 +1209,7 @@ async function main() {
         // THE MARKET (v0.627.0): ADP and the season's calendar, after the directory it matches against.
         try {
           const m = await sweepSportMarket(sport, currentSeason(sport));
-          log(`sport market ${sport}: ${m.adp ? `${m.adp.matched}/${m.adp.parsed} ADP matched` : `ADP: ${m.adpError}`}; ${m.calendar ? `${m.calendar.games} games ${m.calendar.from}→${m.calendar.to}` : `calendar: ${m.calendarError}`}`);
+          log(`sport market ${sport}: ${m.adp ? (m.adp.skipped ? `ADP: ${m.adp.skipped}` : `${m.adp.matched}/${m.adp.parsed} ADP matched${m.adp.source ? ` (${m.adp.source})` : ''}`) : `ADP: ${m.adpError}`}; ${m.calendar ? (m.calendar.skipped ? `calendar: ${m.calendar.skipped}` : `${m.calendar.games} games ${m.calendar.from}→${m.calendar.to}`) : `calendar: ${m.calendarError}`}`);
         } catch (e) { log(`sport market ${sport}:`, e.message); }
       }
     };

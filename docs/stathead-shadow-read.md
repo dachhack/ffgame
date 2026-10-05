@@ -113,6 +113,10 @@ yesterday) and one line per game as it goes final:
 4. ✓ The fixture days run through both adapters at every boot and
    `sport-shadow <sport> <date>` runs any day by hand, compared under each
    sport's default table (`server/src/poll/sportShadow.js`).
+   Soccer (v0.635.0) is live through Stathead with no public feed to shadow:
+   its calendar and ADP also come from the feed (`sportMarket.js`), and the
+   check is the boot log (directory count, market line, yesterday's poll) and
+   a walk through the app.
 5. Seven live game days per sport in shadow (`SPORT_SHADOW=nhl,mlb` on the
    pilot worker, each final compared once as it lands), then the acceptance
    list; flip `SPORT_PROVIDER=nhl=stathead` (and so on) per sport that passes.

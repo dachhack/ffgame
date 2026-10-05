@@ -68,6 +68,51 @@ export function soccerPosn(pos) {
   return first === 'GK' ? 1 : first === 'DEF' ? 2 : first === 'MID' ? 3 : first === 'FWD' ? 4 : 0;
 }
 
+/** A served injury status → the sport's own code (core injuryStatuses), or
+ *  null for a healthy man. Stathead passes the platform's code through
+ *  (Sleeper's for the four; FPL's a/d/i/s/u/n for the Premier League; MLS
+ *  Fantasy's words), so anything the sport does not list is read by its
+ *  word or first letter. */
+export function injuryCodeOf(sport, status) {
+  const raw = String(status ?? '').trim();
+  if (!raw) return null;
+  const up = raw.toUpperCase();
+  const known = new Set((SPORTS[sport]?.injuryStatuses ?? []).map((i) => i.code));
+  if (known.has(up)) return up;
+  if (/^(A|AVAILABLE|ACTIVE|HEALTHY|FIT)$/.test(up)) return null;
+  if (/^(S|SUS|SUSPENDED)$/.test(up)) return known.has('SUSP') ? 'SUSP' : 'O';
+  if (/^(D|DTD|DOUBTFUL|GTD)$/.test(up)) return known.has('D') ? 'D' : 'Q';
+  if (/^(Q|QUESTIONABLE|PROBABLE|P)$/.test(up)) return known.has('Q') ? 'Q' : 'D';
+  if (/^(OFS|SEASON|OUT FOR SEASON|IR-LT)$/.test(up)) return known.has('OFS') ? 'OFS' : 'O';
+  return known.has('O') ? 'O' : (known.has('IR') ? 'IR' : up);
+}
+
+/** A season calendar (/games?season=) → sport_calendar rows: the regular
+ *  season and the playoffs, never preseason. */
+export function statheadCalendarRows(rows) {
+  const out = [];
+  for (const r of rows ?? []) {
+    if (!r?.game_id || !r.game_date || !r.home || !r.away || r.game_type === 'pre') continue;
+    if (r.status === 'cancelled') continue;
+    out.push({ src_id: String(r.game_id), game_date: r.game_date, start_utc: r.start_utc ?? null, home: r.home, away: r.away });
+  }
+  return out.sort((a, b) => a.game_date.localeCompare(b.game_date) || a.src_id.localeCompare(b.src_id));
+}
+
+/** An ADP board (/adp) → sport_adp_upsert rows keyed by our player key. */
+export function statheadAdpRows(sport, rows, keyOf = (id) => bareId(sport, id)) {
+  const out = [], seen = new Set();
+  for (const r of rows ?? []) {
+    const adp = Number(r?.adp);
+    if (!r?.player_id || !Number.isFinite(adp) || adp <= 0) continue;
+    const key = `${sport}-${keyOf(r.player_id)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, adp, name: r.name ?? '', team: r.team ?? '', sources: r.sources ?? null });
+  }
+  return out;
+}
+
 /** A served `stats` object → our line for the sport, games-played flags set. */
 export function statheadLine(sport, stats, { pos, played } = {}) {
   const s = stats ?? {};
@@ -147,7 +192,7 @@ export function statheadDirectory(sport, players, cur, prior, season, keyOf = (i
       extId: String(keyOf(id)), name: p.full_name ?? '', team: p.team ?? '', pos: p.pos ?? '',
       feedCodes, jersey: p.jersey ?? null, headshot: p.headshot_url ?? null,
       active: p.active !== false,
-      injury: p.injury_status ? { code: String(p.injury_status).toUpperCase(), note: p.injury_note ?? null } : null,
+      injury: injuryCodeOf(sport, p.injury_status) ? { code: injuryCodeOf(sport, p.injury_status), note: p.injury_note ?? null } : null,
       exp: Number.isFinite(Number(p.exp)) && p.exp != null ? Number(p.exp) : null,
       season: use?.line ?? null, seasonId, gp: gamesOf(sport, use?.line),
       statheadId: id, ids: p.ids ?? null,
@@ -182,6 +227,9 @@ const keyOfWith = (sport, map) => (id) => {
   const bare = bareId(sport, id);
   return map?.get(String(id)) ?? map?.get(`${sport}-${bare}`) ?? bare;
 };
+
+/** Our key for a Stathead player_id, for the market sweep (the crosswalk for NBA). */
+export async function statheadKeyOf(sport) { return keyOfWith(sport, await keyMapFor(sport)); }
 
 /** The adapter for one sport. */
 export function statheadAdapter(sport) {

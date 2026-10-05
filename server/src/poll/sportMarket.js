@@ -149,7 +149,20 @@ export function matchAdp(adpRows, directory) {
 }
 
 /** One sport's ADP sweep: fetch, match, write. */
-export async function sweepSportAdp(sport) {
+export async function sweepSportAdp(sport, season) {
+  // STATHEAD (v0.635.0): a sport the feed serves takes its board from
+  // /v1/{sport}/adp, keyed by player id — no name matching. Soccer only has
+  // this source (the Premier League's is FPL Draft's rank; MLS has none).
+  const { providerOf } = await import('../sports/index.js');
+  if (providerOf(sport) === 'stathead') {
+    const [{ statheadAdp }, { statheadAdpRows, statheadKeyOf }] = await Promise.all([import('../stathead.js'), import('../sports/statheadAdapter.js')]);
+    const payload = await statheadAdp(sport, season);
+    const rows = statheadAdpRows(sport, payload.rows ?? [], await statheadKeyOf(sport));
+    if (!rows.length) return { sport, skipped: `Stathead serves no ${sport} board${payload.count === 0 ? '' : ' rows'}` };
+    const { data, error: wErr } = await db().rpc('sport_adp_upsert', { p_sport: sport, p_rows: rows });
+    if (wErr) throw new Error(`sport_adp_upsert: ${wErr.message}`);
+    return { sport, parsed: rows.length, matched: rows.length, written: data ?? rows.length, unmatched: 0, source: 'stathead' };
+  }
   if (!FP_SPORT[sport]) return { sport, skipped: 'no ADP page for this sport' };
   const html = await fetchFantasyProsAdp(sport);
   const parsed = parseFantasyProsAdp(html, sport);
@@ -165,25 +178,35 @@ export async function sweepSportAdp(sport) {
 
 /** One sport's calendar sweep for a season. */
 export async function sweepSportCalendar(sport, season) {
-  if (!ESPN_GAME[sport]) return { sport, skipped: 'no calendar source' };
-  const payload = await fetchEspnSeason(sport, season);
-  const games = espnCalendar(payload, sport);
-  if (!games.length) throw new Error(`${sport} ${season}: the calendar had no games`);
-  const rows = games.map((g) => ({ src_id: g.srcId, game_date: g.gameDate, start_utc: g.startUtc, home: g.home, away: g.away }));
+  let rows;
+  const { providerOf } = await import('../sports/index.js');
+  if (providerOf(sport) === 'stathead') {
+    // STATHEAD (v0.635.0): the season calendar from /v1/{sport}/games?season=.
+    const [{ statheadGames }, { statheadCalendarRows }] = await Promise.all([import('../stathead.js'), import('../sports/statheadAdapter.js')]);
+    const payload = await statheadGames(sport, { season });
+    rows = statheadCalendarRows(payload.rows ?? []);
+    if (!rows.length) throw new Error(`${sport} ${season}: Stathead's calendar had no games`);
+  } else {
+    if (!ESPN_GAME[sport]) return { sport, skipped: 'no calendar source' };
+    const payload = await fetchEspnSeason(sport, season);
+    const games = espnCalendar(payload, sport);
+    if (!games.length) throw new Error(`${sport} ${season}: the calendar had no games`);
+    rows = games.map((g) => ({ src_id: g.srcId, game_date: g.gameDate, start_utc: g.startUtc, home: g.home, away: g.away }));
+  }
   let written = 0;
   for (let i = 0; i < rows.length; i += 400) {
     const { data, error } = await db().rpc('sport_calendar_upsert', { p_sport: sport, p_season: String(season), p_rows: rows.slice(i, i + 400) });
     if (error) throw new Error(`sport_calendar_upsert: ${error.message}`);
     written += data ?? 0;
   }
-  const dates = games.map((g) => g.gameDate);
-  return { sport, season: String(season), games: games.length, written, from: dates[0], to: dates[dates.length - 1] };
+  const dates = rows.map((g) => g.game_date);
+  return { sport, season: String(season), games: rows.length, written, from: dates[0], to: dates[dates.length - 1] };
 }
 
 /** Both, for the daily sweep. Each half fails on its own. */
 export async function sweepSportMarket(sport, season) {
   const out = { sport };
-  try { out.adp = await sweepSportAdp(sport); } catch (e) { out.adpError = e.message; }
+  try { out.adp = await sweepSportAdp(sport, season); } catch (e) { out.adpError = e.message; }
   try { out.calendar = await sweepSportCalendar(sport, season); } catch (e) { out.calendarError = e.message; }
   return out;
 }

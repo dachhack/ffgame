@@ -2,7 +2,7 @@
 // pool is checked by before a sport switches provider. Run from server/:
 // `npx tsx test/stathead.mjs`.
 import { crosswalkCoverage, statheadSportOf } from '../src/stathead.js';
-import { bareId, statheadGameRow, statheadLine, statheadBoxToGame, statheadSeasonMap, statheadDirectory, buildKeyMap, soccerPosn } from '../src/sports/statheadAdapter.js';
+import { bareId, statheadGameRow, statheadLine, statheadBoxToGame, statheadSeasonMap, statheadDirectory, buildKeyMap, soccerPosn, injuryCodeOf, statheadCalendarRows, statheadAdpRows } from '../src/sports/statheadAdapter.js';
 import { compareLines, compareSlates, describeLines } from '../src/poll/sportShadow.js';
 import { linePoints } from '../../packages/core/src/sports/score.ts';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
@@ -90,6 +90,25 @@ const gkDir = statheadDirectory('nhl', { rows: [{ player_id: 'nhl-2', full_name:
   statheadSeasonMap('nhl', { rows: [{ player_id: 'nhl-2', pos: 'G', season: 2026, gp: 25, stats: { gs: 24, gtoi: 1450, w: 15, sv: 700, sa: 760, ga: 60 } }] }), new Map(), '2026');
 ok(gkDir[0].gp === 25 && gkDir[0].season.gapp === 25 && gkDir[0].season.gp == null && gkDir[0].exp === null, 'a goalie season line: gp → gapp; unknown tenure is null');
 ok(statheadDirectory('epl', { rows: [{ player_id: 'epl-45', full_name: 'Mo', team: 'LIV', pos: 'F', eligible: ['F'], exp: 9 }] }, new Map(), new Map(), '2026')[0].feedCodes.join() === 'F', 'a soccer directory row keeps ESPN codes for the core posMap');
+
+// ── THE MARKET FROM STATHEAD (v0.635.0): injuries, calendar, ADP ──────────────
+ok(injuryCodeOf('epl', 'i') === 'O' && injuryCodeOf('epl', 'd') === 'D' && injuryCodeOf('epl', 's') === 'SUSP' && injuryCodeOf('epl', 'a') === null && injuryCodeOf('epl', 'u') === 'O' && injuryCodeOf('epl', '') === null, "FPL's letters → the soccer codes; available is healthy");
+ok(injuryCodeOf('mls', 'Injured') === 'O' && injuryCodeOf('mls', 'Suspended') === 'SUSP' && injuryCodeOf('mls', 'Questionable') === 'Q', 'MLS Fantasy words → the soccer codes');
+ok(injuryCodeOf('nhl', 'IR') === 'IR' && injuryCodeOf('nhl', 'O') === 'O' && injuryCodeOf('mlb', 'IL10') === 'IL10', 'a code the sport lists passes through');
+const cal = statheadCalendarRows([
+  { game_id: 'e3', game_date: '2026-08-15', start_utc: '2026-08-15T14:00:00Z', home: 'LIV', away: 'BOU', game_type: 'regular', status: 'final' },
+  { game_id: 'e1', game_date: '2026-07-30', home: 'MNC', away: 'ARS', game_type: 'pre', status: 'final' },
+  { game_id: 'e2', game_date: '2026-08-15', start_utc: '2026-08-15T16:30:00Z', home: 'AVL', away: 'NEW', game_type: 'regular', status: 'pre' },
+  { game_id: 'e9', game_date: '2026-12-26', home: 'TOT', away: 'CHE', game_type: 'regular', status: 'cancelled' },
+]);
+ok(cal.length === 2 && cal[0].src_id === 'e2' && cal[1].src_id === 'e3' && cal[0].home === 'AVL' && cal[0].start_utc.startsWith('2026-08-15T16'), 'a calendar: regular season kept, preseason and cancelled dropped, ordered by date then id');
+const adp = statheadAdpRows('epl', [
+  { player_id: 'epl-45', name: 'Mohamed Salah', team: 'LIV', pos: 'F', adp: 1.2, sources: 1, spread: 0 },
+  { player_id: 'epl-46', name: 'Nobody', team: 'LIV', pos: 'M', adp: null },
+  { player_id: 'epl-45', name: 'Mohamed Salah', team: 'LIV', pos: 'F', adp: 1.5 },
+]);
+ok(adp.length === 1 && adp[0].key === 'epl-45' && adp[0].adp === 1.2, 'ADP rows are keyed by our player key; an unpriced man and a repeat are dropped');
+ok(statheadAdpRows('nba', [{ player_id: 'nba-3945274', adp: 2 }], (id) => keyMap.get(id) ?? bareId('nba', id))[0].key === 'nba-1658', 'an NBA board is keyed through the crosswalk to the Sleeper id');
 
 // ── THE SHADOW READ (v0.634.0): both feeds compared ────────────────────────────
 const oursSlate = [{ gameId: '1', away: 'MTL', home: 'TOR', status: 'final' }, { gameId: '2', away: 'NJ', home: 'BOS', status: 'live' }, { gameId: '3', away: 'LA', home: 'SJ', status: 'pre' }];
