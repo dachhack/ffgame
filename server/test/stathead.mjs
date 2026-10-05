@@ -114,6 +114,10 @@ const text = describeLines('MTL@TOR', cl);
 ok(text.includes('1/2 lines differ') && text.includes('Cole Caufield ours') && text.includes('[a]') && text.includes('1 scoring only theirs (Extra Dresser)'), 'the log line names the game, the count, the top disagreement and the gaps');
 ok(describeLines('MTL@TOR', compareLines('nhl', oursLines.slice(0, 1), theirLines.slice(0, 1))) === 'MTL@TOR: 1 lines agree', 'agreement is one quiet line');
 
+const fo = compareLines('nhl', [{ extId: '1', name: 'Nick Suzuki', team: 'MTL', played: true, line: { gp: 1, g: 1, fow: 0, fol: 0 } }], [{ extId: '1', name: 'Nick Suzuki', team: 'MTL', played: true, line: { gp: 1, g: 1, fow: 9, fol: 7 } }]);
+ok(fo.agree === 1 && fo.diffs.length === 0, 'NHL faceoffs are not compared: the public box score serves none, Stathead counts them');
+ok(compareLines('nhl', [{ extId: '1', name: 'N', team: 'MTL', line: { fow: 0 } }], [{ extId: '1', name: 'N', team: 'MTL', line: { fow: 9 } }], { ignore: [] }).diffs.length === 1, 'asked to compare them, it does');
+
 const nbaOurs = [{ extId: '1658', name: 'Luka Dončić', team: 'LAL', played: true, line: { gp: 1, min: 36, pts: 31, reb: 8, ast: 9 } }];
 const nbaTheirs = [{ extId: '3945274', name: 'Luka Doncic', team: 'LAL', played: true, line: { gp: 1, min: 36, pts: 31, reb: 8, ast: 9 } }];
 ok(compareLines('nba', nbaOurs, nbaTheirs).agree === 1, 'NBA lines match by team and normalised name across the two id spaces');

@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.634.1 — the shadow read leaves our known gaps out
+
+> - The shadow log no longer calls every NHL final a disagreement over faceoffs, which the public box score does not serve at all; it now says so once per day and compares the rest. Nothing a player sees changes.
+
+- The first live shadow (boot of v0.634.0): MLB agreed on all six finals of
+  2026-09-29 and 2026-10-04; every NHL final "differed" by 0 points, only on
+  `fow`/`fol`, because `sports/nhl.js` writes 0 for both (the box score gives
+  a percentage) while Stathead counts them from the play-by-play. `PUBLIC_GAPS`
+  (`poll/sportShadow.js`) names the fields a public feed lacks; `compareLines`
+  leaves them out (an `ignore` option overrides) and the day line reads
+  `shadow nhl 2026-10-04 (fow/fol not compared: the public feed has none)`.
+  Stathead's faceoff counts are a gain the switch brings. 40 checks.
+
 ### v0.634.0 — the Stathead adapter and the shadow read
 
 > - The worker can now read any daily sport from Stathead's feed, and reads NHL and MLB from both Stathead and the public feeds at once, comparing every final in its log. Nothing a player sees changes until a sport's week of shadow agrees and its provider is switched.
