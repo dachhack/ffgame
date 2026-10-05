@@ -25,7 +25,7 @@ declare r jsonb; lid uuid; l2 uuid; code text; yr text := extract(year from (now
 begin
   -- a league with its market open
   perform dl_as('01');
-  r := create_native_league('Devy Launch', yr, 3, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Launch', yr, 3, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code'; lin := _lineage(lid);
   perform dl_ok(commish_setup_devy(lid, 'shares'), 'dl0 a devy market league');
   perform dl_as('02'); perform native_join(code, 'DL-2');
@@ -137,7 +137,7 @@ begin
   delete from devy_launch where lineage = lin and status = 'open';
 
   -- a market that hasn't opened yet waits too
-  r := create_native_league('Devy Launch Two', yr, 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Launch Two', yr, 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   l2 := (r ->> 'league_id')::uuid;
   perform dl_ok(commish_setup_devy(l2, 'shares'), 'dl7d a second market, not yet drafted');
   perform set_config('app.uid', '', false);

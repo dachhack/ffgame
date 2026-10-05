@@ -60,7 +60,7 @@ begin
     where id = '00000000-0000-0000-0000-0000000c0c01';
   perform pr_as('1');
   r := create_native_league('Practice Source', '2026', 4, 8, 45, 'snake', 200, 15, 1,
-                            null, null, '{"QB": 2}'::jsonb, 'classic');
+                            null, null, '{"QB": 2}'::jsonb, 'classic', 'keeper', 2);
   perform pr_ok(r, 'pr0 a classic source league is created');
   lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform set_config('probe.pr_lid', lid::text, false);
@@ -232,7 +232,7 @@ do $$
 declare lid uuid; r jsonb;
 begin
   perform pr_as('1');
-  r := create_native_league('Unseeded', '2026', 4, 8, 45);
+  r := create_native_league('Unseeded', '2026', 4, 8, 45, p_continuity => 'keeper', p_continuity_n => 2);
   lid := (r ->> 'league_id')::uuid;
   perform pr_no(create_mock_from_league(lid, 1), 'not seeded yet',
     'pr30 an unseeded league is refused, rather than opening an empty room');

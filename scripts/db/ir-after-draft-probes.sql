@@ -55,7 +55,7 @@ begin
   perform probe_as('a');
 
   -- ══ A CLASSIC LEAGUE THAT DRAFTED WITH NO IR ═════════════════════════════
-  r := create_native_league('IR After', '2024', 2, 5, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('IR After', '2024', 2, 5, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform assert_ok(r, 'ia0 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform probe_as('b'); perform assert_ok(native_join(code, 'IA-B'), 'ia0a join'); perform probe_as('a');
   perform assert_ok(set_league_classic_slots(lid,
@@ -143,7 +143,7 @@ begin
   perform assert_true((select rounds from draft where league_id = lid) = 6, 'ia5c rounds follow');
 
   -- ══ A LEAGUE THAT NEVER SET A SHAPE ══════════════════════════════════════
-  r := create_native_league('Never Shaped', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Never Shaped', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform assert_ok(r, 'ia6 a classic league with the default roster'); lid2 := (r ->> 'league_id')::uuid;
   perform assert_ok(set_league_classic_slots(lid2,
     '[{"pos":["QB"]},{"pos":["RB"]},{"pos":["WR"]}]'::jsonb), 'ia6a three starters');

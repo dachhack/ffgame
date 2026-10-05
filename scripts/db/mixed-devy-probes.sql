@@ -60,7 +60,7 @@ begin
   perform md_as('01');
 
   -- ══ md1. MADE WITH BOTH ══════════════════════════════════════════════════
-  r := create_native_league('Mixed Devy', '2031', 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Mixed Devy', '2031', 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   a := (r ->> 'league_id')::uuid; code := r ->> 'invite_code'; n0 := (select rounds from draft where league_id = a);
   r := commish_setup_college(a, 'mixed', 1, 2, false);
   perform md_ok(r, 'md1 THE POINT: college starting spots and devy spots together');
@@ -122,7 +122,7 @@ begin
   perform md_true(devy_room_error(a, 1, 'c-98903') like 'devy spots are full (2) and so is the NFL roster%', 'md5b both full: refused with both counts: ' || coalesce(devy_room_error(a, 1, 'c-98903'), 'null'));
 
   -- ══ md6. THE DEVY-ONLY LEAGUE KEEPS 0366 ═════════════════════════════════
-  r := create_native_league('Devy Only', '2031', 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Only', '2031', 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   b := (r ->> 'league_id')::uuid;
   perform md_ok(commish_setup_college(b, 'none', 1, 2, false), 'md6 a devy league with no college starting spots');
   perform md_true(not league_is_mixed(b), 'md6a is not mixed');

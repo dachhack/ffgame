@@ -33,6 +33,7 @@ import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
 import { collegeSetupBlocked, collegeSetupLine, collegeSetupActive, collegePoolOpts, collegeScheduleWeeks, COLLEGE_SETUP_INFO, DEFAULT_COLLEGE_SETUP, type CollegeSetup } from '@drip/core/data/devyShares';
+import { formatBlocked, shelfBlocked, isRedraft } from '@drip/core/data/leagueRules';
 import { myLeaguesOnSleeper, importMyLeague, importSeason } from '@drip/core/data/sleeperAdmin';
 import { sleeperAvatarUrl, type SleeperLeague, type SleeperUser } from '@drip/core/data/sleeper';
 import { IMPORT_PROVIDERS, normalizeProviderLeague, importMyProviderLeague, providerImportSeason, type ImportProvider } from '@drip/core/data/providerAdmin';
@@ -224,6 +225,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const pickContinuity = (c: LeagueContinuity) => {
     setContinuity(c);
     if (c === 'contract' || c === 'contract_dynasty') setDraftMode('auction');
+    // 0442: what the seasons allow. A dynasty league plays head-to-head; a
+    // redraft league has no devy shelf and no market.
+    if (isDynastyContinuity(c) && format !== 'standard') setFormat('standard');
+    if (isRedraft(c)) setCollege((x) => ({ ...x, devySpots: 0, market: false }));
   };
   const contLabel = continuity === 'contract_dynasty' ? 'CONTRACT DYNASTY '
     : continuity === 'contract' ? 'CONTRACT '
@@ -239,6 +244,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // types — picking a format that presets something says so rather than
   // quietly rearranging the form.
   const pickFormat = (f: LeagueFormat) => {
+    if (formatBlocked(f, continuity)) { warn(); return; }   // 0442
     setFormat(f);
     if (f === 'guillotine' && teamCount < 18) setTeamCount(18);
   };
@@ -558,7 +564,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       // college players IN the pool; the market keeps them out of it (they
       // are bought, not drafted); a college-only league's pool is college only.
       const collegeNow = game === 'classic' && !isSport && collegeSetupActive(college)
-        && !collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? college : null;
+        && !collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType, redraft: isRedraft(continuity) }) ? college : null;
       if (collegeNow) {
         setMakeNote('Setting up college players…');
         const dr = await setupLeagueCollege(r.league_id, collegeNow);
@@ -923,9 +929,12 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                   info={'How the season is WON.\n\nHEAD-TO-HEAD — weekly matchups, standings, playoffs. The standard game.\n\nGUILLOTINE — each week the lowest-scoring team is ELIMINATED and its whole roster hits a $1000 FAAB frenzy (preset). The last team standing wins.\n\nIt plays all 17 weeks (no playoffs — the survivor IS the result) and defaults to 18 teams, which is exactly the field that reaches one survivor on the final week. Fewer teams simply finish earlier.\n\nVAMPIRE — one team is the Vampire: no waivers or free agents, but when it wins a matchup it STEALS a player from the loser (giving one back). Appoint the seat in COMMISH after creating, where you can also require your approval per steal.'} />
                 <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                   <Chip label="HEAD-TO-HEAD" on={format === 'standard'} onPress={() => { tap(); pickFormat('standard'); }} />
-                  {!isSport && <Chip label="GUILLOTINE" on={format === 'guillotine'} onPress={() => { tap(); pickFormat('guillotine'); }} />}
-                  {!isSport && <Chip label="VAMPIRE" on={format === 'vampire'} onPress={() => { tap(); pickFormat('vampire'); }} />}
+                  {!isSport && <Chip label="GUILLOTINE" on={format === 'guillotine'} dim={!!formatBlocked('guillotine', continuity)} onPress={() => { tap(); pickFormat('guillotine'); }} />}
+                  {!isSport && <Chip label="VAMPIRE" on={format === 'vampire'} dim={!!formatBlocked('vampire', continuity)} onPress={() => { tap(); pickFormat('vampire'); }} />}
                 </View>
+                {!isSport && formatBlocked('vampire', continuity) && (
+                  <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: 13 }}>{formatBlocked('vampire', continuity)}.</Mono>
+                )}
               </View>
             )}
             {step === 'name' && (
@@ -952,7 +961,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             {/* DEVY (0398) — its own step, because a devy league is a
                 different game and nothing else on these screens says so. */}
             {step === 'devy' && (() => {
-              const blk = collegeSetupBlocked(college, { classic: game === 'classic', auction: draftMode === 'auction', contract: contractType });
+              const blk = collegeSetupBlocked(college, { classic: game === 'classic', auction: draftMode === 'auction', contract: contractType, redraft: isRedraft(continuity) });
+              const shelfWhy = shelfBlocked(continuity);   // 0442: no shelf, no market, on a redraft league
               const stepper = (label: string, value: number, min: number, max: number, set: (n: number) => void) => (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Mono size={8.5} tone="faint" track={0.1}>{label}</Mono>
@@ -984,6 +994,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                     </Mono>
                     {college.lineup === 'mixed' && stepper('COLLEGE STARTING SPOTS', college.collegeSpots, 1, 6, (n) => patchCollege({ collegeSpots: n }))}
                   </View>
+                  {shelfWhy ? (
+                    <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
+                      DEVY SPOTS and the DEVY MARKET: {shelfWhy}. Pick KEEPER or DYNASTY on the NEXT SEASON step to use them.
+                    </Mono>
+                  ) : (<>
                   <View style={{ gap: 6 }}>
                     {stepper('DEVY SPOTS PER TEAM', college.devySpots, 0, 10, (n) => patchCollege({ devySpots: n }))}
                     <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
@@ -1015,6 +1030,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                       </View>
                     )}
                   </View>
+                  </>)}
                   {blk && <Mono size={9} tone="warn" style={{ lineHeight: 13 }}>⚠ {blk} — college players won't be set up until this is changed.</Mono>}
                 </View>
               );
@@ -1048,7 +1064,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                   {draftMode === 'auction' ? 'AUCTION' : 'SNAKE'} draft · {pace === 'live' ? `${clockDraft || '90'}s a pick` : `${clockDraft || '12'}h a pick`}
                 </Mono>
                 {game === 'classic' && (() => {
-                  const blk = collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType });
+                  const blk = collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType, redraft: isRedraft(continuity) });
                   return (
                     <Mono size={10} tone={collegeSetupActive(college) && !blk ? 'you' : 'dim'} style={{ lineHeight: 15 }}>
                       {blk ? `${collegeSetupLine(DEFAULT_COLLEGE_SETUP)} (${blk})` : collegeSetupLine(college)}

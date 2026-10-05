@@ -26,7 +26,7 @@ do $$
 declare r jsonb; lid uuid; code text; cs text;
 begin
   perform cc_as('01');
-  r := create_native_league('Custom College', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Custom College', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform cc_as('02'); perform cc_ok(native_join(code, 'CC-2'), 'cc0 join');
 

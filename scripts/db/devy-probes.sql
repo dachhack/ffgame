@@ -39,7 +39,7 @@ do $$
 declare r jsonb; lid uuid; plain uuid; code text; rounds0 int; e text; boom boolean;
 begin
   perform dv_as('01');
-  r := create_native_league('Devy', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform dv_ok(r, 'dv0 league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform dv_as('02'); perform dv_ok(native_join(code, 'DV-2'), 'dv0 join'); perform dv_as('01');
 
@@ -142,7 +142,7 @@ begin
   perform dv_true(native_autopick_slug(lid, 1, rounds0) ~ '^c-[0-9]+$', 'dv6a with the NFL side full, it takes a college player');
 
   -- ══ dv7. A LEAGUE WITHOUT DEVY SPOTS IS UNTOUCHED ════════════════════════
-  r := create_native_league('No Devy', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('No Devy', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   plain := (r ->> 'league_id')::uuid;
   perform dv_ok(set_league_position_access(plain, '["COLLEGE"]'::jsonb), 'dv7 COLLEGE on, no devy spots');
   perform dv_ok(seed_league_pool(plain, '[{"slug":"c-93701","full":"Col Qb","pos":"QB"}]'::jsonb), 'dv7 pool');
@@ -152,7 +152,7 @@ begin
   perform dv_true(devy_room_error(plain, 1, 'c-93702') is null, 'dv7b and nothing splits the roster');
 
   -- ══ dv8. THE POOL FILTER TAKES A LEVEL ═══════════════════════════════════
-  r := create_native_league('Filter', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Filter', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform dv_ok(set_league_pool_filter((r ->> 'league_id')::uuid, '{"level":"college"}'::jsonb), 'dv8 level college');
   perform dv_true((select settings_json -> 'pool_filter' ->> 'level' from league where id = (r ->> 'league_id')::uuid) = 'college',
     'dv8a stored');

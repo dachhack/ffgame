@@ -73,7 +73,7 @@ begin
     'cf2b a top-up offering him again adds nothing');
 
   -- ══ cf3. THE DEVY MARKET GETS NONE ════════════════════════════════════════
-  r := create_native_league('College Market', '2031', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('College Market', '2031', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);   -- 0442: the market needs seasons
   perform cf_ok(r, 'cf3 league'); lid2 := (r ->> 'league_id')::uuid;
   perform cf_ok(seed_league_pool(lid2, '[{"slug":"cf-gamma","full":"Cf Gamma","pos":"TE","team":"NYJ"}]'::jsonb), 'cf3 seed');
   update league set settings_json = coalesce(settings_json, '{}'::jsonb) || '{"devy_mode": "shares"}'::jsonb where id = lid2;

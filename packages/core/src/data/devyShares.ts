@@ -162,9 +162,12 @@ export const collegeSetupActive = (s: CollegeSetup): boolean => s.lineup !== 'no
  *  pairings wait on engine work (0439's header has the why). College
  *  starting spots + devy spots combine since 0440: the shelf is a taxi
  *  squad there. */
-export function collegeSetupBlocked(s: CollegeSetup, o: { classic: boolean; auction: boolean; contract: boolean }): string | null {
+export function collegeSetupBlocked(s: CollegeSetup, o: { classic: boolean; auction: boolean; contract: boolean;
+  /** 0442: a redraft league gets college lineup spots only — no shelf, no market. */
+  redraft?: boolean }): string | null {
   if (!collegeSetupActive(s)) return null;
   if (!o.classic) return 'college players need a CLASSIC league';
+  if ((s.devySpots > 0 || s.market) && o.redraft) return 'devy spots and the devy market are for keeper and dynasty leagues — a redraft league starts over every season, so there is nothing to develop';
   if (s.lineup === 'college' && s.devySpots > 0) return 'a college-only league has no devy spots — every spot already takes college players; the taxi squad holds prospects';
   if (s.market && s.devySpots > 0) return "the devy market and devy spots can't combine — shares reserve a player's draft rights, and drafting him into a devy spot would make them worthless";
   if (s.market && s.lineup === 'mixed') return "the devy market keeps college players out of the draft pool, and college lineup spots need them in it — they can't combine yet";
@@ -212,6 +215,7 @@ export const COLLEGE_SETUP_INFO =
   + 'in the rookie draft. Prices rise as players play well, so early scouting pays; shares trade like picks. '
   + 'The commissioner decides when the market opens: right away, so teams can scout before the startup draft, '
   + 'or once the startup draft is done. Every year after, shares lock on Jan 15 until the rookie draft.\n\n'
+  + 'Devy spots and the market are for KEEPER and DYNASTY leagues; a redraft league starts over every season, so it gets college lineup spots only.\n\n'
   + 'MIXED + DEVY SPOTS: college players you draft can start in your college spots or sit on the devy shelf, and move between the two like taxi players. '
   + 'The market is the one that stands alone for now: it keeps college players off every roster, so it does not combine with devy spots or college lineup spots, '
   + 'and it needs an NFL-calendar league with a snake draft. The form says so before you create. After the league is made, all of this lives in COMMISH.';

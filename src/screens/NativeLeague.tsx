@@ -7,6 +7,7 @@
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
 import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, collegeSetupBlocked, collegeSetupActive, collegeSetupLine, collegePoolOpts, collegeScheduleWeeks, COLLEGE_SETUP_INFO, DEFAULT_COLLEGE_SETUP, type CollegeSetup } from '@drip/core/data/devyShares';
+import { formatBlocked, shelfBlocked, isRedraft } from '@drip/core/data/leagueRules';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag, InjuryNow } from '../app/ui';
 import { useStore } from '../app/store';
@@ -254,6 +255,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   const pickContinuity = (c: LeagueContinuity) => {
     setContinuity(c);
     if (c === 'contract' || c === 'contract_dynasty') setMode('auction');
+    // 0442: what the seasons allow. A dynasty league plays head-to-head; a
+    // redraft league has no devy shelf and no market.
+    if (isDynastyContinuity(c) && format !== 'standard') setFormat('standard');
+    if (isRedraft(c)) setCollege((x) => ({ ...x, devySpots: 0, market: false }));
   };
   const contLabel = continuity === 'contract_dynasty' ? 'CONTRACT DYNASTY '
     : continuity === 'contract' ? 'CONTRACT '
@@ -265,6 +270,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // Guillotine brings a crowd — see the app's twin. 17 weeks (0245) makes 18
   // teams the number that reaches one survivor on the final week.
   const pickFormat = (f: LeagueFormat) => {
+    if (formatBlocked(f, continuity)) return;   // 0442
     setFormat(f);
     if (f === 'guillotine' && teams < 18) setTeams(18);
   };
@@ -449,7 +455,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
       // college players IN the pool; the market keeps them out of it (they
       // are bought, not drafted); a college-only league's pool is college only.
       const collegeNow = chosenGame === 'classic' && !isSport && collegeSetupActive(college)
-        && !collegeSetupBlocked(college, { classic: true, auction: mode === 'auction', contract: contractType }) ? college : null;
+        && !collegeSetupBlocked(college, { classic: true, auction: mode === 'auction', contract: contractType, redraft: isRedraft(continuity) }) ? college : null;
       if (collegeNow) {
         setNote('Setting up college players…');
         const dr = await setupLeagueCollege(r.league_id, collegeNow);
@@ -691,9 +697,12 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             {!isSport && <div className="mono" style={label}>FORMAT</div>}
             {!isSport && <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
               <Chip on={format === 'standard'} onClick={() => pickFormat('standard')}>HEAD-TO-HEAD</Chip>
-              <Chip on={format === 'guillotine'} onClick={() => pickFormat('guillotine')}>GUILLOTINE</Chip>
-              <Chip on={format === 'vampire'} onClick={() => pickFormat('vampire')}>VAMPIRE</Chip>
+              <Chip on={format === 'guillotine'} onClick={() => pickFormat('guillotine')} title={formatBlocked('guillotine', continuity) ?? undefined}>GUILLOTINE</Chip>
+              <Chip on={format === 'vampire'} onClick={() => pickFormat('vampire')} title={formatBlocked('vampire', continuity) ?? undefined}>VAMPIRE</Chip>
             </div>}
+            {!isSport && formatBlocked('vampire', continuity) && (
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6 }}>{formatBlocked('vampire', continuity)}.</div>
+            )}
             {format !== 'standard' && (
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
                 {format === 'guillotine'
@@ -751,7 +760,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             daily sport (0426): college football players have no place in an
             NBA or NHL pool. */}
         {kind === 'league' && game === 'classic' && !isSport && (() => {
-          const blk = collegeSetupBlocked(college, { classic: true, auction: mode === 'auction', contract: contractType });
+          const blk = collegeSetupBlocked(college, { classic: true, auction: mode === 'auction', contract: contractType, redraft: isRedraft(continuity) });
+          const shelfWhy = shelfBlocked(continuity);   // 0442: no shelf, no market, on a redraft league
           const note: React.CSSProperties = { fontSize: 11.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 };
           return (
             <div style={{ marginTop: 16 }}>
@@ -774,6 +784,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   : college.lineup === 'mixed' ? `${college.collegeSpots} college-only starting spot${college.collegeSpots === 1 ? '' : 's'} beside your NFL lineup — college and NFL players score in the same week. Reshape the spots in the roster builder any time before the draft.`
                   : 'No NFL players at all. Every spot takes college players and the season runs on the college calendar, Saturday by Saturday.'}
               </div>
+              {shelfWhy && <div style={note}>DEVY SPOTS and the DEVY MARKET: {shelfWhy}. Pick KEEPER or DYNASTY under NEXT SEASON to use them.</div>}
+              {!shelfWhy && (<>
               <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span className="mono" style={{ ...label, marginTop: 0 }}>DEVY SPOTS / TEAM</span>{num(college.devySpots, (n) => patchCollege({ devySpots: n }), 0, 10, 1)}
               </div>
@@ -796,6 +808,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
                   </span>
                 </div>
               )}
+              </>)}
               <div className="mono" style={{ fontSize: 10.5, color: blk ? 'var(--warn)' : 'var(--you)', marginTop: 8 }}>
                 {blk ? `⚠ ${blk} — college players won't be set up until this is changed.` : collegeSetupLine(college)}
               </div>

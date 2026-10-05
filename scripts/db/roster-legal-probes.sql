@@ -33,7 +33,7 @@ do $$
 declare r jsonb; lid uuid; code text; b int; bu uuid := '00000000-0000-0000-0000-000000002302'; mid uuid; saved_inj int;
 begin
   perform rl_as('01');
-  r := create_native_league('Legal', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Legal', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform rl_ok(r, 'l0 league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform rl_as('02'); perform rl_ok(native_join(code, 'RL-B'), 'l0 B joins');
   perform rl_as('01');

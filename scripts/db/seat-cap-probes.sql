@@ -54,7 +54,7 @@ begin
   perform probe_as('a');
 
   -- ══ A SHAPED CLASSIC LEAGUE: 3 starters + 2 bench + 2 taxi + 1 IR = 8 ════
-  r := create_native_league('Seats', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Seats', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform assert_ok(r, 'sc0 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   -- 0337: this suite predates the weekly waiver schedule, whose default is
   -- now Sleeper's (waivers all week). It tests adds and drops, not the
@@ -140,7 +140,7 @@ begin
 
   -- ══ A LEAGUE WITH NO SHAPE IS UNCHANGED ══════════════════════════════════
   perform probe_as('a');
-  r := create_native_league('No Shape', '2024', 2, 6, 60);
+  r := create_native_league('No Shape', '2024', 2, 6, 60, p_continuity => 'keeper', p_continuity_n => 2);
   perform assert_ok(r, 'sc8 a drip league, no roster shape'); dlid := (r ->> 'league_id')::uuid;
   -- 0337: this suite predates the weekly waiver schedule, whose default is
   -- now Sleeper's (waivers all week). It tests adds and drops, not the

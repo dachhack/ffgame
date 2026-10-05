@@ -22,6 +22,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.638.0 — what a league's seasons allow
+
+> - A redraft league no longer offers devy spots, the devy market or a taxi squad — those are for keeper and dynasty leagues. A dynasty league plays head-to-head: guillotine and vampire are off its menu. Leagues already running either keep working as they are.
+
+The founder: "Devy spots and the devy market don't make sense for redraft
+leagues. Nor does taxi. Dynasty leagues can't do vampire or guillotine
+modes either."
+- 0442 `_league_seasons_rule(settings)` names the violation: a redraft
+  league with devy spots, the market or a taxi squad; a dynasty league
+  (dynasty, contract dynasty) on guillotine or vampire. Enforced with the
+  reason where the choice is made — `commish_setup_college` (devy spots or
+  the market at creation; college lineup spots stay open to a redraft
+  league, they score this season), `set_league_roster_shape` (a new or
+  larger taxi squad or devy shelf), `set_league_format` (into guillotine
+  or vampire), `set_league_continuity` (to redraft under a shelf, to
+  dynasty under one of those formats) — and the league backstop raises it
+  for every other writer (`commish_setup_devy`, `set_league_devy_mode`, a
+  copied blueprint).
+- ONLY A NEW VIOLATION IS REFUSED. A league already running a taxi squad
+  in a redraft season, or vampire in a dynasty, keeps working untouched:
+  its other settings save, the shelf it has stays, it can shrink or drop
+  it, it cannot grow it.
+- Core `leagueRules` (`formatBlocked`, `shelfBlocked`, `isRedraft`);
+  `collegeSetupBlocked` takes `redraft`. App (Recruit) and web (NativeLeague
+  create form): picking DYNASTY resets the format to head-to-head and
+  greys GUILLOTINE / VAMPIRE with the reason; picking REDRAFT clears devy
+  spots and the market, and the COLLEGE step shows the reason in their
+  place; the setup call never asks for what the server would refuse.
+- Probes: `scripts/db/season-rules-probes.sql`. Twenty suites that put a
+  taxi squad, devy spots or the market on the default league now make it
+  a KEEPER league (`create_native_league(…, 'classic', 'keeper', 2)` or
+  `p_continuity => 'keeper'`), which is what they were testing all along.
+
 ### v0.637.1 — the autodraft in a mixed league: K and D/ST arrive, college goes two deep
 
 > - An autodraft in a league with IR or OUT spots now takes its kicker and defense in the last rounds as it always meant to, and in a league with college starting spots it drafts two college players per college spot instead of one.

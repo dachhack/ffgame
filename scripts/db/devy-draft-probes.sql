@@ -43,7 +43,7 @@ declare r jsonb; lid uuid; dyn uuid; code text; d draft%rowtype; pool jsonb := '
 begin
   -- ══ dd1. A STARTUP WITH A DEVY BLOCK ══
   perform dd_as('01');
-  r := create_native_league('Devy Draft', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Draft', '2026', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform dd_as('02'); perform dd_ok(native_join(code, 'DD-2'), 'dd0 join'); perform dd_as('01');
   perform dd_ok(set_league_position_access(lid, '["COLLEGE"]'::jsonb), 'dd0 COLLEGE on');

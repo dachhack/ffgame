@@ -77,12 +77,12 @@ declare r jsonb; a uuid; b uuid; c uuid; code text; tid uuid;
 begin
   perform gr_as('01');
   -- Three devy leagues holding the same college player, c-93801.
-  r := create_native_league('Grad A', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Grad A', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   a := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform gr_as('02'); perform gr_ok(native_join(code, 'GR-2'), 'gr join a'); perform gr_as('01');
-  r := create_native_league('Grad B', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Grad B', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   b := (r ->> 'league_id')::uuid;
-  r := create_native_league('Grad C', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Grad C', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   c := (r ->> 'league_id')::uuid;
   perform gr_ok(set_league_position_access(a, '["COLLEGE"]'::jsonb), 'gr a college');
   perform gr_ok(set_league_position_access(b, '["COLLEGE"]'::jsonb), 'gr b college');

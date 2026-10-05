@@ -54,7 +54,7 @@ begin
     jsonb_build_object('espn_id', '94002', 'full_name', 'Mx Dawg Wideout', 'pos', 'WR', 'school_abbr', 'MXUGA', 'school_id', '94061')));
 
   perform mx_as('01');
-  r := create_native_league('Mixed', '2032', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Mixed', '2032', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform mx_ok(r, 'mx0 league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform mx_as('02'); perform mx_ok(native_join(code, 'MX-2'), 'mx0 join'); perform mx_as('01');
 
@@ -146,7 +146,7 @@ begin
   delete from college_player_stats where espn_id in ('94001', '94002');
 
   -- ══ mx6. A DEVY LEAGUE IS NOT MIXED ══════════════════════════════════════
-  r := create_native_league('Devy Not Mixed', '2032', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Not Mixed', '2032', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   dv := (r ->> 'league_id')::uuid;
   perform mx_ok(set_league_position_access(dv, '["COLLEGE"]'::jsonb), 'mx6 COLLEGE on');
   perform mx_ok(set_league_roster_shape(dv, 2, 0, 0, 0, 2), 'mx6a devy spots');

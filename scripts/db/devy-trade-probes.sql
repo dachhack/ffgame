@@ -32,7 +32,7 @@ begin
               and (_devy_share_rules() -> 'round_price' ->> '3')::int = 5, 'dt0 THE TWEAK: rounds 4–7 pay 2, round 3 still 5');
 
   perform dt_as('01');
-  r := create_native_league('Devy Trades', yr, 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Trades', yr, 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform dt_ok(r, 'dt0a league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code'; lin := _lineage(lid);
   perform dt_as('02'); perform dt_ok(native_join(code, 'DT-2'), 'dt0b join'); perform dt_as('01');
   perform dt_ok(set_league_position_access(lid, '["COLLEGE"]'::jsonb), 'dt0c COLLEGE on');
