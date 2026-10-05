@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.635.1 — the shadow log shows values, tolerates minute rounding, and the deploy tail grows
+
+> - The shadow read no longer calls every NBA line a disagreement over minutes the two feeds round differently, and names both values when a line does differ. Nothing a player sees changes.
+
+- First NBA shadow (preseason finals of 2026-10-04): 34/42 and 33/41 lines
+  "differed" by 0 points on `min` alone — the NBA CDN gives `PT25M01.00S`
+  (25.02), ESPN gives 25. `TOLERANCE` (`poll/sportShadow.js`): a `min`
+  difference under a minute, `toi`/`gtoi` under 0.1, is not a disagreement.
+- A differing line now reads `[min 25.02≠31]` — both values, not just the
+  field — so the week's log explains itself.
+- `deploy-worker.yml` tails 300 lines instead of 150: with five sports the
+  boot report, the fixture-day shadows and the soccer poll lines no longer
+  push `daily sports:` out of the window.
+- 48 checks in `server/test/stathead.mjs`.
+
 ### v0.635.0 — soccer switched on through Stathead; the NBA joins the shadow
 
 > - The Premier League and MLS are live on the worker: their players, fixtures, box scores and (for the Premier League) a draft board now come from Stathead, so a soccer league can be created. The NBA is polled from its public feeds and compared against Stathead from the first preseason final.

@@ -130,12 +130,17 @@ const cl = compareLines('nhl', oursLines, theirLines);
 ok(cl.matched === 2 && cl.agree === 1 && cl.diffs.length === 1 && cl.diffs[0].name === 'Cole Caufield' && cl.diffs[0].fields.join() === 'a' && cl.diffs[0].delta < 0, 'NHL lines match by id; the one assist disagreement is named with its field');
 ok(cl.onlyOurs.join() === 'Scratch Guy' && cl.onlyOursScoring.length === 0 && cl.onlyTheirs.join() === 'Extra Dresser' && cl.onlyTheirsScoring.join() === 'Extra Dresser', 'a scratch only we list is not a scoring gap; a dressed man only they list is');
 const text = describeLines('MTL@TOR', cl);
-ok(text.includes('1/2 lines differ') && text.includes('Cole Caufield ours') && text.includes('[a]') && text.includes('1 scoring only theirs (Extra Dresser)'), 'the log line names the game, the count, the top disagreement and the gaps');
+ok(text.includes('1/2 lines differ') && text.includes('Cole Caufield ours') && text.includes('[a 1≠2]') && text.includes('1 scoring only theirs (Extra Dresser)'), 'the log line names the game, the count, the top disagreement and the gaps');
 ok(describeLines('MTL@TOR', compareLines('nhl', oursLines.slice(0, 1), theirLines.slice(0, 1))) === 'MTL@TOR: 1 lines agree', 'agreement is one quiet line');
 
 const fo = compareLines('nhl', [{ extId: '1', name: 'Nick Suzuki', team: 'MTL', played: true, line: { gp: 1, g: 1, fow: 0, fol: 0 } }], [{ extId: '1', name: 'Nick Suzuki', team: 'MTL', played: true, line: { gp: 1, g: 1, fow: 9, fol: 7 } }]);
 ok(fo.agree === 1 && fo.diffs.length === 0, 'NHL faceoffs are not compared: the public box score serves none, Stathead counts them');
 ok(compareLines('nhl', [{ extId: '1', name: 'N', team: 'MTL', line: { fow: 0 } }], [{ extId: '1', name: 'N', team: 'MTL', line: { fow: 9 } }], { ignore: [] }).diffs.length === 1, 'asked to compare them, it does');
+
+const mins = compareLines('nba', [{ extId: '1658', name: 'Luka Doncic', team: 'LAL', played: true, line: { gp: 1, min: 25.02, pts: 31 } }], [{ extId: '3945274', name: 'Luka Doncic', team: 'LAL', played: true, line: { gp: 1, min: 25, pts: 31 } }]);
+ok(mins.agree === 1, 'minutes within a minute agree: the CDN gives 25.02, ESPN 25');
+const minsFar = compareLines('nba', [{ extId: '1658', name: 'Luka Doncic', team: 'LAL', played: true, line: { gp: 1, min: 25.02, pts: 31 } }], [{ extId: '3945274', name: 'Luka Doncic', team: 'LAL', played: true, line: { gp: 1, min: 31, pts: 31 } }]);
+ok(minsFar.diffs.length === 1 && minsFar.diffs[0].values.join() === 'min 25.02≠31' && describeLines('LAL@BOS', minsFar).includes('[min 25.02≠31]'), 'six minutes apart is a difference, and the log shows both values');
 
 const nbaOurs = [{ extId: '1658', name: 'Luka Dončić', team: 'LAL', played: true, line: { gp: 1, min: 36, pts: 31, reb: 8, ast: 9 } }];
 const nbaTheirs = [{ extId: '3945274', name: 'Luka Doncic', team: 'LAL', played: true, line: { gp: 1, min: 36, pts: 31, reb: 8, ast: 9 } }];
