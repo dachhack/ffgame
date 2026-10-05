@@ -208,6 +208,21 @@ export function LiveOnboard() {
           <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>DRIP FANTASY</span>
           <VersionTag />
         </div>
+        {/* 📱 GET THE APP, beside the gear (v0.632.1, founder: "move the 'get
+            the app' chip to just to the left of the settings chip"). The same
+            rule as before (v0.561.0): an iPhone sees TestFlight, an Android
+            phone the APK, a desktop both — labelled by platform when both show. */}
+        {session && view === 'home' && (() => {
+          const os = mobileOs();
+          const both = os == null && !!IOS_TESTFLIGHT_URL;
+          const chip: React.CSSProperties = { fontSize: 9, letterSpacing: '0.08em', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap', color: 'var(--on-accent)', background: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 8px' };
+          return (<>
+            {os !== 'ios' && <a href={APK_ZIP_URL} className="mono" title="Downloads as a zip — unzip it and tap the APK inside. Installs over any earlier build." style={chip}>{both ? '📱 ANDROID APP' : '📱 GET THE APP'}</a>}
+            {IOS_TESTFLIGHT_URL && os !== 'android' && (
+              <a href={IOS_TESTFLIGHT_URL} target="_blank" rel="noopener noreferrer" className="mono" title="Opens TestFlight on your iPhone — install TestFlight if asked, then Drip Fantasy. Updates arrive automatically." style={chip}>{both ? '🍎 iOS APP' : '🍎 GET THE APP'}</a>
+            )}
+          </>);
+        })()}
         <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
       </header>
 
@@ -1141,7 +1156,6 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
 }) {
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   // Which phone this is, for the app chips below — read once per mount.
-  const [phoneOs] = useState(mobileOs);
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
   // Leagues you commission but have no player roster in (no enrollment card).
   const commishOnly = commishLeagues.filter((l) => !enrolledIds.has(l.league_id));
@@ -1205,48 +1219,23 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
           a second league. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         {isCommish && <>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</>}
-        {/* 🔎 FIND A LEAGUE is its own chip (v0.293.1, founder) rather than a
-            card inside the add flow. The two are different questions — "I have
-            a code / I'm making one" versus "I have neither, show me leagues
-            that need managers" — and burying the second inside the first meant
-            the people with no way in had the furthest to walk. */}
-        {/* 📱 GET THE ANDROID APP (v0.393.2, founder: "add a 'get the android
-            app' button on the leagues page"). The one link, always the newest
-            build (release-apk.yml); solid where the other two are dashed,
-            because this one leaves the page. */}
-        {/* ONLY THE APP THIS DEVICE CAN RUN (v0.561.0, founder: "conditionally
-            display the app … if the device is ios or android"). An iPhone gets
-            the TestFlight chip and not the APK; an Android phone the reverse;
-            a desktop — no telling which phone is in the pocket — gets both.
-            The spacer does the right-alignment the Android chip used to carry,
-            so the row stays put whichever chips are showing. */}
-        <span style={{ marginLeft: 'auto' }} />
-        {phoneOs !== 'ios' && <a href={APK_ZIP_URL} className="mono" title="Downloads as a zip — unzip it and tap the APK inside. Installs over any earlier build." style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textDecoration: 'none',
-          color: 'var(--on-accent)', background: 'var(--you)',
-          border: '1px solid var(--you)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
-        }}>📱 GET THE ANDROID APP</a>}
-        {/* 🍎 GET THE iOS APP (v0.541.0, founder: "add to the web version a
-            download the ios app chip"). Same solid style as its Android twin;
-            it opens the TestFlight public link, which does the rest on the
-            phone. Hidden until IOS_TESTFLIGHT_URL is set — see changelog.ts. */}
-        {IOS_TESTFLIGHT_URL && phoneOs !== 'android' && (
-          <a href={IOS_TESTFLIGHT_URL} target="_blank" rel="noopener noreferrer" className="mono" title="Opens TestFlight on your iPhone — install TestFlight if asked, then Drip Fantasy. Updates arrive automatically." style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textDecoration: 'none',
-            color: 'var(--on-accent)', background: 'var(--you)',
-            border: '1px solid var(--you)', borderRadius: 999, padding: '5px 11px', whiteSpace: 'nowrap',
-          }}>🍎 GET THE iOS APP</a>
-        )}
-        <button onClick={onFind} className="mono" style={{
+        {/* FIND and ADD, the app's chips (v0.632.1, founder: "copy the app
+            'add' and 'find' chips on the web version … so there is just one
+            line under 'your leagues'"). The verbs carry it, as on the phone;
+            the long names live in the title and the screen reader. FIND is
+            its own door (v0.293.1): "I have neither a code nor a league —
+            show me leagues that need managers." The app chips moved up
+            beside the gear, so this row no longer folds. */}
+        <button onClick={onFind} aria-label="Find a league" title="Find a league — leagues looking for managers" className="mono" style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
           color: 'var(--you)', background: 'transparent',
           border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
-        }}>🔎 FIND A LEAGUE</button>
-        <button onClick={onAdd} className="mono" style={{
+        }}>FIND</button>
+        <button onClick={onAdd} aria-label="Add a league" title="Add a league — start one, import one, or take an invite code" className="mono" style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
           color: 'var(--you)', background: 'transparent',
           border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
-        }}>＋ ADD A LEAGUE</button>
+        }}>ADD</button>
       </div>
       {/* NO LEAGUES YET (v0.614.0, founder: "No leagues: Open a league or
           join one above"). The chips above are the two doors. */}
@@ -1254,8 +1243,8 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
         <div style={{ background: 'var(--surface)', border: '1px dashed var(--bd)', borderRadius: 10, padding: '28px 18px', textAlign: 'center' }}>
           <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Open a league or join one above.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.6 }}>
-            ＋ ADD A LEAGUE starts a fresh one, brings your Sleeper, ESPN, Fleaflicker, MFL or Yahoo league in, or takes an invite code.<br />
-            🔎 FIND A LEAGUE lists leagues looking for managers.
+            ADD starts a fresh one, brings your Sleeper, ESPN, Fleaflicker, MFL or Yahoo league in, or takes an invite code.<br />
+            FIND lists leagues looking for managers.
           </div>
         </div>
       )}

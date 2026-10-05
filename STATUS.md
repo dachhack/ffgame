@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.632.1 — one line under Your leagues, on the web
+
+> - The web's Your leagues row is the app's: ALL · COMMISH · FIND · ADD on one line. The GET THE APP chip moved up beside the settings gear.
+
+Founder: "copy the app 'add' and 'find' chips on the web version of the my
+league page and move the 'get the app' chip to just to the left of the
+settings chip. So there is just one line under 'your leagues' before we list
+the leagues."
+
+- `LiveOnboard` `LeagueHome`: FIND and ADD carry the verbs alone, as the app's
+  chips do (v0.292.3's "the verbs carry it"), with the long names as the title
+  and the screen-reader label; the spacer and the two app anchors left the row,
+  so it no longer folds onto a second line. The empty-state copy names the
+  chips by their new words.
+- The header: 📱 / 🍎 GET THE APP sits just left of the gear on the home view,
+  in the header's own chip size; the platform rule is unchanged (an iPhone
+  sees TestFlight, an Android phone the APK, a desktop both, labelled ANDROID
+  APP and iOS APP when both show).
+
 ### v0.632.0 — heroes & villains on Your Leagues
 
 > - A new card at the top of Your Leagues (web and app) folds every matchup you are in this week: HEROES, the players starting for you and in how many of your matchups; VILLAINS, the players starting against you; KEY GAMES ranked by how many of your matchups each touches; and a QUAD BOX pick for every window with several games — the four screens to put up.
