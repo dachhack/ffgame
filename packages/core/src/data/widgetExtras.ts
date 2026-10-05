@@ -16,7 +16,12 @@
 // the fields read is the All fields sheet's (AllFieldsSheet.tsx) without the
 // plays table: a widget shows the drive, not the box score.
 import type { WidgetSnapshot, WidgetCard } from './widgetFeed';
-import { liveSlate, slateWeeks, weekGameFeeds, loadCollegeLogos, loadCollegeWeekDates } from './liveApi';
+import { liveSlate, slateWeeks, weekGameFeeds, loadCollegeLogos, loadCollegeWeekDates, sportGamesBetween } from './liveApi';
+import { fieldsPick, fieldsPickAllows, sportFieldGames, FIELDS_PENDING, type FieldsPick, type SportFieldGame } from './fieldsPick';
+import { currentSeason, addDays } from '../sports/league';
+import { sportToday } from '../sports/slate';
+import { SPORTS } from '../sports/index';
+import type { Sport } from '../sports/types';
 import { setRuntimeSlate } from './nflSlate';
 import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, feedScore, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
 import { fieldsWeekFrom, slateWeekOrder, type FieldsLevel } from './fieldsWeek';
@@ -334,4 +339,33 @@ export async function loadFieldsWeek(offset = 0, nowMs: number = Date.now(), lev
   setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
   setLiveGameFeed(week, feedRowsToWeek(feeds));
   return { week, current, hasPrev: i > 0, hasNext: i < order.length - 1 };
+}
+
+// ── FIELDS ACROSS THE SPORTS (v0.631.0) ──────────────────────────────────────
+
+/** One sport's block on the widget: its league name and its games. */
+export interface SportFieldsSection { sport: Sport; league: string; games: SportFieldGame[] }
+
+/** The NFL week's games the pick allows (teams followed, single games). */
+export function applyFieldsPick(games: FieldGame[], pick: FieldsPick = fieldsPick()): FieldGame[] {
+  return games.filter((g) => fieldsPickAllows(pick, 'nfl', { key: g.key, away: g.away, home: g.home }));
+}
+
+/** The daily sports the manager picked, each read for yesterday (a game
+ *  still live past midnight), today and the next two days on the US
+ *  Eastern calendar, on the sport's current season. A sport whose read fails
+ *  is left off rather than failing the picture; a sport with no feed yet
+ *  (soccer, until Stathead delivers) is never read. */
+export async function loadSportFields(pick: FieldsPick = fieldsPick(), nowMs: number = Date.now()): Promise<SportFieldsSection[]> {
+  const now = new Date(nowMs);
+  const today = sportToday(now);
+  const out: SportFieldsSection[] = [];
+  for (const sport of pick.sports) {
+    if (sport === 'nfl' || FIELDS_PENDING.has(sport)) continue;
+    try {
+      const rows = await sportGamesBetween(sport, currentSeason(sport, now), addDays(today, -1), addDays(today, 2));
+      out.push({ sport, league: SPORTS[sport].league, games: sportFieldGames(sport, rows, pick, today) });
+    } catch { /* this sport sits out this paint */ }
+  }
+  return out;
 }

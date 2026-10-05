@@ -22,6 +22,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.631.0 — the fields widget follows the games you pick, across sports
+
+> - The home-screen Fields widget (Android) now lists the sports you choose: the NFL week as before, then the NBA, NHL, MLB and WNBA games of today and the next two days, live first. In Settings → Home-screen widget, pick the sports, follow teams, or tick single games; nothing picked in a sport is every game.
+
+Founder: "let's build a fields widget where the user can specify the games
+across multiple sports that display in the widget. The card should be an app
+widget."
+
+- **Core `data/fieldsPick.ts`.** `FieldsPick` = the sports on the widget,
+  teams followed per sport, single games picked per sport; stored once for
+  every fields widget (`widget:fields:pick`, the app's storage the headless
+  task reads too, as `widget:hidden`). `fieldsPickAllows`: picked games win,
+  else followed teams, else every game. `sportFieldGames` turns a sport's
+  `sport_game` rows into widget rows: live first (by start), then to come by
+  start, then finals; yesterday's only while still live; postponements and
+  cancellations off. `FIELDS_SPORTS` lists what the picker offers; `epl`/`mls`
+  are `FIELDS_PENDING` until Stathead's data lands. `liveApi.sportGamesBetween`
+  reads a sport's games between two dates with no league (sport_game is
+  readable by any signed-in user). `widgetExtras.loadSportFields` reads each
+  picked daily sport for yesterday..+2 days on its current season, a failed
+  sport sitting out the paint; `applyFieldsPick` narrows the NFL week by the
+  same rule.
+- **The widget.** `FieldsState` carries `sportGames` sections; the picture
+  draws them under the NFL rows (a league header with LIVE / to come counts,
+  then one row per game: codes, scores, the clock or the start, live border),
+  and on their own under an empty NFL slate — so the off-season widget is the
+  NBA's and the NHL's. A sport row's tap opens the app. The task reads the
+  pick first and the sports independently of the NFL week; an NFL switched
+  off in the pick skips the slate read. Manifest description updated.
+- **Settings → Home-screen widget → ▦ FIELDS WIDGET · SPORTS.** Sport chips
+  (soccer greyed "soon"); for each daily sport on, TEAMS TO FOLLOW chips off
+  the next seven days' slate and a GAMES · NEXT 7 DAYS list with ✓ toggles
+  and the start time; SHOW EVERY GAME clears a sport's picks. Every change
+  repaints the fields widgets.
+- **Checks.** `check:widget` covers the pick rule, the row shaping and order,
+  the teams a picker offers, the NFL narrowing and the storage round trip
+  (junk dropped, the empty pick reading as the default). `check:widgetrender`
+  builds the new states (sections under the week, alone, under an empty slate,
+  a sport with nothing picked today).
+- Not yet: ★ your players on a daily-sport row. The remembered snapshots do
+  not carry the league's sport, and team codes collide across sports (MIN,
+  MIA), so the stars stay NFL-only until the snapshot names its sport.
+
 ### v0.630.0 — soccer joins the spine: the Premier League and MLS
 
 > - The platform now knows two soccer leagues, the Premier League and MLS: positions, a Fantasy-Premier-League scoring table (goals and clean sheets paid by position), categories, Tuesday-to-Monday weeks and seasons up to 40 weeks. The data arrives with Stathead's delivery; until then no soccer league can be created in production.

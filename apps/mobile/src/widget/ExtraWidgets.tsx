@@ -26,7 +26,8 @@
 // at the call site.
 import React from 'react';
 import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 'react-native-android-widget';
-import type { AlertsSummary, FieldGame, ProjCell } from '@drip/core/data/widgetExtras';
+import type { AlertsSummary, FieldGame, ProjCell, SportFieldsSection } from '@drip/core/data/widgetExtras';
+import type { SportFieldGame } from '@drip/core/data/fieldsPick';
 import { spotLabel } from '@drip/core/data/widgetExtras';
 import { weekLabel } from '@drip/core/data/nflSlate';
 import { teamLogo } from '@drip/core/data/media';
@@ -187,13 +188,17 @@ export interface FieldsNav {
 /** NFL or college games (v0.560.0) — every state carries it, so the chip
  *  that switches is there even when the week is empty or failed to load. */
 type Leveled = { level?: FieldsLevel };
+/** THE OTHER SPORTS (v0.631.0): the daily-sport sections the manager picked
+ *  in Settings, listed under the NFL week — and on their own when the NFL
+ *  slate is empty (the off-season). */
+type Sported = { sportGames?: SportFieldsSection[] };
 export type FieldsState =
   | ({ kind: 'loading' } & Leveled)
-  | ({ kind: 'empty' } & Leveled)
+  | ({ kind: 'empty' } & Leveled & Sported)
   | ({ kind: 'error'; message: string } & Leveled)
   | ({ kind: 'ok'; week: number; games: FieldGame[]; offline?: boolean; stale?: boolean;
       /** A tap is being answered (v0.507.0): the header says so, the frame is inert. */ busy?: boolean;
-      /** The game opened in place (v0.508.0), by key. */ openKey?: string | null } & Partial<FieldsNav> & Leveled);
+      /** The game opened in place (v0.508.0), by key. */ openKey?: string | null } & Partial<FieldsNav> & Leveled & Sported);
 
 /** A small team logo — ESPN's resizer, so the widget fetches 36px, not 500.
  *  College teams get their own logo by school id, or none (v0.560.0: HOU was
@@ -372,6 +377,56 @@ function GameRow({ g, last, open, college }: { g: FieldGame; last: boolean; open
   );
 }
 
+/** A daily-sport game (v0.631.0): the two codes and scores, the clock or the
+ *  start, live-bordered while on. No logos — the feeds carry none the widget
+ *  may draw — and no drive: a tap opens the app. */
+function SportGameRow({ g, last }: { g: SportFieldGame; last: boolean }) {
+  const live = g.state === 'live';
+  const lead = (a: number, b: number) => g.state !== 'pre' && a > b;
+  const clockText = g.state === 'pre' ? (g.startMs != null ? lockWhen(g.startMs) : 'TBD') : g.clock ?? '';
+  const clockColor: ColorProp = live ? C.live : g.state === 'final' ? C.faint : C.dim;
+  const side = (team: string, score: number, isLead: boolean, align: 'left' | 'right') => (
+    <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {align === 'left'
+        ? [<TextWidget key="n" text={team} maxLines={1} style={{ fontSize: 11, color: isLead ? C.text : C.dim, fontWeight: 'bold' }} />,
+           g.state !== 'pre' ? <TextWidget key="p" text={String(score)} maxLines={1} style={{ fontSize: 14, color: isLead ? C.text : C.dim, fontWeight: 'bold', marginLeft: 6 }} /> : <FlexWidget key="p" style={{ width: 0 }} />]
+        : [g.state !== 'pre' ? <TextWidget key="p" text={String(score)} maxLines={1} style={{ fontSize: 14, color: isLead ? C.text : C.dim, fontWeight: 'bold', marginRight: 6 }} /> : <FlexWidget key="p" style={{ width: 0 }} />,
+           <TextWidget key="n" text={team} maxLines={1} style={{ fontSize: 11, color: isLead ? C.text : C.dim, fontWeight: 'bold' }} />]}
+    </FlexWidget>
+  );
+  return (
+    <FlexWidget clickAction={WIDGET_CLICK.open} clickActionData={{ uri: FIELDS_DEEP_LINK }}
+      style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: C.bg, borderRadius: 10, padding: 7, marginBottom: last ? 0 : 5,
+        borderWidth: 1, borderColor: live ? C.live : C.line }}>
+      {side(g.away, g.as, lead(g.as, g.hs), 'left')}
+      <TextWidget text={clockText} maxLines={1} style={{ fontSize: 9, color: clockColor, fontWeight: 'bold' }} />
+      {side(g.home, g.hs, lead(g.hs, g.as), 'right')}
+    </FlexWidget>
+  );
+}
+
+/** A sport's header line: the league and how many are on / to come. */
+function SportHeader({ s, first }: { s: SportFieldsSection; first: boolean }) {
+  const live = s.games.filter((g) => g.state === 'live').length;
+  const pre = s.games.filter((g) => g.state === 'pre').length;
+  const sub = s.games.length === 0 ? 'no games picked for today' : [live ? `${live} LIVE` : null, pre ? `${pre} to come` : null].filter(Boolean).join(' · ') || 'all final';
+  return (
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: first ? 0 : 6, marginBottom: 4 }}>
+      <TextWidget text={s.league.toUpperCase()} maxLines={1} style={{ fontSize: 8.5, color: C.you, fontWeight: 'bold', letterSpacing: 0.12 }} />
+      <TextWidget text={sub} maxLines={1} style={{ fontSize: 8, color: live ? C.live : C.faint, fontWeight: 'bold' }} />
+    </FlexWidget>
+  );
+}
+
+/** The picked sports' rows, flat — the tree builder flattens one level, so
+ *  a section is a header element followed by its rows, not a nested list. */
+function sportRows(sections: SportFieldsSection[], firstIsFirst: boolean): React.JSX.Element[] {
+  return sections.flatMap((s, si) => [
+    <SportHeader key={`h-${s.sport}`} s={s} first={firstIsFirst && si === 0} />,
+    ...s.games.map((g, i) => <SportGameRow key={g.key} g={g} last={i === s.games.length - 1} />),
+  ]);
+}
+
 export function FieldsWidget({ state }: { state: FieldsState }) {
   const frame = (head: React.ReactNode, body: React.ReactNode) => (
     <FlexWidget style={{ width: 'match_parent', height: 'match_parent', backgroundColor: C.card, borderRadius: 18, padding: 10, flexDirection: 'column' }}>
@@ -400,7 +455,10 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
   const cfb = state.level === 'cfb';
   const levelChip = block(glyph(cfb ? 'CFB' : 'NFL', busy ? C.dim : C.you, 10), FIELDS_CLICK.level, 36, !!busy);
   if (state.kind !== 'ok') {
-    const msg = state.kind === 'loading' ? 'Reading the week…' : state.kind === 'empty' ? (cfb ? 'No college games on the slate.' : 'No games on the slate yet.') : state.message;
+    const msg = state.kind === 'loading' ? 'Reading the week…' : state.kind === 'empty' ? (cfb ? 'No college games on the slate.' : 'No NFL games on the slate.') : state.message;
+    // The other sports still list under an empty NFL slate (v0.631.0): the
+    // off-season widget is the NBA's and the NHL's.
+    const sections = state.kind === 'empty' ? state.sportGames ?? [] : [];
     return frame(
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginBottom: 6 }}>
         <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
@@ -410,7 +468,11 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
         </FlexWidget>
         <TextWidget text={msg} truncate="END" maxLines={1} style={{ fontSize: 10, color: state.kind === 'error' ? C.warn : C.dim, fontWeight: 'bold', marginTop: 3 }} />
       </FlexWidget>,
-      null,
+      sections.length ? (
+        <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>
+          {sportRows(sections, true)}
+        </ListWidget>
+      ) : null,
     );
   }
   const { games, week, offline } = state;
@@ -434,9 +496,14 @@ export function FieldsWidget({ state }: { state: FieldsState }) {
       {refresh(offline)}
     </FlexWidget>
   );
+  const sections = state.sportGames ?? [];
   return frame(head,
     <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>
-      {games.map((g, i) => <GameRow key={g.key} g={g} last={i === games.length - 1} open={state.openKey === g.key} college={cfb} />)}
+      {[
+        ...games.map((g, i) => <GameRow key={g.key} g={g} last={i === games.length - 1 && !sections.length} open={state.openKey === g.key} college={cfb} />),
+        // The picked sports under the week (v0.631.0).
+        ...sportRows(sections, games.length === 0),
+      ]}
     </ListWidget>,
   );
 }

@@ -27,6 +27,13 @@ import { tap } from './feedback';
 import { Overlay } from './Overlay';
 import { allWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues, type WidgetLeague } from '@drip/core/data/widgetFeed';
 import { refreshMatchupWidgets } from '../widget/widgetTask';
+import { refreshExtraWidgets } from '../widget/extraTasks';
+import { fieldsPick, setFieldsPick, FIELDS_SPORTS, FIELDS_PENDING, sportTeamsOf, type FieldsPick } from '@drip/core/data/fieldsPick';
+import { sportGamesBetween, type SportGameRow } from '@drip/core/data/liveApi';
+import { SPORTS, type Sport } from '@drip/core/sports/index';
+import { currentSeason, addDays } from '@drip/core/sports/league';
+import { sportToday } from '@drip/core/sports/slate';
+import { Chip } from './prims';
 import { CARD_BACKS, CARD_SIZES, type CardSkin, type CardSize } from './cards';
 
 /** Theme ids with the web's display names. Order matches the web menu. */
@@ -102,7 +109,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
     // v0.601.0: StatHead-based devy values, 1QB and SF, for every player.
     { id: 'devy', icon: '🎓', name: 'Devy values', value: '1QB & SF, refreshed with each StatHead board' },
     // A home-screen widget is Android's (react-native-android-widget).
-    ...(Platform.OS === 'android' ? [{ id: 'widget' as Section, icon: '📱', name: 'Home-screen widget', value: 'which leagues it shows' }] : []),
+    ...(Platform.OS === 'android' ? [{ id: 'widget' as Section, icon: '📱', name: 'Home-screen widget', value: 'leagues · fields across sports' }] : []),
     ...(isAdmin ? [{ id: 'rehearsal' as Section, icon: '🧪', name: 'Rehearsal tools', value: 'sim strip on test boards' }] : []),
     // 0422: the way out — delete the account from the app (Apple 5.1.1(v)).
     { id: 'account', icon: '🗑', name: 'Account', value: 'delete my account' },
@@ -216,7 +223,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
             {section === 'voice' && <VoicePicker />}
             {section === 'devy' && <DevyValues />}
             {section === 'account' && <DeleteAccount onDeleted={() => { onClose(); onSignOut(); }} />}
-            {section === 'widget' && <WidgetLeaguesPicker />}
+            {section === 'widget' && <><WidgetLeaguesPicker /><FieldsPicker /></>}
             {section === 'rehearsal' && isAdmin && <RehearsalToggle />}
           </>
         ) : (
@@ -516,6 +523,102 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
         )}
         {log && log.length === 0 && <Mono size={8.5} tone="faint">Nothing has been queued for you yet.</Mono>}
       </View>
+    </View>
+  );
+}
+
+// ▦ THE FIELDS WIDGET'S GAMES (v0.631.0). Founder: "a fields widget where the
+// user can specify the games across multiple sports that display in the
+// widget." Which sports the widget lists, and within a daily sport which
+// teams to follow and which single games to show; nothing picked within a
+// sport is every game of it. Stored once for every fields widget (core
+// fieldsPick); every change repaints them. The NFL's own games follow the
+// week and the widget's NFL/CFB chip. Soccer waits for its data.
+const fmtStart = (iso: string | null) => {
+  const ms = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(ms)) return 'TBD';
+  return new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(ms)).replace(' ', '').replace(/(AM|PM)/, (m) => m[0].toLowerCase());
+};
+function FieldsPicker() {
+  const t = useTheme();
+  const [pick, setPick] = useState<FieldsPick>(() => fieldsPick());
+  const [slates, setSlates] = useState<Partial<Record<Sport, SportGameRow[] | null>>>({});
+  const save = (next: FieldsPick) => { setPick(next); setFieldsPick(next); void refreshExtraWidgets({ fresh: true }); };
+  const daily = pick.sports.filter((s) => s !== 'nfl' && !FIELDS_PENDING.has(s));
+  // The next week of each picked sport, read once per visit, for the team
+  // chips and the game list.
+  useEffect(() => {
+    let alive = true;
+    for (const sp of daily) {
+      if (slates[sp] !== undefined) continue;
+      setSlates((cur) => ({ ...cur, [sp]: null }));
+      const today = sportToday(new Date());
+      sportGamesBetween(sp, currentSeason(sp), today, addDays(today, 6))
+        .then((rows) => { if (alive) setSlates((cur) => ({ ...cur, [sp]: rows })); })
+        .catch(() => { if (alive) setSlates((cur) => ({ ...cur, [sp]: [] })); });
+    }
+    return () => { alive = false; };
+  }, [daily.join(','), slates]);
+  const flipSport = (sp: Sport) => {
+    const on = pick.sports.includes(sp);
+    const sports = on ? pick.sports.filter((x) => x !== sp) : [...pick.sports, sp];
+    if (!sports.length) return;
+    tap(); save({ ...pick, sports });
+  };
+  const flipIn = (kind: 'teams' | 'games', sp: Sport, v: string) => {
+    const cur = pick[kind][sp] ?? [];
+    const next = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
+    tap(); save({ ...pick, [kind]: { ...pick[kind], [sp]: next } });
+  };
+  return (
+    <View style={{ gap: 8, marginTop: 14 }}>
+      <Mono size={8.5} weight="700" track={0.16} tone="faint">▦ FIELDS WIDGET · SPORTS</Mono>
+      <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
+        {FIELDS_SPORTS.map((sp) => (
+          <Chip key={sp} label={FIELDS_PENDING.has(sp) ? `${SPORTS[sp].league} · soon` : SPORTS[sp].league} on={pick.sports.includes(sp)} disabled={FIELDS_PENDING.has(sp)} dim={FIELDS_PENDING.has(sp)}
+            onPress={() => flipSport(sp)} />
+        ))}
+      </View>
+      <Mono size={8.5} tone="faint">The widget lists every sport switched on: the NFL week (or college, from the widget's own chip), then each sport's games today and the next two days. Pick teams or single games below to narrow a sport; nothing picked is every game.</Mono>
+      {daily.map((sp) => {
+        const rows = slates[sp];
+        const teams = rows ? sportTeamsOf(rows) : [];
+        const picked = pick.teams[sp] ?? [], pickedGames = pick.games[sp] ?? [];
+        return (
+          <View key={sp} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 10, gap: 6 }}>
+            <Mono size={9} weight="700" tone="you">{SPORTS[sp].league} · {pickedGames.length ? `${pickedGames.length} game${pickedGames.length === 1 ? '' : 's'} picked` : picked.length ? `${picked.length} team${picked.length === 1 ? '' : 's'} followed` : 'every game'}</Mono>
+            {rows === null && <Mono size={8.5} tone="faint">Reading the week's slate…</Mono>}
+            {rows && rows.length === 0 && <Mono size={8.5} tone="faint">No games on the slate this week — the sweep fills it daily.</Mono>}
+            {teams.length > 0 && (
+              <>
+                <Mono size={8} tone="faint" track={0.1}>TEAMS TO FOLLOW</Mono>
+                <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+                  {teams.map((tm) => <Chip key={tm} label={tm} on={picked.includes(tm)} onPress={() => flipIn('teams', sp, tm)} />)}
+                </View>
+              </>
+            )}
+            {rows && rows.length > 0 && (
+              <>
+                <Mono size={8} tone="faint" track={0.1}>GAMES · NEXT 7 DAYS</Mono>
+                {rows.filter((r) => r.status !== 'cancelled').slice(0, 40).map((r) => {
+                  const on = pickedGames.includes(r.game_id);
+                  return (
+                    <Pressable key={r.game_id} onPress={() => flipIn('games', sp, r.game_id)}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', color: on ? t.you : t.faint, width: 16 }}>{on ? '✓' : '○'}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: '700', color: on ? t.text : t.dim, flex: 1 }}>{r.away} @ {r.home}</Text>
+                      <Mono size={8.5} tone="faint">{r.status === 'final' ? 'FINAL' : r.status === 'live' ? 'LIVE' : r.status === 'postponed' ? 'PPD' : fmtStart(r.start_utc)}</Mono>
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
+            {(picked.length > 0 || pickedGames.length > 0) && (
+              <Chip label="SHOW EVERY GAME" on={false} onPress={() => { tap(); save({ ...pick, teams: { ...pick.teams, [sp]: [] }, games: { ...pick.games, [sp]: [] } }); }} />
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }

@@ -4006,6 +4006,16 @@ export const sportMatchupLines = (matchupId: string) =>
 export interface SportGameRow { game_id: string; game_date: string; start_utc: string | null; status: string; away: string; home: string; away_score: number | null; home_score: number | null; clock: string | null }
 export const sportLeagueGames = (leagueId: string, from: string, to: string) =>
   rpc<SportGameRow[]>('sport_league_games', { p_league_id: leagueId, p_from: from, p_to: to });
+/** A sport's games between two dates, no league needed (v0.631.0) — the
+ *  fields widget's read across the sports a manager follows. sport_game is
+ *  readable by any signed-in user (0424). */
+export async function sportGamesBetween(sport: string, season: string, from: string, to: string): Promise<SportGameRow[]> {
+  const c = await client();
+  const { data, error } = await c.from('sport_game').select('game_id, game_date, start_utc, status, away, home, away_score, home_score, clock')
+    .eq('sport', sport).eq('season', season).gte('game_date', from).lte('game_date', to).order('game_date').order('start_utc');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as SportGameRow[];
+}
 /** THE SPORT MARKET (0435, v0.627.0): ADP, games played and the season line
  *  per pool player, plus each team's dates this period and games left. */
 export const sportLeagueMarket = (leagueId: string) =>

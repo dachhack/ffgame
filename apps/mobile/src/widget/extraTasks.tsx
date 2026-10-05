@@ -16,7 +16,8 @@ import React from 'react';
 import { requestWidgetUpdate, type WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { getSession, friendlyError } from '@drip/core/data/liveApi';
 import { widgetSnapshot, recallSnapshot, recallLeagues, allWidgetLeagues, shownWidgetLeagues, cacheGet, cacheSet, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { alertsSummary, fieldGames, minesByTeam, loadFieldsWeek } from '@drip/core/data/widgetExtras';
+import { alertsSummary, fieldGames, minesByTeam, loadFieldsWeek, loadSportFields, applyFieldsPick } from '@drip/core/data/widgetExtras';
+import { fieldsPick } from '@drip/core/data/fieldsPick';
 import type { FieldsLevel } from '@drip/core/data/fieldsWeek';
 import { AlertsWidget, FieldsWidget, ALERTS_WIDGET_NAME, FIELDS_WIDGET_NAME, FIELDS_CLICK, type AlertsState, type FieldsState } from './ExtraWidgets';
 import { platform } from '@drip/core/platform';
@@ -109,13 +110,20 @@ function rememberedFields(widgetId: number): FieldsOk | null {
 
 async function fieldsState(widgetId: number): Promise<FieldsState> {
   const level = levelOf(widgetId);
+  // THE PICK (v0.631.0): which sports, teams and games Settings chose. The
+  // other sports read independently of the NFL week, so an off-season NFL
+  // slate still leaves the NBA and NHL on the widget, and a failed sport read
+  // leaves that sport off rather than failing the picture.
+  const pick = fieldsPick();
+  const sportGames = pick.sports.some((s) => s !== 'nfl') ? await loadSportFields(pick, Date.now()).catch(() => []) : [];
+  const nflOn = pick.sports.includes('nfl');
   try {
-    const at = await loadFieldsWeek(readNum(PREF_OFFSET(widgetId)), Date.now(), level);
-    if (!at) return { kind: 'empty', level };
+    const at = nflOn ? await loadFieldsWeek(readNum(PREF_OFFSET(widgetId)), Date.now(), level) : null;
+    if (!at) return { kind: 'empty', level, sportGames };
     const star = starOf(widgetId);
     const mine = minesByTeam(rememberedSnaps()?.snaps ?? [], { week: at.week, leagueId: star.id });
-    const games = fieldGames(at.week, mine);
-    const ok: FieldsOk = { kind: 'ok', week: at.week, games, current: at.current, hasPrev: at.hasPrev, hasNext: at.hasNext, leagueLabel: star.label, openKey: readStr(PREF_OPEN(widgetId)), level };
+    const games = applyFieldsPick(fieldGames(at.week, mine), pick);
+    const ok: FieldsOk = { kind: 'ok', week: at.week, games, current: at.current, hasPrev: at.hasPrev, hasNext: at.hasNext, leagueLabel: star.label, openKey: readStr(PREF_OPEN(widgetId)), level, sportGames };
     const { kind: _k, openKey: _o, ...keep } = ok;
     cacheSet(FIELDS_KEY(widgetId), keep);
     return ok;

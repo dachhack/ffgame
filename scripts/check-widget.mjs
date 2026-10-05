@@ -10,7 +10,8 @@
 import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
-import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine, projectedSheet } from '../packages/core/src/data/widgetExtras';
+import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine, projectedSheet, applyFieldsPick } from '../packages/core/src/data/widgetExtras';
+import { fieldsPick, setFieldsPick, fieldsPickAllows, sportFieldGames, sportTeamsOf, FIELDS_SPORTS, FIELDS_PENDING, DEFAULT_FIELDS_PICK } from '../packages/core/src/data/fieldsPick';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueProjScoring } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring, scoringLeague, leagueScoring } from '../packages/core/src/engine/leagueScoring';
 import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
@@ -607,4 +608,37 @@ const state = [
 }
 
 if (fails) { console.log(`\n${fails} WIDGET ASSERTION(S) FAILED`); process.exit(1); }
+
+// ── THE FIELDS PICK (v0.631.0): which sports, teams and games the widget lists ──
+{
+  const base = { sports: ['nfl', 'nba'], teams: {}, games: {} };
+  ok('fields pick: nothing picked within a sport is every game', fieldsPickAllows(base, 'nba', { key: '1', away: 'BOS', home: 'NYK' }));
+  ok('fields pick: a followed team narrows to its games', fieldsPickAllows({ ...base, teams: { nba: ['bos'] } }, 'nba', { key: '1', away: 'BOS', home: 'NYK' }) && !fieldsPickAllows({ ...base, teams: { nba: ['BOS'] } }, 'nba', { key: '2', away: 'LAL', home: 'GSW' }));
+  ok('fields pick: picked games win over followed teams', fieldsPickAllows({ ...base, teams: { nba: ['BOS'] }, games: { nba: ['2'] } }, 'nba', { key: '2', away: 'LAL', home: 'GSW' }) && !fieldsPickAllows({ ...base, teams: { nba: ['BOS'] }, games: { nba: ['2'] } }, 'nba', { key: '1', away: 'BOS', home: 'NYK' }));
+  const rows = [
+    { game_id: '3', game_date: '2026-10-05', start_utc: '2026-10-05T23:00:00Z', status: 'final', away: 'MIA', home: 'ORL', away_score: 101, home_score: 99, clock: null },
+    { game_id: '1', game_date: '2026-10-05', start_utc: '2026-10-06T00:00:00Z', status: 'live', away: 'BOS', home: 'NYK', away_score: 54, home_score: 49, clock: 'Q3 2:35' },
+    { game_id: '2', game_date: '2026-10-06', start_utc: '2026-10-06T23:30:00Z', status: 'pre', away: 'LAL', home: 'GSW', away_score: null, home_score: null, clock: null },
+    { game_id: '0', game_date: '2026-10-04', start_utc: '2026-10-04T23:00:00Z', status: 'final', away: 'DEN', home: 'UTA', away_score: 110, home_score: 100, clock: null },
+    { game_id: '9', game_date: '2026-10-04', start_utc: '2026-10-05T02:30:00Z', status: 'live', away: 'POR', home: 'SAC', away_score: 88, home_score: 90, clock: 'Q4 1:00' },
+    { game_id: '7', game_date: '2026-10-06', start_utc: null, status: 'postponed', away: 'CHI', home: 'DET', away_score: null, home_score: null, clock: null },
+  ];
+  const g = sportFieldGames('nba', rows, base, '2026-10-05');
+  // Live games order by start (the one that tipped first first), then to come by start, then finals.
+  ok('sport fields: live first, then to come by start, then finals; yesterday only while live; a postponement left off', g.map((x) => x.gameId).join() === '9,1,2,3');
+  const by = (id) => g.find((x) => x.gameId === id);
+  ok('sport fields: the row as the widget reads it', by('1').key === 'nba:1' && by('1').clock === 'Q3 2:35' && by('1').as === 54 && by('2').state === 'pre' && by('2').clock === null && by('2').startMs === Date.parse('2026-10-06T23:30:00Z') && by('3').clock === 'FINAL');
+  ok('sport fields: the pick applies', sportFieldGames('nba', rows, { ...base, teams: { nba: ['LAL'] } }, '2026-10-05').map((x) => x.gameId).join() === '2');
+  ok('sport fields: the teams a picker offers', sportTeamsOf(rows).join() === 'BOS,CHI,DEN,DET,GSW,LAL,MIA,NYK,ORL,POR,SAC,UTA');
+  const nfl = fieldGames(WEEK).map((x) => ({ ...x }));
+  ok('fields pick: the NFL week narrows by team too', nfl.length > 0 && applyFieldsPick(nfl, { ...base, teams: { nfl: [nfl[0].away] } }).every((x) => x.away === nfl[0].away || x.home === nfl[0].away) && applyFieldsPick(nfl, base).length === nfl.length);
+  // storage round trip, with the default and with junk
+  setFieldsPick({ sports: ['nba', 'nfl', 'bogus'], teams: { nba: ['BOS'], nope: ['X'] }, games: { nhl: ['22'] } });
+  const back = fieldsPick();
+  ok('fields pick: stored in FIELDS_SPORTS order, unknown sports and junk dropped', back.sports.join() === 'nfl,nba' && back.teams.nba.join() === 'BOS' && !('nope' in back.teams) && back.games.nhl.join() === '22');
+  setFieldsPick({ sports: [], teams: {}, games: {} });
+  ok('fields pick: an empty pick reads as the default (the NFL alone)', fieldsPick().sports.join() === DEFAULT_FIELDS_PICK.sports.join());
+  ok('fields pick: soccer is listed and pending', FIELDS_SPORTS.includes('epl') && FIELDS_PENDING.has('epl') && FIELDS_PENDING.has('mls') && !FIELDS_PENDING.has('nba'));
+}
+
 console.log('\nALL WIDGET ASSERTIONS PASSED');
