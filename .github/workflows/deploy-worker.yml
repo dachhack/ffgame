@@ -287,7 +287,7 @@ jobs:
           # boot syncTick — the three things worth seeing.
           sleep 75
           echo "── recent worker output ──"
-          { timeout 60 flyctl logs --no-tail || timeout 45 flyctl logs || true; } 2>&1 | tail -150
+          { timeout 60 flyctl logs --no-tail || timeout 45 flyctl logs || true; } 2>&1 | tail -300
           echo "── end ──"
           echo "Expect: 'worker starting', 'player index built', and — if"
           echo "PILOT_LEAGUE_IDS is set — a 'weekly sync: week N' line. A"

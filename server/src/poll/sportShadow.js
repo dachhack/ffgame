@@ -27,6 +27,10 @@ const SAME_IDS = new Set(['nhl', 'mlb', 'wnba', 'epl', 'mls']);
  *  (sports/nhl.js writes fow/fol 0); Stathead counts them from the
  *  play-by-play. Left out of the comparison and named in the day's line. */
 export const PUBLIC_GAPS = { nhl: ['fow', 'fol'] };
+/** Fields the two feeds round differently: the NBA CDN gives minutes as
+ *  PT25M01.00S (25.02), ESPN as 25. A difference under the tolerance is not
+ *  a disagreement. */
+export const TOLERANCE = { min: 1, toi: 0.1, gtoi: 0.1 };
 const EPS = 0.05;
 /** Games already compared this process (sport:gameId), so a final is read once. */
 const done = new Set();
@@ -62,9 +66,9 @@ export function compareLines(sport, ours, theirs, { ignore = PUBLIC_GAPS[sport] 
     seen.add(k);
     const po = linePoints(def, o.line ?? {}), pt = linePoints(def, t.line ?? {});
     const fields = [...new Set([...Object.keys(o.line ?? {}), ...Object.keys(t.line ?? {})])]
-      .filter((f) => !skip.has(f) && Math.abs((o.line?.[f] ?? 0) - (t.line?.[f] ?? 0)) > 1e-9);
+      .filter((f) => !skip.has(f) && Math.abs((o.line?.[f] ?? 0) - (t.line?.[f] ?? 0)) > (TOLERANCE[f] ?? 1e-9));
     if (Math.abs(po - pt) < EPS && !fields.length) agree++;
-    else diffs.push({ name: o.name, team: o.team, ours: Math.round(po * 10) / 10, theirs: Math.round(pt * 10) / 10, delta: Math.round((po - pt) * 10) / 10, fields });
+    else diffs.push({ name: o.name, team: o.team, ours: Math.round(po * 10) / 10, theirs: Math.round(pt * 10) / 10, delta: Math.round((po - pt) * 10) / 10, fields, values: fields.slice(0, 4).map((f) => `${f} ${o.line?.[f] ?? 0}≠${t.line?.[f] ?? 0}`) });
   }
   diffs.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
   const onlyOurs = ours.filter((o) => !idx.has(byId ? o.extId : nameKey(o))).map((l) => l.name);
@@ -83,7 +87,7 @@ export function compareLines(sport, ours, theirs, { ignore = PUBLIC_GAPS[sport] 
 /** One line of prose for a game's comparison. */
 export function describeLines(key, c) {
   if (!c.diffs.length && !c.onlyOursScoring.length && !c.onlyTheirsScoring.length) return `${key}: ${c.matched} lines agree`;
-  const top = c.diffs.slice(0, 3).map((d) => `${d.name} ours ${d.ours} theirs ${d.theirs} [${d.fields.slice(0, 4).join(',')}]`).join('; ');
+  const top = c.diffs.slice(0, 3).map((d) => `${d.name} ours ${d.ours} theirs ${d.theirs} [${(d.values ?? d.fields.slice(0, 4)).join(', ')}]`).join('; ');
   return `${key}: ${c.diffs.length}/${c.matched} lines differ (max ${c.maxDelta} pts: ${top})${c.onlyOursScoring.length ? `, ${c.onlyOursScoring.length} scoring only ours (${c.onlyOursScoring.slice(0, 3).join(', ')})` : ''}${c.onlyTheirsScoring.length ? `, ${c.onlyTheirsScoring.length} scoring only theirs (${c.onlyTheirsScoring.slice(0, 3).join(', ')})` : ''}`;
 }
 
