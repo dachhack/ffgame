@@ -1181,6 +1181,10 @@ async function main() {
       setTimeout(() => { void sportsLoop(); }, wait);
     };
     log('daily sports:', config.sports.join(', '));
+    // THE STATHEAD SHADOW READ (v0.633.1): with the token set, say at boot
+    // what the feed holds and whether every pool key resolves. Read-only,
+    // detached, and a failure is a log line.
+    import('./stathead.js').then((m) => m.statheadBootReport({ log })).catch((e) => log('stathead:', e.message));
     if (config.sportsPending.length) log(`soccer named in SPORTS but not polled yet (no adapter until Stathead delivers): ${config.sportsPending.join(', ')}`);
     void sportsLoop();
     // The directory (0425): at boot and daily, detached from the game loop.

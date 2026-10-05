@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.633.1 — the worker reports the Stathead feed at boot
+
+> - With the Stathead token set, the worker says at boot what the feed holds and whether every daily-sport pool key resolves in its crosswalk, so the shadow read's first answers come off the deploy log. Nothing a player sees changes.
+
+- `statheadBootReport` (`server/src/stathead.js`): `/v1/meta`, then per daily
+  sport in our leagues the crosswalk coverage of the pool keys (found/missing,
+  the first 25 missing named) and yesterday's slate with one game's lines
+  (stored, `revised_at`). Read-only; a failure is a log line. The worker runs
+  it once at boot after the sports loop starts (`index.js`); `stathead-report
+  [sport…]` runs it from the CLI.
+
 ### v0.633.0 — the Stathead feed: client, probe and the shadow-read handoff
 
 > - Groundwork for moving the daily sports to Stathead's data service: the worker can talk to it, an ops command exports every sport pool's player keys for the crosswalk check, and the fixture days are catalogued for the shadow-read week. Nothing a player sees changes yet.

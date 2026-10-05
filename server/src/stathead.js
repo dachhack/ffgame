@@ -59,3 +59,50 @@ export function crosswalkCoverage(sport, poolKeys, crosswalkRows) {
   }
   return { found, missing };
 }
+
+/** THE BOOT REPORT (v0.633.1). With the token set, the worker says at boot
+ *  what the feed holds and whether every pool key resolves — the shadow
+ *  read's first two questions, answered where the secrets already are
+ *  (the deploy workflow prints the boot log) rather than on a laptop.
+ *  One meta read, then per daily sport in our leagues: the crosswalk against
+ *  the pool keys and yesterday's slate. Nothing is written. */
+export async function statheadBootReport({ log = console.log, sports = null } = {}) {
+  if (!statheadConfigured()) { log('stathead: no token — the public feeds only'); return null; }
+  const { db, allRows } = await import('./supabase.js');
+  const meta = await statheadMeta();
+  const per = meta?.sports ?? meta?.rows ?? meta ?? {};
+  const names = Array.isArray(per) ? per.map((x) => x.sport ?? '?') : Object.keys(per);
+  log(`stathead meta: as_of ${meta?.as_of ?? '?'}; sports ${names.join(', ') || '?'}`);
+  for (const sp of names) {
+    const m = Array.isArray(per) ? per.find((x) => x.sport === sp) : per[sp];
+    if (m && typeof m === 'object') log(`stathead ${sp}: season ${m.current_season ?? '?'}, as_of ${m.as_of ?? '?'}, ${Object.entries(m).filter(([k, v]) => typeof v === 'number').map(([k, v]) => `${k} ${v}`).join(', ')}${m.status ? `, ${m.status}` : ''}`);
+  }
+  const { data: leagues, error } = await db().from('league').select('id, sport').neq('sport', 'nfl').eq('provider', 'native');
+  if (error) throw new Error(`league read: ${error.message}`);
+  const ours = [...new Set((leagues ?? []).map((l) => l.sport))].filter((s) => !sports || sports.includes(s)).sort();
+  const out = { meta, coverage: {} };
+  for (const sp of ours) {
+    const ids = (leagues ?? []).filter((l) => l.sport === sp).map((l) => l.id);
+    const keys = new Set();
+    for (const id of ids) {
+      const rows = await allRows((from, to) => db().from('league_pool').select('slug').eq('league_id', id).order('slug').range(from, to));
+      for (const r of rows) if (r.slug.startsWith(`${sp}-`)) keys.add(r.slug);
+    }
+    try {
+      const xw = await statheadCrosswalk(sp);
+      const cov = crosswalkCoverage(sp, [...keys], xw.rows ?? xw);
+      out.coverage[sp] = { keys: keys.size, found: cov.found.length, missing: cov.missing };
+      log(`stathead crosswalk ${sp}: ${cov.found.length}/${keys.size} pool keys resolve across ${ids.length} league${ids.length === 1 ? '' : 's'}${cov.missing.length ? `; missing ${cov.missing.slice(0, 25).join(', ')}${cov.missing.length > 25 ? ` … +${cov.missing.length - 25}` : ''}` : ''}`);
+    } catch (e) { log(`stathead crosswalk ${sp}: ${e.message}`); }
+    try {
+      const y = new Date(Date.now() - 86400e3).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const g = await statheadGames(sp, { date: y });
+      const rows = g.rows ?? g;
+      const first = rows[0];
+      let lines = null;
+      if (first) { const l = await statheadLines(sp, first.game_id); lines = `${(l.rows ?? []).length} lines for ${first.away}@${first.home}${l.stored ? ' (stored)' : ''}${l.revised_at ? `, revised ${l.revised_at}` : ''}`; }
+      log(`stathead slate ${sp} ${y}: ${rows.length} games, as_of ${g.as_of ?? '?'}${lines ? `; ${lines}` : ''}`);
+    } catch (e) { log(`stathead slate ${sp}: ${e.message}`); }
+  }
+  return out;
+}

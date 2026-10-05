@@ -159,6 +159,12 @@ async function main() {
       else console.log(JSON.stringify(out, null, 1));
       break;
     }
+    case 'stathead-report': {
+      // v0.633.1: the boot report, on demand.
+      const { statheadBootReport } = await import('./stathead.js');
+      await statheadBootReport({ sports: args.filter((a) => !a.startsWith('--')).length ? args.filter((a) => !a.startsWith('--')) : null });
+      break;
+    }
     case 'stathead-probe': {
       // v0.633.0: is the token good, and what does the feed hold? /v1/meta,
       // then one slate and one box score for a sport and a date if given.
