@@ -83,7 +83,7 @@ begin
   -- ══ cs6. THE PAIRINGS THE ENGINE CAN'T HONOUR YET — refused, nothing written ══
   r := create_native_league('CS Refuse', '2031', 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   f := (r ->> 'league_id')::uuid;
-  perform cs_err(commish_setup_college(f, 'mixed', 1, 2, false), 'can''t combine yet', 'cs6a college lineup spots + devy spots');
+  -- (0440: college lineup spots + devy spots combine — mixed-devy-probes has it)
   perform cs_err(commish_setup_college(f, 'college', 1, 2, false), 'no devy spots', 'cs6b college only + devy spots');
   perform cs_err(commish_setup_college(f, 'none', 1, 2, true), 'market and devy spots', 'cs6c market + devy spots');
   perform cs_err(commish_setup_college(f, 'mixed', 1, 0, true), 'out of the draft pool', 'cs6d market + college lineup spots');
@@ -92,6 +92,8 @@ begin
   perform cs_true(not _league_has_college((select settings_json from league where id = f)) and _devy_slots(f) = 0
               and (select settings_json -> 'roster_slots' from league where id = f) is null,
     'cs6g a refusal writes nothing');
+  perform cs_ok(commish_setup_college(f, 'mixed', 1, 2, false), 'cs6k college lineup spots + devy spots combine (0440)');
+  perform cs_true(league_is_mixed(f) and _devy_slots(f) = 2, 'cs6l …mixed, with the shelf');
   r := create_native_league('CS Auction', '2031', 2, 8, 60, 'auction', 200, 15, 1, null, null, null, 'classic');
   g := (r ->> 'league_id')::uuid;
   perform cs_err(commish_setup_college(g, 'none', 1, 0, true), 'auction', 'cs6h no market with an auction draft');

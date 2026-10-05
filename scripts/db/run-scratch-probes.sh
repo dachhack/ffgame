@@ -260,3 +260,4 @@ $RUN -f scripts/db/computer-fix-probes.sql | grep -E "PROBE FAIL|ALL COMPUTER-FI
 $RUN -f scripts/db/devy-values-probes.sql | grep -E "PROBE FAIL|ALL DEVY-VALUES PROBES" || { echo "DEVY-VALUES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/college-fill-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-FILL PROBES" || { echo "COLLEGE-FILL PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/college-setup-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-SETUP PROBES" || { echo "COLLEGE-SETUP PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/mixed-devy-probes.sql | grep -E "PROBE FAIL|ALL MIXED-DEVY PROBES" || { echo "MIXED-DEVY PROBES FAILED"; exit 1; }

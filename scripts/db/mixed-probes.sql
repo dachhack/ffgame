@@ -75,9 +75,13 @@ begin
     'mx2a nfl, college, and a spot for either');
   r := set_league_classic_slots(lid, '[{"pos":["QB"],"level":"pro"}]'::jsonb);
   perform mx_true((r ->> 'ok')::boolean is false, 'mx2b an unknown level is refused');
-  boom := false;
-  begin perform set_league_roster_shape(lid, 2, 0, 0, 0, 2); exception when others then boom := true; end;
-  perform mx_true(boom, 'mx2c devy spots cannot join a league whose spots carry levels');
+  -- 0440: devy spots may join a league whose spots carry levels — the league
+  -- stays mixed by its college spot, and the shelf is a taxi squad there.
+  perform mx_ok(set_league_roster_shape(lid, 2, 0, 0, 0, 2), 'mx2c devy spots join a league whose spots carry levels (0440)');
+  perform mx_true(league_is_mixed(lid) and _devy_slots(lid) = 2
+              and (select settings_json -> 'roster_slots' -> 1 ->> 'level' from league where id = lid) = 'college',
+    'mx2d …still mixed, the levels kept');
+  perform mx_ok(set_league_roster_shape(lid, 2, 0, 0, 0, 0), 'mx2e and back off, for the rest of the suite');
 
   -- ══ mx3. A COLLEGE PLAYER'S KICKOFF ══════════════════════════════════════
   perform mx_ok(seed_league_pool(lid, '[
