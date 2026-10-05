@@ -1,0 +1,15 @@
+{
+  "note": "The days and games the sport fixtures capture (server/test/fixtures/sports/README.md). Dates are US Eastern; game ids are the league feeds' own.",
+  "days": [
+    { "sport": "nhl", "date": "2026-09-29", "games": [{ "game_id": "2026020002", "away": "MTL", "home": "TOR", "fixture": "final" }, { "game_id": "2026020003", "away": "NYR", "home": "BOS", "fixture": "live" }], "slate_fixture": "nhl-schedule-2026-09-29.json" },
+    { "sport": "mlb", "date": "2026-09-29", "games": [{ "game_id": "849845", "away": "PHI", "home": "ATL", "fixture": "final" }, { "game_id": "849851", "away": "BOS", "home": "NYY", "fixture": "live" }], "slate_fixture": "mlb-schedule-2026-09-29.json" },
+    { "sport": "nba", "date": "2021-01-15", "games": [{ "game_id": "0022000180", "away": "ORL", "home": "BOS", "fixture": "final", "note": "league CDN id; Stathead keys NBA games on ESPN ids — match by date and teams" }] }
+  ],
+  "seasons": [
+    { "sport": "nhl", "season": "2025", "fixtures": ["nhl-skaters-20252026-sample.json", "nhl-goalies-20252026-sample.json", "nhl-realtime-20252026-sample.json"] },
+    { "sport": "mlb", "season": "2026", "fixtures": ["mlb-hitting-2026-sample.json", "mlb-pitching-2026-sample.json", "mlb-fielding-2026-sample.json"] },
+    { "sport": "nba", "season": "2025", "fixtures": ["sleeper-nba-stats-2025-sample.json"] }
+  ],
+  "adp": { "date": "2026-10-04", "sports": ["nba", "nhl", "mlb"] },
+  "calendars": [{ "sport": "nba", "season": "2026" }, { "sport": "nhl", "season": "2026" }, { "sport": "mlb", "season": "2026" }]
+}

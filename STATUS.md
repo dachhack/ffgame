@@ -22,6 +22,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.633.0 — the Stathead feed: client, probe and the shadow-read handoff
+
+> - Groundwork for moving the daily sports to Stathead's data service: the worker can talk to it, an ops command exports every sport pool's player keys for the crosswalk check, and the fixture days are catalogued for the shadow-read week. Nothing a player sees changes yet.
+
+Stathead (2026-10-05): the daily-sport feed is live for NHL, MLB, NBA, WNBA,
+MLS and the Premier League; "to start the shadow-read week we need … the
+fixture days in server/test/fixtures/sports, and the pool key lists per
+sport."
+
+- `server/src/stathead.js`: the bearer-token client (`statheadGet` and one
+  function per route: meta, games, lines, players, season-lines, adp,
+  crosswalk, teams) over `sports/http.js`; `crosswalkCoverage(sport, keys,
+  rows)` — the rule a pool is checked by (NHL and MLB keys are the league id,
+  NBA keys Sleeper's and WNBA keys ESPN's, through the crosswalk). Config:
+  `STATHEAD_URL` (defaults to the service) and `STATHEAD_TOKEN` (a Fly secret,
+  never in the repo).
+- CLI: `sport-pool-keys [sport] [--out=dir] [--check]` — every daily-sport
+  league's pool keys per sport, to stdout or a file per sport, with the
+  crosswalk's found/missing when the token is set; `stathead-probe [sport
+  date]` — `/v1/meta`, then a slate and a box score.
+- `server/test/fixtures/sports/README.md` + `days.json`: what each fixture
+  captures (NHL and MLB 2026-09-29 with a final and a live snapshot each, the
+  NBA 2021-01-15 sample game, the season reports, the 2026-10-04 ADP pages,
+  the ESPN calendars) — the days Stathead serves for parity.
+- `docs/stathead-shadow-read.md`: the runbook — setup, the two handoffs, what
+  the contract changes for our adapters (NBA/WNBA on ESPN ids via the
+  crosswalk; Stathead's soccer dictionary vs ours — `ga`→`gc`, `posn` from the
+  position code, the unserved knobs stay 0; `revised_at` on stored finals; one
+  team-code set per sport), and the week's steps up to the per-sport
+  `SPORT_PROVIDER` switch.
+- `server/test/stathead.mjs` covers the coverage rule; in `check:sports`.
+
 ### v0.632.1 — one line under Your leagues, on the web
 
 > - The web's Your leagues row is the app's: ALL · COMMISH · FIND · ADD on one line. The GET THE APP chip moved up beside the settings gear.

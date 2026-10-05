@@ -121,6 +121,11 @@ export const config = {
   // schedule this often when none is.
   sportsLivePollMs: Number(process.env.SPORTS_LIVE_POLL_MS || 60000),
   sportsIdlePollMs: Number(process.env.SPORTS_IDLE_POLL_MS || 600000),
+  // THE STATHEAD FEED (v0.633.0): the daily-sport data service, behind a
+  // bearer token (a Fly secret, never in this repo). Unset = the public
+  // feeds, as before; the shadow-read week compares the two.
+  statheadUrl: process.env.STATHEAD_URL || 'https://stathead-sports.dachhack.workers.dev',
+  statheadToken: process.env.STATHEAD_TOKEN || '',
 };
 
 /** Throws unless the Supabase service credentials are present. */
