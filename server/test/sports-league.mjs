@@ -28,6 +28,9 @@ ok(st.roster_slots.length === 12 && st.sport.period_start === '2026-10-05' && st
 const back = sportSettingsOf({ roster_slots: st.roster_slots, sport: st.sport });
 ok(back && back.period_start === '2026-10-05' && back.weeks === 27, 'settings read back');
 ok(sportSettingsOf({}) === null && sportSettingsOf(null) === null, 'an NFL league has no sport block');
+// SOCCER (v0.630.0): a Premier League season opens on a Tuesday and runs 40 weeks by default.
+const epl = sportLeagueSettings('epl', { periodStart: '2026-10-08' });
+ok(epl.sport.period_start === '2026-10-06' && epl.sport.weeks === 40 && sportPeriod(301, epl.sport.period_start).to === '2026-10-12' && sportWeekOf('2026-10-12', epl.sport.period_start) === 301 && sportWeekOf('2026-10-13', epl.sport.period_start) === 302, 'EPL periods run Tuesday to Monday from the Tuesday on or before the pick');
 
 // ── locking ──────────────────────────────────────────────────────────────────
 const now = Date.parse('2026-10-21T00:00:00Z');

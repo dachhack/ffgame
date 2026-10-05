@@ -1181,6 +1181,7 @@ async function main() {
       setTimeout(() => { void sportsLoop(); }, wait);
     };
     log('daily sports:', config.sports.join(', '));
+    if (config.sportsPending.length) log(`soccer named in SPORTS but not polled yet (no adapter until Stathead delivers): ${config.sportsPending.join(', ')}`);
     void sportsLoop();
     // The directory (0425): at boot and daily, detached from the game loop.
     const sweep = async () => {

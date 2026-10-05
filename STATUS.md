@@ -22,6 +22,47 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.630.0 — soccer joins the spine: the Premier League and MLS
+
+> - The platform now knows two soccer leagues, the Premier League and MLS: positions, a Fantasy-Premier-League scoring table (goals and clean sheets paid by position), categories, Tuesday-to-Monday weeks and seasons up to 40 weeks. The data arrives with Stathead's delivery; until then no soccer league can be created in production.
+
+Founder: "They [Stathead] are adding MLS and Premier League as well … Add the
+soccer section to the doc and build the spine."
+
+- **Core.** `sports/soccer.ts`: one definition for `epl` and `mls` (as nba/wnba
+  share basketball): GK/DEF/MID/FWD, slot types GK DEF MID FWD UTIL (outfield),
+  a 1-3-3-2-2 default lineup, 4 bench, 2 IR. Every match line carries `posn`
+  (1 GK 2 DEF 3 MID 4 FWD, set by the adapter from the box score) and
+  `deriveSoccer` splits goals and clean sheets by position (`g_def`, `cs_gk`…),
+  applies the 60-minute clean-sheet rule, counts saves in threes and goals
+  conceded in pairs, and marks the appearance under/over 60 minutes. Default
+  table is FPL's. Categories include a shot-accuracy ratio and lower-is-better
+  cards and goals conceded. `SportDef.weekStartDow` (optional, Monday default)
+  is 2 for soccer; `weekStartOnOrBefore`, `sportWeekStartDow`,
+  `periodStartOnOrBefore` and `SPORT_WEEK_START_LABEL` replace the Monday
+  assumption in `sportLeagueSettings` and both create flows (the FIRST WEEK
+  picker re-anchors when the sport changes and labels the weekday).
+  `currentSeason('epl')` straddles New Year like the NBA; MLS is the calendar
+  year. Keys `epl-<id>` / `mls-<id>` parse; the card leads with soccer stats.
+- **Migration 0437.** The five check lists accept the two ids; `sport_week_start_dow`;
+  `sport_positions` for both; `create_native_league` (0432's body) accepts
+  them; `sport_generate_schedule` and `set_sport_settings` allow 1–40 weeks and
+  the settings RPC normalises period_start to the sport's own weekday. Verified
+  locally: an EPL league's 2026-10-08 becomes Tuesday 2026-10-06, an NBA
+  league's stays Monday; 38 weeks accepted, 41 refused; a PG spot refused on
+  an EPL lineup; a 38-week schedule ends at week 338.
+- **Worker.** No adapter yet: `SPORTS=…,epl` is logged and skipped
+  (`config.sportsPending`) rather than polled; the injury prune keeps soccer
+  keys. The Stathead adapter slots into `server/src/sports/index.js` when the
+  feed lands (requirements in the shared doc, soccer section).
+- **Checks.** `check-sports.mjs`: the two leagues, key parsing, position
+  mapping, the FPL table by position (a forward's brace, a defender's goal and
+  clean sheet, a 59-minute non-clean-sheet, a keeper's saves and penalty save,
+  the penalties), derive, categories, the Tuesday week, settings, seasons and
+  the 0437 pins; the check now reads the league.sport list and
+  `sport_positions` from 0437. `sports-league.mjs`: EPL periods Tuesday to
+  Monday.
+
 ### v0.629.1 — NHL tenure, so ROOKIES spots work for hockey
 
 > - A hockey league's lineup spots can now be scoped to ROOKIES, like the NBA's and MLB's: the directory learns each player's first NHL season.

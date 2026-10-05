@@ -28,7 +28,7 @@ import {
 } from '@drip/core/data/leagueBlueprint';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
-import { sportLeagueSettings, currentSeason, priorSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
+import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -183,20 +183,22 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const [sport, setSport] = useState<Sport>('nfl');
   // THE SPORTS FLAG (0432) — holders and admins see the chips; the RPC gates.
   const [sportsOn, setSportsOn] = useState(false);
-  const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+  // The first period opens on the sport's own weekday (Monday; Tuesday for soccer, v0.630.0).
+  const [periodStart, setPeriodStart] = useState(() => periodStartOnOrBefore('nba', addDays(new Date().toISOString().slice(0, 10), 7)));
   const [sportFormat, setSportFormat] = useState<SportFormat>('points');
   // REPLAY (v0.628.0): last season on a clock that runs a year behind — the
   // web form's twin. Week 301 opens this real week either way.
   const [replay, setReplay] = useState(false);
   const pickReplay = (on: boolean) => {
     setReplay(on);
-    const thisMon = mondayOnOrBefore(new Date().toISOString().slice(0, 10));
-    setPeriodStart(on ? addDays(thisMon, -364) : mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+    const thisWk = periodStartOnOrBefore(sport, new Date().toISOString().slice(0, 10));
+    setPeriodStart(on ? addDays(thisWk, -364) : periodStartOnOrBefore(sport, addDays(new Date().toISOString().slice(0, 10), 7)));
   };
   const sportDef = SPORTS[sport];
   const isSport = sport !== 'nfl';
   const pickSport = (sp: Sport) => {
     setSport(sp);
+    setPeriodStart((d) => periodStartOnOrBefore(sp, addDays(d, 6)));
     if (sp !== 'nfl') {
       setGame('classic'); setFormat('standard');
       // Contracts are not built for a daily sport; dynasty is (v0.625.0).
@@ -823,7 +825,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             {step === 'game' && (
               <View>
                 {sportsOn && <LabelInfo label="WHICH SPORT?"
-                  info={'NFL plays DRIP or CLASSIC on the NFL week.\n\nNBA, NHL, MLB and WNBA play CLASSIC on Monday-to-Sunday weeks: a positional lineup you can change any day, with every player locking into his slot when his game tips off. The pool is the league\'s current rosters, ranked by last season\'s production.'} />}
+                  info={'NFL plays DRIP or CLASSIC on the NFL week.\n\nNBA, NHL, MLB and WNBA play CLASSIC on Monday-to-Sunday weeks (the Premier League and MLS on Tuesday-to-Monday weeks, so a matchweek\'s Monday night counts): a positional lineup you can change any day, with every player locking into his slot when his game tips off. The pool is the league\'s current rosters, ranked by last season\'s production.'} />}
                 {sportsOn && <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                   {SPORT_IDS.map((sp) => (
                     <Chip key={`sp-${sp}`} label={SPORTS[sp].league} on={sport === sp} onPress={() => { tap(); pickSport(sp); }} />
@@ -847,11 +849,11 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                       <Chip label={`REPLAY · ${priorSeason(sport)}`} on={replay} onPress={() => { tap(); pickReplay(true); }} />
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                      <Mono size={8.5} tone="faint" track={0.1}>FIRST WEEK{replay ? ` (${priorSeason(sport)})` : ''}</Mono>
+                      <Mono size={8.5} tone="faint" track={0.1}>FIRST WEEK{replay ? ` (${priorSeason(sport)})` : ''} · {SPORT_WEEK_START_LABEL[sportWeekStartDow(sport)]}</Mono>
                       <Pressable hitSlop={6} onPress={() => { tap(); setPeriodStart((d) => addDays(d, -7)); }}>
                         <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
                       </Pressable>
-                      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>Mon {replay ? periodStart.replace(/-/g, '/') : periodStart.slice(5).replace('-', '/')}</Text>
+                      <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '700', color: t.text }}>{SPORT_WEEK_START_LABEL[sportWeekStartDow(sport)][0] + SPORT_WEEK_START_LABEL[sportWeekStartDow(sport)].slice(1).toLowerCase()} {replay ? periodStart.replace(/-/g, '/') : periodStart.slice(5).replace('-', '/')}</Text>
                       <Pressable hitSlop={6} onPress={() => { tap(); setPeriodStart((d) => addDays(d, 7)); }}>
                         <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
                       </Pressable>

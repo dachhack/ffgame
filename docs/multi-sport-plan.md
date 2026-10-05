@@ -63,6 +63,12 @@ posture as ESPN today.
   (`server/src/poll/sportGames.js`) gated on `SPORTS=nhl,mlb` so the NFL
   worker is unchanged when unset; CLI `sport-poll <sport> [date] [--force]`.
 
+**v0.630.0**: soccer joins the spine (0437): `epl` and `mls` share one
+definition (`sports/soccer.ts`) with position-split scoring off a per-match
+`posn`, Tuesday-to-Monday weeks (`weekStartDow`), seasons to 40 weeks. No
+adapter yet: Stathead is delivering the data for all six sports (the
+requirements doc, soccer section).
+
 **v0.629.0**: best ball and scoped spots for a daily sport (0436). A spot
 carries `bb`, `teams` and `min_exp`/`max_exp` with the NFL SlotSpec's keys, so
 the boards read it unchanged; the worker's resolve pass seats each best-ball
@@ -135,6 +141,8 @@ NBA/WNBA schedule by date, and the mobile screens are still open.
 | **MLB** | statsapi.mlb.com, official, no key | statsapi live feed (`/feed/live`, diffPatch for increments) | Official IL transactions | statsapi people stats | ✅ 200 |
 | **NHL** | api-web.nhle.com rosters and `/schedule/{date}` | `/gamecenter/{id}/boxscore` (TOI, goalie lines); PPA/SHA/GWG from `/landing` | No official feed; ESPN hidden endpoint | api-web player landing / stats REST | ✅ 200 (follow the 307) |
 | **NBA** | cdn.nba.com static schedule; rosters via ESPN or Sleeper `/players/nba` | cdn.nba.com liveData boxscore — browser headers required | Official report is a PDF; ESPN hidden endpoint | stats.nba.com blocks cloud hosts — bake once from a residential machine, or balldontlie | ❌ 403 (Akamai) |
+| **Premier League** | Stathead (in delivery) | Stathead | Stathead | Stathead | — |
+| **MLS** | Stathead (in delivery) | Stathead | Stathead | Stathead | — |
 | **WNBA** | ESPN hidden rosters/scoreboard | cdn.wnba.com liveData (same shape as NBA) or ESPN summary | ESPN hidden endpoint | stats.wnba.com, same cloud block | ❌ HTML error page |
 
 Every official feed is non-commercial by its terms — the same posture as

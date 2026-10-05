@@ -44,6 +44,8 @@ const CARD: Record<string, Record<string, string[]>> = {
   wnba: { all: ['pts', 'reb', 'ast', 'stl', 'blk', 'tpm', 'tov', 'fgpct', 'min'] },
   nhl: { skater: ['g', 'a', 'pts', 'sog', 'hit', 'blk', 'ppp', 'pim', 'toi'], goalie: ['w', 'l', 'otl', 'ga', 'sv', 'so', 'gaa', 'svpct'] },
   mlb: { hitter: ['ab', 'h', 'hr', 'r', 'rbi', 'sb', 'bb', 'k', 'avg', 'obp'], pitcher: ['ip', 'w', 'l', 'sv', 'hld', 'p_k', 'er', 'era', 'whip', 'qs'] },
+  epl: { outfielder: ['g', 'a', 'sot', 'kp', 'tkl', 'int', 'cs', 'yc', 'min'], keeper: ['sv', 'gc', 'cs', 'ps', 'min'] },
+  mls: { outfielder: ['g', 'a', 'sot', 'kp', 'tkl', 'int', 'cs', 'yc', 'min'], keeper: ['sv', 'gc', 'cs', 'ps', 'min'] },
 };
 
 /** Stats a season card shows as TOTALS rather than per game, per sport:
@@ -51,6 +53,8 @@ const CARD: Record<string, Record<string, string[]>> = {
 const SEASON_TOTALS: Record<string, string[]> = {
   nhl: ['w', 'l', 'otl', 'so'],
   mlb: ['w', 'l', 'sv', 'hld', 'qs', 'cg', 'sho', 'nh'],
+  epl: ['cs', 'yc', 'rc', 'ps', 'pm', 'og'],
+  mls: ['cs', 'yc', 'rc', 'ps', 'pm', 'og'],
 };
 
 /** The population a line belongs to: the group whose stats it carries. */

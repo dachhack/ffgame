@@ -112,7 +112,11 @@ export const config = {
   // THE DAILY SPORTS (v0.616.0): which of nba / wnba / nhl / mlb this worker
   // polls into sport_game + game_stat_line (poll/sportGames.js). Unset = none,
   // so a worker that only carries the NFL is byte-for-byte what it was.
+  // The daily sports the worker polls: only those with an adapter. Soccer
+  // (epl, mls) is in the spine (0437) but its data arrives with Stathead's
+  // delivery; naming it here is logged and skipped until then.
   sports: (process.env.SPORTS || '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ['nba', 'wnba', 'nhl', 'mlb'].includes(s)),
+  sportsPending: (process.env.SPORTS || '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ['epl', 'mls'].includes(s)),
   // Box scores are re-read this often while a game is live, and the day's
   // schedule this often when none is.
   sportsLivePollMs: Number(process.env.SPORTS_LIVE_POLL_MS || 60000),

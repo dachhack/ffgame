@@ -25,7 +25,7 @@ import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { installSportMarketFor } from '@drip/core/sports/market';
-import { sportLeagueSettings, currentSeason, priorSeason, mondayOnOrBefore, addDays, type SportFormat } from '@drip/core/sports/league';
+import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
 import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
@@ -211,7 +211,8 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     Promise.all([readMyFeatures().catch(() => ({} as Record<string, boolean>)), readIsAdmin().catch(() => false)])
       .then(([f, a]) => setSportsOn(!!a || f.sports === true));
   }, []);
-  const [periodStart, setPeriodStart] = useState(() => mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+  // The first period opens on the sport's own weekday (Monday; Tuesday for soccer, v0.630.0).
+  const [periodStart, setPeriodStart] = useState(() => periodStartOnOrBefore('nba', addDays(new Date().toISOString().slice(0, 10), 7)));
   const [sportWeeks, setSportWeeks] = useState<number | null>(null);
   // REPLAY (v0.626.0): play last season on a shifted clock — a demo when the
   // live season is over (founder: "demo with MLB 2025 data for now").
@@ -220,14 +221,16 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     setReplay(on);
     // Week 301 opens this real week either way; a replay's first week is the
     // same calendar week a year back, which the date picker can move.
-    const thisMon = mondayOnOrBefore(new Date().toISOString().slice(0, 10));
-    setPeriodStart(on ? addDays(thisMon, -364) : mondayOnOrBefore(addDays(new Date().toISOString().slice(0, 10), 7)));
+    const thisWk = periodStartOnOrBefore(sport, new Date().toISOString().slice(0, 10));
+    setPeriodStart(on ? addDays(thisWk, -364) : periodStartOnOrBefore(sport, addDays(new Date().toISOString().slice(0, 10), 7)));
   };
   const [sportFormat, setSportFormat] = useState<SportFormat>('points');
   const sportDef = SPORTS[sport];
   const isSport = sport !== 'nfl';
   const pickSport = (sp: Sport) => {
     setSport(sp);
+    // Re-anchor the first week to the sport's weekday (soccer weeks open on Tuesday).
+    setPeriodStart((d) => periodStartOnOrBefore(sp, addDays(d, 6)));
     if (sp !== 'nfl') {
       setGame('classic');
       setFormat('standard');
@@ -538,7 +541,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             </div>
             {isSport && (
               <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-                {sportDef.league} plays CLASSIC: a positional lineup, weekly head-to-head, and every player locking at his own tip-off.
+                {sportDef.league} plays CLASSIC: a positional lineup, weekly head-to-head ({SPORT_WEEK_START_LABEL[sportWeekStartDow(sport)] === 'TUE' ? 'Tuesday-to-Monday weeks, so a matchweek\'s Monday night counts' : 'Monday-to-Sunday weeks'}), and every player locking at his own {sportDef.vocab.start}.
                 The pool is the league's current rosters, ranked by last season's production.
               </div>
             )}
@@ -612,13 +615,13 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div style={{ height: 14 }} />
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
-                <div className="mono" style={label}>{replay ? `FIRST WEEK STARTS (MON, ${priorSeason(sport)})` : 'FIRST WEEK STARTS (MON)'}</div>
-                <input type="date" value={periodStart} onChange={(e) => { if (e.target.value) setPeriodStart(mondayOnOrBefore(e.target.value)); }}
+                <div className="mono" style={label}>{replay ? `FIRST WEEK STARTS (${SPORT_WEEK_START_LABEL[sportWeekStartDow(sport)]}, ${priorSeason(sport)})` : `FIRST WEEK STARTS (${SPORT_WEEK_START_LABEL[sportWeekStartDow(sport)]})`}</div>
+                <input type="date" value={periodStart} onChange={(e) => { if (e.target.value) setPeriodStart(periodStartOnOrBefore(sport, e.target.value)); }}
                   style={{ ...input, marginTop: 7, width: 170 }} />
               </div>
               <div>
                 <div className="mono" style={label}>WEEKS</div>
-                <div style={{ marginTop: 7 }}>{num(sportWeeks ?? sportDef.regularSeasonWeeks, setSportWeeks, 1, 30, 1)}</div>
+                <div style={{ marginTop: 7 }}>{num(sportWeeks ?? sportDef.regularSeasonWeeks, setSportWeeks, 1, 40, 1)}</div>
               </div>
             </div>
             <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>

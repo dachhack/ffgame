@@ -80,16 +80,18 @@ ok(roto[0].id === 't1' || roto[0].id === 't2', `standings lead: ${roto[0].id} wi
 ok(sumLines([{ a: 1 }, { a: 2, b: 1 }]).a === 3, 'sumLines');
 
 // ── 5. the database names the same sports ───────────────────────────────────
-const sql = readFileSync(new URL('../supabase/migrations/0424_sports.sql', import.meta.url), 'utf8');
-const inList = /sport in \(([^)]*)\)/.exec(sql)?.[1]?.match(/'([a-z]+)'/g)?.map((s) => s.replace(/'/g, '')) ?? [];
+// 0437 re-issued the check with soccer; it is the latest word on the list.
+const sql = readFileSync(new URL('../supabase/migrations/0437_soccer.sql', import.meta.url), 'utf8');
+const inList = /alter table league add constraint league_sport_check check \(sport in \(([^)]*)\)/.exec(sql)?.[1]?.match(/'([a-z]+)'/g)?.map((s) => s.replace(/'/g, '')) ?? [];
 ok(inList.join() === SPORT_IDS.join(), `league.sport's check list is SPORT_IDS (${inList.join(', ')})`);
 
 ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && weekLabel(304) === 'WK 4' && boardWeekTitle(310) === 'WEEK 10' && weekTitle(5) === 'WEEK 5', 'sport weeks title from 301 as week 1; the slate\'s base is core\'s');
 
 // ── 6. the lineup builder's positions and the card ──────────────────────────
 {
-  const sql403 = readFileSync(new URL('../supabase/migrations/0431_sport_lineup_and_card.sql', import.meta.url), 'utf8');
-  for (const id of ['nba', 'wnba', 'nhl', 'mlb']) {
+  // sport_positions was re-issued with soccer in 0437.
+  const sql403 = readFileSync(new URL('../supabase/migrations/0437_soccer.sql', import.meta.url), 'utf8');
+  for (const id of ['nba', 'wnba', 'nhl', 'mlb', 'epl', 'mls']) {
     const m = new RegExp(`when '${id}'\\s+then array\\[([^\\]]*)\\]`).exec(sql403);
     const list = m ? m[1].match(/'([A-Z0-9]+)'/g).map((x) => x.replace(/'/g, '')) : [];
     ok(list.join() === SPORTS[id].positions.join(), `${id}: sport_positions() is the SportDef's list (${list.join(' ')})`);
@@ -157,6 +159,43 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
   ok(/spot -> 'bb'/.test(sql) && /spot -> 'teams'/.test(sql) && /spot -> 'min_exp'/.test(sql) && /spot -> 'max_exp'/.test(sql), 'set_sport_lineup reads bb, teams, min_exp and max_exp');
   ok(/'points', 'cats', 'roto', 'season'/.test(sql), 'set_sport_settings accepts the season format');
   ok(/coalesce\(nr\.spot, 'active'\) = 'active'/.test(sql) && /s\.played/.test(sql), 'the day-lines RPC reads active roster spots and the played flag');
+}
+
+// ── v0.630.0: soccer joins the spine ─────────────────────────────────────────
+{
+  const { EPL, MLS } = await import('../packages/core/src/sports/soccer.ts');
+  const { currentSeason, periodStartOnOrBefore, weekStartOnOrBefore, sportWeekStartDow, sportLeagueSettings, sportPeriod } = await import('../packages/core/src/sports/league.ts');
+  ok(SPORT_IDS.includes('epl') && SPORT_IDS.includes('mls') && SPORTS.epl === EPL && SPORTS.mls === MLS && EPL.stats === MLS.stats && EPL.league === 'Premier League', 'two soccer leagues share one definition');
+  ok(parsePlayerKey('epl-12345')?.sport === 'epl' && playerKey('mls', 77) === 'mls-77' && isDailySport('epl'), 'soccer keys parse and the sport is daily');
+  ok(eligibleFor('epl', 'CB').join() === 'DEF' && eligibleFor('epl', 'ST').join() === 'FWD' && eligibleFor('epl', 'GKP').join() === 'GK' && slotAccepts('epl', 'UTIL', ['DEF']) && !slotAccepts('epl', 'UTIL', ['GK']), 'feed codes map to the four positions; UTIL is outfield only');
+  // the FPL table, by position
+  const d = EPL;
+  const striker = { posn: 4, min: 90, g: 2, a: 1, sot: 3, cs: 1, yc: 1 };
+  ok(linePoints(d, striker) === 2 + 2 * 4 + 3 - 1, `a forward's brace with an assist and a booking: ${linePoints(d, striker)} (a forward's clean sheet is worth nothing)`);
+  const cb = { posn: 2, min: 90, g: 1, cs: 1, gc: 0 };
+  ok(linePoints(d, cb) === 2 + 6 + 4, `a defender's goal and clean sheet: ${linePoints(d, cb)}`);
+  const cbLate = { posn: 2, min: 59, cs: 1 };
+  ok(linePoints(d, cbLate) === 1, 'a 59-minute clean sheet is an appearance only');
+  const keeper = { posn: 1, min: 90, sv: 7, gc: 3, ps: 1 };
+  ok(linePoints(d, keeper) === 2 + 2 + 5 - 1, `a keeper: 7 saves (2), a penalty save, three conceded (−1): ${linePoints(d, keeper)}`);
+  ok(linePoints(d, { posn: 3, min: 75, cs: 1, g: 1 }) === 2 + 1 + 5, 'a midfielder: clean sheet 1, goal 5');
+  ok(linePoints(d, { posn: 4, min: 20, rc: 1, og: 1, pm: 1 }) === 1 - 3 - 2 - 2, 'the penalties: red, own goal, missed penalty');
+  const der = d.derive({ posn: 1, min: 90, sv: 8, gc: 4, g: 0 });
+  ok(der.sv3 === 2 && der.gc2 === 2 && der.app60 === 1 && der.app === 0 && der.g_gk === 0 && der.cs_gk === 0, 'derive: saves in threes, conceded in pairs, no clean sheet with goals against');
+  ok(linesPoints(d, [striker, cb]) === linePoints(d, striker) + linePoints(d, cb), 'lines sum per match');
+  // categories: a ratio and a lower-is-better
+  const t = categoryTotals(d, [{ sh: 10, sot: 4, yc: 2 }, { sh: 5, sot: 1, yc: 0 }]);
+  ok(categoryValue(categoryById(d, 'shacc'), t) === 0.333 && compareCategories(d, t, categoryTotals(d, [{ yc: 1 }]), ['yc']).cats[0].result === 'b', 'shot accuracy from totals; fewer yellows wins');
+  // the week: Tuesday to Monday
+  ok(sportWeekStartDow('epl') === 2 && sportWeekStartDow('mls') === 2 && sportWeekStartDow('nba') === 1, 'soccer weeks open on Tuesday');
+  ok(weekStartOnOrBefore('2026-10-08', 2) === '2026-10-06' && weekStartOnOrBefore('2026-10-06', 2) === '2026-10-06' && weekStartOnOrBefore('2026-10-05', 2) === '2026-09-29' && weekStartOnOrBefore('2026-10-08', 1) === '2026-10-05', 'the week start on or before a date, by weekday (a Monday belongs to the week before in soccer)');
+  const st = sportLeagueSettings('epl', { periodStart: '2026-10-08' });
+  ok(st.sport.period_start === '2026-10-06' && st.sport.weeks === 40 && sportPeriod(301, st.sport.period_start).to === '2026-10-12' && st.roster_slots.length === 11, `EPL settings: Tuesday ${st.sport.period_start} to Monday, ${st.sport.weeks} weeks, ${st.roster_slots.length} starters`);
+  ok(periodStartOnOrBefore('nhl', '2026-10-08') === '2026-10-05', 'every other sport keeps Monday');
+  ok(currentSeason('epl', new Date('2026-10-05T00:00:00Z')) === '2026' && currentSeason('epl', new Date('2027-03-01T00:00:00Z')) === '2026' && currentSeason('mls', new Date('2027-03-01T00:00:00Z')) === '2027', 'the Premier League straddles New Year; MLS is the calendar year');
+  // the database knows both
+  ok(/sport_week_start_dow\(p_sport text\)/.test(sql) && /when 'epl' then 2 when 'mls' then 2 else 1/.test(sql) && /weeks must be 1–40/.test(sql) && /'epl', 'mls'\) then/.test(sql), '0437: the week anchor, the 40-week cap and create_native_league accept soccer');
+  ok(d.vocab.start === 'kick-off' && MLS.vocab.slate === 'MLS FIXTURES' && d.vocab.noGame === 'no match today', 'soccer words');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport checks passed');
