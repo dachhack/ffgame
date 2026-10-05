@@ -22,6 +22,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.637.0 — devy spots beside college starting spots: the shelf is a taxi squad
+
+> - A league can now have both college starting spots and devy spots. College players you draft land on your active roster while there is room and on the devy shelf once it is full, and you move them between the two like taxi players. A devy league without college starting spots works exactly as before.
+
+The founder: "I think that could work. Devy spots would be like taxi spots
+where some players are in your active roster, some are held for
+development."
+- 0366 made the devy shelf absolute — a college player landed in a devy
+  spot, could not leave it, was illegal outside it — and 0372 defined a
+  MIXED league as one with no devy spots, so a league could start college
+  players or shelve them, never both; 0439 refused the pairing at creation.
+- 0440: a MIXED league is one where college players SCORE: COLLEGE on, the
+  NFL calendar, not the devy market, and — once it has devy spots — at
+  least one starting spot that takes college players (a level, a
+  conference or a class rule). `league_is_mixed` says so; `_league_may_level`
+  (COLLEGE on, NFL calendar) is what the roster builder checks, so a devy
+  league's commissioner can add the first college spot; the backstop
+  trigger no longer treats devy spots as a bar to levels. In a mixed
+  league: `_devy_landing` puts a college player on the active roster while
+  it has room and on the shelf once it is full (a row inserted as devy — the
+  rollover — stays devy); `set_roster_spot` moves him devy ⇄ active;
+  `roster_illegal_reason` accepts him active; `devy_room_error` lets him
+  take an NFL spot when the shelf is full; `native_autopick_slug` fills an
+  open college starting spot with a college player (college rows rank after
+  every NFL row, so only when no NFL player fits what is open — the bench
+  and rank picks stay NFL, the shelf fills last). `mixed_leagues_exist` and
+  `college_calendar_in_use` follow `league_is_mixed`, so the worker polls
+  and scores such a league's college starters. `commish_setup_college`
+  takes MIXED + devy spots.
+- Core `collegeStartsHere(gm)` (college.ts) mirrors the rule for the
+  clients; `collegeSetupBlocked` drops the refusal; `COLLEGE_SETUP_INFO`
+  says the pairing works and the market is the one that stands alone.
+  App (Team) and web (NativeLeague) roster screens: in such a league the
+  DV chips open the same picker the taxi squad uses — his way back to
+  active at the top, the active roster's college players below (NFL
+  players greyed: "devy spots hold college players"), an empty devy spot
+  offers to shelve one.
+- Probes: `scripts/db/mixed-devy-probes.sql` (made with both; landing
+  active then on the shelf; the row inserted as devy stays; moves both
+  ways and the active-seat rule; legal active; the caps with the shelf
+  full; the devy-only league keeps every 0366 rule; the builder mixes a
+  devy league and the backstop lets the shelf join; the worker's readers;
+  autopick fills the open college spot), run on a scratch DB built fresh
+  with every migration applied; the runner's 154 suites on that build: 150
+  pass, and the 4 that fail (native-league 1a0, convert-league cv2,
+  practice-room pr0c, graduation gr0) fail identically on a build that
+  stops at 0439 — the open door (0422) and the sport slot lock (0436)
+  outran those probes before this change.
+
 ### v0.636.0 — the college choices, made clear: three questions, mixed and matched
 
 > - Making a classic league now asks three separate college questions instead of one: college players in the starting lineup (NFL only, MIXED with college-only starting spots, or COLLEGE ONLY on the college calendar), devy holding spots (like taxi, never starting), and the devy market (the investment market). Mix and match them; the form says up front which pairings the engine can't run yet.

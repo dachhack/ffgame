@@ -113,3 +113,20 @@ export function collegeRuleAllows(m: CollegeMeta | null, confs?: string[] | null
   }
   return true;
 }
+
+/** May a college player be ACTIVE in this league (0440) — start, and move
+ *  between the devy shelf and the active roster like a taxi player? A mixed
+ *  league: COLLEGE on and, once the league has devy spots, at least one
+ *  starting spot that takes college players (a level, a conference or a
+ *  class rule). Mirrors SQL league_is_mixed for an NFL-calendar league; a
+ *  devy league without college starting spots keeps 0366's shelf, where a
+ *  college player is held until he graduates. */
+export function collegeStartsHere(gm: {
+  positions?: string[] | null;
+  shape?: { devy?: number } | null;
+  slots?: { level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null;
+} | null | undefined): boolean {
+  if (!gm?.positions?.includes('COLLEGE')) return false;
+  if ((gm.shape?.devy ?? 0) === 0) return true;
+  return (gm.slots ?? []).some((s) => s.level === 'college' || !!s.confs?.length || !!s.classes?.length);
+}

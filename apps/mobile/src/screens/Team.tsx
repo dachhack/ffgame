@@ -31,7 +31,7 @@ import { sportLeagueMarket,
 } from '@drip/core/data/liveApi';
 import { teamBook, fmtPts, stakesOf } from '@drip/core/data/devyShares';
 import { DevyMarketTab } from '../ui/DevyShares';
-import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
+import { isCollegeSlug, teamLabel, collegeStartsHere } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
 import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
@@ -377,11 +377,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   const [err, setErr] = useState<string | null>(null);
   const [pendingAdd, setPendingAdd] = useState<LeaguePoolPlayer | null>(null); // roster full → pick a drop
   // Which empty place is asking to be filled — 'taxi' or 'ir' (v0.285.0).
-  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | 'out' | null>(null);
+  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | 'out' | 'devy' | null>(null);
   // Who is IN the place whose chip opened the picker — null for an empty one.
   // Always written with fillFor (openSpot), so it can never be stale.
   const [fillOcc, setFillOcc] = useState<string | null>(null);
-  const openSpot = (spot: 'taxi' | 'ir' | 'out', occupant: string | null) => { tap(); setFillOcc(occupant); setFillFor(spot); };
+  const openSpot = (spot: 'taxi' | 'ir' | 'out' | 'devy', occupant: string | null) => { tap(); setFillOcc(occupant); setFillFor(spot); };
   // ── WHO MAY BE STASHED (0198) ───────────────────────────────────────────
   // The server has enforced both since 0164/0196, but no screen read the
   // rules — so the picker offered every name and the rule only appeared as a
@@ -511,6 +511,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // since 0164; the card just took its controls off for a rival's roster.
   // For the commissioner they stay on, and the pickers offer THAT roster.
   const canStash = viewingMine || !!team?.is_commish;
+  // 0440: a mixed league with devy spots — college players may be active or
+  // shelved, so the DV chips open the picker like the taxi squad's do.
+  const mixedDevy = (gm?.shape?.devy ?? 0) > 0 && collegeStartsHere(gm);
   const shown = useMemo(() => viewingMine ? mine : rosters.filter((r) => r.roster_id === shownRid)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [viewingMine, mine, rosters, shownRid, poolBySlug]);
@@ -541,7 +544,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   /** Why this player may NOT go in that place — null when he may. The wording
    *  matches the server's refusal: the server is still the authority, and a
    *  screen that disagreed with it would be worse than one that stayed quiet. */
-  const stashBlock = (slug: string, spot: 'taxi' | 'ir' | 'out'): string | null => {
+  const stashBlock = (slug: string, spot: 'taxi' | 'ir' | 'out' | 'devy'): string | null => {
+    // 0440: the devy shelf takes college players only.
+    if (spot === 'devy') return isCollegeSlug(slug) ? null : 'devy spots hold college players';
     if (!stashRules) return null;
     if (spot === 'out') {
       const tag = injTags[slug];
@@ -564,7 +569,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     if (stashRules.taxiLocked && !team?.is_commish) return 'the taxi squad locked at the season’s first kickoff — you can still take players OFF it';
     return null;
   };
-  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir' | 'out') => {
+  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir' | 'out' | 'devy') => {
     tap();
     setFillFor(null);
     void run(() => setRosterSpot(leagueId, slug, spot));
@@ -981,12 +986,15 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             return (
               <RosterRow key={p.slug} badge="DV" tone="you" p={p} busy={busy} t={t}
                 sub={grad ? `${p.team} · drafted — tap DV to activate` : [c?.declared ? 'DECLARED' : null, c?.custom ? c.level : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
-                onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+                // 0440: in a mixed league the shelf is a taxi squad — the chip
+                // opens the picker, with his way back to active at the top.
+                onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : mixedDevy && canStash ? () => openSpot('devy', p.slug) : undefined} />
             );
           })}
           {Array.from({ length: Math.max(0, (gm?.shape?.devy ?? 0) - bySpot.devy.length) }, (_, i) => (
             <RosterRow key={`dv-empty-${i}`} badge="DV" tone="you" p={null} busy={busy} t={t}
-              emptyLabel="Open — claim a college player from the wire" />
+              emptyLabel={mixedDevy ? 'Open — shelve a college player, or claim one from the wire' : 'Open — claim a college player from the wire'}
+              onSlot={mixedDevy && canStash ? () => openSpot('devy', null) : undefined} />
           ))}
         </>)}
 
@@ -1392,8 +1400,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           for another shelf — back to active first, one legal step at a time.
           A shelf at its limit greys every move-in with the reason. */}
       <Overlay visible={!!fillFor}
-        title={`${viewingMine ? '' : `${shownName ?? 'This team'}: `}${fillFor === 'ir' ? 'Injured reserve' : fillFor === 'out' ? 'OUT' : 'Taxi squad'}`}
-        subtitle={fillFor === 'ir'
+        title={`${viewingMine ? '' : `${shownName ?? 'This team'}: `}${fillFor === 'ir' ? 'Injured reserve' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'Devy spots' : 'Taxi squad'}`}
+        subtitle={fillFor === 'devy'
+          ? 'Devy spots hold college players off your active roster \u2014 a taxi squad for prospects. He can\u2019t be started while he\u2019s on it. NFL players are grayed out below.'
+          : fillFor === 'ir'
           ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report \u2014 your commissioner sets that list. Everyone else is grayed out below.`
           : fillFor === 'out'
           ? `OUT holds players designated ${(stashRules?.outTags ?? ['O', 'D']).join('/')} by the injury report \u2014 the week-to-week shelf; your commissioner sets that list. Everyone else is grayed out below.`
@@ -1416,7 +1426,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                   <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.you }}>↩ BACK TO ACTIVE</Text>
                 </Pressable>
               </View>
-              <Mono size={9} tone="dim" track={0.1}>{`OR MOVE SOMEONE ${fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : 'TO THE TAXI SQUAD'}`}</Mono>
+              <Mono size={9} tone="dim" track={0.1}>{`OR MOVE SOMEONE ${fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : fillFor === 'devy' ? 'TO A DEVY SPOT' : 'TO THE TAXI SQUAD'}`}</Mono>
             </View>
           );
         })()}
@@ -1431,10 +1441,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             const cap = fillFor ? gm?.shape?.[fillFor] ?? 0 : 0;
             const full = !!fillFor && cap > 0 && bySpot[fillFor].length >= cap;
             const why = !fillFor ? null : full
-              ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : 'The taxi squad'} is full (${cap}/${cap}) — move someone back to active first`
+              ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'The devy shelf' : 'The taxi squad'} is full (${cap}/${cap}) — move someone back to active first`
               : stashBlock(p.slug, fillFor);
             return (
-            <Pressable key={p.slug} disabled={busy || !!why} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : fillFor === 'out' ? 'out' : 'taxi')}
+            <Pressable key={p.slug} disabled={busy || !!why} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : fillFor === 'out' ? 'out' : fillFor === 'devy' ? 'devy' : 'taxi')}
               style={{ paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, opacity: busy || why ? 0.45 : 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Face slug={p.slug} pos={p.pos} />
@@ -1442,7 +1452,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
                 {fillFor !== 'taxi' && !!injTags[p.slug] && <Mono size={8.5} weight="700" tone="warn">{injTags[p.slug]}</Mono>}
                 <Mono size={8.5} tone="faint">{teamLabel(p)}</Mono>
-                <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{fillFor === 'ir' ? '\u2192IR' : fillFor === 'out' ? '\u2192OUT' : '\u2192TX'}</Mono>
+                <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{fillFor === 'ir' ? '\u2192IR' : fillFor === 'out' ? '\u2192OUT' : fillFor === 'devy' ? '\u2192DV' : '\u2192TX'}</Mono>
               </View>
               {!!why && <Mono size={8} tone="faint" style={{ marginTop: 3, lineHeight: fs(11) }}>{why}</Mono>}
             </Pressable>

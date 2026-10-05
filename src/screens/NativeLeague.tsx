@@ -66,7 +66,7 @@ import {
   setupLeagueCollege, setLeagueDevyOpen,
 } from '@drip/core/data/liveApi';
 import { DevySharesPanel, DevyStakesList } from './DevyShares';
-import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
+import { isCollegeSlug, teamLabel, collegeStartsHere } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, leagueSuperflex, assignSpots, slotDisplayNames, slotBadgeLabel, slotAcceptsLabel, leagueEligiblePos, type SpotPlayer } from '@drip/core/engine/classic';
 import { devyBlockLine, devyBlockRound, draftRoundLabel, pickRoundLabel } from '@drip/core/data/devyDraft';
@@ -3089,11 +3089,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // starting spots, and how many bench/IR/taxi places exist (v0.285.0, matching
   // the app's roster since v0.281.0).
   const [gm, setGm] = useState<GameModeInfo | null>(null);
-  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | 'out' | null>(null);  // an IR/OUT/taxi place's picker
+  const [fillFor, setFillFor] = useState<'taxi' | 'ir' | 'out' | 'devy' | null>(null);  // an IR/OUT/taxi/devy place's picker
   // Who is IN the place whose chip opened the picker — null for an empty one.
   // Always written with fillFor (openSpot), so it can never be stale.
   const [fillOcc, setFillOcc] = useState<string | null>(null);
-  const openSpot = (spot: 'taxi' | 'ir' | 'out', occupant: string | null) => { setFillOcc(occupant); setFillFor(spot); };
+  const openSpot = (spot: 'taxi' | 'ir' | 'out' | 'devy', occupant: string | null) => { setFillOcc(occupant); setFillFor(spot); };
   // ── WHO MAY BE STASHED (0198) ───────────────────────────────────────────
   // The server has enforced both of these since 0164/0196, but no screen had
   // ever read the rules — so the picker offered every name and the rule only
@@ -3117,7 +3117,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
    *  and a screen that disagreed with it would be worse than one that stayed
    *  quiet. The commissioner is exempt from the taxi LOCK (a deadline) and
    *  from nothing else. */
-  const stashBlock = (slug: string, spot: 'taxi' | 'ir' | 'out'): string | null => {
+  const stashBlock = (slug: string, spot: 'taxi' | 'ir' | 'out' | 'devy'): string | null => {
+    // 0440: the devy shelf takes college players only.
+    if (spot === 'devy') return isCollegeSlug(slug) ? null : 'devy spots hold college players';
     if (!stashRules) return null;
     if (spot === 'out') {
       const tag = injTags[slug];
@@ -3227,6 +3229,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // off for a rival's roster. For the commissioner they stay on, and the
   // pickers offer THAT roster.
   const canStash = viewingMine || !!team?.is_commish;
+  // 0440: a mixed league with devy spots — college players may be active or
+  // shelved, so the DV chips open the picker like the taxi squad's do.
+  const mixedDevy = (gm?.shape?.devy ?? 0) > 0 && collegeStartsHere(gm);
   const shown = useMemo(() => viewingMine ? mine : rosters.filter((r) => r.roster_id === shownRid)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [viewingMine, mine, rosters, shownRid, poolBySlug]);
@@ -3278,7 +3283,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   /** TAXI/IR designations (0164), driven by the PLACES rather than by a cycle
    *  button on every line. The server still enforces the caps and the IR
    *  injury gate and says why not. */
-  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir' | 'out') => {
+  const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir' | 'out' | 'devy') => {
     setFillFor(null);
     run(() => setRosterSpot(leagueId, slug, spot));
   };
@@ -3668,12 +3673,15 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             return (
               <RosterLine key={p.slug} badge="DV" tone="var(--you)" p={p} busy={busy}
                 sub={grad ? `${p.pos} · ${p.team} · drafted — move him to active` : [c?.declared ? 'DECLARED' : null, p.pos, c?.custom ? c.level : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
-                onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : undefined} />
+                // 0440: in a mixed league the shelf is a taxi squad — the chip
+                // opens the picker, with his way back to active at the top.
+                onSlot={grad && canStash ? () => moveToSpot(p.slug, 'active') : mixedDevy && canStash ? () => openSpot('devy', p.slug) : undefined} />
             );
           })}
           {Array.from({ length: Math.max(0, (gm?.shape?.devy ?? 0) - bySpot.devy.length) }, (_, i) => (
             <RosterLine key={`dv-empty-${i}`} badge="DV" tone="var(--you)" p={null} busy={busy}
-              emptyLabel="Open — claim a college player from the wire" />
+              emptyLabel={mixedDevy ? 'Open — shelve a college player, or claim one from the wire' : 'Open — claim a college player from the wire'}
+              slotVerb="devy spot" onSlot={mixedDevy && canStash ? () => openSpot('devy', null) : undefined} />
           ))}
         </>)}
 
@@ -4007,7 +4015,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         <div onClick={() => setFillFor(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 400, maxHeight: '70vh', overflowY: 'auto' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-              {viewingMine ? '' : `${shownName ?? 'This team'}: `}{fillFor === 'ir' ? 'Injured reserve' : fillFor === 'out' ? 'OUT' : 'Taxi squad'}
+              {viewingMine ? '' : `${shownName ?? 'This team'}: `}{fillFor === 'ir' ? 'Injured reserve' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'Devy spots' : 'Taxi squad'}
             </div>
             {(() => {
               const occ = fillOcc ? shown.find((p) => p.slug === fillOcc && p.spot === fillFor) : null;
@@ -4024,7 +4032,9 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               );
             })()}
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 }}>
-              {fillFor === 'ir'
+              {fillFor === 'devy'
+                ? 'Devy spots hold college players off your active roster — a taxi squad for prospects. He can’t be started while he’s on it. NFL players are grayed out below.'
+                : fillFor === 'ir'
                 ? `IR holds players designated ${(stashRules?.irTags ?? ['IR', 'O']).join('/')} by the injury report — your commissioner sets that list. Everyone else is grayed out below.`
                 : fillFor === 'out'
                 ? `OUT holds players designated ${(stashRules?.outTags ?? ['O', 'D']).join('/')} by the injury report — the week-to-week shelf; your commissioner sets that list. Everyone else is grayed out below.`
@@ -4034,7 +4044,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             </div>
             {fillOcc && (
               <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginTop: 12 }}>
-                OR MOVE SOMEONE {fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : 'TO THE TAXI SQUAD'}
+                OR MOVE SOMEONE {fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : fillFor === 'devy' ? 'TO A DEVY SPOT' : 'TO THE TAXI SQUAD'}
               </div>
             )}
             {shown.filter((p) => p.spot === 'active').length === 0 && (
@@ -4047,7 +4057,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
               const cap = gm?.shape?.[fillFor] ?? 0;
               const full = cap > 0 && bySpot[fillFor].length >= cap;
               const why = full
-                ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : 'The taxi squad'} is full (${cap}/${cap}) — move someone back to active first`
+                ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'The devy shelf' : 'The taxi squad'} is full (${cap}/${cap}) — move someone back to active first`
                 : stashBlock(p.slug, fillFor);
               return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6, opacity: why ? 0.45 : 1, flexWrap: 'wrap' }}>
@@ -4059,7 +4069,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                 )}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{teamLabel(p)}</span>
                 <button onClick={() => moveToSpot(p.slug, fillFor)} disabled={busy || !!why} title={why ?? ''} className="mono"
-                  style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: why ? 'var(--faint)' : 'var(--you)', cursor: why ? 'not-allowed' : 'pointer' }}>{fillFor === 'ir' ? '→IR' : fillFor === 'out' ? '→OUT' : '→TX'}</button>
+                  style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: why ? 'var(--faint)' : 'var(--you)', cursor: why ? 'not-allowed' : 'pointer' }}>{fillFor === 'ir' ? '→IR' : fillFor === 'out' ? '→OUT' : fillFor === 'devy' ? '→DV' : '→TX'}</button>
                 {why && <span className="mono" style={{ flexBasis: '100%', fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.4 }}>{why}</span>}
               </div>
               );
