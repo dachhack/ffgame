@@ -118,6 +118,73 @@ async function main() {
       console.log(JSON.stringify(await sweepSportMarket(sport, season || currentSeason(sport)), null, 1));
       break;
     }
+    case 'sport-pool-keys': {
+      // THE SHADOW-READ WEEK (v0.633.0). Stathead: "we need … the pool key
+      // lists per sport so we can confirm every pool player resolves in the
+      // crosswalk." Every key in every daily-sport league's pool, per sport,
+      // as JSON — to stdout, or one file per sport under --out=<dir>. With
+      // STATHEAD_TOKEN set, --check reads the crosswalk and reports the keys
+      // that resolve and the ones that do not.
+      const only = args.find((a) => !a.startsWith('--')) || null;
+      const outDir = args.find((a) => a.startsWith('--out='))?.slice('--out='.length) || null;
+      const check = args.includes('--check');
+      const { allRows } = await import('./supabase.js');
+      const { db } = await import('./supabase.js');
+      const { data: leagues, error } = await db().from('league').select('id, name, sport, season').neq('sport', 'nfl').eq('provider', 'native');
+      if (error) throw new Error(error.message);
+      const sports = [...new Set((leagues ?? []).map((l) => l.sport))].filter((s) => !only || s === only).sort();
+      const out = [];
+      for (const sport of sports) {
+        const ids = (leagues ?? []).filter((l) => l.sport === sport).map((l) => l.id);
+        const keys = new Set();
+        for (const id of ids) {
+          const rows = await allRows((from, to) => db().from('league_pool').select('slug').eq('league_id', id).order('slug').range(from, to));
+          for (const r of rows) if (r.slug.startsWith(`${sport}-`)) keys.add(r.slug);
+        }
+        const entry = { sport, leagues: ids.length, keys: [...keys].sort(), as_of: new Date().toISOString() };
+        if (check) {
+          const { statheadCrosswalk, crosswalkCoverage } = await import('./stathead.js');
+          const xw = await statheadCrosswalk(sport);
+          const cov = crosswalkCoverage(sport, entry.keys, xw.rows ?? xw);
+          entry.crosswalk = { found: cov.found.length, missing: cov.missing, as_of: xw.as_of ?? null };
+        }
+        out.push(entry);
+        if (outDir) {
+          const { writeFileSync, mkdirSync } = await import('node:fs');
+          mkdirSync(outDir, { recursive: true });
+          writeFileSync(`${outDir}/pool-keys-${sport}.json`, JSON.stringify(entry, null, 1));
+        }
+      }
+      if (outDir) console.log(out.map((e) => `${e.sport}: ${e.keys.length} keys across ${e.leagues} league${e.leagues === 1 ? '' : 's'}${e.crosswalk ? ` · crosswalk ${e.crosswalk.found}/${e.keys.length}` : ''} → ${outDir}/pool-keys-${e.sport}.json`).join('\n'));
+      else console.log(JSON.stringify(out, null, 1));
+      break;
+    }
+    case 'stathead-report': {
+      // v0.633.1: the boot report, on demand.
+      const { statheadBootReport } = await import('./stathead.js');
+      await statheadBootReport({ sports: args.filter((a) => !a.startsWith('--')).length ? args.filter((a) => !a.startsWith('--')) : null });
+      break;
+    }
+    case 'stathead-probe': {
+      // v0.633.0: is the token good, and what does the feed hold? /v1/meta,
+      // then one slate and one box score for a sport and a date if given.
+      const { statheadMeta, statheadGames, statheadLines, statheadConfigured } = await import('./stathead.js');
+      if (!statheadConfigured()) throw new Error('set STATHEAD_URL (optional) and STATHEAD_TOKEN');
+      const meta = await statheadMeta();
+      console.log(JSON.stringify(meta, null, 1).slice(0, 4000));
+      const [sport, date] = args.filter((a) => !a.startsWith('--'));
+      if (sport && date) {
+        const g = await statheadGames(sport, { date });
+        const rows = g.rows ?? g;
+        console.log(`${sport} ${date}: ${rows.length} games, as_of ${g.as_of ?? '?'}`);
+        for (const x of rows.slice(0, 20)) console.log(`  ${x.game_id} ${x.away}@${x.home} ${x.status} ${x.start_utc ?? ''} ${x.away_score ?? ''}-${x.home_score ?? ''}`);
+        if (rows[0]) {
+          const l = await statheadLines(sport, rows[0].game_id);
+          console.log(`lines for ${rows[0].game_id}: ${(l.rows ?? []).length} players, stored ${l.stored}, revised_at ${l.revised_at ?? '—'}; first: ${JSON.stringify((l.rows ?? [])[0] ?? null).slice(0, 300)}`);
+        }
+      }
+      break;
+    }
     case 'sport-poll': {
       const [sport, dateArg] = args.filter((a) => !a.startsWith('--'));
       if (!sport) throw new Error('usage: sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force]');
