@@ -6,12 +6,13 @@ import { NBA } from './nba';
 import { WNBA } from './wnba';
 import { NHL } from './nhl';
 import { MLB } from './mlb';
+import { EPL, MLS } from './soccer';
 
 export type { Sport, SportDef, StatLine, StatDef, CategoryDef, SportSlotType, InjuryStatusDef, PeriodModel } from './types';
 export { SPORT_IDS } from './types';
-export { NFL, NBA, WNBA, NHL, MLB };
+export { NFL, NBA, WNBA, NHL, MLB, EPL, MLS };
 
-export const SPORTS: Record<Sport, SportDef> = { nfl: NFL, nba: NBA, wnba: WNBA, nhl: NHL, mlb: MLB };
+export const SPORTS: Record<Sport, SportDef> = { nfl: NFL, nba: NBA, wnba: WNBA, nhl: NHL, mlb: MLB, epl: EPL, mls: MLS };
 
 export const isSport = (s: unknown): s is Sport => typeof s === 'string' && (SPORT_IDS as readonly string[]).includes(s);
 
@@ -53,7 +54,7 @@ export function playerKey(sport: Sport, feedId: string | number): string {
   return `${SPORTS[sport].keyPrefix}-${id}`;
 }
 
-const KEY_RE = /^(nba|wnba|nhl|mlb)-(\d+)$/;
+const KEY_RE = /^(nba|wnba|nhl|mlb|epl|mls)-(\d+)$/;
 
 /** The sport and feed id a player key names, or null for an NFL slug. */
 export function parsePlayerKey(key: string | null | undefined): { sport: Sport; id: string } | null {

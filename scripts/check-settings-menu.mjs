@@ -29,8 +29,11 @@ for (const a of ['Admin', "What's new", 'Sign out']) {
   ok(src.includes(`label="${a}"`), `the "${a}" action is on the menu`);
 }
 // v0.503.0: the widget's league picker — Android only, where the widget is.
-ok(/section === 'widget' && <WidgetLeaguesPicker \/>/.test(src) && /Platform\.OS === 'android' \? \[\{ id: 'widget'/.test(src),
-  'the widget league picker is on the menu, on Android only');
+// v0.631.0: the fields widget's sports picker sits under it on the same page.
+ok(/section === 'widget' && <><WidgetLeaguesPicker \/><FieldsPicker \/><\/>/.test(src) && /Platform\.OS === 'android' \? \[\{ id: 'widget'/.test(src),
+  'the widget league picker and the fields picker are on the menu, on Android only');
+ok(/function FieldsPicker\(\)/.test(src) && /FIELDS WIDGET · SPORTS/.test(src) && /refreshExtraWidgets\(\{ fresh: true \}\)/.test(src),
+  'the fields picker names the sports and repaints the fields widgets on every change');
 // 0422: delete my account lives in the Account section and asks for the email back.
 ok(/section === 'account' && <DeleteAccount/.test(src) && /deleteMyAccount\(typed\)/.test(src), 'delete my account is reachable and confirms by typed email');
 // v0.502.0: the demo board left with the 2025 bake it replayed.

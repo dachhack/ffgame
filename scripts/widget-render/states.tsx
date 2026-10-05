@@ -72,6 +72,19 @@ const starred = games.map((g, i) => (i === 0 ? { ...g, mine: [
 tryIt('fields with nav, a picked league, stars in every state', <FieldsWidget state={{ kind: 'ok', week: 2, games: starred, current: 3, hasPrev: true, hasNext: false, leagueLabel: 'Gridiron Gang' }} />);
 tryIt('fields at the slate\'s start, now', <FieldsWidget state={{ kind: 'ok', week: 3, games: [], current: 3, hasPrev: false, hasNext: true }} />);
 tryIt('fields offline', <FieldsWidget state={{ kind: 'ok', week: 3, games, offline: true }} />);
+// THE OTHER SPORTS (v0.631.0): sections under the week, and alone under an empty slate.
+const sportGames = [
+  { sport: 'nba' as const, league: 'NBA', games: [
+    { key: 'nba:1', sport: 'nba' as const, gameId: '1', away: 'BOS', home: 'NYK', as: 54, hs: 49, state: 'live' as const, clock: 'Q3 2:35', startMs: Date.now() - 3600e3, gameDate: '2026-10-05' },
+    { key: 'nba:2', sport: 'nba' as const, gameId: '2', away: 'LAL', home: 'GSW', as: 0, hs: 0, state: 'pre' as const, clock: null, startMs: Date.now() + 3600e3, gameDate: '2026-10-05' },
+    { key: 'nba:3', sport: 'nba' as const, gameId: '3', away: 'MIA', home: 'ORL', as: 101, hs: 99, state: 'final' as const, clock: 'FINAL', startMs: Date.now() - 7200e3, gameDate: '2026-10-05' },
+  ] },
+  { sport: 'nhl' as const, league: 'NHL', games: [] },
+];
+tryIt('fields with the other sports under the week', <FieldsWidget state={{ kind: 'ok', week: 3, games, current: 3, sportGames }} />);
+tryIt('fields, the other sports alone (no NFL games picked)', <FieldsWidget state={{ kind: 'ok', week: 3, games: [], current: 3, sportGames }} />);
+tryIt('fields empty slate, the other sports', <FieldsWidget state={{ kind: 'empty', sportGames }} />);
+tryIt('fields empty slate, a sport with nothing picked today', <FieldsWidget state={{ kind: 'empty', sportGames: [sportGames[1]] }} />);
 for (const s of [{ kind: 'loading' }, { kind: 'empty' }, { kind: 'error', message: 'x' }] as const) tryIt(`fields ${s.kind}`, <FieldsWidget state={s as any} />);
 // v0.508.0 — a game opened in place: last plays, leaders, the app button.
 const opened = games.map((g) => ({ ...g, dd: g.state === 'live' ? '2nd & 7' : null, spot: g.state === 'live' ? 'BUF 34' : null,

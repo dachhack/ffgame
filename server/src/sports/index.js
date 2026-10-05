@@ -6,6 +6,8 @@ import { nhl } from './nhl.js';
 import { mlb } from './mlb.js';
 import { nba, wnba } from './nba.js';
 
+// Soccer (epl, mls) has no adapter yet: its data arrives with Stathead's
+// delivery (v0.630.0); the core definitions are ready for it.
 export const ADAPTERS = { nhl, mlb, nba, wnba };
 
 export const adapterFor = (sport) => {

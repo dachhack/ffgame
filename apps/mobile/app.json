@@ -82,7 +82,7 @@
             {
               "name": "Fields",
               "label": "Drip all fields",
-              "description": "Every NFL game this week — scores, drives and your players.",
+              "description": "The games you follow across the NFL, NBA, NHL, MLB and more — scores, drives and your players.",
               "minWidth": "250dp",
               "minHeight": "110dp",
               "targetCellWidth": 4,

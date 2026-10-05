@@ -10,7 +10,9 @@
 import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
-import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine, projectedSheet } from '../packages/core/src/data/widgetExtras';
+import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine, projectedSheet, applyFieldsPick } from '../packages/core/src/data/widgetExtras';
+import { fieldsPick, setFieldsPick, fieldsPickAllows, sportFieldGames, sportTeamsOf, FIELDS_SPORTS, FIELDS_PENDING, DEFAULT_FIELDS_PICK } from '../packages/core/src/data/fieldsPick';
+import { heroesVillains, heroesWeek } from '../packages/core/src/data/heroes';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueProjScoring } from '../packages/core/src/engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring, scoringLeague, leagueScoring } from '../packages/core/src/engine/leagueScoring';
 import { setLiveGameFeed, feedRowsToWeek } from '../packages/core/src/data/gameFeed';
@@ -607,4 +609,77 @@ const state = [
 }
 
 if (fails) { console.log(`\n${fails} WIDGET ASSERTION(S) FAILED`); process.exit(1); }
+
+// ── THE FIELDS PICK (v0.631.0): which sports, teams and games the widget lists ──
+{
+  const base = { sports: ['nfl', 'nba'], teams: {}, games: {} };
+  ok('fields pick: nothing picked within a sport is every game', fieldsPickAllows(base, 'nba', { key: '1', away: 'BOS', home: 'NYK' }));
+  ok('fields pick: a followed team narrows to its games', fieldsPickAllows({ ...base, teams: { nba: ['bos'] } }, 'nba', { key: '1', away: 'BOS', home: 'NYK' }) && !fieldsPickAllows({ ...base, teams: { nba: ['BOS'] } }, 'nba', { key: '2', away: 'LAL', home: 'GSW' }));
+  ok('fields pick: picked games win over followed teams', fieldsPickAllows({ ...base, teams: { nba: ['BOS'] }, games: { nba: ['2'] } }, 'nba', { key: '2', away: 'LAL', home: 'GSW' }) && !fieldsPickAllows({ ...base, teams: { nba: ['BOS'] }, games: { nba: ['2'] } }, 'nba', { key: '1', away: 'BOS', home: 'NYK' }));
+  const rows = [
+    { game_id: '3', game_date: '2026-10-05', start_utc: '2026-10-05T23:00:00Z', status: 'final', away: 'MIA', home: 'ORL', away_score: 101, home_score: 99, clock: null },
+    { game_id: '1', game_date: '2026-10-05', start_utc: '2026-10-06T00:00:00Z', status: 'live', away: 'BOS', home: 'NYK', away_score: 54, home_score: 49, clock: 'Q3 2:35' },
+    { game_id: '2', game_date: '2026-10-06', start_utc: '2026-10-06T23:30:00Z', status: 'pre', away: 'LAL', home: 'GSW', away_score: null, home_score: null, clock: null },
+    { game_id: '0', game_date: '2026-10-04', start_utc: '2026-10-04T23:00:00Z', status: 'final', away: 'DEN', home: 'UTA', away_score: 110, home_score: 100, clock: null },
+    { game_id: '9', game_date: '2026-10-04', start_utc: '2026-10-05T02:30:00Z', status: 'live', away: 'POR', home: 'SAC', away_score: 88, home_score: 90, clock: 'Q4 1:00' },
+    { game_id: '7', game_date: '2026-10-06', start_utc: null, status: 'postponed', away: 'CHI', home: 'DET', away_score: null, home_score: null, clock: null },
+  ];
+  const g = sportFieldGames('nba', rows, base, '2026-10-05');
+  // Live games order by start (the one that tipped first first), then to come by start, then finals.
+  ok('sport fields: live first, then to come by start, then finals; yesterday only while live; a postponement left off', g.map((x) => x.gameId).join() === '9,1,2,3');
+  const by = (id) => g.find((x) => x.gameId === id);
+  ok('sport fields: the row as the widget reads it', by('1').key === 'nba:1' && by('1').clock === 'Q3 2:35' && by('1').as === 54 && by('2').state === 'pre' && by('2').clock === null && by('2').startMs === Date.parse('2026-10-06T23:30:00Z') && by('3').clock === 'FINAL');
+  ok('sport fields: the pick applies', sportFieldGames('nba', rows, { ...base, teams: { nba: ['LAL'] } }, '2026-10-05').map((x) => x.gameId).join() === '2');
+  ok('sport fields: the teams a picker offers', sportTeamsOf(rows).join() === 'BOS,CHI,DEN,DET,GSW,LAL,MIA,NYK,ORL,POR,SAC,UTA');
+  const nfl = fieldGames(WEEK).map((x) => ({ ...x }));
+  ok('fields pick: the NFL week narrows by team too', nfl.length > 0 && applyFieldsPick(nfl, { ...base, teams: { nfl: [nfl[0].away] } }).every((x) => x.away === nfl[0].away || x.home === nfl[0].away) && applyFieldsPick(nfl, base).length === nfl.length);
+  // storage round trip, with the default and with junk
+  setFieldsPick({ sports: ['nba', 'nfl', 'bogus'], teams: { nba: ['BOS'], nope: ['X'] }, games: { nhl: ['22'] } });
+  const back = fieldsPick();
+  ok('fields pick: stored in FIELDS_SPORTS order, unknown sports and junk dropped', back.sports.join() === 'nfl,nba' && back.teams.nba.join() === 'BOS' && !('nope' in back.teams) && back.games.nhl.join() === '22');
+  setFieldsPick({ sports: [], teams: {}, games: {} });
+  ok('fields pick: an empty pick reads as the default (the NFL alone)', fieldsPick().sports.join() === DEFAULT_FIELDS_PICK.sports.join());
+  ok('fields pick: soccer is listed and pending', FIELDS_SPORTS.includes('epl') && FIELDS_PENDING.has('epl') && FIELDS_PENDING.has('mls') && !FIELDS_PENDING.has('nba'));
+}
+
+
+// ── HEROES & VILLAINS (v0.632.0): both sides on the snapshot, folded across leagues ──
+{
+  // A drip snapshot inside the first window: my pick and the opponent's revealed one.
+  const pool = [{ slug: 'josh-allen', full: 'Josh Allen', team: 'BUF', pos: 'QB' }, { slug: 'tyreek-hill', full: 'Tyreek Hill', team: 'MIA', pos: 'WR' }];
+  const theirPool = [{ slug: 'de-von-achane', full: "De'Von Achane", team: 'MIA', pos: 'RB' }];
+  const picks = [{ game_window: wins[0].id, roster_slot: '0', player_slug: 'josh-allen', metric_id: 'pass' }];
+  const st = [{ game_window: wins[0].id, home_score: 12.4, away_score: 3.9, slot_scores: [
+    { side: 'home', slot: '0', slug: 'josh-allen', metric: 'pass', score: 12.4 },
+    { side: 'away', slot: '0', slug: 'de-von-achane', metric: 'rush', score: 3.9 },
+  ] }];
+  const d = summarize({ league, week: WEEK, matchup: matchup(), state: st, teams, nowMs: kick(0) + 30 * 60_000, picks, pool, theirPool });
+  ok('sides: a drip snapshot carries my starter and the opponent\'s revealed one, named off his pool', d.sides && d.sides.mine.map((p) => p.slug).join() === 'josh-allen' && d.sides.theirs.length === 1 && d.sides.theirs[0].name === "D. Achane" && d.sides.theirs[0].team === 'MIA' && d.sides.theirs[0].status === 'live' && d.sides.theirs[0].pts === 3.9, d.sides);
+  ok('sides: the windows still to lock count their sealed slots', d.sides.theirsSealed > 0, d.sides.theirsSealed);
+  // A second league where Allen starts AGAINST me and Hill for me; a third on another week.
+  const other = { ...d, leagueId: 'L2', leagueName: 'Office Pool', them: { name: 'Bagel Boys', score: 0 }, sides: { mine: [{ slug: 'tyreek-hill', name: 'T. Hill', pos: 'WR', team: 'MIA', win: wins[0].id, status: 'live', pts: 8.2, proj: null }], theirs: [{ slug: 'josh-allen', name: 'J. Allen', pos: 'QB', team: 'BUF', win: wins[0].id, status: 'live', pts: 12.4, proj: null }, { slug: 'patrick-mahomes', name: 'P. Mahomes', pos: 'QB', team: 'KC', win: 'snf', status: 'pre', pts: null, proj: 22.1 }], theirsSealed: 0 } };
+  const third = { ...d, leagueId: 'L3', leagueName: 'Elsewhere', week: WEEK + 1, sides: { mine: [{ slug: 'nobody', name: 'N. Body', pos: 'RB', team: 'DEN', win: 'late', status: 'pre', pts: null, proj: 9 }], theirs: [], theirsSealed: 0 } };
+  const hv = heroesVillains([d, other, third]);
+  ok('heroes: the week is the one most leagues are on, and only its snapshots fold', heroesWeek([d, other, third]) === WEEK && hv.week === WEEK && hv.leagues === 2 && !hv.heroes.some((p) => p.slug === 'nobody'), hv.week);
+  const allen = hv.heroes.find((p) => p.slug === 'josh-allen');
+  ok('heroes: Allen is a hero once and a villain once — conflicted, listed on both sides', allen && allen.count === 1 && allen.villainIn.length === 1 && hv.villains.some((p) => p.slug === 'josh-allen') && hv.conflicted.length === 1 && hv.conflicted[0].slug === 'josh-allen', hv.conflicted);
+  ok('heroes: Hill is a hero in Office Pool, Achane and Mahomes villains with their opponents named', hv.heroes.some((p) => p.slug === 'tyreek-hill' && p.heroIn[0].leagueName === 'Office Pool') && hv.villains.some((p) => p.slug === 'de-von-achane' && p.villainIn[0].opponent === 'Beach Day Ballers') && hv.villains.some((p) => p.slug === 'patrick-mahomes' && p.villainIn[0].opponent === 'Bagel Boys'), hv.villains.map((p) => p.slug));
+  ok('heroes: the sealed count sums across the leagues', hv.sealed === d.sides.theirsSealed, hv.sealed);
+  const mia = hv.games.find((g) => g.key === 'MIA@BUF');
+  ok('key games: MIA@BUF carries Allen (hero + villain), Hill and Achane — 4 at stake, both leagues, live', mia && mia.stake === 4 && mia.leagues.length === 2 && mia.status === 'live' && mia.heroes.map((p) => p.slug).sort().join() === 'josh-allen,tyreek-hill' && mia.villains.map((p) => p.slug).sort().join() === 'de-von-achane,josh-allen', mia);
+  ok('key games: ranked by stake, then kickoff', hv.games.map((g) => g.key).join() === 'MIA@BUF,KC@NYG', hv.games.map((g) => g.key));
+  // Quad boxes: the fixture's windows have one game each, so none; a window with several games lists its four by stake.
+  ok('quad box: no window with several games, no quad', hv.quads.length === 0, hv.quads);
+  setRuntimeSlate(WEEK, [
+    { away: 'MIA', home: 'BUF', aScore: 0, hScore: 0, win: 'early', kickoff: et(27, 13, 0) },
+    { away: 'ATL', home: 'CAR', aScore: 0, hScore: 0, win: 'early', kickoff: et(27, 13, 0) },
+    { away: 'KC', home: 'NYG', aScore: 0, hScore: 0, win: 'early', kickoff: et(27, 13, 0) },
+    { away: 'DEN', home: 'LAC', aScore: 0, hScore: 0, win: 'early', kickoff: et(27, 13, 0) },
+    { away: 'DET', home: 'BAL', aScore: 0, hScore: 0, win: 'early', kickoff: et(27, 13, 0) },
+    { away: 'NYJ', home: 'NE', aScore: 0, hScore: 0, win: 'late', kickoff: et(27, 16, 25) },
+  ]);
+  const q = heroesVillains([d, other], WEEK);
+  ok('quad box: the early window lists its four screens, stake first, and counts the rest', q.quads.length === 1 && q.quads[0].games.length === 4 && q.quads[0].games[0].key === 'MIA@BUF' && q.quads[0].games[1].key === 'KC@NYG' && q.quads[0].others === 1, q.quads.map((x) => ({ win: x.win, games: x.games.map((g) => g.key), others: x.others })));
+}
+
 console.log('\nALL WIDGET ASSERTIONS PASSED');

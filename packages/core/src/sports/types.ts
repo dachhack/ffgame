@@ -26,9 +26,9 @@
 //
 // See docs/multi-sport-plan.md for the phases this is the first of.
 
-export type Sport = 'nfl' | 'nba' | 'wnba' | 'nhl' | 'mlb';
+export type Sport = 'nfl' | 'nba' | 'wnba' | 'nhl' | 'mlb' | 'epl' | 'mls';
 
-export const SPORT_IDS: readonly Sport[] = ['nfl', 'nba', 'wnba', 'nhl', 'mlb'];
+export const SPORT_IDS: readonly Sport[] = ['nfl', 'nba', 'wnba', 'nhl', 'mlb', 'epl', 'mls'];
 
 /** How a season is cut into scoring periods and when a lineup locks. NFL is
  *  weekly (one lock at the week's first kickoff, late swap per window); the
@@ -106,8 +106,12 @@ export interface SportDef {
   injuryStatuses: InjuryStatusDef[];
   teams: number;
   gamesPerTeam: number;
-  /** Regular-season Mon–Sun weeks a native schedule spans by default. */
+  /** Regular-season weeks a native schedule spans by default. */
   regularSeasonWeeks: number;
+  /** The ISO weekday a scoring period opens on (1 Monday … 7 Sunday); absent
+   *  = Monday. Soccer plays Tuesday-to-Monday weeks (v0.630.0) because a
+   *  Premier League matchweek runs Saturday to Monday night. */
+  weekStartDow?: number;
   /** The player_key prefix — `${prefix}-${feedId}`, numeric ids only, the same
    *  rule college uses (`c-<espn_id>`) so a key never collides with an NFL
    *  name slug. */

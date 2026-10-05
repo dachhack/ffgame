@@ -56,7 +56,8 @@ export interface SportSlotSpec { pos: string[]; label: string; bb?: boolean; tea
 /** Which sports carry a tenure (years of experience) in their directory:
  *  NBA from Sleeper's years_exp, MLB from the debut date, NHL from the stats
  *  bios' first season (v0.629.1). The WNBA feed has none, so a tenure-scoped
- *  spot there would refuse everyone. */
+ *  spot there would refuse everyone; soccer joins when Stathead's directory
+ *  carries it. */
 export const sportHasTenure = (sport: Sport): boolean => sport === 'nba' || sport === 'mlb' || sport === 'nhl';
 
 /** The spot's scope on screen: "BOS/LAL · ROOKIES ONLY", or ''. */
@@ -156,13 +157,25 @@ export function slotCountsOf(def: SportDef, slots: { pos: string[] }[] | null | 
   return out;
 }
 
-/** Monday on or before a date (UTC calendar math on a YYYY-MM-DD). */
-export function mondayOnOrBefore(date: string): string {
+/** The last day on or before `date` that falls on ISO weekday `dow` (1
+ *  Monday … 7 Sunday); UTC calendar math on a YYYY-MM-DD. */
+export function weekStartOnOrBefore(date: string, dow = 1): string {
   const d = new Date(`${date}T00:00:00Z`);
-  const dow = d.getUTCDay();                 // 0 Sun … 6 Sat
-  d.setUTCDate(d.getUTCDate() - ((dow + 6) % 7));
+  const iso = ((d.getUTCDay() + 6) % 7) + 1;  // 1 Mon … 7 Sun
+  d.setUTCDate(d.getUTCDate() - ((iso - dow + 7) % 7));
   return d.toISOString().slice(0, 10);
 }
+
+/** Monday on or before a date. */
+export const mondayOnOrBefore = (date: string): string => weekStartOnOrBefore(date, 1);
+
+/** The ISO weekday a sport's periods open on: Monday for every sport but
+ *  soccer, whose matchweeks run Saturday to Monday night (v0.630.0). */
+export const sportWeekStartDow = (sport: Sport): number => SPORTS[sport].weekStartDow ?? 1;
+export const SPORT_WEEK_START_LABEL: Record<number, string> = { 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT', 7: 'SUN' };
+
+/** The period start on or before a date, on the sport's own weekday. */
+export const periodStartOnOrBefore = (sport: Sport, date: string): string => weekStartOnOrBefore(date, sportWeekStartDow(sport));
 
 export const addDays = (date: string, n: number): string => {
   const d = new Date(`${date}T00:00:00Z`);
@@ -176,9 +189,9 @@ export function sportLeagueSettings(sport: Sport, opts: { periodStart: string; w
   /** Replay a past season: its starting year, and the real date week 301 opens on (default today). */
   replay?: { season: string; anchor?: string } | null }) {
   const def = SPORTS[sport];
-  const start = mondayOnOrBefore(opts.periodStart);
+  const start = periodStartOnOrBefore(sport, opts.periodStart);
   const replay = opts.replay
-    ? { season: opts.replay.season, offset_days: daysBetween(start, mondayOnOrBefore(opts.replay.anchor ?? new Date().toISOString().slice(0, 10))) }
+    ? { season: opts.replay.season, offset_days: daysBetween(start, periodStartOnOrBefore(sport, opts.replay.anchor ?? new Date().toISOString().slice(0, 10))) }
     : null;
   const sportBlock: SportLeagueSettings = {
     format: opts.format ?? 'points',
@@ -227,12 +240,13 @@ export function sportSettingsOf(settings: Record<string, unknown> | null | undef
   };
 }
 
-/** The season a sport is in on a date, as its starting year: NBA and NHL
- *  seasons straddle New Year (the 2026-27 season is '2026', from July on);
- *  MLB and WNBA seasons are the calendar year. The NFL keeps config.season. */
+/** The season a sport is in on a date, as its starting year: NBA, NHL and
+ *  Premier League seasons straddle New Year (the 2026-27 season is '2026',
+ *  from July on); MLB, WNBA and MLS seasons are the calendar year. The NFL
+ *  keeps config.season. */
 export function currentSeason(sport: Sport, now: Date = new Date()): string {
   const y = now.getUTCFullYear(), m = now.getUTCMonth() + 1;
-  if (sport === 'nba' || sport === 'nhl') return String(m >= 7 ? y : y - 1);
+  if (sport === 'nba' || sport === 'nhl' || sport === 'epl') return String(m >= 7 ? y : y - 1);
   return String(y);
 }
 

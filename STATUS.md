@@ -22,6 +22,149 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.632.1 — one line under Your leagues, on the web
+
+> - The web's Your leagues row is the app's: ALL · COMMISH · FIND · ADD on one line. The GET THE APP chip moved up beside the settings gear.
+
+Founder: "copy the app 'add' and 'find' chips on the web version of the my
+league page and move the 'get the app' chip to just to the left of the
+settings chip. So there is just one line under 'your leagues' before we list
+the leagues."
+
+- `LiveOnboard` `LeagueHome`: FIND and ADD carry the verbs alone, as the app's
+  chips do (v0.292.3's "the verbs carry it"), with the long names as the title
+  and the screen-reader label; the spacer and the two app anchors left the row,
+  so it no longer folds onto a second line. The empty-state copy names the
+  chips by their new words.
+- The header: 📱 / 🍎 GET THE APP sits just left of the gear on the home view,
+  in the header's own chip size; the platform rule is unchanged (an iPhone
+  sees TestFlight, an Android phone the APK, a desktop both, labelled ANDROID
+  APP and iOS APP when both show).
+
+### v0.632.0 — heroes & villains on Your Leagues
+
+> - A new card at the top of Your Leagues (web and app) folds every matchup you are in this week: HEROES, the players starting for you and in how many of your matchups; VILLAINS, the players starting against you; KEY GAMES ranked by how many of your matchups each touches; and a QUAD BOX pick for every window with several games — the four screens to put up.
+
+Founder: "Let's make a heroes and villains feature on the your leagues page.
+It lists the key players for your matchups and how many matchups they are in
+for you… suggestions for your quad box for game windows with multiple games
+and a list of key games for your matchups."
+
+- **The snapshot carries both sides (`widgetFeed`).** `WidgetSnapshot.sides`
+  = `{ mine, theirs, theirsSealed }` of `SidePlayer` (slug, name, pos, team,
+  window or spot, pre/live/final, points, projection). Mine come off the cards
+  (a drip pick, a classic spot with a man in it). Theirs: a classic opponent's
+  rows (the same `sideOf` that projects their final); a drip opponent's picks
+  only once a window has locked and the resolver's slot rows name them, with
+  `theirsSealed` counting the slots still hidden. `widgetSnapshot` now reads
+  the opponent's roster for drip leagues too (`theirPool`), so a revealed pick
+  is named rather than printed as a slug.
+- **The fold (`data/heroes.ts`, pure).** `heroesVillains(snaps)`: the week is
+  the one most NFL snapshots are on (daily-sport weeks 301+ are their own
+  product and are left out); a HERO counts once per matchup he starts for me,
+  a VILLAIN once per matchup he starts against me, a man on both sides is
+  CONFLICTED and listed on both with the other count beside him; a KEY GAME
+  (`nflGameForTeam`) carries its heroes and villains and a stake = every count
+  in it, ranked by stake then kickoff; a QUAD BOX for every window with two or
+  more games lists the four by stake, the rest of the window by kickoff, and
+  counts the overflow. Byes and unknown teams join no game.
+- **The cards.** `apps/mobile/src/ui/HeroesVillains.tsx` and
+  `src/screens/HeroesVillains.tsx`: a collapsed header (week, counts, sealed
+  slots) that opens to four chips. Each player row: ×N, name, position and
+  team, the leagues (a villain's with the opponent's name), "also a villain in
+  N" when conflicted, and his live points or projection. Each game row: the
+  teams, LIVE / FINAL / kickoff, "N at stake", then 👍 heroes and 👎 villains.
+  Both pages pass the glance snapshots they already read, so the card costs no
+  new request and refreshes with them (every five minutes, pull-to-refresh).
+- **Checks.** `check:widget`: a drip snapshot's sides (mine, the revealed
+  opponent named off his pool, the sealed count), the fold across three leagues
+  on two weeks (week choice, a conflicted Allen, opponents named, sealed sum),
+  the key games' stake and order, and a six-game early window's quad box.
+
+### v0.631.0 — the fields widget follows the games you pick, across sports
+
+> - The home-screen Fields widget (Android) now lists the sports you choose: the NFL week as before, then the NBA, NHL, MLB and WNBA games of today and the next two days, live first. In Settings → Home-screen widget, pick the sports, follow teams, or tick single games; nothing picked in a sport is every game.
+
+Founder: "let's build a fields widget where the user can specify the games
+across multiple sports that display in the widget. The card should be an app
+widget."
+
+- **Core `data/fieldsPick.ts`.** `FieldsPick` = the sports on the widget,
+  teams followed per sport, single games picked per sport; stored once for
+  every fields widget (`widget:fields:pick`, the app's storage the headless
+  task reads too, as `widget:hidden`). `fieldsPickAllows`: picked games win,
+  else followed teams, else every game. `sportFieldGames` turns a sport's
+  `sport_game` rows into widget rows: live first (by start), then to come by
+  start, then finals; yesterday's only while still live; postponements and
+  cancellations off. `FIELDS_SPORTS` lists what the picker offers; `epl`/`mls`
+  are `FIELDS_PENDING` until Stathead's data lands. `liveApi.sportGamesBetween`
+  reads a sport's games between two dates with no league (sport_game is
+  readable by any signed-in user). `widgetExtras.loadSportFields` reads each
+  picked daily sport for yesterday..+2 days on its current season, a failed
+  sport sitting out the paint; `applyFieldsPick` narrows the NFL week by the
+  same rule.
+- **The widget.** `FieldsState` carries `sportGames` sections; the picture
+  draws them under the NFL rows (a league header with LIVE / to come counts,
+  then one row per game: codes, scores, the clock or the start, live border),
+  and on their own under an empty NFL slate — so the off-season widget is the
+  NBA's and the NHL's. A sport row's tap opens the app. The task reads the
+  pick first and the sports independently of the NFL week; an NFL switched
+  off in the pick skips the slate read. Manifest description updated.
+- **Settings → Home-screen widget → ▦ FIELDS WIDGET · SPORTS.** Sport chips
+  (soccer greyed "soon"); for each daily sport on, TEAMS TO FOLLOW chips off
+  the next seven days' slate and a GAMES · NEXT 7 DAYS list with ✓ toggles
+  and the start time; SHOW EVERY GAME clears a sport's picks. Every change
+  repaints the fields widgets.
+- **Checks.** `check:widget` covers the pick rule, the row shaping and order,
+  the teams a picker offers, the NFL narrowing and the storage round trip
+  (junk dropped, the empty pick reading as the default). `check:widgetrender`
+  builds the new states (sections under the week, alone, under an empty slate,
+  a sport with nothing picked today).
+- Not yet: ★ your players on a daily-sport row. The remembered snapshots do
+  not carry the league's sport, and team codes collide across sports (MIN,
+  MIA), so the stars stay NFL-only until the snapshot names its sport.
+
+### v0.630.0 — soccer joins the spine: the Premier League and MLS
+
+> - The platform now knows two soccer leagues, the Premier League and MLS: positions, a Fantasy-Premier-League scoring table (goals and clean sheets paid by position), categories, Tuesday-to-Monday weeks and seasons up to 40 weeks. The data arrives with Stathead's delivery; until then no soccer league can be created in production.
+
+Founder: "They [Stathead] are adding MLS and Premier League as well … Add the
+soccer section to the doc and build the spine."
+
+- **Core.** `sports/soccer.ts`: one definition for `epl` and `mls` (as nba/wnba
+  share basketball): GK/DEF/MID/FWD, slot types GK DEF MID FWD UTIL (outfield),
+  a 1-3-3-2-2 default lineup, 4 bench, 2 IR. Every match line carries `posn`
+  (1 GK 2 DEF 3 MID 4 FWD, set by the adapter from the box score) and
+  `deriveSoccer` splits goals and clean sheets by position (`g_def`, `cs_gk`…),
+  applies the 60-minute clean-sheet rule, counts saves in threes and goals
+  conceded in pairs, and marks the appearance under/over 60 minutes. Default
+  table is FPL's. Categories include a shot-accuracy ratio and lower-is-better
+  cards and goals conceded. `SportDef.weekStartDow` (optional, Monday default)
+  is 2 for soccer; `weekStartOnOrBefore`, `sportWeekStartDow`,
+  `periodStartOnOrBefore` and `SPORT_WEEK_START_LABEL` replace the Monday
+  assumption in `sportLeagueSettings` and both create flows (the FIRST WEEK
+  picker re-anchors when the sport changes and labels the weekday).
+  `currentSeason('epl')` straddles New Year like the NBA; MLS is the calendar
+  year. Keys `epl-<id>` / `mls-<id>` parse; the card leads with soccer stats.
+- **Migration 0437.** The five check lists accept the two ids; `sport_week_start_dow`;
+  `sport_positions` for both; `create_native_league` (0432's body) accepts
+  them; `sport_generate_schedule` and `set_sport_settings` allow 1–40 weeks and
+  the settings RPC normalises period_start to the sport's own weekday. Verified
+  locally: an EPL league's 2026-10-08 becomes Tuesday 2026-10-06, an NBA
+  league's stays Monday; 38 weeks accepted, 41 refused; a PG spot refused on
+  an EPL lineup; a 38-week schedule ends at week 338.
+- **Worker.** No adapter yet: `SPORTS=…,epl` is logged and skipped
+  (`config.sportsPending`) rather than polled; the injury prune keeps soccer
+  keys. The Stathead adapter slots into `server/src/sports/index.js` when the
+  feed lands (requirements in the shared doc, soccer section).
+- **Checks.** `check-sports.mjs`: the two leagues, key parsing, position
+  mapping, the FPL table by position (a forward's brace, a defender's goal and
+  clean sheet, a 59-minute non-clean-sheet, a keeper's saves and penalty save,
+  the penalties), derive, categories, the Tuesday week, settings, seasons and
+  the 0437 pins; the check now reads the league.sport list and
+  `sport_positions` from 0437. `sports-league.mjs`: EPL periods Tuesday to
+  Monday.
+
 ### v0.629.1 — NHL tenure, so ROOKIES spots work for hockey
 
 > - A hockey league's lineup spots can now be scoped to ROOKIES, like the NBA's and MLB's: the directory learns each player's first NHL season.
