@@ -3,7 +3,8 @@
 //   node src/cli.js sync-week <leagueId> <wk>  mirror a week's schedule + lineups
 //   node src/cli.js poll-once                  one scoreboard+plays pass (current week)
 //   node src/cli.js inj-once                   one injury poll
-//   node src/cli.js sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force] [--replay=2025]  one day's games + box scores → sport_game/game_stat_line
+//   node src/cli.js sport-poll <sport> [YYYY-MM-DD] [--force] [--replay=2025] [--provider=stathead|public]  one day's games + box scores → sport_game/game_stat_line
+//   node src/cli.js sport-shadow <sport> <YYYY-MM-DD> [--max=20]  both feeds for one day, compared in the log; writes nothing
 //   node src/cli.js sport-market <nhl|mlb|nba|wnba> [season]  ADP + the season calendar → sport_player.adp / sport_calendar
 //   node src/cli.js sport-dir <sport> [season]   sweep the sport's directory → sport_player (ranked)
 //   node src/cli.js sport-leagues <sport> [YYYY-MM-DD]  one lock + resolve pass over the sport's leagues
@@ -62,6 +63,8 @@ async function installWeekSlate(week, season) {
 const [cmd, ...args] = process.argv.slice(2);
 
 async function main() {
+  // v0.634.0: a sport served by Stathead needs its adapter module loaded.
+  { const { loadAdapters } = await import('./sports/index.js'); await loadAdapters(); }
   switch (cmd) {
     case 'sync': {
       const ids = args.length ? args : config.leagueIds;
@@ -159,6 +162,14 @@ async function main() {
       else console.log(JSON.stringify(out, null, 1));
       break;
     }
+    case 'sport-shadow': {
+      // v0.634.0: one day, both feeds, compared. `sport-shadow nhl 2026-09-29`.
+      const [sport, date] = args.filter((a) => !a.startsWith('--'));
+      if (!sport || !date) throw new Error('usage: sport-shadow <sport> <YYYY-MM-DD>');
+      const { shadowDay } = await import('./poll/sportShadow.js');
+      await shadowDay(sport, date, { maxGames: Number(args.find((a) => a.startsWith('--max='))?.slice(6) || 20) });
+      break;
+    }
     case 'stathead-report': {
       // v0.633.1: the boot report, on demand.
       const { statheadBootReport } = await import('./stathead.js');
@@ -187,8 +198,11 @@ async function main() {
     }
     case 'sport-poll': {
       const [sport, dateArg] = args.filter((a) => !a.startsWith('--'));
-      if (!sport) throw new Error('usage: sport-poll <nhl|mlb|nba|wnba> [YYYY-MM-DD] [--force]');
+      if (!sport) throw new Error('usage: sport-poll <sport> [YYYY-MM-DD] [--force] [--provider=stathead|public]');
       const date = dateArg || easternDate();
+      // --provider= (v0.634.0): this run's feed for the sport, over SPORT_PROVIDER.
+      const prov = args.find((a) => a.startsWith('--provider='))?.slice('--provider='.length);
+      if (prov) config.sportProvider[sport] = prov;
       // --replay=<season> (v0.626.0): read a past season's day as a replay
       // league would at this real moment — every game of that day is final,
       // so this backfills a replay league's days already behind it.

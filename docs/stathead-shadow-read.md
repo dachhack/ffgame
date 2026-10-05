@@ -49,6 +49,39 @@ the runbook.
   never a file in the repo. `STATHEAD_URL` defaults to the service above.
 - `npm run cli -- stathead-probe` reads `/v1/meta`; `stathead-probe nhl 2026-10-04`
   adds that day's slate and the first game's lines.
+- `SPORT_PROVIDER` (fly.toml / env) picks a sport's feed: `stathead` for every
+  sport, or per sport `nhl=stathead,mlb=public`. Unset, the four polled sports
+  read their public feeds and soccer reads Stathead (it has no other adapter).
+  A `stathead` choice without the token falls back to public and the boot log
+  says `nhl (public)`.
+- `SPORT_SHADOW` names the sports read from Stathead beside their public feed
+  and compared in the log (`nhl,mlb` on the pilot worker; `all` for every
+  public-provided sport). Needs the token; writes nothing.
+- `npm run cli -- sport-shadow nhl 2026-09-29` compares one day by hand;
+  `sport-poll nhl 2026-09-29 --provider=stathead` writes a day from Stathead.
+
+## Reading the shadow log
+
+The worker logs one block per day at boot (the fixture days, then
+yesterday) and one line per game as it goes final:
+
+```
+[shadow] shadow nhl 2026-09-29: slate 2/2 matched by teams (0 only ours, 0 only theirs, 0 status diffs); finals 1: 1 agree, 0 differ
+[shadow]   MTL@TOR: 38 lines agree
+[shadow] shadow mlb 2026-10-04 final: SD@MIL: 2/26 lines differ (max 1.0 pts: Tatis ours 9.0 theirs 8.0 [sb]), 1 scoring only theirs (Pinch Runner) (theirs stored)
+```
+
+- **slate**: both feeds' games for the US Eastern date, matched `AWAY@HOME`
+  through each feed's team aliases. "Only ours/theirs" names a game one feed
+  lacks; "status diffs" a game one feed calls final and the other live.
+- **lines agree**: every player both feeds list has the same stats and the
+  same points under the sport's default table. "N/M lines differ" names the
+  biggest disagreements with their fields. "Scoring only ours/theirs" is a
+  player with a non-zero line that only one feed lists (a scratch with an
+  empty line is not counted). NBA lines are matched by team and normalised
+  name because the id spaces differ (CDN vs ESPN); the rest by id.
+- A sport is ready to switch when a week of finals reads "agree" (or the
+  differences are explained and Stathead's side is the right one).
 
 ## What the contract changes for our adapters
 
@@ -72,10 +105,11 @@ the runbook.
 1. Set the token; `stathead-probe` for each sport.
 2. Run `sport-pool-keys --check`; hand the files to Stathead; every key must
    resolve before a sport switches.
-3. Build the Stathead adapter behind the registry (`server/src/sports/index.js`),
-   selectable per sport by `SPORT_PROVIDER` (e.g. `nhl=stathead,mlb=public`).
-4. Dry-run each fixture day through both adapters (`sport-poll --provider=`)
-   and compare the lines under each sport's default table; capture Stathead's
-   rows for the same days as fixtures beside ours.
-5. Seven live game days per sport in shadow (both adapters polling, Stathead's
-   rows written to a scratch table or logged), then the acceptance list.
+3. ✓ The Stathead adapter (`server/src/sports/statheadAdapter.js`, v0.634.0)
+   sits behind the registry, selectable per sport by `SPORT_PROVIDER`.
+4. ✓ The fixture days run through both adapters at every boot and
+   `sport-shadow <sport> <date>` runs any day by hand, compared under each
+   sport's default table (`server/src/poll/sportShadow.js`).
+5. Seven live game days per sport in shadow (`SPORT_SHADOW=nhl,mlb` on the
+   pilot worker, each final compared once as it lands), then the acceptance
+   list; flip `SPORT_PROVIDER=nhl=stathead` (and so on) per sport that passes.

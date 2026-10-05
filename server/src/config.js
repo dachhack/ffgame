@@ -115,8 +115,19 @@ export const config = {
   // The daily sports the worker polls: only those with an adapter. Soccer
   // (epl, mls) is in the spine (0437) but its data arrives with Stathead's
   // delivery; naming it here is logged and skipped until then.
-  sports: (process.env.SPORTS || '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ['nba', 'wnba', 'nhl', 'mlb'].includes(s)),
-  sportsPending: (process.env.SPORTS || '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ['epl', 'mls'].includes(s)),
+  sports: (process.env.SPORTS || '').split(',').map((s) => s.trim().toLowerCase())
+    .filter((s) => ['nba', 'wnba', 'nhl', 'mlb'].includes(s) || (['epl', 'mls'].includes(s) && !!process.env.STATHEAD_TOKEN)),
+  sportsPending: (process.env.SPORTS || '').split(',').map((s) => s.trim().toLowerCase()).filter((s) => ['epl', 'mls'].includes(s) && !process.env.STATHEAD_TOKEN),
+  // THE PROVIDER SWITCH (v0.634.0): SPORT_PROVIDER=stathead (every sport) or
+  // nhl=stathead,mlb=public (per sport). Unset = the public feeds for the
+  // four, Stathead for soccer. A 'stathead' choice without the token falls
+  // back to public (sports/index.js providerOf).
+  sportProvider: Object.fromEntries((process.env.SPORT_PROVIDER || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean)
+    .map((x) => (x.includes('=') ? x.split('=').map((y) => y.trim()) : ['*', x]))),
+  // THE SHADOW READ (v0.634.0): sports whose finals are read from Stathead
+  // beside the public feed and compared in the log. SPORT_SHADOW=nhl,mlb;
+  // 'all' = every polled sport on a public provider. Needs the token.
+  sportShadow: (process.env.SPORT_SHADOW || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   // Box scores are re-read this often while a game is live, and the day's
   // schedule this often when none is.
   sportsLivePollMs: Number(process.env.SPORTS_LIVE_POLL_MS || 60000),
