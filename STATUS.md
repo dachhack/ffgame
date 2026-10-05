@@ -54,7 +54,9 @@ picked one college player per spot and didn't get K or DST."
 - Probes: `scripts/db/autodraft-mixed-probes.sql` (an IR stash still
   yields K then D/ST in the last two drafted picks; with two college spots
   the autodraft takes a third and fourth college player after the NFL
-  depth, then goes back to NFL).
+  depth, then goes back to NFL). On a scratch DB built fresh with every
+  migration: 151 of the runner's 155 suites pass; the 4 misses are the
+  same pre-existing four as v0.637.0's.
 
 ### v0.637.0 — devy spots beside college starting spots: the shelf is a taxi squad
 
