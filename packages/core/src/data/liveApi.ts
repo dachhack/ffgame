@@ -3753,7 +3753,10 @@ export const feedingBell = (st: VampireState | null | undefined, rosterId: numbe
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */
 export const setLeaguePositionAccess = (leagueId: string, positions: string[]) =>
-  rpc<{ ok: boolean; error?: string; positions?: string[] }>('set_league_position_access', {
+  rpc<{ ok: boolean; error?: string; positions?: string[];
+        /** 0438: COLLEGE switched on fills the pool from the directory, off
+         *  drops the college players nobody holds — how many, each way. */
+        college_added?: number; college_removed?: number }>('set_league_position_access', {
     p_league_id: leagueId, p_positions: positions,
   });
 

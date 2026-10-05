@@ -1980,7 +1980,14 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     try {
       const next = extraPos.includes(g) ? extraPos.filter((x) => x !== g) : [...extraPos, g];
       const r = await setLeaguePositionAccess(leagueId, next);
-      if (r.ok) { commit(); setExtraPos(r.positions ?? next); setNote(`✓ ${g} ${next.includes(g) ? 'on' : 'off'} — refresh the player pool (draft room)`); }
+      // 0438: COLLEGE brings its players with it; the other groups still
+      // wait for a pool refresh.
+      if (r.ok) {
+        commit(); setExtraPos(r.positions ?? next);
+        setNote(r.college_added ? `✓ COLLEGE on — ${r.college_added} college players joined the pool as free agents`
+          : r.college_removed ? `✓ COLLEGE off — ${r.college_removed} unrostered college players left the pool`
+          : `✓ ${g} ${next.includes(g) ? 'on' : 'off'} — refresh the player pool (draft room)`);
+      }
       else { warn(); setNote(r.error ?? 'refused'); }
     } finally { setBusy(false); }
   };

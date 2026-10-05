@@ -22,6 +22,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.635.3 — turning college on fills the pool with college players
+
+> - A league that turned college players on after it was made now gets the college players in its pool the moment the switch flips, before or after the draft, and the league chat says so. Leagues already in that state get them with this release.
+
+- Founder, from a mixed NFL + college league in week 4: "Started a league
+  with mixed college and NFL. There were no college players in the draft or
+  on waivers." A mixed league (0372) is made after creation — COLLEGE on in
+  EXTRA POSITIONS, college spots in the roster builder — and neither move
+  put a college player in the pool: the pool was seeded at creation with
+  COLLEGE off, the toggle only changed the setting and asked for a refresh,
+  and the draft ran on NFL players under spots that take nobody else. (Devy
+  spots chosen at creation seed college players themselves; the devy market
+  keeps them out on purpose.)
+- 0438 `_league_pool_add_college(league, limit)`: the college players the
+  pool lacks, from `college_directory` in its ranking, under the league's
+  positions and pool filter (conferences, tiers, classes; `level: nfl` or
+  the devy market → none), ranked after everyone as free agents — 0386's
+  top-up rules without a caller's list. `set_league_position_access`:
+  COLLEGE on fills the pool and posts the chat line; COLLEGE off drops the
+  college players nobody holds. The reply carries `college_added` /
+  `college_removed`, which the admin page (web) and commissioner tools
+  (app) print. The migration backfills every native league with COLLEGE on
+  and no college player in its pool.
+- The founder's league is one of those backfilled leagues if it matches the
+  reading above (COLLEGE on, no devy market, no NFL-only pool filter); that
+  could not be checked from this session. Until the migration lands, the
+  commissioner's ADD NEW PLAYERS (0386) does the same by hand.
+- Probes: `scripts/db/college-fill-probes.sql` (COLLEGE on after the draft
+  fills the pool, ranked last, free agents, chat line; a second flip adds
+  nothing; the devy market gets none; COLLEGE off drops the unheld and keeps
+  the rostered; a member can't), run on a scratch DB with every migration
+  applied, with top-up, devy-setup and custom-college still passing; the
+  backfill block run against a league built the way the founder's was (pool
+  seeded NFL-only, COLLEGE flipped on afterwards, draft complete) added its
+  college players. `supabase-shim.sql` gains the `auth.users` columns 0422
+  reads (`raw_user_meta_data`, `created_at`, `last_sign_in_at`), without
+  which the scratch build stopped at 0422. roster-builder-probes fails on
+  this scratch build with "permission denied for table sealed_pick" before
+  and after this change alike.
+
 ### v0.635.2 — a second seat in a league gets its own card
 
 > - A member who holds two teams in one league saw the league listed twice with the same team on both cards. Each card now shows its own team's matchup, projection and lineup, and names the team under the league name.
