@@ -22,6 +22,114 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.636.0 — the college choices, made clear: three questions, mixed and matched
+
+> - Making a classic league now asks three separate college questions instead of one: college players in the starting lineup (NFL only, MIXED with college-only starting spots, or COLLEGE ONLY on the college calendar), devy holding spots (like taxi, never starting), and the devy market (the investment market). Mix and match them; the form says up front which pairings the engine can't run yet.
+
+The founder, holding the DEVY step: "Let's make the devy choices clear:
+College player roster spots: Mixed with NFL or just college players with no
+NFL. Devy spots: Not starting roster spots. Just like taxi slots where you
+hold guys. Devy market: The investment market. These are all mix and
+matchable."
+- 0398's step asked one question (NO DEVY / DEVY SPOTS / DEVY MARKET) and
+  left the two league types the engine already plays — mixed (0372) and
+  college-only (0371) — to an admin switch after creation, which is how the
+  founder's mixed league drafted without college players (v0.635.3).
+- 0439 `commish_setup_college(league, lineup, college_spots, devy_spots,
+  market)`: COLLEGE on; 'mixed' appends `college_spots` college-only
+  starting spots (a flex each, labelled COLLEGE, 0372 levels) to the lineup
+  and grows the rounds; 'college' switches the calendar through the new
+  `_league_calendar_apply` (set_league_calendar keeps its admin gate and
+  calls it); devy spots and the market as 0398 did. The pairings the engine
+  can't honour are refused before any write, with the reason: college
+  lineup spots + devy spots (0366 lands every college player in a devy spot
+  and keeps him there), the market + devy spots or + college lineup spots
+  (shares reserve a player a draft would hand to someone else; the market
+  empties the pool of college players), the market + the college calendar,
+  the college calendar + devy spots. `_classic_slot_spec` reads a league's
+  starting spots, stored or implied. commish_setup_devy stands for older
+  clients.
+- Core devyShares: `CollegeSetup`, `collegeSetupBlocked` (the same refusals,
+  said before CREATE), `collegePoolOpts` (college players in the pool for
+  lineup spots and devy spots, college only for a college-only league, none
+  for the market), `collegeScheduleWeeks`, `collegeSetupLine`,
+  `COLLEGE_SETUP_INFO` in the founder's words. Client
+  `setupLeagueCollege`. App (Recruit) and web (NativeLeague create form):
+  the step is three questions — IN THE STARTING LINEUP (NFL ONLY / MIXED +
+  spots / COLLEGE ONLY), DEVY SPOTS PER TEAM (0 = none), DEVY MARKET (off /
+  on + when it opens) — with a line that names the first pairing that won't
+  set up, and the review line reads the whole choice.
+- Still to do for "all mix and matchable": letting a college player start
+  in a mixed league that also has devy spots (the landing trigger,
+  set_roster_spot, the caps and the illegal-roster rule from 0366 all key
+  on "a college player lives in a devy spot"), and a market that coexists
+  with drafted college players (a reserved player someone else holds).
+  Both are engine work; queued as follow-ups.
+- Probes: `scripts/db/college-setup-probes.sql` (run on the scratch DB with
+  every migration applied; devy-setup and college-fill still pass).
+
+### v0.635.3 — turning college on fills the pool with college players
+
+> - A league that turned college players on after it was made now gets the college players in its pool the moment the switch flips, before or after the draft, and the league chat says so. Leagues already in that state get them with this release.
+
+- Founder, from a mixed NFL + college league in week 4: "Started a league
+  with mixed college and NFL. There were no college players in the draft or
+  on waivers." A mixed league (0372) is made after creation — COLLEGE on in
+  EXTRA POSITIONS, college spots in the roster builder — and neither move
+  put a college player in the pool: the pool was seeded at creation with
+  COLLEGE off, the toggle only changed the setting and asked for a refresh,
+  and the draft ran on NFL players under spots that take nobody else. (Devy
+  spots chosen at creation seed college players themselves; the devy market
+  keeps them out on purpose.)
+- 0438 `_league_pool_add_college(league, limit)`: the college players the
+  pool lacks, from `college_directory` in its ranking, under the league's
+  positions and pool filter (conferences, tiers, classes; `level: nfl` or
+  the devy market → none), ranked after everyone as free agents — 0386's
+  top-up rules without a caller's list. `set_league_position_access`:
+  COLLEGE on fills the pool and posts the chat line; COLLEGE off drops the
+  college players nobody holds. The reply carries `college_added` /
+  `college_removed`, which the admin page (web) and commissioner tools
+  (app) print. The migration backfills every native league with COLLEGE on
+  and no college player in its pool.
+- The founder's league is one of those backfilled leagues if it matches the
+  reading above (COLLEGE on, no devy market, no NFL-only pool filter); that
+  could not be checked from this session. Until the migration lands, the
+  commissioner's ADD NEW PLAYERS (0386) does the same by hand.
+- Probes: `scripts/db/college-fill-probes.sql` (COLLEGE on after the draft
+  fills the pool, ranked last, free agents, chat line; a second flip adds
+  nothing; the devy market gets none; COLLEGE off drops the unheld and keeps
+  the rostered; a member can't), run on a scratch DB with every migration
+  applied, with top-up, devy-setup and custom-college still passing; the
+  backfill block run against a league built the way the founder's was (pool
+  seeded NFL-only, COLLEGE flipped on afterwards, draft complete) added its
+  college players. `supabase-shim.sql` gains the `auth.users` columns 0422
+  reads (`raw_user_meta_data`, `created_at`, `last_sign_in_at`), without
+  which the scratch build stopped at 0422. roster-builder-probes fails on
+  this scratch build with "permission denied for table sealed_pick" before
+  and after this change alike.
+
+### v0.635.2 — a second seat in a league gets its own card
+
+> - A member who holds two teams in one league saw the league listed twice with the same team on both cards. Each card now shows its own team's matchup, projection and lineup, and names the team under the league name.
+
+- Founder's screenshot (app v0.635.1): Contract Captains twice, both cards
+  Silver Starters vs Team 8, 97.90–142.50. The list has one card per SEAT
+  (`my_teams` returns one row per seat), but the score strip (`my_league_slate`
+  rows) and the glance (`widgetSnapshot`) were keyed by LEAGUE, and
+  `pickWidgetLeague` found a league by id alone — so the second card painted
+  the first seat's picture.
+- Core `seatKey`; `pickWidgetLeague` / `widgetSnapshot` take the seat;
+  `rememberSnapshot` keeps a per-seat copy and leaves the league's slot (the
+  home-screen widget's pick) to the first seat. Both lists (app `Leagues`,
+  web `LiveOnboard`) key slate and glance by seat; a league you hold more than
+  one seat in names the team on each card; the app's inbox strip stays one
+  chip per league.
+- Unconfirmed against live data (no database access from this session):
+  which second seat the account holds in Contract Captains and how it got
+  there (`claim_my_rosters` by email, or a co-manager add). If the account
+  should hold one seat there, that is a seat to release, not a list bug.
+- Checks in `scripts/check-widget.mjs`.
+
 ### v0.635.1 — the shadow log shows values, tolerates minute rounding, and the deploy tail grows
 
 > - The shadow read no longer calls every NBA line a disagreement over minutes the two feeds round differently, and names both values when a line does differ. Nothing a player sees changes.

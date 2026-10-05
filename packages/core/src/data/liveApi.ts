@@ -3753,7 +3753,10 @@ export const feedingBell = (st: VampireState | null | undefined, rosterId: numbe
 /** Admin-only (0171): which extra position groups this league may use
  *  (subset of HC / P / IDP / FB / RET). */
 export const setLeaguePositionAccess = (leagueId: string, positions: string[]) =>
-  rpc<{ ok: boolean; error?: string; positions?: string[] }>('set_league_position_access', {
+  rpc<{ ok: boolean; error?: string; positions?: string[];
+        /** 0438: COLLEGE switched on fills the pool from the directory, off
+         *  drops the college players nobody holds — how many, each way. */
+        college_added?: number; college_removed?: number }>('set_league_position_access', {
     p_league_id: leagueId, p_positions: positions,
   });
 
@@ -3994,6 +3997,11 @@ export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
 export const setupLeagueDevy = (leagueId: string, mode: 'spots' | 'shares', spots = 3) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('commish_setup_devy',
     { p_league_id: leagueId, p_mode: mode, p_spots: spots }), Ev.commishAction, { tool: 'devy_setup' });
+/** 0439: the three college questions at creation — college players in the
+ *  lineup (none / mixed / college-only), devy holding spots, the market. */
+export const setupLeagueCollege = (leagueId: string, s: { lineup: 'none' | 'mixed' | 'college'; collegeSpots: number; devySpots: number; market: boolean }) =>
+  tracked(rpc<{ ok: boolean; error?: string; lineup?: string; college_spots?: number; devy_spots?: number; market?: boolean; rounds?: number }>('commish_setup_college',
+    { p_league_id: leagueId, p_lineup: s.lineup, p_college_spots: s.collegeSpots, p_devy_spots: s.devySpots, p_market: s.market }), Ev.commishAction, { tool: 'college_setup' });
 
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });

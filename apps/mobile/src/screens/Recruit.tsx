@@ -19,7 +19,7 @@ import {
   closeLeagueListing, commishOverview, friendlyError, joinFromBoard, leagueBoard, leagueInvite, leaguePreview, leagueListingState,
   type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
-  setLeagueFormat, type LeagueFormat, setupLeagueDevy, setLeagueDevyOpen,
+  setLeagueFormat, type LeagueFormat, setupLeagueCollege, setLeagueDevyOpen,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment,
 } from '@drip/core/data/liveApi';
@@ -32,7 +32,7 @@ import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore,
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
-import { devyChoiceBlocked, devyChoiceLine, DEVY_CHOICE_INFO, type DevyChoice } from '@drip/core/data/devyShares';
+import { collegeSetupBlocked, collegeSetupLine, collegeSetupActive, collegePoolOpts, collegeScheduleWeeks, COLLEGE_SETUP_INFO, DEFAULT_COLLEGE_SETUP, type CollegeSetup } from '@drip/core/data/devyShares';
 import { myLeaguesOnSleeper, importMyLeague, importSeason } from '@drip/core/data/sleeperAdmin';
 import { sleeperAvatarUrl, type SleeperLeague, type SleeperUser } from '@drip/core/data/sleeper';
 import { IMPORT_PROVIDERS, normalizeProviderLeague, importMyProviderLeague, providerImportSeason, type ImportProvider } from '@drip/core/data/providerAdmin';
@@ -83,7 +83,7 @@ const NODE_SUB: Record<Node, string> = {
 type Step = 'copy' | 'game' | 'season' | 'format' | 'name' | 'devy' | 'draft' | 'review';
 const STEP_TITLE: Record<Step, string> = {
   copy: 'COPY SETTINGS', game: 'WHICH GAME', season: 'NEXT SEASON', format: 'FORMAT',
-  name: 'NAME & SIZE', devy: 'DEVY', draft: 'THE DRAFT', review: 'REVIEW',
+  name: 'NAME & SIZE', devy: 'COLLEGE', draft: 'THE DRAFT', review: 'REVIEW',
 };
 
 /** One row of the root menu — a destination, not a control. */
@@ -214,11 +214,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   const [nameDraft, setNameDraft] = useState('');
   const [teamCount, setTeamCount] = useState(8);
   const [draftMode, setDraftMode] = useState<'snake' | 'auction'>('snake');
-  // 0398: devy is a question at creation, not an admin switch found later.
-  const [devy, setDevy] = useState<DevyChoice>('none');
-  const [devySpots, setDevySpots] = useState(3);
-  // 0399: the commissioner decides when the market opens.
-  const [devyOpen, setDevyOpen] = useState<'now' | 'after_draft'>('after_draft');
+  // 0398: college players are a question at creation, not an admin switch
+  // found later; 0439: THREE questions — the lineup, devy spots, the market.
+  const [college, setCollege] = useState<CollegeSetup>(DEFAULT_COLLEGE_SETUP);
+  const patchCollege = (p: Partial<CollegeSetup>) => setCollege((c) => ({ ...c, ...p }));
   // Contract types (0218) preset the room: bids become salaries, so the
   // startup can only be an auction — picking one forces the mode.
   const contractType = continuity === 'contract' || continuity === 'contract_dynasty';
@@ -555,24 +554,25 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         });
         setCopyReport(steps.filter((s) => !s.ok).map((s) => `${s.step} — ${friendlyError(s.error ?? 'refused')}`));
       }
-      // DEVY before the pool: devy spots need college players IN the pool;
-      // the market keeps them out of it (they are bought, not drafted).
-      const devyNow = game === 'classic' && !isSport && !devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? devy : 'none';
-      if (devyNow !== 'none') {
-        setMakeNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
-        const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
-        if (!dr.ok) setCopyReport((cur) => [...(cur ?? []), `devy — ${friendlyError(dr.error ?? 'refused')}`]);
-        else if (devyNow === 'shares' && devyOpen === 'now') {
+      // COLLEGE before the pool (0439): lineup spots and devy spots need
+      // college players IN the pool; the market keeps them out of it (they
+      // are bought, not drafted); a college-only league's pool is college only.
+      const collegeNow = game === 'classic' && !isSport && collegeSetupActive(college)
+        && !collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? college : null;
+      if (collegeNow) {
+        setMakeNote('Setting up college players…');
+        const dr = await setupLeagueCollege(r.league_id, collegeNow);
+        if (!dr.ok) setCopyReport((cur) => [...(cur ?? []), `college players — ${friendlyError(dr.error ?? 'refused')}`]);
+        else if (collegeNow.market && collegeNow.marketOpen === 'now') {
           const or = await setLeagueDevyOpen(r.league_id, 'now');
           if (!or.ok) setCopyReport((cur) => [...(cur ?? []), `devy market opening — ${friendlyError(or.error ?? 'refused')}`]);
         }
       }
       setMakeNote('Building the 2026 player pool…');
-      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote,
-        devyNow === 'spots' ? { positions: ['COLLEGE'] } : undefined));
+      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote, collegeNow ? collegePoolOpts(collegeNow) : undefined));
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
       setMakeNote('Generating the season schedule…');
-      const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
+      const sched = await nativeGenerateSchedule(r.league_id, collegeNow ? collegeScheduleWeeks(collegeNow, scheduleWeeksFor(format)) : scheduleWeeksFor(format));
       if (!sched.ok) { warn(); setErr(friendlyError(sched.error ?? 'league created, but the schedule failed — regenerate it from COMMISH')); return; }
       commit();
       // The success note names the game too — created is the moment a wrong
@@ -952,52 +952,70 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             {/* DEVY (0398) — its own step, because a devy league is a
                 different game and nothing else on these screens says so. */}
             {step === 'devy' && (() => {
-              const blk = (c: DevyChoice) => devyChoiceBlocked(c, { classic: game === 'classic', auction: draftMode === 'auction', contract: contractType });
-              const pick = (c: DevyChoice) => { if (blk(c)) { warn(); return; } tap(); setDevy(c); };
+              const blk = collegeSetupBlocked(college, { classic: game === 'classic', auction: draftMode === 'auction', contract: contractType });
+              const stepper = (label: string, value: number, min: number, max: number, set: (n: number) => void) => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Mono size={8.5} tone="faint" track={0.1}>{label}</Mono>
+                  <Pressable hitSlop={6} onPress={() => { tap(); set(Math.max(min, value - 1)); }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
+                  </Pressable>
+                  <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 22, textAlign: 'center' }}>{value}</Text>
+                  <Pressable hitSlop={6} onPress={() => { tap(); set(Math.min(max, value + 1)); }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
+                  </Pressable>
+                </View>
+              );
               return (
-                <View style={{ gap: 10 }}>
-                  <LabelInfo label="COLLEGE PLAYERS" info={DEVY_CHOICE_INFO} />
-                  <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                    <Chip label="NO DEVY" on={devy === 'none'} onPress={() => pick('none')} />
-                    <Chip label="DEVY SPOTS" on={devy === 'spots'} onPress={() => pick('spots')} />
-                    <Chip label="DEVY MARKET" on={devy === 'shares'} dim={!!blk('shares')} onPress={() => pick('shares')} />
+                <View style={{ gap: 12 }}>
+                  <LabelInfo label="COLLEGE PLAYERS" info={COLLEGE_SETUP_INFO} />
+                  {/* THREE QUESTIONS, NOT ONE (0439, founder: "these are all
+                      mix and matchable"): the lineup, devy spots, the market. */}
+                  <View style={{ gap: 6 }}>
+                    <Mono size={8.5} tone="faint" track={0.1}>IN THE STARTING LINEUP</Mono>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      <Chip label="NFL ONLY" on={college.lineup === 'none'} onPress={() => { tap(); patchCollege({ lineup: 'none' }); }} />
+                      <Chip label="MIXED" on={college.lineup === 'mixed'} onPress={() => { tap(); patchCollege({ lineup: 'mixed' }); }} />
+                      <Chip label="COLLEGE ONLY" on={college.lineup === 'college'} onPress={() => { tap(); patchCollege({ lineup: 'college' }); }} />
+                    </View>
+                    <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
+                      {college.lineup === 'none' ? 'No college players start. Devy spots and the market below still hold or reserve them.'
+                        : college.lineup === 'mixed' ? 'College-only starting spots beside your NFL lineup — college and NFL players score in the same week. Reshape the spots in the roster builder any time before the draft.'
+                        : 'No NFL players at all. Every spot takes college players and the season runs on the college calendar, Saturday by Saturday.'}
+                    </Mono>
+                    {college.lineup === 'mixed' && stepper('COLLEGE STARTING SPOTS', college.collegeSpots, 1, 6, (n) => patchCollege({ collegeSpots: n }))}
                   </View>
-                  <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
-                    {devy === 'none' ? 'An NFL-only league. Pick DEVY SPOTS or DEVY MARKET to make it a devy league.'
-                      : devy === 'spots' ? 'College players are in the draft pool, and every team gets roster spots that hold only college players.'
-                      : 'College players stay out of the draft. Every team gets 100 points to buy shares; a big enough stake reserves the right to draft that player as a rookie.'}
-                  </Mono>
-                  {devy === 'spots' && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Mono size={8.5} tone="faint" track={0.1}>DEVY SPOTS PER TEAM</Mono>
-                      <Pressable hitSlop={6} onPress={() => { tap(); setDevySpots((n) => Math.max(1, n - 1)); }}>
-                        <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>−</Text>
-                      </Pressable>
-                      <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: '700', color: t.text, minWidth: 22, textAlign: 'center' }}>{devySpots}</Text>
-                      <Pressable hitSlop={6} onPress={() => { tap(); setDevySpots((n) => Math.min(10, n + 1)); }}>
-                        <Text style={{ fontFamily: MONO, fontSize: 16, color: t.dim }}>＋</Text>
-                      </Pressable>
+                  <View style={{ gap: 6 }}>
+                    {stepper('DEVY SPOTS PER TEAM', college.devySpots, 0, 10, (n) => patchCollege({ devySpots: n }))}
+                    <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
+                      Not starting spots. Holding spots, like the taxi squad: college players are drafted into them and kept there, and move onto the NFL roster when they graduate. 0 = none.
+                    </Mono>
+                  </View>
+                  <View style={{ gap: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Mono size={8.5} tone="faint" track={0.1}>DEVY MARKET</Mono>
+                      <Chip label="OFF" on={!college.market} onPress={() => { tap(); patchCollege({ market: false }); }} />
+                      <Chip label="ON" on={college.market} onPress={() => { tap(); patchCollege({ market: true }); }} />
                     </View>
-                  )}
-                  {devy === 'shares' && !blk('shares') && (
-                    <View style={{ gap: 6 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <Mono size={8.5} tone="faint" track={0.1}>MARKET OPENS</Mono>
-                        <Chip label="AFTER THE DRAFT" on={devyOpen === 'after_draft'} onPress={() => { tap(); setDevyOpen('after_draft'); }} />
-                        <Chip label="RIGHT AWAY" on={devyOpen === 'now'} onPress={() => { tap(); setDevyOpen('now'); }} />
+                    <Mono size={9.5} tone="dim" style={{ lineHeight: 14 }}>
+                      The investment market. Every team gets 100 points to buy shares in college players; a big enough stake reserves the right to draft that player as a rookie.
+                    </Mono>
+                    {college.market && (
+                      <View style={{ gap: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <Mono size={8.5} tone="faint" track={0.1}>MARKET OPENS</Mono>
+                          <Chip label="AFTER THE DRAFT" on={college.marketOpen === 'after_draft'} onPress={() => { tap(); patchCollege({ marketOpen: 'after_draft' }); }} />
+                          <Chip label="RIGHT AWAY" on={college.marketOpen === 'now'} onPress={() => { tap(); patchCollege({ marketOpen: 'now' }); }} />
+                        </View>
+                        <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
+                          {college.marketOpen === 'now'
+                            ? 'Teams can buy shares as soon as they join — scouting starts before the startup draft (paused while it runs).'
+                            : 'Shares open once the startup draft is done, so everyone starts buying at the same moment.'}
+                          {' '}You can change this in COMMISH until the draft.
+                        </Mono>
                       </View>
-                      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>
-                        {devyOpen === 'now'
-                          ? 'Teams can buy shares as soon as they join — scouting starts before the startup draft (paused while it runs).'
-                          : 'Shares open once the startup draft is done, so everyone starts buying at the same moment.'}
-                        {' '}You can change this in COMMISH until the draft.
-                      </Mono>
-                    </View>
-                  )}
-                  {blk(devy) && <Mono size={9} tone="warn" style={{ lineHeight: 13 }}>⚠ {blk(devy)} — it won't be set up.</Mono>}
-                  {!blk(devy) && blk('shares') && devy !== 'shares' && (
-                    <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>DEVY MARKET: {blk('shares')}</Mono>
-                  )}
+                    )}
+                  </View>
+                  {blk && <Mono size={9} tone="warn" style={{ lineHeight: 13 }}>⚠ {blk} — college players won't be set up until this is changed.</Mono>}
                 </View>
               );
             })()}
@@ -1029,12 +1047,14 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
                   {draftMode === 'auction' ? 'AUCTION' : 'SNAKE'} draft · {pace === 'live' ? `${clockDraft || '90'}s a pick` : `${clockDraft || '12'}h a pick`}
                 </Mono>
-                {game === 'classic' && (
-                  <Mono size={10} tone={devy !== 'none' && !devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType }) ? 'you' : 'dim'} style={{ lineHeight: 15 }}>
-                    {devyChoiceBlocked(devy, { classic: true, auction: draftMode === 'auction', contract: contractType })
-                      ? devyChoiceLine('none', 0) : devyChoiceLine(devy, devySpots, devyOpen === 'now')}
-                  </Mono>
-                )}
+                {game === 'classic' && (() => {
+                  const blk = collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType });
+                  return (
+                    <Mono size={10} tone={collegeSetupActive(college) && !blk ? 'you' : 'dim'} style={{ lineHeight: 15 }}>
+                      {blk ? `${collegeSetupLine(DEFAULT_COLLEGE_SETUP)} (${blk})` : collegeSetupLine(college)}
+                    </Mono>
+                  );
+                })()}
                 {copyBp && (
                   <Mono size={9} tone="you" style={{ lineHeight: 14 }}>
                     copying {copyFrom?.league?.name ?? 'a league'} — scoring, waivers and the rest are applied right after it is made

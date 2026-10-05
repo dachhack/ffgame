@@ -1099,6 +1099,10 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
   const [on, setOn] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // 0438: what the COLLEGE switch did to the pool — the players arrive (or
+  // leave) with the flip now, where the note below used to leave that to a
+  // refresh nobody ran (the founder's mixed league drafted without them).
+  const [did, setDid] = useState<string | null>(null);
   useEffect(() => {
     leagueGameMode(leagueId).then((r) => { if (r.ok) setOn(r.positions ?? []); }).catch(() => {});
   }, [leagueId]);
@@ -1108,7 +1112,11 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
     try {
       const next = on.includes(g) ? on.filter((x) => x !== g) : [...on, g];
       const r = await setLeaguePositionAccess(leagueId, next);
-      if (r.ok) { setOn(r.positions ?? next); setErr(null); } else setErr(r.error ?? 'refused');
+      if (r.ok) {
+        setOn(r.positions ?? next); setErr(null);
+        setDid(r.college_added ? `✓ ${r.college_added} college players joined the pool as free agents`
+          : r.college_removed ? `✓ ${r.college_removed} unrostered college players left the pool` : null);
+      } else setErr(r.error ?? 'refused');
     } finally { setBusy(false); }
   };
   return (
@@ -1125,7 +1133,8 @@ function PositionAccessRow({ leagueId }: { leagueId: string }) {
           </button>
         );
       })}
-      <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>commish must ↻ refresh the pool after a flip</span>
+      <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>COLLEGE fills the pool on its own; for the others the commish must ↻ refresh the pool after a flip</span>
+      {did && <span className="mono" style={{ fontSize: 10.5, color: 'var(--you)' }}>{did}</span>}
       {err && <span className="mono" style={{ fontSize: 10.5, color: 'var(--opp)' }}>{err}</span>}
       {on?.includes('COLLEGE') && <CalendarToggle leagueId={leagueId} />}
     </div>

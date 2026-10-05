@@ -241,10 +241,23 @@ export function widgetLeagues(enr: Enrollment[]): WidgetLeague[] {
 /** Which league a widget shows: the stored choice when it is still one you're
  *  in, else the first. A widget that outlived its league falls forward rather
  *  than drawing a hole. */
-export function pickWidgetLeague(leagues: WidgetLeague[], wantId: string | null | undefined): WidgetLeague | null {
+export function pickWidgetLeague(leagues: WidgetLeague[], wantId: string | null | undefined,
+  /** v0.635.2: WHICH SEAT, for a caller that holds more than one in the
+   *  league. The league list passes each card's own; the home-screen widget
+   *  passes none and gets the league's first seat, as it always did. */
+  wantRosterId?: number | null): WidgetLeague | null {
   if (!leagues.length) return null;
+  if (wantRosterId != null) {
+    const seat = leagues.find((l) => l.id === wantId && l.rosterId === wantRosterId);
+    if (seat) return seat;
+  }
   return leagues.find((l) => l.id === wantId) ?? leagues[0];
 }
+
+/** A seat's key in a per-seat map (v0.635.2). A member can hold two seats in
+ *  one league — the founder's own Contract Captains — and a list keyed by
+ *  league alone painted both cards from whichever seat was read last. */
+export const seatKey = (leagueId: string, rosterId: number) => `${leagueId}:${rosterId}`;
 
 // ── WHICH LEAGUES THE WIDGET SHOWS (v0.503.0) ───────────────────────────────
 // Founder: "we also need in the settings, the ability for users to pick which
@@ -799,8 +812,17 @@ export interface RememberedSnapshot { leagues: WidgetLeague[]; snapshot: WidgetS
 /** The last picture drawn for a league, for the instant first paint. A day
  *  old is still worth a frame while the fresh one loads; the card says when
  *  it was drawn. */
-export const recallSnapshot = (leagueId: string): RememberedSnapshot | null => cacheGet<RememberedSnapshot>(`snap:${leagueId}`, 24 * 60 * MIN);
-export const rememberSnapshot = (r: RememberedSnapshot): void => cacheSet(`snap:${r.snapshot.leagueId}`, r);
+export const recallSnapshot = (leagueId: string, rosterId?: number | null): RememberedSnapshot | null =>
+  cacheGet<RememberedSnapshot>(rosterId != null ? `snap:${seatKey(leagueId, rosterId)}` : `snap:${leagueId}`, 24 * 60 * MIN);
+/** Remembered under the seat, and under the league only when this is the seat
+ *  the widget's own pick lands on (the league's first) — a second seat's
+ *  picture must not become the one the home screen paints first. */
+export const rememberSnapshot = (r: RememberedSnapshot): void => {
+  const { leagueId, rosterId } = r.snapshot;
+  cacheSet(`snap:${seatKey(leagueId, rosterId)}`, r);
+  const first = r.leagues.find((l) => l.id === leagueId);
+  if (!first || first.rosterId === rosterId) cacheSet(`snap:${leagueId}`, r);
+};
 /** The leagues list as last read, so ▸ can pick the next league without a
  *  network round-trip. */
 export const recallLeagues = (): WidgetLeague[] | null => {
@@ -821,10 +843,12 @@ export async function allWidgetLeagues(fresh = false): Promise<WidgetLeague[]> {
 export async function widgetSnapshot(wantLeagueId?: string | null, userId?: string | null, fresh = false,
   /** v0.509.0: read `wantLeagueId` even when it is hidden from the widget —
    *  the app's league list shows every league, whatever the widget picks. */
-  opts: { anyLeague?: boolean } = {}): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
+  opts: { anyLeague?: boolean;
+    /** v0.635.2: which of my seats in `wantLeagueId`, when I hold several. */
+    rosterId?: number | null } = {}): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
   const all = await allWidgetLeagues(fresh);
   const leagues = opts.anyLeague ? all : shownWidgetLeagues(all);
-  const league = pickWidgetLeague(leagues, wantLeagueId);
+  const league = pickWidgetLeague(leagues, wantLeagueId, opts.rosterId);
   if (!league) return { leagues, snapshot: null };
   const openWeek = await cached(`week:${league.id}`, 10 * MIN, fresh, () => defaultOpenWeek(league.id));
   const matchup = await myMatchupFrom(league.id, league.rosterId, openWeek);

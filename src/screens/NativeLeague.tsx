@@ -6,7 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
-import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, devyChoiceBlocked, DEVY_CHOICE_INFO, type DevyChoice } from '@drip/core/data/devyShares';
+import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, collegeSetupBlocked, collegeSetupActive, collegeSetupLine, collegePoolOpts, collegeScheduleWeeks, COLLEGE_SETUP_INFO, DEFAULT_COLLEGE_SETUP, type CollegeSetup } from '@drip/core/data/devyShares';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PosPill, PlayerImg, Avatar, FlagChip, InjuryTag, InjuryNow } from '../app/ui';
 import { useStore } from '../app/store';
@@ -63,7 +63,7 @@ import {
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
-  setupLeagueDevy, setLeagueDevyOpen,
+  setupLeagueCollege, setLeagueDevyOpen,
 } from '@drip/core/data/liveApi';
 import { DevySharesPanel, DevyStakesList } from './DevyShares';
 import { isCollegeSlug, teamLabel } from '@drip/core/data/college';
@@ -272,11 +272,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   const [teams, setTeams] = useState(8);
   const [clock, setClock] = useState(90);
   const [mode, setMode] = useState<'snake' | 'linear' | 'auction'>('snake');
-  // 0398: devy is a question at creation, not an admin switch found later.
-  const [devy, setDevy] = useState<DevyChoice>('none');
-  const [devySpots, setDevySpots] = useState(3);
-  // 0399: the commissioner decides when the market opens.
-  const [devyOpen, setDevyOpen] = useState<'now' | 'after_draft'>('after_draft');
+  // 0398: college players are a question at creation, not an admin switch
+  // found later; 0439: THREE questions — the lineup, devy spots, the market.
+  const [college, setCollege] = useState<CollegeSetup>(DEFAULT_COLLEGE_SETUP);
+  const patchCollege = (p: Partial<CollegeSetup>) => setCollege((c) => ({ ...c, ...p }));
   const [budget, setBudget] = useState(200);
   // Pace: LIVE = everyone in the room (seconds); SLOW = days-long drafts
   // (hour-scale clocks; queues + proxy bids keep turns fair while offline).
@@ -446,24 +445,25 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         });
         copyReportPending = steps.filter((s) => !s.ok).map((s) => `${s.step} — ${friendlyError(s.error ?? 'refused')}`);
       }
-      // DEVY before the pool: devy spots need college players IN the pool;
-      // the market keeps them out of it (they are bought, not drafted).
-      const devyNow = chosenGame === 'classic' && !isSport && !devyChoiceBlocked(devy, { classic: true, auction: mode === 'auction', contract: contractType }) ? devy : 'none';
-      if (devyNow !== 'none') {
-        setNote(devyNow === 'shares' ? 'Opening the devy market…' : 'Adding the devy spots…');
-        const dr = await setupLeagueDevy(r.league_id, devyNow, devySpots);
-        if (!dr.ok) copyReportPending = [...copyReportPending, `devy — ${friendlyError(dr.error ?? 'refused')}`];
-        else if (devyNow === 'shares' && devyOpen === 'now') {
+      // COLLEGE before the pool (0439): lineup spots and devy spots need
+      // college players IN the pool; the market keeps them out of it (they
+      // are bought, not drafted); a college-only league's pool is college only.
+      const collegeNow = chosenGame === 'classic' && !isSport && collegeSetupActive(college)
+        && !collegeSetupBlocked(college, { classic: true, auction: mode === 'auction', contract: contractType }) ? college : null;
+      if (collegeNow) {
+        setNote('Setting up college players…');
+        const dr = await setupLeagueCollege(r.league_id, collegeNow);
+        if (!dr.ok) copyReportPending = [...copyReportPending, `college players — ${friendlyError(dr.error ?? 'refused')}`];
+        else if (collegeNow.market && collegeNow.marketOpen === 'now') {
           const or = await setLeagueDevyOpen(r.league_id, 'now');
           if (!or.ok) copyReportPending = [...copyReportPending, `devy market opening — ${friendlyError(or.error ?? 'refused')}`];
         }
       }
       setNote('Building the 2026 player pool…');
-      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote,
-        devyNow === 'spots' ? { positions: ['COLLEGE'] } : undefined));
+      const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote, collegeNow ? collegePoolOpts(collegeNow) : undefined));
       if (!pool.ok) { setErr(friendlyError(pool.error ?? 'Could not seed the player pool.')); setBusy(false); return; }
       setNote('Generating the season schedule…');
-      const sched = await nativeGenerateSchedule(r.league_id, scheduleWeeksFor(format));
+      const sched = await nativeGenerateSchedule(r.league_id, collegeNow ? collegeScheduleWeeks(collegeNow, scheduleWeeksFor(format)) : scheduleWeeksFor(format));
       if (!sched.ok) { setErr(friendlyError(sched.error ?? 'Could not build the schedule.')); setBusy(false); return; }
       // A COPY THAT ONLY PARTLY LANDED HOLDS THE SCREEN. Navigating away on a
       // partial copy would hide the misses behind a page change and leave the
@@ -751,41 +751,54 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             daily sport (0426): college football players have no place in an
             NBA or NHL pool. */}
         {kind === 'league' && game === 'classic' && !isSport && (() => {
-          const blk = (c: DevyChoice) => devyChoiceBlocked(c, { classic: true, auction: mode === 'auction', contract: contractType });
+          const blk = collegeSetupBlocked(college, { classic: true, auction: mode === 'auction', contract: contractType });
+          const note: React.CSSProperties = { fontSize: 11.5, color: 'var(--dim)', marginTop: 6, lineHeight: 1.5 };
           return (
             <div style={{ marginTop: 16 }}>
-              <div className="mono" style={label} title={DEVY_CHOICE_INFO}>DEVY (COLLEGE PLAYERS) ⓘ</div>
+              <div className="mono" style={label} title={COLLEGE_SETUP_INFO}>COLLEGE PLAYERS ⓘ</div>
+              {/* THREE QUESTIONS, NOT ONE (0439, founder: "these are all mix
+                  and matchable"): the lineup, devy spots, the market. */}
+              <div className="mono" style={{ ...label, marginTop: 10 }}>IN THE STARTING LINEUP</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Chip on={devy === 'none'} onClick={() => setDevy('none')}>NO DEVY</Chip>
-                <Chip on={devy === 'spots'} onClick={() => setDevy('spots')}>DEVY SPOTS</Chip>
-                <Chip on={devy === 'shares'} onClick={() => { if (!blk('shares')) setDevy('shares'); }}>DEVY MARKET</Chip>
-                {devy === 'spots' && (
+                <Chip on={college.lineup === 'none'} onClick={() => patchCollege({ lineup: 'none' })}>NFL ONLY</Chip>
+                <Chip on={college.lineup === 'mixed'} onClick={() => patchCollege({ lineup: 'mixed' })}>MIXED</Chip>
+                <Chip on={college.lineup === 'college'} onClick={() => patchCollege({ lineup: 'college' })}>COLLEGE ONLY</Chip>
+                {college.lineup === 'mixed' && (
                   <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginLeft: 8 }}>
-                    <span className="mono" style={{ ...label, marginTop: 0 }}>SPOTS / TEAM</span>{num(devySpots, setDevySpots, 1, 10, 1)}
+                    <span className="mono" style={{ ...label, marginTop: 0 }}>COLLEGE STARTING SPOTS</span>{num(college.collegeSpots, (n) => patchCollege({ collegeSpots: n }), 1, 6, 1)}
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-                {devy === 'none' ? 'An NFL-only league. Pick DEVY SPOTS or DEVY MARKET to make it a devy league.'
-                  : devy === 'spots' ? `College players are in the draft pool, and every team gets ${devySpots} roster spot${devySpots === 1 ? '' : 's'} that hold only college players — drafted and kept like anyone else, and moved to the NFL roster when they graduate.`
-                  : 'College players stay out of the draft. Every team gets 100 points to buy shares: the first to 20 shares — or the only team with 5+ shares and 15+ points in — reserves the right to draft that player as a rookie. Prices rise as players play well, so early scouting pays. Every year, shares lock on Jan 15 until the rookie draft.'}
+              <div style={note}>
+                {college.lineup === 'none' ? 'No college players start. Devy spots and the market below still hold or reserve them.'
+                  : college.lineup === 'mixed' ? `${college.collegeSpots} college-only starting spot${college.collegeSpots === 1 ? '' : 's'} beside your NFL lineup — college and NFL players score in the same week. Reshape the spots in the roster builder any time before the draft.`
+                  : 'No NFL players at all. Every spot takes college players and the season runs on the college calendar, Saturday by Saturday.'}
               </div>
-              {devy === 'shares' && !blk('shares') && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span className="mono" style={{ ...label, marginTop: 0 }}>DEVY SPOTS / TEAM</span>{num(college.devySpots, (n) => patchCollege({ devySpots: n }), 0, 10, 1)}
+              </div>
+              <div style={note}>Not starting spots. Holding spots, like the taxi squad: college players are drafted into them and kept there, and move onto the NFL roster when they graduate. 0 = none.</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span className="mono" style={{ ...label, marginTop: 0 }}>DEVY MARKET</span>
+                <Chip on={!college.market} onClick={() => patchCollege({ market: false })}>OFF</Chip>
+                <Chip on={college.market} onClick={() => patchCollege({ market: true })}>ON</Chip>
+              </div>
+              <div style={note}>The investment market. College players stay out of the draft. Every team gets 100 points to buy shares: the first to 20 shares — or the only team with 5+ shares and 15+ points in — reserves the right to draft that player as a rookie. Prices rise as players play well, so early scouting pays. Every year, shares lock on Jan 15 until the rookie draft.</div>
+              {college.market && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                   <span className="mono" style={label}>MARKET OPENS</span>
-                  <Chip on={devyOpen === 'after_draft'} onClick={() => setDevyOpen('after_draft')}>AFTER THE DRAFT</Chip>
-                  <Chip on={devyOpen === 'now'} onClick={() => setDevyOpen('now')}>RIGHT AWAY</Chip>
+                  <Chip on={college.marketOpen === 'after_draft'} onClick={() => patchCollege({ marketOpen: 'after_draft' })}>AFTER THE DRAFT</Chip>
+                  <Chip on={college.marketOpen === 'now'} onClick={() => patchCollege({ marketOpen: 'now' })}>RIGHT AWAY</Chip>
                   <span style={{ fontSize: 11.5, color: 'var(--dim)', flexBasis: '100%', lineHeight: 1.5 }}>
-                    {devyOpen === 'now'
+                    {college.marketOpen === 'now'
                       ? 'Teams can buy shares as soon as they join — scouting starts before the startup draft (paused while it runs).'
                       : 'Shares open once the startup draft is done, so everyone starts buying at the same moment.'} You can change this in COMMISH until the draft.
                   </span>
                 </div>
               )}
-              {blk(devy) && <div className="mono" style={{ fontSize: 10.5, color: 'var(--warn)', marginTop: 6 }}>⚠ {blk(devy)} — it won't be set up.</div>}
-              {!blk(devy) && blk('shares') && devy !== 'shares' && (
-                <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 6 }}>DEVY MARKET: {blk('shares')}</div>
-              )}
+              <div className="mono" style={{ fontSize: 10.5, color: blk ? 'var(--warn)' : 'var(--you)', marginTop: 8 }}>
+                {blk ? `⚠ ${blk} — college players won't be set up until this is changed.` : collegeSetupLine(college)}
+              </div>
             </div>
           );
         })()}

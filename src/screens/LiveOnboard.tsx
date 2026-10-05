@@ -15,7 +15,7 @@ import {
   leagueTouch, leagueDetailLine, leagueTypeLine, leagueLandingRoom,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
-import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import { widgetLeagues, widgetSnapshot, recallSnapshot, seatKey, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
 import { HeroesVillains } from './HeroesVillains';
 import { track, identify, Ev } from '@drip/core/analytics';
@@ -258,7 +258,7 @@ function Muted({ text }: { text: string }) {
 
 // A stable per-team key (a commissioner can hold several rosters in one league,
 // so league_id alone isn't unique across enrollment cards).
-const enrollKey = (e: Enrollment) => `${e.league_id}:${e.sleeper_roster_id}`;
+const enrollKey = (e: Enrollment) => seatKey(e.league_id, e.sleeper_roster_id);
 
 function NotConfigured() {
   return (
@@ -642,7 +642,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       .then((r) => {
         if (dead || !r.ok || !r.leagues) return;
         const rowsFor = r.leagues.filter((x) => want.has(x.league_id));
-        setSlate(Object.fromEntries(rowsFor.map((x) => [x.league_id, x])));
+        // Keyed by SEAT (v0.635.2), like the glance below: two seats in one
+        // league are two rows, and a league-keyed map kept one of them for
+        // both cards — the founder's Contract Captains, listed twice with the
+        // same team on each.
+        setSlate(Object.fromEntries(rowsFor.map((x) => [seatKey(x.league_id, x.roster_id), x])));
         const m: Record<string, { n: number; mention: boolean }> = {};
         for (const x of rowsFor) { const b = unreadBadge(x); if (b) m[x.league_id] = b; }
         setUnreads(m);
@@ -668,14 +672,14 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     const leagues = widgetLeagues(enrollments);
     let dead = false;
     const remembered: Record<string, WidgetSnapshot> = {};
-    for (const l of leagues) { const r = recallSnapshot(l.id); if (r) remembered[l.id] = r.snapshot; }
+    for (const l of leagues) { const r = recallSnapshot(l.id, l.rosterId); if (r) remembered[seatKey(l.id, l.rosterId)] = r.snapshot; }
     setGlance((g) => ({ ...remembered, ...g }));
     const read = async (fresh: boolean) => {
       for (const l of leagues) {
         if (dead) return;
         try {
-          const { snapshot } = await widgetSnapshot(l.id, session.user.id, fresh, { anyLeague: true });
-          if (!dead && snapshot && snapshot.leagueId === l.id) setGlance((g) => ({ ...g, [l.id]: snapshot }));
+          const { snapshot } = await widgetSnapshot(l.id, session.user.id, fresh, { anyLeague: true, rosterId: l.rosterId });
+          if (!dead && snapshot && snapshot.leagueId === l.id && snapshot.rosterId === l.rosterId) setGlance((g) => ({ ...g, [seatKey(l.id, l.rosterId)]: snapshot }));
         } catch { /* keep what the card had */ }
       }
     };
@@ -1157,6 +1161,10 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
   const [filter, setFilter] = useState<'all' | 'commish'>('all');
   // Which phone this is, for the app chips below — read once per mount.
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
+  // How many seats you hold per league (v0.635.2): past one, each card names
+  // its team.
+  const seatsIn: Record<string, number> = {};
+  for (const e of enrollments) seatsIn[e.league_id] = (seatsIn[e.league_id] ?? 0) + 1;
   // Leagues you commission but have no player roster in (no enrollment card).
   const commishOnly = commishLeagues.filter((l) => !enrolledIds.has(l.league_id));
   const enrolledCommish = enrollments.filter((e) => commishIds.has(e.league_id));
@@ -1256,11 +1264,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
         {enrolledCommish.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} commish slate={slate[e.league_id]} glance={glance[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish slate={slate[enrollKey(e)]} glance={glance[enrollKey(e)]} seats={seatsIn[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
         {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
-          : <LeagueCard key={enrollKey(e)} e={e} commish={false} slate={slate[e.league_id]} glance={glance[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
+          : <LeagueCard key={enrollKey(e)} e={e} commish={false} slate={slate[enrollKey(e)]} glance={glance[enrollKey(e)]} seats={seatsIn[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
       </div>
 
@@ -1512,8 +1520,12 @@ function LineupLine({ snap }: { snap: WidgetSnapshot }) {
   return <div className="mono" style={{ fontSize: 12, lineHeight: 1.45, fontWeight: 700, marginTop: 3, color: open ? 'var(--warn)' : 'var(--you)' }}>{text}</div>;
 }
 
-function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
+function LeagueCard({ e, commish, slate, glance, unread, seats, onPodBuild, onOpen }: {
   e: Enrollment; commish: boolean;
+  /** v0.635.2: how many seats you hold in this league. Past one the card
+   *  names its team — two cards for one league with no team on either read
+   *  as the same card twice. */
+  seats?: number;
   /** v0.510.0: the league's widget picture — projected finals, or the drip lineup. */
   glance?: WidgetSnapshot;
   /** 0347: this league's current fixture, or undefined while the shelf loads. */
@@ -1561,6 +1573,11 @@ function LeagueCard({ e, commish, slate, glance, unread, onPodBuild, onOpen }: {
               </span>
             )}
           </div>
+          {(seats ?? 0) > 1 && (
+            <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)', marginTop: 1 }}>
+              {(e.team_name || `Seat ${e.sleeper_roster_id}`).toUpperCase()}
+            </div>
+          )}
           {/* Wraps rather than clips (v0.357.2): the line carries the game
               now, and a clipped ellipsis would hide the very words the founder
               asked to see. */}
