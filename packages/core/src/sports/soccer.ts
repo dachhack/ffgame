@@ -113,7 +113,7 @@ const SOCCER_POS_MAP: Record<string, string[]> = {
   GK: ['GK'], G: ['GK'], GKP: ['GK'],
   DEF: ['DEF'], D: ['DEF'], CB: ['DEF'], LB: ['DEF'], RB: ['DEF'], WB: ['DEF'], LWB: ['DEF'], RWB: ['DEF'],
   MID: ['MID'], M: ['MID'], CM: ['MID'], DM: ['MID'], CDM: ['MID'], AM: ['MID'], CAM: ['MID'], LM: ['MID'], RM: ['MID'],
-  FWD: ['FWD'], F: ['FWD'], FW: ['FWD'], ST: ['FWD'], CF: ['FWD'], LW: ['FWD'], RW: ['FWD'], W: ['FWD'],
+  FWD: ['FWD'], F: ['FWD'], FW: ['FWD'], ST: ['FWD'], CF: ['FWD'], LF: ['FWD'], RF: ['FWD'], SS: ['FWD'], LW: ['FWD'], RW: ['FWD'], W: ['FWD'],
   'D-M': ['DEF', 'MID'], 'M-F': ['MID', 'FWD'],
 };
 

@@ -52,6 +52,7 @@ import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
 import { tickSports } from './poll/sportGames.js';
+import { loadAdapters, providerOf } from './sports/index.js';
 import { syncSportDirectory } from './poll/sportDirectory.js';
 import { sweepSportMarket } from './poll/sportMarket.js';
 import { lockStartedGames, resolveSportLeagues, sportReplayClocks } from './sportLeague.js';
@@ -1163,6 +1164,11 @@ async function main() {
         }
         const r = await tickSports(config.sports, new Date(), clocks);
         live = r.live; nextStartMs = r.nextStartMs;
+        // THE SHADOW READ (v0.634.0): each final once, Stathead beside the
+        // public feed, in the log. Nothing written.
+        for (const sport of shadowSports) {
+          try { await shadowOnTick(sport, r.games[sport] ?? [], { log }); } catch (e) { log(`shadow ${sport}:`, e.message); }
+        }
         // Then the leagues (0426): lock what just started, score what is live.
         for (const sport of config.sports) {
           try {
@@ -1180,12 +1186,20 @@ async function main() {
       if (!live && nextStartMs != null) wait = Math.max(config.sportsLivePollMs, Math.min(wait, nextStartMs - Date.now() + 5000));
       setTimeout(() => { void sportsLoop(); }, wait);
     };
-    log('daily sports:', config.sports.join(', '));
-    // THE STATHEAD SHADOW READ (v0.633.1): with the token set, say at boot
-    // what the feed holds and whether every pool key resolves. Read-only,
-    // detached, and a failure is a log line.
-    import('./stathead.js').then((m) => m.statheadBootReport({ log })).catch((e) => log('stathead:', e.message));
-    if (config.sportsPending.length) log(`soccer named in SPORTS but not polled yet (no adapter until Stathead delivers): ${config.sportsPending.join(', ')}`);
+    await loadAdapters();
+    log('daily sports:', config.sports.map((sp) => `${sp} (${providerOf(sp)})`).join(', '));
+    // THE SHADOW READ (v0.634.0): the sports read from Stathead beside their
+    // public feed — SPORT_SHADOW, or 'all' for every public-provided sport.
+    const shadowSports = config.statheadToken
+      ? (config.sportShadow.includes('all') ? config.sports : config.sportShadow).filter((sp) => config.sports.includes(sp) && providerOf(sp) === 'public')
+      : [];
+    const { shadowOnTick, shadowBoot } = await import('./poll/sportShadow.js');
+    if (shadowSports.length) log(`shadow read: ${shadowSports.join(', ')} compared against Stathead as finals land`);
+    // THE STATHEAD BOOT REPORT (v0.633.1): what the feed holds and whether
+    // every pool key resolves; then the fixture days and yesterday in shadow
+    // (v0.634.0). Read-only, detached, and a failure is a log line.
+    import('./stathead.js').then((m) => m.statheadBootReport({ log })).then(() => shadowBoot(shadowSports, { log })).catch((e) => log('stathead:', e.message));
+    if (config.sportsPending.length) log(`soccer named in SPORTS but not polled yet (no Stathead token): ${config.sportsPending.join(', ')}`);
     void sportsLoop();
     // The directory (0425): at boot and daily, detached from the game loop.
     const sweep = async () => {

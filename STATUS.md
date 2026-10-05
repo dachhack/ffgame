@@ -22,6 +22,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.634.0 — the Stathead adapter and the shadow read
+
+> - The worker can now read any daily sport from Stathead's feed, and reads NHL and MLB from both Stathead and the public feeds at once, comparing every final in its log. Nothing a player sees changes until a sport's week of shadow agrees and its provider is switched.
+
+- **The adapter** (`server/src/sports/statheadAdapter.js`): `statheadAdapter(sport)`
+  answers `schedule(date)`, `game(gameId)` and `directory(season)` from the
+  contract's rows for NHL, MLB, NBA, WNBA, EPL and MLS. Ids: `<sport>-<id>` loses
+  its prefix (NHL, MLB, WNBA, soccer keys already agree); NBA rows are keyed by
+  the crosswalk's `sleeper_id` (cached a day), an unlisted man by his ESPN id.
+  Games-played flags (`gp`, `gapp`, `hgp`, `pgp`) are set from the served line
+  as the public box scores set them. Soccer maps `ga → gc` and the ESPN position
+  code to `posn`; Stathead-only keys are dropped and unserved knobs stay 0. The
+  directory applies the same this-season-or-last rule as the public adapters
+  and MLB eligibility from `pos_games` through `mlbEligibility`.
+- **The provider switch** (`server/src/sports/index.js`, `config.js`):
+  `SPORT_PROVIDER=stathead` or `nhl=stathead,mlb=public`; unset is the public
+  feeds for the four and Stathead for soccer, which is now polled when the token
+  is set (`SPORTS=…,epl`). `providerOf(sport)` falls back to public without the
+  token; the boot log reads `daily sports: nhl (public), mlb (public)`.
+  `sport-poll --provider=` overrides for one run.
+- **The shadow read** (`server/src/poll/sportShadow.js`): `compareSlates` matches
+  both slates `AWAY@HOME` through the team aliases and names status
+  disagreements; `compareLines` matches lines by id (by team and normalised name
+  for NBA), scores both under the sport's default table and names the biggest
+  differences with their fields, plus players with a scoring line only one feed
+  lists. `shadowDay` runs a day; `shadowOnTick` compares each final once as the
+  live loop lands it; `shadowBoot` runs the fixture days (2026-09-29 NHL and MLB)
+  and yesterday after the boot report. `SPORT_SHADOW=nhl,mlb` on the pilot worker
+  (`fly.toml`); `all` shadows every public-provided sport. Writes nothing.
+- CLI `sport-shadow <sport> <date> [--max=]`. Soccer's posMap learns ESPN's
+  `LF RF SS`. The runbook (`docs/stathead-shadow-read.md`) gains the switch, the
+  shadow variables and how to read the log. 38 checks in `server/test/stathead.mjs`.
+
 ### v0.633.1 — the worker reports the Stathead feed at boot
 
 > - With the Stathead token set, the worker says at boot what the feed holds and whether every daily-sport pool key resolves in its crosswalk, so the shadow read's first answers come off the deploy log. Nothing a player sees changes.

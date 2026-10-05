@@ -5,13 +5,36 @@
 import { nhl } from './nhl.js';
 import { mlb } from './mlb.js';
 import { nba, wnba } from './nba.js';
+import { config } from '../config.js';
 
-// Soccer (epl, mls) has no adapter yet: its data arrives with Stathead's
-// delivery (v0.630.0); the core definitions are ready for it.
+/** The public feeds' adapters, by sport. Soccer has none: its data is
+ *  Stathead's (v0.634.0). */
 export const ADAPTERS = { nhl, mlb, nba, wnba };
 
+/** THE PROVIDER SWITCH (v0.634.0): which feed serves a sport — 'public'
+ *  (the league and fan feeds, as before) or 'stathead' (poll/statheadAdapter)
+ *  — from SPORT_PROVIDER (config.js). Soccer is Stathead's or nothing. */
+export const providerOf = (sport) => {
+  const want = config.sportProvider[sport] ?? config.sportProvider['*'] ?? (ADAPTERS[sport] ? 'public' : 'stathead');
+  return want === 'stathead' && config.statheadToken ? 'stathead' : 'public';
+};
+
+/** The public adapter for a sport, or null (soccer). */
+export const publicAdapterFor = (sport) => ADAPTERS[sport] ?? null;
+
+let statheadMod = null;
 export const adapterFor = (sport) => {
+  if (providerOf(sport) === 'stathead') {
+    // Lazy, so a worker with no token never loads the module.
+    if (!statheadMod) throw new Error(`stathead adapter not loaded for ${sport} — call loadAdapters() first`);
+    return statheadMod.statheadAdapter(sport);
+  }
   const a = ADAPTERS[sport];
   if (!a) throw new Error(`no adapter for sport ${sport}`);
   return a;
 };
+/** Load the Stathead module when any sport is served by it (index.js, CLI). */
+export async function loadAdapters() {
+  if (!statheadMod && config.statheadToken) statheadMod = await import('./statheadAdapter.js');
+  return statheadMod;
+}
