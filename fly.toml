@@ -11,12 +11,13 @@ primary_region = "iad"
   PILOT_SEASON = "2026"
   # Daily sports the worker polls, sweeps and scores (v0.623.2, on main as v0.624.0). Unset, it is
   # the NFL worker byte for byte; sport leagues are behind has_sports() anyway.
-  SPORTS = "nhl,mlb"
+  # v0.635.0: the NBA (public feeds, shadowed) and soccer (Stathead only).
+  SPORTS = "nhl,mlb,nba,epl,mls"
   # THE SHADOW READ (v0.634.0): these sports' finals are also read from
   # Stathead and compared in the log (poll/sportShadow.js). STATHEAD_TOKEN is
   # a Fly secret. Switch a sport's provider with SPORT_PROVIDER=nhl=stathead
   # once its week of shadow agrees; soccer is Stathead's by default.
-  SPORT_SHADOW = "nhl,mlb"
+  SPORT_SHADOW = "nhl,mlb,nba"
   # PILOT_SEASON_TYPE is deliberately UNSET. The scheduler runs every week context
   # that currently has games (server/src/index.js activeContexts), so preseason and
   # the regular season poll together and neither needs a flag. Setting it PINS the

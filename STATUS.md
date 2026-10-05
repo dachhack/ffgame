@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.635.0 — soccer switched on through Stathead; the NBA joins the shadow
+
+> - The Premier League and MLS are live on the worker: their players, fixtures, box scores and (for the Premier League) a draft board now come from Stathead, so a soccer league can be created. The NBA is polled from its public feeds and compared against Stathead from the first preseason final.
+
+- `fly.toml`: `SPORTS = "nhl,mlb,nba,epl,mls"`, `SPORT_SHADOW = "nhl,mlb,nba"`.
+  The boot log reads `daily sports: nhl (public), mlb (public), nba (public),
+  epl (stathead), mls (stathead)`.
+- **The market from Stathead** (`poll/sportMarket.js`): a sport whose provider
+  is Stathead takes its season calendar from `/v1/{sport}/games?season=`
+  (`statheadCalendarRows`: regular season and playoffs, never preseason or a
+  cancelled match) and its ADP board from `/v1/{sport}/adp`
+  (`statheadAdpRows`, keyed by player id through the crosswalk — no name
+  matching). MLS has no board; the log says so instead of an error. The ADP
+  source column still reads `fantasypros` (the RPC stamps it); nothing reads it.
+- **Injury codes** (`injuryCodeOf`): Stathead passes each platform's status
+  through (FPL's `a d i s u n`, MLS Fantasy's words, Sleeper's codes); the
+  adapter maps anything the sport does not list to its own codes (O, D, Q,
+  SUSP, OFS for soccer) so the boards and the lineup rules read them.
+- 46 checks in `server/test/stathead.mjs`. Soccer has no public adapter to
+  shadow against; its first live check is the boot log's directory count,
+  market line and yesterday's `epl`/`mls` poll lines, then a walk through the
+  create, draft and lineup screens.
+
 ### v0.634.1 — the shadow read leaves our known gaps out
 
 > - The shadow log no longer calls every NHL final a disagreement over faceoffs, which the public box score does not serve at all; it now says so once per day and compares the rest. Nothing a player sees changes.
