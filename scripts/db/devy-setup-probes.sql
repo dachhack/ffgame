@@ -27,7 +27,7 @@ do $$
 declare r jsonb; a uuid; b uuid; c uuid; code text; n0 int;
 begin
   perform dv_as('01');
-  r := create_native_league('Devy Spots Made', '2031', 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Spots Made', '2031', 2, 15, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   a := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   n0 := (select rounds from draft where league_id = a);
   perform dv_ok(commish_setup_devy(a, 'spots'), 'dv1 THE POINT: a commissioner turns devy on at creation');
@@ -36,7 +36,7 @@ begin
   perform dv_true((_roster_shape(a) ->> 'devy')::int = 3, 'dv1c three devy spots by default');
   perform dv_true((select rounds from draft where league_id = a) = n0 + 3, 'dv1d …added on top of the rounds: ' || n0 || ' → ' || (select rounds from draft where league_id = a) || ' starters ' || _classic_starters(a));
 
-  r := create_native_league('Devy Market Made', '2031', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Market Made', '2031', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   b := (r ->> 'league_id')::uuid;
   perform dv_ok(commish_setup_devy(b, 'shares'), 'dv2 …or the devy market');
   perform dv_true(_devy_shares_on(b) and _league_has_college((select settings_json from league where id = b)), 'dv2a market on, college on');
@@ -54,7 +54,7 @@ begin
   perform dv_err(set_league_devy_open(b, 'after_draft'), 'has drafted', 'do4a the choice is moot after the first draft');
   perform dv_ok(set_league_devy_open(a, 'after_draft'), 'do5 closing again is fine before the draft');
 
-  r := create_native_league('Devy Auction', '2031', 2, 8, 60, 'auction', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Auction', '2031', 2, 8, 60, 'auction', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   c := (r ->> 'league_id')::uuid;
   perform dv_err(commish_setup_devy(c, 'shares'), 'auction', 'dv3 no market with an auction draft');
   r := create_native_league('Devy Drip', '2031', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'drip');

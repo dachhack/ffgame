@@ -59,17 +59,17 @@ begin
   -- ══ THE OLD CEILING IS GONE ══════════════════════════════════════════════
   -- 40 rounds was refused outright before this migration ("roster size must be
   -- 5–25"), which is the size a dynasty with a taxi squad actually wants.
-  r := create_native_league('Deep Roster', '2024', 2, 40, 60);
+  r := create_native_league('Deep Roster', '2024', 2, 40, 60, p_continuity => 'keeper', p_continuity_n => 2);
   perform assert_ok(r, 'rs1 a 40-round league is creatable');
   big := (r ->> 'league_id')::uuid;
   perform assert_true((select rounds from draft where league_id = big) = 40, 'rs1a the draft carries 40 rounds');
 
   -- The new edge, and one past it.
-  r := create_native_league('At The Edge', '2024', 2, 99, 60);
+  r := create_native_league('At The Edge', '2024', 2, 99, 60, p_continuity => 'keeper', p_continuity_n => 2);
   perform assert_ok(r, 'rs2 99 is allowed');
   r := create_native_league('Over The Edge', '2024', 2, 100, 60);
   perform assert_err(r, 'roster size must be 5–99', 'rs2a 100 is refused, and says the new bound');
-  r := create_native_league('Under The Floor', '2024', 2, 4, 60);
+  r := create_native_league('Under The Floor', '2024', 2, 4, 60, p_continuity => 'keeper', p_continuity_n => 2);
   perform assert_err(r, 'roster size must be 5–99', 'rs2b the floor still holds');
 
   -- set_roster_rules moves an existing league to the same edge.
@@ -79,7 +79,7 @@ begin
 
   -- ══ THE ROSTER SHAPE HAS NO CEILING OF ITS OWN ═══════════════════════════
   -- Classic only: the shape is the starting spec plus its stashes.
-  r := create_native_league('Shapely', '2024', 2, 12, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Shapely', '2024', 2, 12, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform assert_ok(r, 'rs4 classic league');
   lid := (r ->> 'league_id')::uuid;
   -- Bench 40 / taxi 12 / IR 10 used to CLAMP to 20 / 8 / 8 without saying so.
@@ -113,7 +113,7 @@ begin
   perform assert_true((select status from draft where league_id = big) = 'live', 'rs6a live');
 
   -- An unseeded pool still fails first, with its own message.
-  r := create_native_league('No Pool', '2024', 2, 10, 60);
+  r := create_native_league('No Pool', '2024', 2, 10, 60, p_continuity => 'keeper', p_continuity_n => 2);
   perform assert_ok(r, 'rs7 create');
   code := r ->> 'invite_code';
   perform probe_as('b'); perform assert_ok(native_join(code, 'B2'), 'rs7a join');

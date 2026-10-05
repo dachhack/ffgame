@@ -22,6 +22,77 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.638.0 — what a league's seasons allow
+
+> - A redraft league no longer offers devy spots, the devy market or a taxi squad — those are for keeper and dynasty leagues. A dynasty league plays head-to-head: guillotine and vampire are off its menu. Leagues already running either keep working as they are.
+
+The founder: "Devy spots and the devy market don't make sense for redraft
+leagues. Nor does taxi. Dynasty leagues can't do vampire or guillotine
+modes either."
+- 0442 `_league_seasons_rule(settings)` names the violation: a redraft
+  league with devy spots, the market or a taxi squad; a dynasty league
+  (dynasty, contract dynasty) on guillotine or vampire. Enforced with the
+  reason where the choice is made — `commish_setup_college` (devy spots or
+  the market at creation; college lineup spots stay open to a redraft
+  league, they score this season), `set_league_roster_shape` (a new or
+  larger taxi squad or devy shelf), `set_league_format` (into guillotine
+  or vampire), `set_league_continuity` (to redraft under a shelf, to
+  dynasty under one of those formats) — and the league backstop raises it
+  for every other writer (`commish_setup_devy`, `set_league_devy_mode`, a
+  copied blueprint).
+- ONLY A NEW VIOLATION IS REFUSED. A league already running a taxi squad
+  in a redraft season, or vampire in a dynasty, keeps working untouched:
+  its other settings save, the shelf it has stays, it can shrink or drop
+  it, it cannot grow it.
+- Core `leagueRules` (`formatBlocked`, `shelfBlocked`, `isRedraft`);
+  `collegeSetupBlocked` takes `redraft`. App (Recruit) and web (NativeLeague
+  create form): picking DYNASTY resets the format to head-to-head and
+  greys GUILLOTINE / VAMPIRE with the reason; picking REDRAFT clears devy
+  spots and the market, and the COLLEGE step shows the reason in their
+  place; the setup call never asks for what the server would refuse.
+- Probes: `scripts/db/season-rules-probes.sql`. Twenty suites that put a
+  taxi squad, devy spots or the market on the default league now make it
+  a KEEPER league (`create_native_league(…, 'classic', 'keeper', 2)` or
+  `p_continuity => 'keeper'`), which is what they were testing all along.
+  On a scratch DB built fresh with every migration: 152 of the runner's
+  156 suites pass; the 4 misses are the same pre-existing four.
+
+### v0.637.1 — the autodraft in a mixed league: K and D/ST arrive, college goes two deep
+
+> - An autodraft in a league with IR or OUT spots now takes its kicker and defense in the last rounds as it always meant to, and in a league with college starting spots it drafts two college players per college spot instead of one.
+
+The founder, from a mixed league's autodrafted roster: "Auto draft only
+picked one college player per spot and didn't get K or DST."
+- **K and D/ST.** 0195 fills the kicker and defense in the last rounds,
+  when the picks left equal the spots still forced. 0193 made IR and OUT
+  spots part of `draft.rounds` that the draft never fills
+  (`draft.stash_slots`) — and the autopick kept counting its picks left
+  against the full rounds. In a league with IR spots the count never fell
+  to the forced two, the last picks went to bench depth, and the K and
+  D/ST spots drafted empty. 0441: the picks left are rounds − stash − held.
+- **College depth.** 0381's bench rule takes a position two deep per
+  starting spot that takes it, and counted a college-only spot as NFL depth
+  (an RB/WR/TE college spot made the RB target two deeper) while no college
+  player was ever a depth pick: college rows rank after every NFL row, so
+  the rank picks never reached one. A college-only spot (a level, a
+  conference or a class rule — `_spot_takes_college_only`) now counts
+  toward COLLEGE depth, two college players per college spot, taken after
+  the NFL bench depth and before the rank picks, and not toward NFL depth.
+- `_autopick_slug_0387`'s body from 0440 with the marked changes;
+  `native_autopick_slug` (0411's devy-round wrapper) untouched.
+- Not confirmed against the founder's league: `dbquery.yml` refused this
+  session's dispatch (403), and `scripts/db/mixed-autodraft-diag.sql` is
+  checked in for a run from the Actions page — it prints the league's
+  shape, pool by position and level, each roster, and the picks in order.
+  The K/D/ST mechanism is 0193's and needs only IR or OUT spots on the
+  league; the one-per-spot behaviour follows from the rank order alone.
+- Probes: `scripts/db/autodraft-mixed-probes.sql` (an IR stash still
+  yields K then D/ST in the last two drafted picks; with two college spots
+  the autodraft takes a third and fourth college player after the NFL
+  depth, then goes back to NFL). On a scratch DB built fresh with every
+  migration: 151 of the runner's 155 suites pass; the 4 misses are the
+  same pre-existing four as v0.637.0's.
+
 ### v0.637.0 — devy spots beside college starting spots: the shelf is a taxi squad
 
 > - A league can now have both college starting spots and devy spots. College players you draft land on your active roster while there is room and on the devy shelf once it is full, and you move them between the two like taxi players. A devy league without college starting spots works exactly as before.

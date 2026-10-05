@@ -261,3 +261,5 @@ $RUN -f scripts/db/devy-values-probes.sql | grep -E "PROBE FAIL|ALL DEVY-VALUES 
 $RUN -f scripts/db/college-fill-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-FILL PROBES" || { echo "COLLEGE-FILL PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/college-setup-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-SETUP PROBES" || { echo "COLLEGE-SETUP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/mixed-devy-probes.sql | grep -E "PROBE FAIL|ALL MIXED-DEVY PROBES" || { echo "MIXED-DEVY PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/autodraft-mixed-probes.sql | grep -E "PROBE FAIL|ALL AUTODRAFT-MIXED PROBES" || { echo "AUTODRAFT-MIXED PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/season-rules-probes.sql | grep -E "PROBE FAIL|ALL SEASON-RULES PROBES" || { echo "SEASON-RULES PROBES FAILED"; exit 1; }

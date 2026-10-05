@@ -50,7 +50,7 @@ begin
   update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": true}'::jsonb
     where id = '00000000-0000-0000-0000-00000000000b';
   perform probe_as('b');
-  r := create_native_league('Taxi League', '2026', 4, 7, 60);
+  r := create_native_league('Taxi League', '2026', 4, 7, 60, p_continuity => 'keeper', p_continuity_n => 2);
   perform assert_ok(r, 'tx0 create');
   lid := (r ->> 'league_id')::uuid;
   code := r ->> 'invite_code';

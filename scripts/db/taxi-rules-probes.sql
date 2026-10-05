@@ -49,7 +49,7 @@ begin
     where id in ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b');
   perform probe_as('a');
 
-  r := create_native_league('Taxi Rules', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Taxi Rules', '2024', 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform assert_ok(r, 'tr0 classic league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform probe_as('b'); perform assert_ok(native_join(code, 'TR-B'), 'tr0a join'); perform probe_as('a');
   perform assert_ok(set_league_classic_slots(lid,

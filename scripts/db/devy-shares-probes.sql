@@ -31,7 +31,7 @@ begin
       'pos', 'WR', 'school_id', '97999', 'school_abbr', 'DSU', 'class_year', 3)) from generate_series(1, 9) g));
 
   perform ds_as('01');
-  r := create_native_league('Devy Shares', yr, 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Shares', yr, 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform ds_ok(r, 'ds0 league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
   perform ds_as('02'); perform ds_ok(native_join(code, 'DS-2'), 'ds0 join'); perform ds_as('01');
 
@@ -101,7 +101,7 @@ begin
   delete from league where id = nxt;
   perform ds_ok(set_league_devy_start_cash(lid, 150), 'ds5c the commissioner sets a new team''s cash');
   perform ds_true(_devy_cash(_lineage(lid), 9) = 150 and _devy_cash(_lineage(lid), 1) = 20, 'ds5d a new seat starts at 150; a seat with a book keeps it');
-  r := create_native_league('Devy Auction', yr, 2, 8, 60, 'auction', 200, 15, 1, null, null, null, 'classic');
+  r := create_native_league('Devy Auction', yr, 2, 8, 60, 'auction', 200, 15, 1, null, null, null, 'classic', 'keeper', 2);
   perform ds_ok(set_league_position_access((r ->> 'league_id')::uuid, '["COLLEGE"]'::jsonb), 'ds5e auction COLLEGE on');
   perform ds_err(set_league_devy_mode((r ->> 'league_id')::uuid, 'shares'), 'auction', 'ds5f no shares in an auction league');
   delete from league where id = (r ->> 'league_id')::uuid;
