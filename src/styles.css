@@ -60,3 +60,5 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .guide-ring { animation: none; box-shadow: 0 0 0 2px var(--you); }
 }
+/* v0.638.1: a chip strip scrolls sideways and shows no bar — its › cap says there is more. */
+.chip-strip::-webkit-scrollbar { display: none; }

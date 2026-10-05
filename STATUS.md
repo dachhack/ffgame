@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.638.1 — the filter chips: compact, and capped where there is more
+
+> - The draft room's and the wire's filter rows are single-line strips of smaller chips that scroll sideways, with a › on the edge that has more behind it (tap it to page). Three rows of filters take about half the height they did, so the player list starts higher.
+
+The founder, holding the draft room's PLAYERS tab: "Let's clean up these
+filters. Compact chips, make them scroll off screen with (more) or other
+solutions."
+- App: `Chip` takes `small` (two-thirds the height, fs(10)); new `ChipStrip`
+  (prims) is a horizontal ScrollView that measures its frame, its content
+  and its offset, and wears a › / ‹ cap on the surface colour on whichever
+  edge has chips behind it — only while something is actually out of view;
+  tapping a cap pages the strip 70% of its width. The draft room's three
+  strips (positions + rookies / stars / taken; level + class + conference;
+  sort) and the wire's NFL-team strip use small chips in a `ChipStrip`;
+  the team screen's seat strip keeps full-size chips in one.
+- Web (NativeLeague): the same `Chip small` and a `ChipStrip` div
+  (overflow-x, no scrollbar, a gradient cap with › that pages on click,
+  measured with a ResizeObserver) for the draft room's position and sort
+  rows, `LevelClassChips`, and the wire's position and sort rows; the star
+  chips read ★ FIRST / ★ ONLY as the app's do.
+
 ### v0.638.0 — what a league's seasons allow
 
 > - A redraft league no longer offers devy spots, the devy market or a taxi squad — those are for keeper and dynasty leagues. A dynasty league plays head-to-head: guillotine and vampire are off its menu. Leagues already running either keep working as they are.
