@@ -200,6 +200,16 @@ const state = [
   ok('no leagues = null, not a crash', pickWidgetLeague([], 'a') === null && nextWidgetLeague([], 'a') === null);
   ok('▸ cycles and wraps', nextWidgetLeague(ls, 'a').id === 'b' && nextWidgetLeague(ls, 'b').id === 'a');
   ok('▸ from an unknown league starts at the first', nextWidgetLeague(ls, 'zzz').id === 'a');
+  // v0.635.2: two seats in one league — the founder's Contract Captains,
+  // listed twice with the same team on both cards.
+  const two = widgetLeagues([
+    { league_id: 'cc', sleeper_roster_id: 1, team_name: 'Silver Starters', league: { name: 'Contract Captains' } },
+    { league_id: 'cc', sleeper_roster_id: 5, team_name: 'Team 5', league: { name: 'Contract Captains' } },
+  ]);
+  ok('a league with two seats lists both', two.length === 2 && two[0].rosterId === 1 && two[1].rosterId === 5, two);
+  ok('asked for the second seat, the pick is the second seat', pickWidgetLeague(two, 'cc', 5).rosterId === 5);
+  ok('asked for no seat (the widget), the pick is the first', pickWidgetLeague(two, 'cc').rosterId === 1 && pickWidgetLeague(two, 'cc', null).rosterId === 1);
+  ok("a seat you no longer hold falls to the league's first", pickWidgetLeague(two, 'cc', 9).rosterId === 1);
 }
 
 // ── v0.422.1: the cache that makes a tap instant ──
@@ -219,6 +229,13 @@ const state = [
   rememberSnapshot({ leagues: [league, league2], snapshot: snap });
   ok('the remembered picture comes back by league', recallSnapshot('L2')?.snapshot.leagueName === 'Other' && recallSnapshot('L2')?.leagues.length === 2);
   ok('a league never drawn has no picture', recallSnapshot('L9') === null);
+  // v0.635.2: a second seat's picture is remembered under the seat and never
+  // takes the league's slot (the widget's pick) from the first seat.
+  const seatB = { id: 'L2', name: 'Other', rosterId: 7, gameMode: 'drip' };
+  const snapB = summarize({ league: seatB, week: WEEK, matchup: null, state: [], teams: {}, nowMs: kick(0) });
+  rememberSnapshot({ leagues: [league, league2, seatB], snapshot: snapB });
+  ok('the second seat comes back by seat', recallSnapshot('L2', 7)?.snapshot.rosterId === 7, recallSnapshot('L2', 7));
+  ok('the first seat still answers by league and by seat', recallSnapshot('L2')?.snapshot.rosterId === 1 && recallSnapshot('L2', 1)?.snapshot.rosterId === 1);
   ok('the leagues list is remembered only by the feed (nothing wrote it here)', recallLeagues() === null);
 }
 

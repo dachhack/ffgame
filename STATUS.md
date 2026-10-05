@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.635.2 — a second seat in a league gets its own card
+
+> - A member who holds two teams in one league saw the league listed twice with the same team on both cards. Each card now shows its own team's matchup, projection and lineup, and names the team under the league name.
+
+- Founder's screenshot (app v0.635.1): Contract Captains twice, both cards
+  Silver Starters vs Team 8, 97.90–142.50. The list has one card per SEAT
+  (`my_teams` returns one row per seat), but the score strip (`my_league_slate`
+  rows) and the glance (`widgetSnapshot`) were keyed by LEAGUE, and
+  `pickWidgetLeague` found a league by id alone — so the second card painted
+  the first seat's picture.
+- Core `seatKey`; `pickWidgetLeague` / `widgetSnapshot` take the seat;
+  `rememberSnapshot` keeps a per-seat copy and leaves the league's slot (the
+  home-screen widget's pick) to the first seat. Both lists (app `Leagues`,
+  web `LiveOnboard`) key slate and glance by seat; a league you hold more than
+  one seat in names the team on each card; the app's inbox strip stays one
+  chip per league.
+- Unconfirmed against live data (no database access from this session):
+  which second seat the account holds in Contract Captains and how it got
+  there (`claim_my_rosters` by email, or a co-manager add). If the account
+  should hold one seat there, that is a seat to release, not a list bug.
+- Checks in `scripts/check-widget.mjs`.
+
 ### v0.635.1 — the shadow log shows values, tolerates minute rounding, and the deploy tail grows
 
 > - The shadow read no longer calls every NBA line a disagreement over minutes the two feeds round differently, and names both values when a line does differ. Nothing a player sees changes.

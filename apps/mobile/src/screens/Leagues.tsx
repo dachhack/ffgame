@@ -13,7 +13,7 @@ import {
   type AdminLeague, type Enrollment, type WaitlistRow, type LeagueSlateRow,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
-import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import { widgetLeagues, widgetSnapshot, recallSnapshot, seatKey, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
 import { HeroesVillains } from '../ui/HeroesVillains';
 import { useTheme, MONO, alpha } from '../theme.native';
@@ -97,7 +97,10 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
   // summary per league and a notification for unread chats." One call for every
   // league's current fixture AND its unread counts — it replaced a `chat_unread`
   // fan-out of one RPC per league per minute, and a summary done the old way
-  // would have doubled it. Keyed by league id so a card looks its own row up.
+  // would have doubled it. Keyed by SEAT, not league (v0.635.2): the founder
+  // held two seats in Contract Captains and the list showed the league twice
+  // with the SAME team on both cards — one row per seat came back, the
+  // league-keyed map kept one, and both cards read it.
   const [slate, setSlate] = useState<Record<string, LeagueSlateRow>>({});
 
   const load = useCallback(async () => {
@@ -133,7 +136,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
   useEffect(() => {
     let dead = false;
     const poll = () => myLeagueSlate()
-      .then((r) => { if (!dead && r.ok && r.leagues) setSlate(Object.fromEntries(r.leagues.map((x) => [x.league_id, x]))); })
+      .then((r) => { if (!dead && r.ok && r.leagues) setSlate(Object.fromEntries(r.leagues.map((x) => [seatKey(x.league_id, x.roster_id), x]))); })
       .catch(() => {});
     poll();
     const id = setInterval(poll, 60_000);
@@ -155,14 +158,16 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
     if (!leagues.length) return;
     let dead = false;
     const remembered: Record<string, WidgetSnapshot> = {};
-    for (const l of leagues) { const r = recallSnapshot(l.id); if (r) remembered[l.id] = r.snapshot; }
+    // Per seat (v0.635.2), like the slate: the picture is read FOR this seat,
+    // and remembered under it.
+    for (const l of leagues) { const r = recallSnapshot(l.id, l.rosterId); if (r) remembered[seatKey(l.id, l.rosterId)] = r.snapshot; }
     setGlance((g) => ({ ...remembered, ...g }));
     (async () => {
       for (const l of leagues) {
         if (dead) return;
         try {
-          const { snapshot } = await widgetSnapshot(l.id, userId, glanceTick > 0, { anyLeague: true });
-          if (!dead && snapshot && snapshot.leagueId === l.id) setGlance((g) => ({ ...g, [l.id]: snapshot }));
+          const { snapshot } = await widgetSnapshot(l.id, userId, glanceTick > 0, { anyLeague: true, rosterId: l.rosterId });
+          if (!dead && snapshot && snapshot.leagueId === l.id && snapshot.rosterId === l.rosterId) setGlance((g) => ({ ...g, [seatKey(l.id, l.rosterId)]: snapshot }));
         } catch { /* keep what the card had */ }
       }
     })();
@@ -174,6 +179,11 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
   }, []);
 
   const refresh = async () => { setRefreshing(true); await load(); setGlanceTick((n) => n + 1); setRefreshing(false); };
+
+  // How many seats you hold per league (v0.635.2): past one, each card names
+  // its team.
+  const seatsIn: Record<string, number> = {};
+  for (const e of rows ?? []) if (!e.archived) seatsIn[e.league_id] = (seatsIn[e.league_id] ?? 0) + 1;
 
   if (rows === null) {
     return (
@@ -266,6 +276,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
 
       {rows.filter((e) => !e.archived).filter((e) => filter === 'all' || commishIds.has(e.league_id)).map((e) => {
         const lg = e.league;
+        const seat = seatKey(e.league_id, e.sleeper_roster_id);
         return (
           <Pressable
             key={`${e.league_id}-${e.sleeper_roster_id}`}
@@ -312,6 +323,15 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
                 <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: t.text }}>
                   {lg?.name ?? 'League'}
                 </Text>
+                {/* WHICH TEAM (v0.635.2) — only when you hold more than one
+                    seat in this league. The card dropped its team name on
+                    purpose (v0.356.16), but two cards for one league with no
+                    team on either read as the same card twice. */}
+                {(seatsIn[e.league_id] ?? 0) > 1 && (
+                  <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: t.you }}>
+                    {(e.team_name || `Seat ${e.sleeper_roster_id}`).toUpperCase()}
+                  </Text>
+                )}
                 {/* Two lines allowed since v0.357.2: the line carries the
                     GAME now (Drip/Classic, Guillotine, Vampire, Golf) as well
                     as the type, and a loaded league runs past one line on a
@@ -334,7 +354,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
                   only while it is next to the league. Mentions take the warn
                   fill; a plain count stays in the accent outline. */}
               {(() => {
-                const b = unreadBadge(slate[e.league_id] ?? { unread: { league: 0, dm: 0, mention: 0 } } as LeagueSlateRow);
+                const b = unreadBadge(slate[seat] ?? { unread: { league: 0, dm: 0, mention: 0 } } as LeagueSlateRow);
                 if (!b) return null;
                 return (
                   <View style={{ flexShrink: 0, minWidth: 22, alignItems: 'center', backgroundColor: b.mention ? t.warn : alpha(t.you, 14),
@@ -346,7 +366,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
                 );
               })()}
             </View>
-            <MatchupStrip row={slate[e.league_id]} glance={glance[e.league_id]} />
+            <MatchupStrip row={slate[seat]} glance={glance[seat]} />
           </Pressable>
         );
       })}
@@ -574,10 +594,18 @@ function InboxStrip({ rows, slate, onOpenChat }: {
   const t = useTheme();
   const counts: Record<string, { n: number; mention: boolean }> = {};
   for (const e of rows) {
-    const b = slate[e.league_id] ? unreadBadge(slate[e.league_id]!) : null;
+    const row = slate[seatKey(e.league_id, e.sleeper_roster_id)];
+    const b = row ? unreadBadge(row) : null;
     if (b) counts[e.league_id] = b;
   }
-  const loud = rows.filter((e) => (counts[e.league_id]?.n ?? 0) > 0);
+  // One chip per league (v0.635.2): the count is the league's, whichever of
+  // your seats read it.
+  const seen = new Set<string>();
+  const loud = rows.filter((e) => {
+    if ((counts[e.league_id]?.n ?? 0) === 0 || seen.has(e.league_id)) return false;
+    seen.add(e.league_id);
+    return true;
+  });
   if (!loud.length) return null;
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
