@@ -42,7 +42,7 @@ import { fmtClearsAt, waiverScheduleText } from '@drip/core/data/waiverClock';
 import { useTheme, MONO, fs } from '../theme.native';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
-import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
+import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton, ChipStrip } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
@@ -886,12 +886,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             default. Tap a rival to read their roster laid out the same way;
             the card says whose it is and takes its controls off. */}
         {(team.waiver_order?.length ?? 0) > 1 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+          <ChipStrip style={{ marginBottom: 8 }}>
             {[...team.waiver_order].sort((a, b) => (a.roster_id === myRoster ? -1 : b.roster_id === myRoster ? 1 : a.roster_id - b.roster_id)).map((w) => (
               <Chip key={w.roster_id} on={w.roster_id === shownRid} onPress={() => setViewRid(w.roster_id === myRoster ? null : w.roster_id)}
                 label={w.roster_id === myRoster ? 'MY TEAM' : (w.team ?? `Team ${w.roster_id}`).toUpperCase()} />
             ))}
-          </ScrollView>
+          </ChipStrip>
         )}
         <Mono size={9} tone="faint" track={0.12}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</Mono>
         {!viewingMine && canStash && (
@@ -1202,16 +1202,15 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         </View>
         {/* The team strip scrolls: 32 codes wrapped would fill a phone screen
             before a single player showed. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0, marginTop: 6 }}
-          contentContainerStyle={{ gap: 6, paddingRight: 12 }}>
-          <Chip label="ALL NFL" on={nflTeam === 'ALL'} onPress={() => { tap(); setNflTeam('ALL'); }} />
+        <ChipStrip style={{ marginTop: 6 }}>
+          <Chip small label="ALL NFL" on={nflTeam === 'ALL'} onPress={() => { tap(); setNflTeam('ALL'); }} />
           {/* 0341: owned players in the list, with who holds them. */}
-          <Chip label={showOwned ? 'OWNED ✓' : 'SHOW OWNED'} on={showOwned}
+          <Chip small label={showOwned ? 'OWNED ✓' : 'SHOW OWNED'} on={showOwned}
             onPress={() => { tap(); setShowOwned(!showOwned); }} />
           {poolTeams.map((tm) => (
-            <Chip key={tm} label={tm} on={nflTeam === tm} onPress={() => { tap(); setNflTeam(nflTeam === tm ? 'ALL' : tm); }} />
+            <Chip small key={tm} label={tm} on={nflTeam === tm} onPress={() => { tap(); setNflTeam(nflTeam === tm ? 'ALL' : tm); }} />
           ))}
-        </ScrollView>
+        </ChipStrip>
         {free.slice(0, 60).map((p) => {
           const left = waivedFor(p);
           // 0341: THE DAY HE CLEARS. A countdown has to be read and converted

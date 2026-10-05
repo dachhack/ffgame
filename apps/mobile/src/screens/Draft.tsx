@@ -43,7 +43,7 @@ import { FlagChip, InjuryNow } from '../ui/rosterGroup';
 import { useTheme, MONO } from '../theme.native';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
-import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton } from '../ui/prims';
+import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton, ChipStrip } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -1014,59 +1014,57 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
               thing you are actually reading. The order is deliberate: ALL and
               the positions come first, so what scrolls out of reach is the
               modes, not the filter you use every pick. */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}
-            style={{ marginBottom: 8, flexGrow: 0 }}
-            contentContainerStyle={{ flexDirection: 'row', gap: 6, paddingRight: 4 }}>
-            <Chip label={`ALL${myRoster == null ? '' : ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`}`}
+          {/* COMPACT, AND CAPPED (v0.638.1, founder: "compact chips, make them
+              scroll off screen with (more)"): three single-line strips of
+              small chips, each wearing a › on the edge that has more behind
+              it — the list below is the point, not the filters above it. */}
+          <ChipStrip style={{ marginBottom: 6 }}>
+            <Chip small label={`ALL${myRoster == null ? '' : ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`}`}
               on={posSel.size === 0} onPress={() => { tap(); setPosSel(new Set()); }} />
             {posChips.map((p) => {
               const fill = myRoster == null ? '' : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
               return (
-                <Chip key={p} label={`${p}${fill}`} on={posSel.has(p)}
+                <Chip small key={p} label={`${p}${fill}`} on={posSel.has(p)}
                   onPress={() => { tap(); setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; }); }} />
               );
             })}
             {/* ROOKIES (v0.398.0). Only once years_exp has loaded — an empty
                 map would hide every player and look broken rather than empty. */}
             {Object.keys(expMap).length > 0 && (
-              <Chip label="🌱 ROOKIES" on={tenure === 'rookie'}
+              <Chip small label="🌱 ROOKIES" on={tenure === 'rookie'}
                 onPress={() => { tap(); setTenure((cur) => (cur === 'rookie' ? 'any' : 'rookie')); }} />
             )}
-            <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
-            <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
-            <Chip label="✕ TAKEN" on={showTaken} onPress={() => { tap(); setShowTaken((v) => !v); }} />
-          </ScrollView>
+            <Chip small label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
+            <Chip small label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
+            <Chip small label="✕ TAKEN" on={showTaken} onPress={() => { tap(); setShowTaken((v) => !v); }} />
+          </ChipStrip>
           {poolKinds.college && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 8, flexGrow: 0 }}
-              contentContainerStyle={{ flexDirection: 'row', gap: 6, alignItems: 'center', paddingRight: 4 }}>
+            <ChipStrip style={{ marginBottom: 6 }}>
               {poolKinds.both && LEVEL_FILTERS.map((o) => (
-                <Chip key={o.id} label={o.label} on={level === o.id} onPress={() => { tap(); setLevel(o.id); }} />
+                <Chip small key={o.id} label={o.label} on={level === o.id} onPress={() => { tap(); setLevel(o.id); }} />
               ))}
               <Mono size={8} tone="faint">CLASS</Mono>
               {CLASS_FILTERS.map((o) => (
-                <Chip key={o.id} label={o.label} on={cls.has(o.id)}
+                <Chip small key={o.id} label={o.label} on={cls.has(o.id)}
                   onPress={() => { tap(); setCls((cur) => { const n = new Set(cur); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); return n; }); }} />
               ))}
               {/* CONFERENCE / DIVISION (0382) */}
               {confOpts.length > 0 && <Mono size={8} tone="faint">CONF</Mono>}
-              {confOpts.length > 0 && <Chip label="ALL" on={conf === 'all'} onPress={() => { tap(); setConf('all'); }} />}
+              {confOpts.length > 0 && <Chip small label="ALL" on={conf === 'all'} onPress={() => { tap(); setConf('all'); }} />}
               {confOpts.map((o) => (
-                <Chip key={o.value} label={o.label.toUpperCase()} on={conf === o.value} onPress={() => { tap(); setConf(conf === o.value ? 'all' : o.value); }} />
+                <Chip small key={o.value} label={o.label.toUpperCase()} on={conf === o.value} onPress={() => { tap(); setConf(conf === o.value ? 'all' : o.value); }} />
               ))}
-            </ScrollView>
+            </ChipStrip>
           )}
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
               so it stays the default even here where ADP and PROJ already
               print beside every name. */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}
-            style={{ marginBottom: 8, flexGrow: 0 }}
-            contentContainerStyle={{ flexDirection: 'row', gap: 6, alignItems: 'center', paddingRight: 4 }}>
+          <ChipStrip style={{ marginBottom: 6 }}>
             <Mono size={8} tone="faint">SORT</Mono>
             {POOL_SORTS.map((o) => (
-              <Chip key={o.id} label={o.label} on={sortBy === o.id} onPress={() => { tap(); setSortBy(o.id); }} />
+              <Chip small key={o.id} label={o.label} on={sortBy === o.id} onPress={() => { tap(); setSortBy(o.id); }} />
             ))}
-          </ScrollView>
+          </ChipStrip>
           {assigning && (
             <Notice tone="warn">
               <Mono size={9.5} tone="warn" style={{ lineHeight: 15 }}>

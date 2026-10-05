@@ -110,13 +110,57 @@ function fmtCountdown(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
-function Chip({ on, children, onClick, title }: { on?: boolean; children: React.ReactNode; onClick: () => void; title?: string }) {
+function Chip({ on, children, onClick, title, small }: { on?: boolean; children: React.ReactNode; onClick: () => void; title?: string;
+  /** v0.638.1: a FILTER chip, one of a dozen in a strip above a list. */
+  small?: boolean }) {
   return (
     <button onClick={onClick} title={title} className="mono" style={{
-      fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+      fontSize: small ? 9.5 : 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
       color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--surface)',
-      border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '5px 11px',
+      border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: small ? '3px 9px' : '5px 11px',
     }}>{children}</button>
+  );
+}
+
+/** A single line of chips that scrolls sideways (v0.638.1, the app's twin —
+ *  founder: "compact chips, make them scroll off screen with (more)"). Chips
+ *  that wrap cost rows of the list you are reading; a strip costs a swipe or
+ *  a wheel, and wears a › on the edge that has more behind it, which also
+ *  pages the strip when clicked. Measured: the cap shows only while
+ *  something is actually out of view. */
+function ChipStrip({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState<{ left: boolean; right: boolean }>({ left: false, right: false });
+  const measure = () => {
+    const el = ref.current; if (!el) return;
+    setMore({ left: el.scrollLeft > 4, right: el.scrollWidth - el.clientWidth - el.scrollLeft > 4 });
+  };
+  useEffect(() => {
+    measure();
+    const el = ref.current; if (!el) return;
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [children]);
+  const page = (dir: 1 | -1) => { const el = ref.current; if (el) el.scrollBy({ left: dir * el.clientWidth * 0.7, behavior: 'smooth' }); };
+  const cap = (side: 'left' | 'right') => (
+    <button onClick={() => page(side === 'right' ? 1 : -1)} aria-label={side === 'right' ? 'more filters' : 'back'} className="mono"
+      style={{ position: 'absolute', top: 0, bottom: 0, [side]: 0, width: 26, border: 'none', cursor: 'pointer', padding: 0,
+        background: `linear-gradient(${side === 'right' ? '90deg' : '270deg'}, transparent, var(--surface) 45%)`,
+        color: 'var(--dim)', fontSize: 14, fontWeight: 700, textAlign: side === 'right' ? 'right' : 'left' }}>
+      {side === 'right' ? '›' : '‹'}
+    </button>
+  );
+  return (
+    <div style={{ position: 'relative', marginBottom: 10, ...style }}>
+      <div ref={ref} onScroll={measure} className="chip-strip"
+        style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none', paddingRight: more.right ? 24 : 0 }}>
+        {children}
+      </div>
+      {more.right && cap('right')}
+      {more.left && cap('left')}
+    </div>
   );
 }
 
@@ -139,33 +183,33 @@ function LevelClassChips({ level, setLevel, cls, setCls, showLevel, conf, setCon
 }) {
   const groups = (['NFL', 'College'] as const).map((g) => ({ g, opts: confOpts.filter((o) => o.group === g) })).filter((x) => x.opts.length);
   return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+    <ChipStrip>
       {/* CONFERENCE / DIVISION (0382): AFC/NFC and the eight divisions for NFL
           players, Power 4 / Group of 5 and each conference for college ones. */}
       {confOpts.length > 0 && (
         <select value={conf} onChange={(e) => setConf(e.target.value)} className="mono" title="conference / division"
-          style={{ fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6, background: 'var(--bg)', color: conf === 'all' ? 'var(--dim)' : 'var(--text)', border: `1px solid ${conf === 'all' ? 'var(--bd)' : 'var(--you)'}` }}>
+          style={{ fontSize: 10, fontWeight: 700, padding: '3px 6px', borderRadius: 6, flexShrink: 0, background: 'var(--bg)', color: conf === 'all' ? 'var(--dim)' : 'var(--text)', border: `1px solid ${conf === 'all' ? 'var(--bd)' : 'var(--you)'}` }}>
           <option value="all">ALL CONFERENCES</option>
           {groups.map(({ g, opts }) => (
             <optgroup key={g} label={g}>{opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
           ))}
         </select>
       )}
-      {showLevel && LEVEL_FILTERS.map((o) => <Chip key={o.id} on={level === o.id} onClick={() => setLevel(o.id)}>{o.label}</Chip>)}
-      <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginLeft: showLevel ? 6 : 0 }}>CLASS</span>
+      {showLevel && LEVEL_FILTERS.map((o) => <Chip small key={o.id} on={level === o.id} onClick={() => setLevel(o.id)}>{o.label}</Chip>)}
+      <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginLeft: showLevel ? 6 : 0, flexShrink: 0 }}>CLASS</span>
       {CLASS_FILTERS.map((o) => (
-        <Chip key={o.id} on={cls.has(o.id)}
+        <Chip small key={o.id} on={cls.has(o.id)}
           onClick={() => { const n = new Set(cls); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); setCls(n); }}>{o.label}</Chip>
       ))}
-    </div>
+    </ChipStrip>
   );
 }
 
-function StarChips({ mode, setMode }: { mode: StarMode; setMode: (m: StarMode) => void }) {
+function StarChips({ mode, setMode, small }: { mode: StarMode; setMode: (m: StarMode) => void; small?: boolean }) {
   return (
     <>
-      <Chip on={mode === 'first'} onClick={() => setMode(mode === 'first' ? 'off' : 'first')}>FIRST</Chip>
-      <Chip on={mode === 'only'} onClick={() => setMode(mode === 'only' ? 'off' : 'only')}>ONLY</Chip>
+      <Chip small={small} on={mode === 'first'} onClick={() => setMode(mode === 'first' ? 'off' : 'first')}>★ FIRST</Chip>
+      <Chip small={small} on={mode === 'only'} onClick={() => setMode(mode === 'only' ? 'off' : 'only')}>★ ONLY</Chip>
     </>
   );
 }
@@ -2225,14 +2269,16 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
         <div style={card}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players, teams or schools…" style={{ ...input, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            <Chip on={posSel.size === 0} onClick={() => setPosSel(new Set())}>
+          {/* COMPACT, AND CAPPED (v0.638.1): single-line strips of small
+              chips, a › on the edge that has more — the list is the point. */}
+          <ChipStrip>
+            <Chip small on={posSel.size === 0} onClick={() => setPosSel(new Set())}>
               ALL{myRoster == null ? '' : ` ${Object.values(myPosCount).reduce((a, b) => a + b, 0)}/${st.rounds}`}
             </Chip>
             {posChips.map((p) => {
               const fill = myRoster == null ? '' : ` ${myPosCount[p] ?? 0}/${st.pos_caps?.[p as keyof PosCaps] ?? '∞'}`;
               return (
-                <Chip key={p} on={posSel.has(p)}
+                <Chip small key={p} on={posSel.has(p)}
                   onClick={() => setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })}>{posLabel(p)}{fill}</Chip>
               );
             })}
@@ -2240,22 +2286,22 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                 loaded — an empty map would make the chip hide every player and
                 look broken rather than empty. */}
             {Object.keys(expMap).length > 0 && (
-              <Chip on={tenure === 'rookie'} onClick={() => setTenure((t) => (t === 'rookie' ? 'any' : 'rookie'))}>
+              <Chip small on={tenure === 'rookie'} onClick={() => setTenure((t) => (t === 'rookie' ? 'any' : 'rookie'))}>
                 🌱 ROOKIES
               </Chip>
             )}
-            <StarChips mode={starMode} setMode={setStarMode} />
-          </div>
+            <StarChips small mode={starMode} setMode={setStarMode} />
+          </ChipStrip>
           {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} conf={conf} setConf={setConf} confOpts={confOpts} />}
           {/* THE ORDER (v0.302.0). RANK is what the clock's autopick follows,
               so it stays the default even here where ADP and PROJ are already
               printed beside every name. */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>SORT</span>
+          <ChipStrip>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>SORT</span>
             {POOL_SORTS.map((o) => (
-              <Chip key={o.id} on={sortBy === o.id} onClick={() => setSortBy(o.id)} title={o.hint}>{o.label}</Chip>
+              <Chip small key={o.id} on={sortBy === o.id} onClick={() => setSortBy(o.id)} title={o.hint}>{o.label}</Chip>
             ))}
-          </div>
+          </ChipStrip>
           {assigning && (
             <div className="mono" style={{ fontSize: 9.5, lineHeight: 1.5, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: 7, padding: '7px 9px', marginBottom: 8 }}>
               ASSIGNING FOR {teamName(st.on_clock) ?? `Team ${st.on_clock}`} — the next player you pick becomes their pick. Tap CONTROLS to stop.
@@ -3817,23 +3863,23 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             : ''}
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players, teams or schools…" style={{ ...input, marginBottom: 10 }} />
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-          <Chip on={posSel.size === 0} onClick={() => setPosSel(new Set())}>ALL</Chip>
+        <ChipStrip>
+          <Chip small on={posSel.size === 0} onClick={() => setPosSel(new Set())}>ALL</Chip>
           {posChips.map((p) => (
-            <Chip key={p} on={posSel.has(p)}
+            <Chip small key={p} on={posSel.has(p)}
               onClick={() => setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; })}>{posLabel(p)}</Chip>
           ))}
-          <StarChips mode={starMode} setMode={setStarMode} />
-        </div>
+          <StarChips small mode={starMode} setMode={setStarMode} />
+        </ChipStrip>
         {poolKinds.college && <LevelClassChips level={level} setLevel={setLevel} cls={cls} setCls={setCls} showLevel={poolKinds.both} conf={conf} setConf={setConf} confOpts={confOpts} />}
         {/* THE ORDER (v0.302.0). Rank is what the draft clock follows, so it
             stays the default; the other three answer questions rank can't. */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>SORT</span>
+        <ChipStrip>
+          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', flexShrink: 0 }}>SORT</span>
           {POOL_SORTS.map((o) => (
-            <Chip key={o.id} on={sortBy === o.id} onClick={() => setSortBy(o.id)} title={o.hint}>{o.label}</Chip>
+            <Chip small key={o.id} on={sortBy === o.id} onClick={() => setSortBy(o.id)} title={o.hint}>{o.label}</Chip>
           ))}
-        </div>
+        </ChipStrip>
         {/* Tenure + NFL team (founder). Tenure is BANDS rather than a number
             box: nobody searches for "exactly 6 accrued seasons", they want
             rookies or veterans, and ROOKIES is the first band rather than a
