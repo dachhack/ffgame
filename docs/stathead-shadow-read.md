@@ -80,6 +80,9 @@ yesterday) and one line per game as it goes final:
   player with a non-zero line that only one feed lists (a scratch with an
   empty line is not counted). NBA lines are matched by team and normalised
   name because the id spaces differ (CDN vs ESPN); the rest by id.
+- **Known gaps on our side** are left out: the public NHL box score has no
+  faceoff counts (we write 0), Stathead counts them from the play-by-play, so
+  `fow`/`fol` are not compared and the day line says so.
 - A sport is ready to switch when a week of finals reads "agree" (or the
   differences are explained and Stathead's side is the right one).
 

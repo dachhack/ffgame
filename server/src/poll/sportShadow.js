@@ -22,6 +22,11 @@ import { linePoints } from '../../../packages/core/src/sports/score.ts';
 
 const log = (...a) => console.log('[shadow]', ...a);
 const SAME_IDS = new Set(['nhl', 'mlb', 'wnba', 'epl', 'mls']);
+/** Fields the PUBLIC feed does not serve, so a difference there is our gap,
+ *  not a disagreement: the NHL box score gives faceoffs as a percentage only
+ *  (sports/nhl.js writes fow/fol 0); Stathead counts them from the
+ *  play-by-play. Left out of the comparison and named in the day's line. */
+export const PUBLIC_GAPS = { nhl: ['fow', 'fol'] };
 const EPS = 0.05;
 /** Games already compared this process (sport:gameId), so a final is read once. */
 const done = new Set();
@@ -41,8 +46,9 @@ export function compareSlates(sport, ours, theirs) {
 }
 
 /** Both line sets for one game, scored under the sport's default table. */
-export function compareLines(sport, ours, theirs) {
+export function compareLines(sport, ours, theirs, { ignore = PUBLIC_GAPS[sport] ?? [] } = {}) {
   const def = SPORTS[sport];
+  const skip = new Set([...ignore, 'posn']);
   const nameKey = (l) => `${feedTeam(sport, l.team)}|${normName(l.name)}`;
   const byId = SAME_IDS.has(sport);
   const idx = new Map(theirs.map((l) => [byId ? l.extId : nameKey(l), l]));
@@ -56,7 +62,7 @@ export function compareLines(sport, ours, theirs) {
     seen.add(k);
     const po = linePoints(def, o.line ?? {}), pt = linePoints(def, t.line ?? {});
     const fields = [...new Set([...Object.keys(o.line ?? {}), ...Object.keys(t.line ?? {})])]
-      .filter((f) => f !== 'posn' && Math.abs((o.line?.[f] ?? 0) - (t.line?.[f] ?? 0)) > 1e-9);
+      .filter((f) => !skip.has(f) && Math.abs((o.line?.[f] ?? 0) - (t.line?.[f] ?? 0)) > 1e-9);
     if (Math.abs(po - pt) < EPS && !fields.length) agree++;
     else diffs.push({ name: o.name, team: o.team, ours: Math.round(po * 10) / 10, theirs: Math.round(pt * 10) / 10, delta: Math.round((po - pt) * 10) / 10, fields });
   }
@@ -99,7 +105,8 @@ export async function shadowDay(sport, date, { log: out = log, maxGames = 20 } =
     } catch (e) { games.push({ key: m.key, error: e.message }); }
   }
   const agree = games.filter((g) => !g.error && !g.diffs.length && !g.onlyOursScoring.length && !g.onlyTheirsScoring.length).length;
-  out(`shadow ${sport} ${date}: slate ${slate.matched.length}/${ours.length} matched by teams (${slate.onlyOurs.length} only ours${slate.onlyOurs.length ? ` ${slate.onlyOurs.join(' ')}` : ''}, ${slate.onlyTheirs.length} only theirs${slate.onlyTheirs.length ? ` ${slate.onlyTheirs.join(' ')}` : ''}, ${slate.statusDiffs.length} status diffs${slate.statusDiffs.length ? `: ${slate.statusDiffs.join('; ')}` : ''}); finals ${games.length}: ${agree} agree, ${games.length - agree} differ`);
+  const gap = PUBLIC_GAPS[sport]?.length ? ` (${PUBLIC_GAPS[sport].join('/')} not compared: the public feed has none)` : '';
+  out(`shadow ${sport} ${date}${gap}: slate ${slate.matched.length}/${ours.length} matched by teams (${slate.onlyOurs.length} only ours${slate.onlyOurs.length ? ` ${slate.onlyOurs.join(' ')}` : ''}, ${slate.onlyTheirs.length} only theirs${slate.onlyTheirs.length ? ` ${slate.onlyTheirs.join(' ')}` : ''}, ${slate.statusDiffs.length} status diffs${slate.statusDiffs.length ? `: ${slate.statusDiffs.join('; ')}` : ''}); finals ${games.length}: ${agree} agree, ${games.length - agree} differ`);
   for (const g of games) out(`  ${g.error ? `${g.key}: ${g.error}` : describeLines(g.key, g)}`);
   return { slate, games };
 }
