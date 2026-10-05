@@ -54,6 +54,8 @@ modes either."
   taxi squad, devy spots or the market on the default league now make it
   a KEEPER league (`create_native_league(…, 'classic', 'keeper', 2)` or
   `p_continuity => 'keeper'`), which is what they were testing all along.
+  On a scratch DB built fresh with every migration: 152 of the runner's
+  156 suites pass; the 4 misses are the same pre-existing four.
 
 ### v0.637.1 — the autodraft in a mixed league: K and D/ST arrive, college goes two deep
 
