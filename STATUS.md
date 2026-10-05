@@ -64,8 +64,12 @@ development."
   ways and the active-seat rule; legal active; the caps with the shelf
   full; the devy-only league keeps every 0366 rule; the builder mixes a
   devy league and the backstop lets the shelf join; the worker's readers;
-  autopick fills the open college spot), run on the scratch DB with every
-  migration applied, with the full runner's suites re-run alongside.
+  autopick fills the open college spot), run on a scratch DB built fresh
+  with every migration applied; the runner's 154 suites on that build: 150
+  pass, and the 4 that fail (native-league 1a0, convert-league cv2,
+  practice-room pr0c, graduation gr0) fail identically on a build that
+  stops at 0439 — the open door (0422) and the sport slot lock (0436)
+  outran those probes before this change.
 
 ### v0.636.0 — the college choices, made clear: three questions, mixed and matched
 
