@@ -259,3 +259,4 @@ $RUN -f scripts/db/rams-kickoff-probes.sql | grep -E "PROBE FAIL|ALL RAMS-KICKOF
 $RUN -f scripts/db/computer-fix-probes.sql | grep -E "PROBE FAIL|ALL COMPUTER-FIX PROBES" || { echo "COMPUTER-FIX PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/devy-values-probes.sql | grep -E "PROBE FAIL|ALL DEVY-VALUES PROBES" || { echo "DEVY-VALUES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/college-fill-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-FILL PROBES" || { echo "COLLEGE-FILL PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/college-setup-probes.sql | grep -E "PROBE FAIL|ALL COLLEGE-SETUP PROBES" || { echo "COLLEGE-SETUP PROBES FAILED"; exit 1; }

@@ -128,40 +128,92 @@ export function twoSeatDevyLegs(o: {
 export const offersDevy = (giveShares: Record<string, number>, getShares: Record<string, number>, devyCash?: number) =>
   Object.values(giveShares).some((n) => n > 0) || Object.values(getShares).some((n) => n > 0) || Math.abs(devyCash ?? 0) > 0;
 
-// ── League creation (0398) ─────────────────────────────────────────────────
-/** The devy question a new league answers: none, devy roster spots, or the
- *  devy market. */
-export type DevyChoice = 'none' | 'spots' | 'shares';
+// ── League creation (0398, reshaped 0439) ───────────────────────────────────
+/** The founder's three college questions, asked when a league is made —
+ *  "these are all mix and matchable":
+ *   · lineup — college players in the STARTING lineup: 'none' (NFL only),
+ *     'mixed' (collegeSpots college-only starting spots beside the NFL
+ *     lineup, scored in the same week), or 'college' (no NFL players at all:
+ *     the college calendar);
+ *   · devySpots — not starting spots: holding spots, like taxi, where a team
+ *     keeps college players until they reach the NFL;
+ *   · market — the devy market: shares that reserve rookie-draft rights.
+ *  Mix and match as far as the engine goes; collegeSetupBlocked says where
+ *  it stops today, in the same words commish_setup_college refuses with. */
+export type CollegeLineup = 'none' | 'mixed' | 'college';
+export interface CollegeSetup {
+  lineup: CollegeLineup;
+  /** College-only starting spots added for 'mixed' (1–6). */
+  collegeSpots: number;
+  /** Devy holding spots per team (0 = none, up to 10). */
+  devySpots: number;
+  market: boolean;
+  /** 0399: when the market opens. */
+  marketOpen: 'now' | 'after_draft';
+}
+export const DEFAULT_COLLEGE_SETUP: CollegeSetup = { lineup: 'none', collegeSpots: 1, devySpots: 0, market: false, marketOpen: 'after_draft' };
 
-/** Why a devy choice is not open to this league, or null when it is. College
- *  players are a classic-league thing, and the market runs on a snake draft's
- *  picks (a contract type's startup is an auction). */
-export function devyChoiceBlocked(choice: DevyChoice, o: { classic: boolean; auction: boolean; contract: boolean }): string | null {
-  if (choice === 'none') return null;
-  if (!o.classic) return 'devy needs a CLASSIC league';
-  if (choice === 'shares' && o.contract) return 'the devy market needs a snake draft — contract leagues start with an auction';
-  if (choice === 'shares' && o.auction) return 'the devy market needs a snake draft — switch the draft to SNAKE';
+/** Anything chosen at all? */
+export const collegeSetupActive = (s: CollegeSetup): boolean => s.lineup !== 'none' || s.devySpots > 0 || s.market;
+
+/** Why this combination can't be set up on this league, or null when it can.
+ *  College players are a classic-league thing; the market runs on a snake
+ *  draft's picks (a contract type's startup is an auction); and three
+ *  pairings wait on engine work (0439's header has the why). */
+export function collegeSetupBlocked(s: CollegeSetup, o: { classic: boolean; auction: boolean; contract: boolean }): string | null {
+  if (!collegeSetupActive(s)) return null;
+  if (!o.classic) return 'college players need a CLASSIC league';
+  if (s.lineup === 'mixed' && s.devySpots > 0) return "college lineup spots and devy spots can't combine yet — in a devy league a college player is held, never started. Pick one for now";
+  if (s.lineup === 'college' && s.devySpots > 0) return 'a college-only league has no devy spots — every spot already takes college players; the taxi squad holds prospects';
+  if (s.market && s.devySpots > 0) return "the devy market and devy spots can't combine — shares reserve a player's draft rights, and drafting him into a devy spot would make them worthless";
+  if (s.market && s.lineup === 'mixed') return "the devy market keeps college players out of the draft pool, and college lineup spots need them in it — they can't combine yet";
+  if (s.market && s.lineup === 'college') return 'the devy market is for leagues on the NFL schedule';
+  if (s.market && o.contract) return 'the devy market needs a snake draft — contract leagues start with an auction';
+  if (s.market && o.auction) return 'the devy market needs a snake draft — switch the draft to SNAKE';
   return null;
 }
 
-/** One line for the review screen. */
-export function devyChoiceLine(choice: DevyChoice, spots: number, openNow = false): string {
-  if (choice === 'spots') return `DEVY · ${spots} college roster spot${spots === 1 ? '' : 's'} per team`;
-  if (choice === 'shares') return `DEVY MARKET · opens ${openNow ? 'right away' : 'after the draft'} · shares reserve rookie-draft rights`;
-  return 'NO DEVY · NFL players only';
+/** What the draft pool should carry for this setup: college players for
+ *  lineup spots and devy spots (the whole directory, college only, for a
+ *  college-only league); none for the market, which keeps them out of the
+ *  draft; undefined when the league is NFL only. */
+export function collegePoolOpts(s: CollegeSetup): { positions: string[]; filter: { level: 'college' } | null; collegeLimit?: number } | undefined {
+  if (s.market || (s.lineup === 'none' && s.devySpots === 0)) return undefined;
+  return s.lineup === 'college'
+    ? { positions: ['COLLEGE'], filter: { level: 'college' }, collegeLimit: 2000 }
+    : { positions: ['COLLEGE'], filter: null };
 }
 
-export const DEVY_CHOICE_INFO =
-  'Devy leagues let teams invest in COLLEGE players before they reach the NFL.\n\n'
-  + 'NO DEVY — NFL players only.\n\n'
-  + 'DEVY SPOTS — college players join the draft pool, and each team gets extra roster spots that only hold college players. '
-  + 'They are drafted and kept like anyone else, and move to the NFL roster when they graduate.\n\n'
-  + 'DEVY MARKET — college players stay out of the draft. Each team gets 100 points to buy shares in them: '
+/** A college-only league plays college weeks 1–15 (0371); an NFL league's
+ *  schedule length stands. */
+export const collegeScheduleWeeks = (s: CollegeSetup, weeks: number): number => (s.lineup === 'college' ? Math.min(weeks, 15) : weeks);
+
+/** One line for the review screen. */
+export function collegeSetupLine(s: CollegeSetup): string {
+  if (!collegeSetupActive(s)) return 'NFL PLAYERS ONLY · no college players';
+  const parts: string[] = [];
+  if (s.lineup === 'mixed') parts.push(`MIXED · ${s.collegeSpots} college starting spot${s.collegeSpots === 1 ? '' : 's'} beside the NFL lineup`);
+  if (s.lineup === 'college') parts.push('COLLEGE ONLY · no NFL players · the college calendar');
+  if (s.devySpots > 0) parts.push(`${s.devySpots} devy holding spot${s.devySpots === 1 ? '' : 's'} per team`);
+  if (s.market) parts.push(`DEVY MARKET · opens ${s.marketOpen === 'now' ? 'right away' : 'after the draft'}`);
+  return parts.join(' · ');
+}
+
+export const COLLEGE_SETUP_INFO =
+  'Three separate choices. Mix and match them.\n\n'
+  + 'COLLEGE PLAYERS IN THE LINEUP — starting spots that take college players, scored live from their Saturday games. '
+  + 'MIXED adds college-only starting spots beside your NFL lineup, so NFL and college players score in the same week. '
+  + 'COLLEGE ONLY is a league with no NFL players at all: every spot takes college players and the season runs on the college calendar.\n\n'
+  + 'DEVY SPOTS — not starting spots. Holding spots, like the taxi squad: each team drafts college players into them and keeps them there. '
+  + 'They never start; when a player reaches the NFL he moves onto your NFL roster.\n\n'
+  + 'DEVY MARKET — the investment market. College players stay out of the draft. Each team gets 100 points to buy shares in them: '
   + 'the first team to 20 shares (or the only team holding 5+ shares and 15+ points) reserves the right to draft that player '
   + 'in the rookie draft. Prices rise as players play well, so early scouting pays; shares trade like picks. '
   + 'The commissioner decides when the market opens: right away, so teams can scout before the startup draft, '
   + 'or once the startup draft is done. Every year after, shares lock on Jan 15 until the rookie draft.\n\n'
-  + 'After the league is made, devy spots and the SPOTS / MARKET switch live in COMMISH.';
+  + 'Not every pairing works yet: devy spots and the market each keep college players off the starting lineup, so neither combines '
+  + 'with college lineup spots, and the market needs an NFL-calendar league with a snake draft. The form says so before you create. '
+  + 'After the league is made, all of this lives in COMMISH.';
 
 // ── The underclass discount (0413) ─────────────────────────────────────────
 /** A freshman prices ×0.85 and a sophomore ×0.92 of his rank's price, so a

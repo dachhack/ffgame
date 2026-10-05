@@ -3997,6 +3997,11 @@ export const setLeagueDevyMode = (leagueId: string, mode: 'spots' | 'shares') =>
 export const setupLeagueDevy = (leagueId: string, mode: 'spots' | 'shares', spots = 3) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('commish_setup_devy',
     { p_league_id: leagueId, p_mode: mode, p_spots: spots }), Ev.commishAction, { tool: 'devy_setup' });
+/** 0439: the three college questions at creation — college players in the
+ *  lineup (none / mixed / college-only), devy holding spots, the market. */
+export const setupLeagueCollege = (leagueId: string, s: { lineup: 'none' | 'mixed' | 'college'; collegeSpots: number; devySpots: number; market: boolean }) =>
+  tracked(rpc<{ ok: boolean; error?: string; lineup?: string; college_spots?: number; devy_spots?: number; market?: boolean; rounds?: number }>('commish_setup_college',
+    { p_league_id: leagueId, p_lineup: s.lineup, p_college_spots: s.collegeSpots, p_devy_spots: s.devySpots, p_market: s.market }), Ev.commishAction, { tool: 'college_setup' });
 
 export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'], limit = 600) =>
   rpc<CollegeDirectoryRow[]>('college_directory', { p_positions: positions, p_limit: limit });

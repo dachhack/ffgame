@@ -22,6 +22,52 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.636.0 — the college choices, made clear: three questions, mixed and matched
+
+> - Making a classic league now asks three separate college questions instead of one: college players in the starting lineup (NFL only, MIXED with college-only starting spots, or COLLEGE ONLY on the college calendar), devy holding spots (like taxi, never starting), and the devy market (the investment market). Mix and match them; the form says up front which pairings the engine can't run yet.
+
+The founder, holding the DEVY step: "Let's make the devy choices clear:
+College player roster spots: Mixed with NFL or just college players with no
+NFL. Devy spots: Not starting roster spots. Just like taxi slots where you
+hold guys. Devy market: The investment market. These are all mix and
+matchable."
+- 0398's step asked one question (NO DEVY / DEVY SPOTS / DEVY MARKET) and
+  left the two league types the engine already plays — mixed (0372) and
+  college-only (0371) — to an admin switch after creation, which is how the
+  founder's mixed league drafted without college players (v0.635.3).
+- 0439 `commish_setup_college(league, lineup, college_spots, devy_spots,
+  market)`: COLLEGE on; 'mixed' appends `college_spots` college-only
+  starting spots (a flex each, labelled COLLEGE, 0372 levels) to the lineup
+  and grows the rounds; 'college' switches the calendar through the new
+  `_league_calendar_apply` (set_league_calendar keeps its admin gate and
+  calls it); devy spots and the market as 0398 did. The pairings the engine
+  can't honour are refused before any write, with the reason: college
+  lineup spots + devy spots (0366 lands every college player in a devy spot
+  and keeps him there), the market + devy spots or + college lineup spots
+  (shares reserve a player a draft would hand to someone else; the market
+  empties the pool of college players), the market + the college calendar,
+  the college calendar + devy spots. `_classic_slot_spec` reads a league's
+  starting spots, stored or implied. commish_setup_devy stands for older
+  clients.
+- Core devyShares: `CollegeSetup`, `collegeSetupBlocked` (the same refusals,
+  said before CREATE), `collegePoolOpts` (college players in the pool for
+  lineup spots and devy spots, college only for a college-only league, none
+  for the market), `collegeScheduleWeeks`, `collegeSetupLine`,
+  `COLLEGE_SETUP_INFO` in the founder's words. Client
+  `setupLeagueCollege`. App (Recruit) and web (NativeLeague create form):
+  the step is three questions — IN THE STARTING LINEUP (NFL ONLY / MIXED +
+  spots / COLLEGE ONLY), DEVY SPOTS PER TEAM (0 = none), DEVY MARKET (off /
+  on + when it opens) — with a line that names the first pairing that won't
+  set up, and the review line reads the whole choice.
+- Still to do for "all mix and matchable": letting a college player start
+  in a mixed league that also has devy spots (the landing trigger,
+  set_roster_spot, the caps and the illegal-roster rule from 0366 all key
+  on "a college player lives in a devy spot"), and a market that coexists
+  with drafted college players (a reserved player someone else holds).
+  Both are engine work; queued as follow-ups.
+- Probes: `scripts/db/college-setup-probes.sql` (run on the scratch DB with
+  every migration applied; devy-setup and college-fill still pass).
+
 ### v0.635.3 — turning college on fills the pool with college players
 
 > - A league that turned college players on after it was made now gets the college players in its pool the moment the switch flips, before or after the draft, and the league chat says so. Leagues already in that state get them with this release.
