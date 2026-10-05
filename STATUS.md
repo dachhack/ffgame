@@ -22,6 +22,40 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.637.1 — the autodraft in a mixed league: K and D/ST arrive, college goes two deep
+
+> - An autodraft in a league with IR or OUT spots now takes its kicker and defense in the last rounds as it always meant to, and in a league with college starting spots it drafts two college players per college spot instead of one.
+
+The founder, from a mixed league's autodrafted roster: "Auto draft only
+picked one college player per spot and didn't get K or DST."
+- **K and D/ST.** 0195 fills the kicker and defense in the last rounds,
+  when the picks left equal the spots still forced. 0193 made IR and OUT
+  spots part of `draft.rounds` that the draft never fills
+  (`draft.stash_slots`) — and the autopick kept counting its picks left
+  against the full rounds. In a league with IR spots the count never fell
+  to the forced two, the last picks went to bench depth, and the K and
+  D/ST spots drafted empty. 0441: the picks left are rounds − stash − held.
+- **College depth.** 0381's bench rule takes a position two deep per
+  starting spot that takes it, and counted a college-only spot as NFL depth
+  (an RB/WR/TE college spot made the RB target two deeper) while no college
+  player was ever a depth pick: college rows rank after every NFL row, so
+  the rank picks never reached one. A college-only spot (a level, a
+  conference or a class rule — `_spot_takes_college_only`) now counts
+  toward COLLEGE depth, two college players per college spot, taken after
+  the NFL bench depth and before the rank picks, and not toward NFL depth.
+- `_autopick_slug_0387`'s body from 0440 with the marked changes;
+  `native_autopick_slug` (0411's devy-round wrapper) untouched.
+- Not confirmed against the founder's league: `dbquery.yml` refused this
+  session's dispatch (403), and `scripts/db/mixed-autodraft-diag.sql` is
+  checked in for a run from the Actions page — it prints the league's
+  shape, pool by position and level, each roster, and the picks in order.
+  The K/D/ST mechanism is 0193's and needs only IR or OUT spots on the
+  league; the one-per-spot behaviour follows from the rank order alone.
+- Probes: `scripts/db/autodraft-mixed-probes.sql` (an IR stash still
+  yields K then D/ST in the last two drafted picks; with two college spots
+  the autodraft takes a third and fourth college player after the NFL
+  depth, then goes back to NFL).
+
 ### v0.637.0 — devy spots beside college starting spots: the shelf is a taxi squad
 
 > - A league can now have both college starting spots and devy spots. College players you draft land on your active roster while there is room and on the devy shelf once it is full, and you move them between the two like taxi players. A devy league without college starting spots works exactly as before.
