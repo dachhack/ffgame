@@ -17,6 +17,7 @@ import {
 import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
+import { HeroesVillains } from './HeroesVillains';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
@@ -1258,6 +1259,9 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
           </div>
         </div>
       )}
+      {/* HEROES & VILLAINS (v0.632.0): who to root for this week, across
+          every league, off the glance snapshots the cards already read. */}
+      {total > 0 && <HeroesVillains snaps={Object.values(glance)} />}
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
         {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}

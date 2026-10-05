@@ -15,6 +15,7 @@ import {
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
+import { HeroesVillains } from '../ui/HeroesVillains';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
@@ -193,6 +194,10 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
 
       {/* cross-league chat inbox (0154 polish): every league with unread chat,
           one tap from anywhere to the conversation it belongs to. */}
+      {/* HEROES & VILLAINS (v0.632.0): who to root for this week, across
+          every league, off the glance snapshots already read below. */}
+      <HeroesVillains snaps={Object.values(glance)} />
+
       <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)} slate={slate}
         onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat')} />
 

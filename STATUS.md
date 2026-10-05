@@ -22,6 +22,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.632.0 — heroes & villains on Your Leagues
+
+> - A new card at the top of Your Leagues (web and app) folds every matchup you are in this week: HEROES, the players starting for you and in how many of your matchups; VILLAINS, the players starting against you; KEY GAMES ranked by how many of your matchups each touches; and a QUAD BOX pick for every window with several games — the four screens to put up.
+
+Founder: "Let's make a heroes and villains feature on the your leagues page.
+It lists the key players for your matchups and how many matchups they are in
+for you… suggestions for your quad box for game windows with multiple games
+and a list of key games for your matchups."
+
+- **The snapshot carries both sides (`widgetFeed`).** `WidgetSnapshot.sides`
+  = `{ mine, theirs, theirsSealed }` of `SidePlayer` (slug, name, pos, team,
+  window or spot, pre/live/final, points, projection). Mine come off the cards
+  (a drip pick, a classic spot with a man in it). Theirs: a classic opponent's
+  rows (the same `sideOf` that projects their final); a drip opponent's picks
+  only once a window has locked and the resolver's slot rows name them, with
+  `theirsSealed` counting the slots still hidden. `widgetSnapshot` now reads
+  the opponent's roster for drip leagues too (`theirPool`), so a revealed pick
+  is named rather than printed as a slug.
+- **The fold (`data/heroes.ts`, pure).** `heroesVillains(snaps)`: the week is
+  the one most NFL snapshots are on (daily-sport weeks 301+ are their own
+  product and are left out); a HERO counts once per matchup he starts for me,
+  a VILLAIN once per matchup he starts against me, a man on both sides is
+  CONFLICTED and listed on both with the other count beside him; a KEY GAME
+  (`nflGameForTeam`) carries its heroes and villains and a stake = every count
+  in it, ranked by stake then kickoff; a QUAD BOX for every window with two or
+  more games lists the four by stake, the rest of the window by kickoff, and
+  counts the overflow. Byes and unknown teams join no game.
+- **The cards.** `apps/mobile/src/ui/HeroesVillains.tsx` and
+  `src/screens/HeroesVillains.tsx`: a collapsed header (week, counts, sealed
+  slots) that opens to four chips. Each player row: ×N, name, position and
+  team, the leagues (a villain's with the opponent's name), "also a villain in
+  N" when conflicted, and his live points or projection. Each game row: the
+  teams, LIVE / FINAL / kickoff, "N at stake", then 👍 heroes and 👎 villains.
+  Both pages pass the glance snapshots they already read, so the card costs no
+  new request and refreshes with them (every five minutes, pull-to-refresh).
+- **Checks.** `check:widget`: a drip snapshot's sides (mine, the revealed
+  opponent named off his pool, the sealed count), the fold across three leagues
+  on two weeks (week choice, a conflicted Allen, opponents named, sealed sum),
+  the key games' stake and order, and a six-game early window's quad box.
+
 ### v0.631.0 — the fields widget follows the games you pick, across sports
 
 > - The home-screen Fields widget (Android) now lists the sports you choose: the NFL week as before, then the NBA, NHL, MLB and WNBA games of today and the next two days, live first. In Settings → Home-screen widget, pick the sports, follow teams, or tick single games; nothing picked in a sport is every game.

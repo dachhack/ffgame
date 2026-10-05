@@ -194,6 +194,25 @@ export interface WidgetSnapshot {
   // ── v0.500.0 ──
   /** My record and where it sits in the league table, when the table reads. */
   standing?: { wins: number; losses: number; ties: number; place: number; of: number } | null;
+  // ── v0.632.0 ──
+  /** HEROES & VILLAINS: both lineups of the matchup as the leagues page
+   *  aggregates them — my starters and the opponent's. A drip opponent's
+   *  picks are sealed until each window locks, so `theirs` holds only the
+   *  revealed ones and `theirsSealed` counts the slots still hidden. */
+  sides?: { mine: SidePlayer[]; theirs: SidePlayer[]; theirsSealed: number };
+}
+
+/** One starter on either side of a matchup (v0.632.0). */
+export interface SidePlayer {
+  slug: string;
+  name: string;
+  pos: string | null;
+  team: string | null;
+  /** The drip window he plays in, or the classic 'wk'. */
+  win: string;
+  status: 'pre' | 'live' | 'final';
+  pts: number | null;
+  proj: number | null;
 }
 
 /** A league the widget can show — the seats you hold, minus what a home
@@ -283,6 +302,9 @@ export interface SummarizeInput {
   picks?: PickRow[];
   /** The seat's roster, for names, teams (bye) and positions. */
   pool?: Pick<PoolPlayer, 'slug' | 'full' | 'team'>[] | Pick<PoolPlayer, 'slug' | 'full' | 'team' | 'pos'>[];
+  /** The opponent's roster (v0.632.0), to name the drip picks a locked
+   *  window has revealed. Absent = revealed picks read by slug. */
+  theirPool?: Pick<PoolPlayer, 'slug' | 'full' | 'team' | 'pos'>[];
   /** slug → injury designation, from the hourly sync. */
   injuries?: Record<string, string>;
   /** slug → headshot URL (v0.433.9), for the cards. Absent = no photos. */
@@ -391,7 +413,12 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   const cards: WidgetCard[] = [];
   let alarm: WidgetSnapshot['alarm'] = null;
   let left: WidgetSnapshot['left'] = null;
+  // HEROES & VILLAINS (v0.632.0): the opponent's revealed drip picks, and
+  // how many of theirs are still sealed.
+  const theirSide: SidePlayer[] = [];
+  let theirsSealed = 0;
   if (assessable) {
+    const theirPoolBySlug = new Map((input.theirPool ?? []).map((p) => [p.slug, p]));
     const poolBySlug = new Map((pool ?? []).map((p) => [p.slug, p]));
     const slateHasGames = wins.some((w) => gamesInWindow(week, w.id as WindowId).length > 0);
     const meLeft = { waiting: 0, playing: 0 }, themLeft = { waiting: 0, playing: 0 };
@@ -461,6 +488,14 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
           hot: !!sc?.hot,
         });
       }
+      // Their revealed starters in this window (v0.632.0): the resolver's
+      // slot rows name them once the window has locked.
+      for (const r of (s?.slot_scores ?? []).filter((r) => r.side !== mySide && r.slug)) {
+        const pl = theirPoolBySlug.get(r.slug as string);
+        theirSide.push({ slug: r.slug as string, name: pl ? shortName(pl.full) : (r.slug as string), pos: pl?.pos ?? null, team: pl?.team ?? null, win: winId,
+          status: w.phase === 'live' ? 'live' : w.phase === 'final' ? 'final' : 'pre', pts: w.phase === 'live' || w.phase === 'final' ? round1(Number(r.score) || 0) : null, proj: null });
+      }
+      if (w.phase === 'setup' || w.phase === 'locked') theirsSealed += Math.max(0, cap - theirRevealed);
       if (w.phase === 'setup' || w.phase === 'locked') {
         meLeft.waiting += filled.length;
         // Theirs are sealed until kickoff: assume the window's full complement.
@@ -601,6 +636,11 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
     });
     const theirs = c.theirRoster?.length ? sideOf(c.theirPicks, c.theirRoster, mySide === 'home' ? 'away' : 'home') : null;
     if (theirs) them.score = theirs.total; else themLive = true;
+    // HEROES & VILLAINS (v0.632.0): the opponent's starters, as the card has mine.
+    for (const { d, p, live, proj, st } of theirs?.rows ?? []) {
+      if (!p) continue;
+      theirSide.push({ slug: p.slug, name: shortName(p.full), pos: p.pos, team: p.team, win: d.slot, status: st === 'done' ? 'final' : st, pts: st !== 'pre' ? round1(live) : null, proj: round1(proj) });
+    }
     left = { me: mineSide.left, them: theirs ? theirs.left : { waiting: 0, playing: 0, done: 0 } };
     // THE WIN BAR (v0.501.0). Founder: "win probability bar would be good."
     // At the final it is the result; before that, the board's number. Golf
@@ -676,7 +716,16 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   // ── the state line, and which view leads ──
   const openWindow = windows.some((w) => w.phase === 'setup');
   const lead: WidgetView = assessable && openWindow && (fixes.length > 0 || !windows.some((w) => w.phase !== 'setup')) ? 'lineup' : 'score';
-  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead, cards, ...(projected ? { projected, themLive, actual, ...(winPct != null ? { winPct } : {}) } : {}) };
+  // HEROES & VILLAINS (v0.632.0): my starters off the cards (a drip pick or a
+  // classic spot with a man in it), theirs as collected above.
+  const sides: WidgetSnapshot['sides'] = (assessable || projected) ? {
+    mine: cards.filter((k) => k.slug).map((k) => ({
+      slug: k.slug as string, name: k.name, pos: k.pos, team: k.team, win: k.win,
+      status: k.status === 'live' ? 'live' : k.status === 'final' ? 'final' : 'pre', pts: k.points, proj: k.proj ?? null,
+    })),
+    theirs: theirSide, theirsSealed,
+  } : undefined;
+  const common = { ...base, me, them, windows, left, hot, alarm, fixes, assessable, lead, cards, ...(sides ? { sides } : {}), ...(projected ? { projected, themLive, actual, ...(winPct != null ? { winPct } : {}) } : {}) };
   if (final) {
     const r = me.score > them.score ? 'W' : me.score < them.score ? 'L' : 'T';
     return { ...common, phase: 'final', line: `FINAL · ${r} ${me.score}–${them.score}`, lead: 'score' };
@@ -804,7 +853,9 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     classic ? getRevealedPicks(matchup!.id).catch(() => []) : Promise.resolve([]),
     classic ? cached(`spots:${league.id}`, 30 * MIN, fresh, () => nativeRosters(league.id).catch(() => [])) : Promise.resolve([]),
     classic ? cached(`ids:${league.id}`, 60 * MIN, fresh, () => leaguePoolIds(league.id).then((r) => r?.ids ?? {}).catch(() => ({}))) : Promise.resolve({}),
-    classic && oppId != null ? cached(`pool:${league.id}:${week}:${oppId}`, 30 * MIN, fresh, () => myPool(league.id, week, oppId).catch(() => [])) : Promise.resolve([]),
+    // The opponent's roster: the classic projection needs it, and so does the
+    // drip side's naming of revealed picks (v0.632.0).
+    (drip || classic) && oppId != null ? cached(`pool:${league.id}:${week}:${oppId}`, 30 * MIN, fresh, () => myPool(league.id, week, oppId).catch(() => [])) : Promise.resolve([]),
     // THE FACES (v0.433.9): the league pool's ESPN ids, for the headshots the
     // baked map lacks. A day is fine — a photo id does not change.
     drip || classic ? cached(`espn:${league.id}`, 24 * 60 * MIN, fresh, () => leaguePool(league.id)
@@ -901,7 +952,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     };
   }
   try {
-    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, injuries, images, classic: classicIn, weekScheduled, standings, phantoms });
+    const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, theirPool: drip ? oppPool : undefined, injuries, images, classic: classicIn, weekScheduled, standings, phantoms });
     rememberSnapshot({ leagues, snapshot });
     return { leagues, snapshot };
   } finally {
