@@ -22,6 +22,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.640.0 — the depth chart on the player card
+
+> - Every NFL player card has a TEAM DEPTH tab: his team's depth chart by position (QB · RB · WR · TE), the starter at the top of each, him marked, injury tags on. Tap any other name to open that player's card.
+
+Founder: "Are we able to add team depth charts to player cards? And allow
+clicking on players in the depth charts to bring up that player's card?"
+
+- **The data was already here.** The worker publishes Sleeper's depth
+  chart daily (`player_depth`, 0293 — QB/RB/WR/TE, re-ranked for
+  availability week to week) and the projected box reads it; the card said
+  "no TEAM tab, deliberately" from before it existed. `depthChartFor(team)`
+  (`packages/core/src/data/playerDepth.ts`) groups the cache by position in
+  lineup order; `ensureDepthChart()` (`liveApi`) loads it once for a card
+  opened from a screen that never did.
+- **Both cards** (`apps/mobile/src/ui/PlayerCardSheet.tsx`,
+  `src/app/playerCard.tsx`): a `DET DEPTH` tab beside SUMMARY; rows are
+  rank · face · name · injury tag, the card's own man in the accent colour
+  marked THIS CARD, every other row a tap into `openPlayerCard` — the host
+  reuses the one sheet (v0.456.0) and lands on the new man's summary.
+  Team looked up the projected box's way: the normalised code, then raw.
+  Names from `nameFromSlug` (the chart carries slugs only).
+- No K or DST rows: the chart doesn't rank them (kicking and defense score
+  as team units here).
+- Pinned: `scripts/check-depth-card.mjs` (`check:depthcard`, in
+  check:parity) — grouping, order, case-blind team, unranked rows out.
+- Not rendered from this environment; the tab's row layout follows the
+  HISTORY tab's.
+
 ### v0.639.1 — the matchup, graded red to green
 
 > - The spot picker's matchup tag is now a graded pill: the percent is what the defense he faces gives up to his position against the league average, coloured red / orange / yellow / yellow-green / green from tough to soft. A legend under the list says which is which.

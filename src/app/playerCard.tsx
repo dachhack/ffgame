@@ -15,11 +15,13 @@ import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
 import { flagFor } from '@drip/core/data/commish';
 import { displayTeam } from '@drip/core/data/playerTeam';
-import { statsForName, NO_SEASON } from '@drip/core/data/players';
+import { statsForName, NO_SEASON, nameFromSlug } from '@drip/core/data/players';
+import { depthChartFor } from '@drip/core/data/playerDepth';
+import { normTeam } from '@drip/core/data/slugMeta';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, type NewsItem } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, ensureDepthChart, type NewsItem } from '@drip/core/data/liveApi';
 import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
 import { playerSeasonLog } from '@drip/core/data/seasonLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
@@ -82,10 +84,18 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // projection it always did rather than a zero.
   const [wkProj, setWkProj] = useState<WeekPoints | null>(null);
   const [news, setNews] = useState<NewsItem[] | null>(null);
-  // SUMMARY | HISTORY. No GAME LOG or TEAM tab, deliberately: a per-week NFL
-  // stat table and a depth chart are data this app does not hold, and an empty
-  // tab is worse than no tab.
-  const [tab, setTab] = useState<'summary' | 'log' | 'history'>('summary');
+  // SUMMARY | GAME LOG | TEAM | HISTORY. The TEAM tab (v0.640.0, founder:
+  // "add team depth charts to player cards, and allow clicking on players in
+  // the depth charts to bring up that player's card") is the 0293 chart the
+  // projected box already reads — "deliberately absent" while this app held
+  // no depth order.
+  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>('summary');
+  // A teammate clicked on the chart opens HIS card on this same modal (the
+  // host reuses one, v0.456.0) — and lands on his summary, as any card does.
+  useEffect(() => { setTab('summary'); }, [slug]);
+  // The chart is a module cache; this redraws once it is in.
+  const [depthVer, setDepthVer] = useState(0);
+  useEffect(() => { let alive = true; ensureDepthChart().then(() => { if (alive) setDepthVer((v) => v + 1); }).catch(() => {}); return () => { alive = false; }; }, []);
   const [owner, setOwner] = useState<string | null | undefined>(undefined); // undefined = unknown, null = free agent
   const [moves, setMoves] = useState<RegisterRow[] | null>(null);
   // THE DROP (v0.285.0) lives here now, off the roster list. `myRoster` is set
@@ -133,6 +143,13 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // (fresh directory bake + worker overrides, 0142) over whatever the opening
   // surface happened to know.
   const showTeam = displayTeam(slug, team);
+  // The team's chart, grouped by position, read the way the projected box
+  // reads it: by the normalised code, then the raw one.
+  const chart = (() => {
+    void depthVer;
+    const byNorm = depthChartFor(normTeam(showTeam));
+    return byNorm.length ? byNorm : depthChartFor(showTeam);
+  })();
   const bio = PLAYER_BIO[slug];
   // A ROOKIE HAS NO LAST SEASON (v0.299.1, founder: "why does a rookie have a
   // 2025 stat line?"). `statsForName` matches the 2025 bake BY NAME, so a 2026
@@ -284,9 +301,10 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
           {([
             ['summary', 'SUMMARY'] as [string, string],
             ['log', 'GAME LOG'] as [string, string],
+            ['team', `${showTeam || 'TEAM'} DEPTH`] as [string, string],
             ...(leagueId ? [['history', `HISTORY${moves?.length ? ` (${moves.length})` : ''}`] as [string, string]] : []),
           ]).map(([id, label]) => (
-              <button key={id} onClick={() => setTab(id as 'summary' | 'log' | 'history')} className="mono"
+              <button key={id} onClick={() => setTab(id as 'summary' | 'log' | 'team' | 'history')} className="mono"
                 style={{ fontSize: 9.5, fontWeight: 700, cursor: 'pointer', borderRadius: 5, padding: '5px 10px',
                   color: tab === id ? 'var(--you)' : 'var(--dim)', background: tab === id ? 'var(--bg)' : 'transparent',
                   border: `1px solid ${tab === id ? 'var(--you)' : 'var(--bd)'}` }}>{label}</button>
@@ -395,6 +413,45 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
               <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
                 ◈ DRIP leagues score per window, with power-ups on top — there is no one season number to print here.
               </div>
+            )}
+          </div>
+        )}
+
+        {/* TEAM DEPTH (v0.640.0) — his team's chart, the starter at the top of
+            each position, him marked; every other name opens that player's
+            card. Sleeper's order, re-ranked for availability each week,
+            published daily by the worker (0293). */}
+        {tab === 'team' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
+            {chart.length === 0 && (
+              <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6 }}>
+                {showTeam ? `No depth chart for ${showTeam} yet — the worker publishes one daily.` : 'No team on file for him, so no depth chart.'}
+              </span>
+            )}
+            {chart.map((g) => (
+              <div key={g.pos}>
+                <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', marginBottom: 2 }}>{g.pos}</div>
+                {g.rows.map((r) => {
+                  const me = r.slug === slug;
+                  const rn = nameFromSlug(r.slug);
+                  return (
+                    <button key={r.slug} disabled={me} title={me ? undefined : `open ${rn}'s card`}
+                      onClick={() => openPlayerCard({ slug: r.slug, name: rn, pos: r.pos, team: showTeam, week, userId, leagueId })}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '4px 2px', background: 'none', border: 'none', borderBottom: '1px solid var(--bd)', color: 'inherit', cursor: me ? 'default' : 'pointer' }}>
+                      <span className="mono" style={{ width: 14, textAlign: 'right', fontSize: 9, fontWeight: 700, color: me ? 'var(--you)' : 'var(--faint)' }}>{r.depth}</span>
+                      <PlayerImg playerId={r.slug} team={showTeam} pos={r.pos as Pos} size={22} />
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: me ? 800 : 600, color: me ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rn}</span>
+                      {week != null && <InjuryBadge week={week} slug={r.slug} />}
+                      <span className="mono" style={{ fontSize: 8, color: me ? 'var(--you)' : 'var(--faint)', flex: 'none' }}>{me ? 'THIS CARD' : '›'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {chart.length > 0 && (
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5 }}>
+                Sleeper's depth chart, re-ranked for who's available this week; refreshed daily. Click a name for his card.
+              </span>
             )}
           </div>
         )}

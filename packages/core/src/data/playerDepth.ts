@@ -56,3 +56,15 @@ export function depthFor(slug: string): number | null {
 export function depthForTeam(team: string): DepthRow[] {
   return byTeam.get((team ?? '').toUpperCase()) ?? [];
 }
+
+/** THE CHART ON THE CARD (v0.640.0). Founder: "Are we able to add team depth
+ *  charts to player cards? And allow clicking on players in the depth charts
+ *  to bring up that player's card?" The rows were here since 0293; this is
+ *  the shape a card draws — one group per ranked position, in lineup order,
+ *  each deepest-first. Positions the chart doesn't rank (K, DST, the line)
+ *  are simply not groups. Empty when the chart has nobody on the team. */
+export const DEPTH_POS: readonly string[] = ['QB', 'RB', 'WR', 'TE'];
+export function depthChartFor(team: string): { pos: string; rows: DepthRow[] }[] {
+  const rows = depthForTeam(team);
+  return DEPTH_POS.map((pos) => ({ pos, rows: rows.filter((r) => r.pos === pos) })).filter((g) => g.rows.length > 0);
+}

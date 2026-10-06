@@ -14,10 +14,12 @@ import { PLAYER_BIO, tenureLabel } from '@drip/core/data/playerBio';
 import { injuryFor, injuryRowFor } from '@drip/core/data/injuries';
 import { flagFor } from '@drip/core/data/commish';
 import { displayTeam } from '@drip/core/data/playerTeam';
-import { statsForName, NO_SEASON } from '@drip/core/data/players';
+import { statsForName, NO_SEASON, nameFromSlug } from '@drip/core/data/players';
+import { depthChartFor } from '@drip/core/data/playerDepth';
+import { normTeam } from '@drip/core/data/slugMeta';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, type NewsItem } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, ensureDepthChart, type NewsItem } from '@drip/core/data/liveApi';
 import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { nflGameForTeam, kickoffLabel, weekLabel } from '@drip/core/data/nflSlate';
@@ -80,12 +82,20 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // beside them still answers.
   const [wkProj, setWkProj] = useState<WeekPoints | null>(null);
   const [news, setNews] = useState<NewsItem[] | null>(null);
-  // SUMMARY | HISTORY. There is no TEAM tab, deliberately: nothing here knows
-  // a team's depth order, and an empty tab is worse than no tab. The GAME LOG
-  // tab (v0.284.0) read the baked 2025 season that shipped inside the app; it
-  // went with that bake in v0.502.0 (founder: "We only needed to load 2025
-  // data for playtesting previous builds. We can scrap it.").
-  const [tab, setTab] = useState<'summary' | 'history'>('summary');
+  // SUMMARY | TEAM | HISTORY. The TEAM tab (v0.640.0, founder: "add team
+  // depth charts to player cards, and allow clicking on players in the depth
+  // charts to bring up that player's card") is the 0293 chart the projected
+  // box already reads — it was "deliberately absent" while nothing here knew
+  // a team's depth order. The GAME LOG tab (v0.284.0) read the baked 2025
+  // season that shipped inside the app; it went with that bake in v0.502.0.
+  const [tab, setTab] = useState<'summary' | 'team' | 'history'>('summary');
+  // A teammate tapped on the chart opens HIS card on this same sheet (the
+  // host reuses one, v0.456.0) — and lands on his summary, as a card opened
+  // from anywhere does.
+  useEffect(() => { setTab('summary'); }, [slug]);
+  // The chart is a module cache; this redraws once it is in.
+  const [depthVer, setDepthVer] = useState(0);
+  useEffect(() => { let alive = true; ensureDepthChart().then(() => { if (alive) setDepthVer((v) => v + 1); }).catch(() => {}); return () => { alive = false; }; }, []);
   // Who holds him in THIS league, and what the league has done with him.
   const [owner, setOwner] = useState<string | null | undefined>(undefined); // undefined = loading, null = free agent
   const [moves, setMoves] = useState<RegisterRow[] | null>(null);
@@ -127,6 +137,13 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // Prefer the live team layer (fresh bake + worker overrides, 0142) over
   // whatever the opening surface happened to know — see the web card.
   const showTeam = displayTeam(slug, team);
+  // The team's chart, grouped by position (QB · RB · WR · TE), the way the
+  // projected box reads it: by the normalised code, then the raw one.
+  const chart = (() => {
+    void depthVer;
+    const byNorm = depthChartFor(normTeam(showTeam));
+    return byNorm.length ? byNorm : depthChartFor(showTeam);
+  })();
   const bio = PLAYER_BIO[slug];
   // A ROOKIE HAS NO LAST SEASON (v0.299.1, founder: "why does a rookie have a
   // 2025 stat line?"). `statsForName` matches the 2025 bake BY NAME, so a 2026
@@ -256,8 +273,9 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             appears only when the second has something to show. */}
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {(([['summary', 'SUMMARY'],
+              ['team', `${showTeam || 'TEAM'} DEPTH`],
               ...(leagueId ? [['history', `HISTORY${moves?.length ? ` (${moves.length})` : ''}`]] : [])] as const) as readonly (readonly [string, string])[]).map(([id, label]) => (
-            <Pressable key={id} onPress={() => setTab(id as 'summary' | 'history')}
+            <Pressable key={id} onPress={() => setTab(id as 'summary' | 'team' | 'history')}
               style={{ borderWidth: 1, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 6, borderColor: tab === id ? t.you : t.bd, backgroundColor: tab === id ? t.bg : 'transparent' }}>
               <Mono size={9} weight="700" tone={tab === id ? 'you' : 'dim'}>{label}</Mono>
             </Pressable>
@@ -320,6 +338,49 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
                   He sits on waivers for 24h — anyone in the league can claim him, and claims beat first-come.
                 </Mono>
               </View>
+            )}
+          </View>
+        )}
+
+        {/* TEAM DEPTH (v0.640.0) — his team's chart, the starter at the top
+            of each position, him marked. Every other name is a tap into that
+            player's card. Sleeper's order, re-ranked for availability each
+            week, published daily by the worker (0293). */}
+        {tab === 'team' && (
+          <View style={{ gap: 8 }}>
+            {chart.length === 0 && (
+              <Mono size={10} tone="faint" style={{ lineHeight: 15 }}>
+                {showTeam ? `No depth chart for ${showTeam} yet — the worker publishes one daily.` : 'No team on file for him, so no depth chart.'}
+              </Mono>
+            )}
+            {chart.map((g) => (
+              <View key={g.pos} style={{ gap: 0 }}>
+                <Mono size={8} tone="faint" weight="700" track={0.12} style={{ marginBottom: 2 }}>{g.pos}</Mono>
+                {g.rows.map((r) => {
+                  const me = r.slug === slug;
+                  const rn = nameFromSlug(r.slug);
+                  const tag = week != null ? injuryFor(week, r.slug) : null;
+                  return (
+                    <Pressable key={r.slug} disabled={me} hitSlop={4}
+                      onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: rn, pos: r.pos, team: showTeam, week, userId, leagueId }); }}
+                      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: t.bd, opacity: pressed ? 0.6 : 1 })}>
+                      <Mono size={9} tone={me ? 'you' : 'faint'} weight="700" style={{ width: 14, textAlign: 'right' }}>{String(r.depth)}</Mono>
+                      <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
+                        {headshot(r.slug) ? <Image source={{ uri: headshot(r.slug)! }} style={{ width: 22, height: 22 }} resizeMode="cover" />
+                          : <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint }}>{r.pos}</Text>}
+                      </View>
+                      <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: me ? '800' : '600', color: me ? t.you : t.text }}>{rn}</Text>
+                      {!!tag && <InjuryBadge status={tag} />}
+                      {me ? <Mono size={8} tone="you">THIS CARD</Mono> : <Mono size={9} tone="faint">›</Mono>}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+            {chart.length > 0 && (
+              <Mono size={8.5} tone="faint" style={{ lineHeight: 12 }}>
+                Sleeper's depth chart, re-ranked for who's available this week; refreshed daily. Tap a name for his card.
+              </Mono>
             )}
           </View>
         )}

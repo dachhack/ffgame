@@ -9,7 +9,7 @@ import { track, Ev, type Props } from '../analytics';
 import { readPool, type PoolGroup } from './poolEntry';
 import { setLiveInjuries, setInjuryReport, injuryReportAt, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
-import { setDepthChart } from './playerDepth';
+import { setDepthChart, hasDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
 import { supabaseUrl } from './liveConfig';
 import { isChatImageUrl } from './chatImage';
@@ -641,6 +641,16 @@ export async function loadDepthChart(): Promise<number> {
     setDepthChart(rows);
     return rows.length;
   } catch { return 0; }
+}
+
+/** The depth chart, once (v0.640.0): a card opened from a screen that never
+ *  loaded it (the leagues list, the wire) reads it here; a screen that did
+ *  pays nothing. Concurrent openers share one read. Never throws. */
+let depthLoad: Promise<number> | null = null;
+export function ensureDepthChart(): Promise<number> {
+  if (hasDepthChart()) return Promise.resolve(-1);
+  if (!depthLoad) depthLoad = loadDepthChart().finally(() => { depthLoad = null; });
+  return depthLoad;
 }
 
 /** Make sure the any-screen injury report (injuries.ts injuryNow) is no older
