@@ -97,6 +97,24 @@ export interface WireClaim {
   onWaivers: boolean;
 }
 
+/** THE WIRE'S MOMENTUM (v0.642.0). Founder: AI teams should "pickup trending
+ *  and higher ranked players without dropping players that have good long
+ *  term season long value." Sleeper's trending feed (0340) is millions of
+ *  managers acting on news the weekly projection has not priced yet — a
+ *  starter's injury, a breakout — so a candidate carries it as points per
+ *  week on top of his season value: net adds over drops, TREND_PER_POINT
+ *  per point, capped at MOMENTUM_MAX up and half that down. It makes a
+ *  trending body MORE attractive to add; it never makes a rostered player
+ *  cheaper to drop — the drop rails read pure season value, which is the
+ *  founder's second clause. */
+export const MOMENTUM_MAX = 2;
+export const TREND_PER_POINT = 25_000;
+export function trendMomentum(adds: number | null | undefined, drops: number | null | undefined): number {
+  const a = Number(adds) || 0; const d = Number(drops) || 0;
+  const raw = (a - d) / TREND_PER_POINT;
+  return Math.max(-MOMENTUM_MAX / 2, Math.min(MOMENTUM_MAX, raw));
+}
+
 export interface WireOpts {
   /** FAAB league → bids are meaningful. Priority/standings leagues bid 0. */
   faab: boolean;
@@ -136,6 +154,10 @@ export interface WireOpts {
      *  anyone could sign for nothing, so what a claim is measured over. */
     replacementOf: (pos: string) => number;
   };
+  /** Momentum per candidate (v0.642.0): trendMomentum of the wire's adds and
+   *  drops for him. Added to a candidate's season lens (rosGain, the depth
+   *  pick, the bench stash's hold value); never to a drop's. */
+  momentumOf?: (p: SpotPlayer) => number;
 }
 
 /** Points per week an upgrade must add before it is worth transacting for.
@@ -308,6 +330,9 @@ export function seatWirePlan(
 ): WireClaim[] {
   const maxClaims = Math.max(0, opts.maxClaims ?? 2);
   if (!maxClaims || !slots.length) return [];
+  // Momentum (v0.642.0): points per week a CANDIDATE carries on top of his
+  // season value. Zero for anyone the caller has no feed for.
+  const momentum = (p: SpotPlayer): number => Math.max(-MOMENTUM_MAX / 2, Math.min(MOMENTUM_MAX, Number(opts.momentumOf?.(p)) || 0));
 
   // A commissioner's no_add flag binds the agent exactly as it binds a manager
   // (0144). The DB would reject the claim anyway — `process_waivers` kills a
@@ -424,7 +449,10 @@ export function seatWirePlan(
         // upgrade bar is met by either measure, and the claim is ranked by
         // the larger, so the frenzy's prize is not passed over for a
         // streamer with a game on Sunday.
-        const rosGain = opts.rosValueOf ? lineupValue(slots, next, rosOf) - rosBase : 0;
+        // …plus the candidate's momentum (v0.642.0): a trending body clears
+        // the season bar sooner and ranks ahead of a flat one. The drop rails
+        // above read pure season value, so momentum never cheapens a drop.
+        const rosGain = (opts.rosValueOf ? lineupValue(slots, next, rosOf) - rosBase : 0) + momentum(cand);
         const kind: 'hole' | 'upgrade' = hole ? 'hole' : 'upgrade';
         const clears = hole ? gain >= HOLE_MIN_GAIN : (gain >= UPGRADE_MIN_GAIN || rosGain >= UPGRADE_MIN_GAIN);
         if (!clears) continue;
@@ -466,7 +494,7 @@ export function seatWirePlan(
         .filter((p) => !(p.held ?? p.onWaivers) && !used.has(p.id) && !have.some((q) => q.id === p.id)
           && need.has(p.pos) && rosOf(p) > 0)
         .sort((a, b) => ((need.get(a.pos) ?? 0) - (need.get(b.pos) ?? 0))
-          || (rosOf(b) - rosOf(a)) || String(a.id).localeCompare(String(b.id)))[0];
+          || ((rosOf(b) + momentum(b)) - (rosOf(a) + momentum(a))) || String(a.id).localeCompare(String(b.id)))[0];
       if (body) best = { add: body.id, drop: null, bid: 0, gain: 0, rosGain: 0, kind: 'depth', onWaivers: body.onWaivers };
     }
     // BENCH (v0.518.0). Founder: AI teams should make "pickups that would
@@ -493,7 +521,7 @@ export function seatWirePlan(
         // One backup at a one-spot position is cover; a second is a hoard.
         if (benchUse(slots, cand.pos) < 1 && droppable.some((p) => p.pos === cand.pos && p.id !== drop.id)) continue;
         if (realLoss(drop, cand)) continue;   // the floor (v0.561.4)
-        const benchGain = holdValue(cand, cand.id) - holdValue(drop, cand.id);
+        const benchGain = holdValue(cand, cand.id) + momentum(cand) - holdValue(drop, cand.id);
         if (benchGain < BENCH_MIN_GAIN) continue;
         if (best && !(benchGain > best.rosGain + 1e-9)) continue;
         best = { add: cand.id, drop: drop.id, bid: 0, gain: 0, rosGain: benchGain, kind: 'bench', onWaivers: cand.onWaivers };
@@ -530,4 +558,36 @@ export function seatWirePlan(
     budget -= best.bid;
   }
   return claims;
+}
+
+
+/** WHO GOES SO A HEALED MAN CAN COME BACK (v0.642.0). Founder: "I need AI
+ *  controlled teams to move guys out of IR when they need to make a waiver
+ *  pick up or bid. Especially on Wednesday when waivers run after games."
+ *
+ *  A player on IR whose designation has cleared makes the roster ILLEGAL
+ *  (0360) — and an illegal roster is refused every add and every claim, so
+ *  the seat that left him there could not transact at all; the sweep waited
+ *  for an active place that a full roster never opens. This names the body
+ *  to drop so he can be activated: the cheapest for the season among those
+ *  who would not start with him back, never a starter. If nobody active is
+ *  worth less than him for the season, HE is the one to cut — the roster
+ *  must be legal before Wednesday's run, and a man worth less than every
+ *  bench body is not worth a bench body. Pure. */
+export function legalizeIrDrop<P extends SpotPlayer>(
+  slots: ClassicSlotDef[],
+  active: P[],
+  healed: P,
+  rosOf: (p: SpotPlayer) => number,
+  startValueOf: (p: SpotPlayer, d?: ClassicSlotDef) => number = rosOf,
+): string {
+  const together = [...active.filter((p) => p.id !== healed.id), healed];
+  const starting = new Set(optimalLineup(slots, together, startValueOf).spots
+    .flatMap((r) => (r.player ? [r.player.id] : [])));
+  const bench = active
+    .filter((p) => p.id !== healed.id && !starting.has(p.id))
+    .sort((a, b) => (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
+  const cheapest = bench[0];
+  if (cheapest && rosOf(cheapest) <= rosOf(healed)) return cheapest.id;
+  return healed.id;
 }

@@ -13,6 +13,7 @@
 import {
   seatWirePlan, wireBid, shortlistWire, positionNeed, wireInstrument, HUMANS_FIRST_MS,
   UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE, BENCH_MIN_GAIN, benchUse, DROP_FLOOR_GAP,
+  trendMomentum, legalizeIrDrop, MOMENTUM_MAX, TREND_PER_POINT,
 } from '../packages/core/src/engine/seatWaivers.ts';
 import { slateAwareProj } from '../packages/core/src/engine/classic.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
@@ -465,6 +466,50 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
     { ...OPTS, rosValueOf: projOf({ w1: 12, w2: 11, w3: 10, scrub: 3, freewr: 10.5, dst: 7 }), healthyValueOf: projOf({ w1: 12, w2: 11, w3: 10, scrub: 3, dst: 7 }) });
   ok(p4.length === 1 && p4[0].add === 'dst' && p4[0].drop === 'scrub', 'a 3-point bench WR still goes for the defense');
   void healthy; void hv2;
+}
+
+// ── 21. MOMENTUM: the wire's trending adds make a candidate more attractive,
+//        never a rostered man cheaper to drop (v0.642.0) ─────────────────────
+{
+  ok(trendMomentum(100_000, 0) === MOMENTUM_MAX && trendMomentum(25_000, 0) === 1 && trendMomentum(0, 0) === 0,
+    `momentum is net adds over ${TREND_PER_POINT} per point, capped at ${MOMENTUM_MAX}`);
+  ok(trendMomentum(0, 100_000) === -MOMENTUM_MAX / 2 && trendMomentum(null, undefined) === 0,
+    'a mass drop is half the cap downward; no feed is zero');
+  // Two free backs for an UPGRADE: flat 'a' beats 'b' on the season by a
+  // hair; 'b' is trending hard. Below the bar neither clears on the week, so
+  // the season lens decides — and momentum tips it to the trending man.
+  const roster = [rb('s1'), rb('s2'), wr('s3'), rb('bench')];
+  const t = projOf({ s1: 12, s2: 11, s3: 10, bench: 3, a: 4.9, b: 4.8 });
+  const pool = [free(rb('a'), false), free(rb('b'), false)];
+  const flat = seatWirePlan(SLOTS, roster, pool, t, { ...OPTS, rosValueOf: t });
+  ok(flat.length === 0, 'neither back clears the upgrade bar on season value alone');
+  const hot = seatWirePlan(SLOTS, roster, pool, t, { ...OPTS, rosValueOf: t, momentumOf: (p) => (p.id === 'b' ? 1.5 : 0) });
+  ok(hot.length === 1 && hot[0].add === 'b' && hot[0].drop === 'bench',
+    'with momentum the trending back clears the season bar and is the one taken');
+  // The rails hold: a trending man never gets a MORE valuable player dropped for him.
+  const keep = projOf({ s1: 12, s2: 11, s3: 10, bench: 8, a: 4.9, b: 4.8 });
+  ok(seatWirePlan(SLOTS, roster, pool, keep, { ...OPTS, rosValueOf: keep, momentumOf: () => MOMENTUM_MAX }).length === 0,
+    'momentum never drops a bench body worth more for the season than the add');
+  // Depth: with a seat open, the trending body is picked over the flat one.
+  const deep = seatWirePlan(SLOTS, [rb('s1'), rb('s2'), wr('s3')], pool, t, { ...OPTS, openSeats: 1, rosValueOf: t, momentumOf: (p) => (p.id === 'b' ? 1 : 0) });
+  ok(deep.length === 1 && deep[0].kind === 'depth' && deep[0].add === 'b', 'a depth add prefers the trending body');
+}
+
+// ── 22. OFF IR, FULL ROSTER OR NOT: who goes so the healed man comes back
+//        (v0.642.0) ─────────────────────────────────────────────────────────
+{
+  const active = [rb('s1'), rb('s2'), wr('s3'), rb('b1'), wr('b2')];
+  const ros = projOf({ s1: 12, s2: 11, s3: 10, b1: 6, b2: 2, healed: 9 });
+  ok(legalizeIrDrop(SLOTS, active, rb('healed'), ros) === 'b2', 'the cheapest season body who would not start goes');
+  // The healed man would START: a starter he displaces is a bench body now, but still never the best ones.
+  const star = projOf({ s1: 12, s2: 11, s3: 10, b1: 6, b2: 2, healed: 20 });
+  ok(legalizeIrDrop(SLOTS, active, rb('healed'), star) === 'b2', 'a returning star bumps a starter to the bench; the cheapest body still goes');
+  // Nobody is worth less than him: he is the cut.
+  const dud = projOf({ s1: 12, s2: 11, s3: 10, b1: 6, b2: 2, healed: 1 });
+  ok(legalizeIrDrop(SLOTS, active, rb('healed'), dud) === 'healed', 'worth less than every bench body, the healed man himself is cut');
+  // Never a starter, even when the bench is empty of cheaper men.
+  const tight = projOf({ s1: 12, s2: 11, s3: 10, healed: 5 });
+  ok(legalizeIrDrop(SLOTS, [rb('s1'), rb('s2'), wr('s3')], rb('healed'), tight) === 'healed', 'with no bench body at all, the starters are never touched');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
