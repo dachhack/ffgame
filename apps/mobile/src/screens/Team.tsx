@@ -51,7 +51,7 @@ import { TradeCenter } from '../ui/TradeCenter';
 import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip, InjuryBadge, InjuryNow } from '../ui/rosterGroup';
-import { setLeagueFlags } from '@drip/core/data/commish';
+import { setLeagueFlags, flagRulesFor, flagFor } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { weekTitle } from '@drip/core/data/nflSlate';
@@ -690,7 +690,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   /** EVERY PICKUP CAN NAME A DROP (v0.489.5) — the web twin. With no open
    *  seat the drop is required; with one it is a choice, led by a button to
    *  go on without one. */
-  const addOrClaim = (p: LeaguePoolPlayer) => { setPendingBid(null); setDropRequired(full); setPendingAdd(p); };
+  const addOrClaim = (p: LeaguePoolPlayer) => {
+    // The flag's courtesy layer (v0.641.1): the row's button is already off,
+    // and any other way in says why rather than letting the server say no.
+    if (flagRulesFor(p.slug).noAdd) { warn(); setErr(`${p.full_name} is flagged — ${flagFor(p.slug) ?? 'commissioner ruling'} — and can’t be added or claimed.`); return; }
+    setPendingBid(null); setDropRequired(full); setPendingAdd(p);
+  };
 
 
   if (!team) {
@@ -1227,7 +1232,13 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
           // wall of dead buttons for the hours the window was closed. It is a
           // claim now: 0288 made the server take one.
           const blocked = !!team.roster_issue || txnLimitSummary(limits).addsOut;
-          const can = !busy && myRoster != null && !blocked;
+          // THE COMMISSIONER'S NO-ADD FLAG, BEFORE THE TAP (v0.641.1). The
+          // database has refused these adds and claims since 0144; the wire
+          // still offered the button and the member learned from the refusal.
+          // Same courtesy the lineup picker gives no_start: greyed, with the
+          // reason on the row (the flag chip carries the commissioner's label).
+          const barred = !!flagRulesFor(p.slug).noAdd;
+          const can = !busy && myRoster != null && !blocked && !barred;
           const claim = left != null || team.fa_open === false;
           return (
             <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
@@ -1279,7 +1290,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                 <Pressable disabled={!can} onPress={() => { tap(); addOrClaim(p); }}
                   style={{ backgroundColor: can ? t.you : t.sh, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, opacity: can ? 1 : 0.45 }}>
                   <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: can ? t.onAccent : t.faint }}>
-                    {claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
+                    {barred ? '🚫 NO ADDS' : claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
                   </Text>
                 </Pressable>
               )}

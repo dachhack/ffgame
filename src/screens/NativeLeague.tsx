@@ -74,7 +74,7 @@ import { devyBlockLine, devyBlockRound, draftRoundLabel, pickRoundLabel } from '
 import { sortPool, POOL_SORTS, poolSortValue, projFor, adpFor, installLiveMarket, clearLiveMarket, adpLabel, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setDynFormat } from '@drip/core/data/dyn2026';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
-import { setLeagueFlags } from '@drip/core/data/commish';
+import { setLeagueFlags, flagRulesFor, flagFor } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
@@ -3468,7 +3468,11 @@ export function TeamManage({ leagueId, onDraft, focus }: {
    *  your pickup." So the picker always opens: with no open seat the drop is
    *  required, as before; with one it is a choice, led by a button to go on
    *  without one. The server has taken a drop on either move all along. */
-  const addOrClaim = (p: LeaguePoolPlayer) => { setPendingBid(null); setDropRequired(full); setPendingAdd(p); };
+  const addOrClaim = (p: LeaguePoolPlayer) => {
+    // The flag's courtesy layer (v0.641.1) — see the app's wire.
+    if (flagRulesFor(p.slug).noAdd) { setErr(`${p.full_name} is flagged — ${flagFor(p.slug) ?? 'commissioner ruling'} — and can’t be added or claimed.`); return; }
+    setPendingBid(null); setDropRequired(full); setPendingAdd(p);
+  };
 
   if (!team) return (
     <div>
@@ -3972,16 +3976,22 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                   // closed the board was a wall of dead buttons. It is a
                   // CLAIM now: 0288 made the server take one.
                   const addsOut = txnLimitSummary(limits).addsOut;
-                  const blocked = !!team.roster_issue || addsOut;
+                  // THE COMMISSIONER'S NO-ADD FLAG, BEFORE THE CLICK (v0.641.1):
+                  // the database has refused these since 0144; the wire still
+                  // offered the button. Greyed, with the flag's label as the
+                  // reason — the courtesy the lineup picker gives no_start.
+                  const barred = !!flagRulesFor(p.slug).noAdd;
+                  const blocked = !!team.roster_issue || addsOut || barred;
                   const claim = left != null || team.fa_open === false;
                   return (
                     <button onClick={() => addOrClaim(p)} disabled={busy || myRoster == null || blocked} className="mono"
-                      title={team.roster_issue ? `your roster isn’t legal — ${team.roster_issue}`
+                      title={barred ? `flagged by the commissioner — ${flagFor(p.slug) ?? 'ruling'} — can’t be added or claimed`
+                        : team.roster_issue ? `your roster isn’t legal — ${team.roster_issue}`
                         : addsOut ? 'no adds left — see the transaction limits above'
                         : left != null ? 'on waivers — put in a claim'
                         : team.fa_open === false ? 'free agency is closed — put in a claim for the next run' : undefined}
                       style={{ ...btn, padding: '6px 10px', fontSize: 10, opacity: busy || myRoster == null || blocked ? 0.4 : 1 }}>
-                      {claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
+                      {barred ? '🚫 NO ADDS' : claim ? (team.waiver_mode === 'faab' ? 'BID' : 'CLAIM') : 'ADD'}
                     </button>
                   );
                 })()}
