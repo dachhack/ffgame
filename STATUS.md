@@ -22,6 +22,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.639.1 — the matchup, graded red to green
+
+> - The spot picker's matchup tag is now a graded pill: the percent is what the defense he faces gives up to his position against the league average, coloured red / orange / yellow / yellow-green / green from tough to soft. A legend under the list says which is which.
+
+The founder, on v0.639.0's two words: "It's coming through as soft spot or
+tough spot. We need it to be more linear with more distinction.
+Red/orange/yellow/yellow-green/green. Do we have strength or team matchup
+or position matchup?"
+
+- **We do — it was being thrown away.** The StatHead weekly file carries
+  `defVsPos`: per defense, per position, what it concedes against the
+  league average (blended across last season and this one, shrunk, clamped
+  ±18%) — the factor the per-player week multipliers are built from. The
+  worker now stores it (`defVsPosTable` in `server/src/poll/projections.js`
+  → `upsert_def_vs_pos`, 0443, one row per season) and
+  `league_week_projections` serves it as `def_vs_pos` beside the rows.
+- **The grade** (`matchupGrade(row, pos, table)` in
+  `packages/core/src/data/weekProj.ts`): the opponent's factor against the
+  player's position (our DEF reads the table's DST), as a whole percent, in
+  five bands — ≤0.92 tough, ≤0.97 hard, to 1.03 even, to 1.08 good, past it
+  soft — with fixed colours (`MATCHUP_BAND_COLOR`). Where the table has no
+  entry for the opponent it falls back to the week multiplier and the pill
+  says "wk" instead of the position. Null at zero (OUT) and without a
+  multiplier. `matchupLean` is gone.
+- **Both boards' pickers** (`apps/mobile/src/ui/ClassicBoard.tsx`,
+  `src/screens/ClassicBoard.tsx`): the pill under the projection, "RB +12%"
+  in the band's colour, and a five-swatch legend with one line of
+  explanation under the list.
+- Pinned: `scripts/check-week-mult.mjs` §10–11 (bands, position column,
+  DEF→DST, the fallback and its basis, the worker's table parse);
+  `scripts/db/week-proj-probes.sql` wp9 (the write, replace in place, the
+  key beside the rows, empty before the first sweep).
+- The table fills on the worker's next hourly projection sweep after the
+  migration runs; until then the pill reads off the week multiplier ("wk").
+
 ### v0.639.0 — the spot switcher says who he plays
 
 > - Tap ⇄ on a starting spot and every candidate now shows his game: kickoff, opponent (vs KC / @ KC), the roof and night marks, and his projected points for that spot — best first. Where the week's matchup feed has him, a ▲ soft spot / ▼ tough spot tag says whether this week's line runs above or below his usual.

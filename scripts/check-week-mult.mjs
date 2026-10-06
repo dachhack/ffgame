@@ -15,8 +15,8 @@
 // Offline on purpose: no network, so it can live in check:parity. The live
 // feed is checked by `npm run validate:weekmult`.
 import { readFileSync } from 'node:fs';
-import { statheadRows } from '../server/src/poll/projections.js';
-import { weekPointsFor, matchupLean, matchupLeanLabel } from '../packages/core/src/data/weekProj.ts';
+import { statheadRows, defVsPosTable } from '../server/src/poll/projections.js';
+import { weekPointsFor, matchupGrade, matchupGradeLabel, matchupBand } from '../packages/core/src/data/weekProj.ts';
 import { setLeagueProjScoring, projectedPoints } from '../packages/core/src/engine/projScoring.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
 import { slugMeta } from '../packages/core/src/data/slugMeta.ts';
@@ -130,14 +130,27 @@ ok(/'adjusted', f <> 1/.test(inj), 'and a number that was changed says so');
 ok(/round\(mult \* f, 4\)/.test(inj),
   'the multiplier carries the same discount as the points — a client that scales its own season number cannot miss it');
 
-// 10. the picker's matchup lean (v0.639.0) reads the multiplier as a lean, not a number
-ok(matchupLean({ mult: 1.2 }) === 'soft', 'a week 20% over his usual is a soft spot');
-ok(matchupLean({ mult: 0.8 }) === 'tough', 'a week 20% under is a tough spot');
-ok(matchupLean({ mult: 1.03 }) === 'even' && matchupLean({ mult: 0.95 }) === 'even', 'inside ±8% is even — the nudges alone do not make a lean');
-ok(matchupLean({ mult: 1.08 }) === 'soft' && matchupLean({ mult: 0.92 }) === 'tough', 'the line is inclusive at ±8%');
-ok(matchupLean({ mult: 0, status: 'OUT' }) === null, 'a zero multiplier is OUT, not a tough matchup');
-ok(matchupLean({ mult: null, pts: 12 }) === null && matchupLean(null) === null && matchupLean(undefined) === null, 'no multiplier, no lean');
-ok(matchupLeanLabel('soft').startsWith('▲') && matchupLeanLabel('tough').startsWith('▼'), 'the labels carry the arrow a row prints');
+// 10. the picker's matchup grade (v0.639.1): the position matchup, in five bands
+const dvp = { NO: { RB: 1.12, WR: 0.9, DST: 1.05 }, BUF: { RB: 0.95 } };
+ok(matchupBand(0.9) === 1 && matchupBand(0.95) === 2 && matchupBand(1.0) === 3 && matchupBand(1.05) === 4 && matchupBand(1.1) === 5,
+  'five bands: tough ≤0.92, hard ≤0.97, even to 1.03, good to 1.08, soft past it');
+let g = matchupGrade({ mult: 1.02, opp: 'NO', home: true }, 'RB', dvp);
+ok(g?.basis === 'def' && g.band === 5 && g.pct === 12, "the grade is the opponent's factor against HIS position, not his week multiplier");
+g = matchupGrade({ mult: 1.02, opp: 'NO', home: true }, 'WR', dvp);
+ok(g?.band === 1 && g.pct === -10 && matchupGradeLabel(g) === '\u221210%', 'same opponent, a WR reads the WR column, and the label carries a minus sign');
+ok(matchupGrade({ mult: 1.0, opp: 'NO' }, 'DEF', dvp)?.pct === 5, 'our DEF is the table\'s DST');
+g = matchupGrade({ mult: 1.09, opp: 'KC' }, 'RB', dvp);
+ok(g?.basis === 'week' && g.band === 5 && g.pct === 9, 'a team the table lacks falls back to the week multiplier, and says so');
+ok(matchupGrade({ mult: 0, opp: 'KC', status: 'OUT' }, 'RB', dvp) === null, 'a zero multiplier is OUT, not a tough matchup');
+ok(matchupGrade({ mult: null, pts: 12, opp: null }, 'RB', dvp) === null && matchupGrade(null, 'RB', dvp) === null, 'no opponent and no multiplier, no grade');
+ok(matchupGradeLabel({ band: 3, pct: 0, basis: 'def' }) === '0%' && matchupGradeLabel({ band: 4, pct: 4, basis: 'def' }) === '+4%', 'labels: 0% and +4%');
+
+// 11. the worker's table, out of the feed
+const tbl = defVsPosTable({ defVsPos: { CHI: { QB: 1.009, RB: '0.957', TE: 'n/a', K: 0 }, KC: null, LA: {} } });
+ok(tbl.CHI.QB === 1.009 && tbl.CHI.RB === 0.957, 'numeric cells are kept, strings coerced');
+ok(!('TE' in tbl.CHI) && !('K' in tbl.CHI), 'a non-number or a zero is dropped, not guessed');
+ok(!('KC' in tbl) && !('LA' in tbl), 'a team with nothing numeric is absent');
+ok(Object.keys(defVsPosTable({})).length === 0 && Object.keys(defVsPosTable(null)).length === 0, 'no table, empty — never a throw');
 
 console.log(fails === 0 ? '\nALL WEEK-MULT ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

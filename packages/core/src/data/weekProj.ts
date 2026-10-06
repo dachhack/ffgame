@@ -80,31 +80,57 @@ export function weekPointsFor(
   return { ...base, pts: Math.round(pts * 10) / 10, scored: false };
 }
 
-/** THE MATCHUP, AS ONE LEAN (v0.639.0). A member, from the matchup board:
- *  "I can't always see the opponent for my players in the matchup screen
- *  where I switch the lineup around … so I have to toggle between screens."
- *  The founder: "richer info on the roster spot switcher — the players'
- *  game, opponent, strength of matchup, projected points."
+/** THE MATCHUP, GRADED (v0.639.1). v0.639.0 printed two words off the
+ *  per-player multiplier; the founder: "We need it to be more linear with
+ *  more distinction. Red / orange / yellow / yellow-green / green." And:
+ *  "Do we have strength or team matchup or position matchup?" We do — the
+ *  feed publishes `defVsPos`, one factor per defense per position: what
+ *  that defense concedes to the position against the league average,
+ *  blended across last season and this one, shrunk and clamped to ±18%.
+ *  The worker stores it (0443) and the week RPC serves it beside the rows.
  *
- *  The STRENGTH is already in the row. `mult` is the source's week-over-
- *  season scale — his opponent's defence against his position, the
- *  home/away nudge, the market's implied total — renormalised so the season
- *  sums to itself. So 1.0 is an average week for HIM, above it a softer
- *  spot than his usual, below it a tougher one. Three words, not a number:
- *  a manager choosing between two names needs the lean, and a percentage
- *  invites a precision the feed does not have.
- *
- *  ±8% is the line. The nudges alone (home field, a posted total) move a
- *  line a few percent; a defence that is genuinely soft or stiff against a
- *  position moves it past that. Null when the source served no multiplier,
- *  and when it served ZERO — that is "out", which the injury tag already
- *  says, not a tough matchup. */
-export type MatchupLean = 'soft' | 'tough' | 'even';
-export function matchupLean(row: WeekProjRow | null | undefined): MatchupLean | null {
-  const mult = row?.mult == null ? NaN : Number(row.mult);
-  if (!Number.isFinite(mult) || mult <= 0) return null;
-  return mult >= 1.08 ? 'soft' : mult <= 0.92 ? 'tough' : 'even';
+ *  So the grade is the POSITION MATCHUP: his opponent's factor against his
+ *  position, as a percent, in five bands. The per-player multiplier is the
+ *  fallback when the table has no entry (it folds the same factor together
+ *  with home field and the posted total, so it says the same thing, less
+ *  cleanly) — `basis` tells a screen which one it is reading. */
+export type MatchupBand = 1 | 2 | 3 | 4 | 5;
+export interface MatchupGrade {
+  /** 1 tough … 5 soft. */
+  band: MatchupBand;
+  /** The factor as a whole percent against average: −8, 0, +12. */
+  pct: number;
+  /** 'def': the opponent's defense-vs-position factor. 'week': the player's week multiplier. */
+  basis: 'def' | 'week';
 }
-/** What the lean says on a row: "▲ soft spot" / "▼ tough spot" / "· even". */
-export const matchupLeanLabel = (lean: MatchupLean): string =>
-  lean === 'soft' ? '▲ soft spot' : lean === 'tough' ? '▼ tough spot' : '· even';
+/** Red / orange / yellow / yellow-green / green. Fixed, not themed: the
+ *  scale has to read the same on every board and in both modes. */
+export const MATCHUP_BAND_COLOR: Record<MatchupBand, string> = {
+  1: '#D9403A', 2: '#E3812A', 3: '#D4A90A', 4: '#8DB600', 5: '#2EA043',
+};
+export const MATCHUP_BAND_WORD: Record<MatchupBand, string> = {
+  1: 'tough', 2: 'hard', 3: 'even', 4: 'good', 5: 'soft',
+};
+/** The factor's band. ±3% is even; ±8% is the next step; past that the ends. */
+export function matchupBand(factor: number): MatchupBand {
+  return factor <= 0.92 ? 1 : factor <= 0.97 ? 2 : factor < 1.03 ? 3 : factor < 1.08 ? 4 : 5;
+}
+/** The feed's position keys: our DEF is its DST; everything else is itself. */
+const defPos = (pos: string): string => (pos === 'DEF' ? 'DST' : pos);
+export function matchupGrade(
+  row: WeekProjRow | null | undefined,
+  pos: string,
+  defVsPos?: Record<string, Record<string, number>> | null,
+): MatchupGrade | null {
+  if (!row) return null;
+  const f = row.opp ? Number(defVsPos?.[row.opp]?.[defPos(pos)]) : NaN;
+  if (Number.isFinite(f) && f > 0) return { band: matchupBand(f), pct: Math.round((f - 1) * 100), basis: 'def' };
+  // No table entry: the week multiplier. Null when the source served none,
+  // and at ZERO — that is "out", which the injury tag already says.
+  const mult = row.mult == null ? NaN : Number(row.mult);
+  if (!Number.isFinite(mult) || mult <= 0) return null;
+  return { band: matchupBand(mult), pct: Math.round((mult - 1) * 100), basis: 'week' };
+}
+/** "+12%" / "−8%" / "0%" — the pill's text. */
+export const matchupGradeLabel = (g: MatchupGrade): string =>
+  g.pct === 0 ? '0%' : `${g.pct > 0 ? '+' : '\u2212'}${Math.abs(g.pct)}%`;

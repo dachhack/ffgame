@@ -53,7 +53,7 @@ import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
 import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, leagueWeekProjections, type MatchupResult, type PlayerAdjustment, type WeekProjRow } from '@drip/core/data/liveApi';
-import { matchupLean, matchupLeanLabel } from '@drip/core/data/weekProj';
+import { matchupGrade, matchupGradeLabel, MATCHUP_BAND_COLOR, MATCHUP_BAND_WORD } from '@drip/core/data/weekProj';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
@@ -797,17 +797,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     installCollegeProjections(projWeek).then((n) => { if (alive && n) setProjVer((v) => v + 1); }).catch(() => {});
     return () => { alive = false; };
   }, [projWeek]);
-  // THE WEEK'S MATCHUP ROWS (v0.639.0), for the picker's lean: opponent and
-  // the source's week-over-season multiplier per player. One read per week
-  // (the player card reads the same RPC per open); a miss leaves the rows
-  // empty and the picker simply shows no lean.
-  const [wkRows, setWkRows] = useState<Record<string, WeekProjRow>>({});
+  // THE WEEK'S MATCHUP ROWS (v0.639.0) and the season's defense-vs-position
+  // table (v0.639.1, 0443), for the picker's grade: each candidate's
+  // opponent, and what that defense concedes to his position. One read per
+  // week (the player card reads the same RPC per open); a miss leaves both
+  // empty and the picker simply shows no grade.
+  const [wk, setWk] = useState<{ rows: Record<string, WeekProjRow>; dvp: Record<string, Record<string, number>> }>({ rows: {}, dvp: {} });
   useEffect(() => {
-    if (projWeek == null) { setWkRows({}); return; }
+    if (projWeek == null) { setWk({ rows: {}, dvp: {} }); return; }
     let alive = true;
     leagueWeekProjections(leagueId, projWeek)
-      .then((r) => { if (alive) setWkRows(r?.rows ?? {}); })
-      .catch(() => { if (alive) setWkRows({}); });
+      .then((r) => { if (alive) setWk({ rows: r?.rows ?? {}, dvp: r?.def_vs_pos ?? {} }); })
+      .catch(() => { if (alive) setWk({ rows: {}, dvp: {} }); });
     return () => { alive = false; };
   }, [leagueId, projWeek]);
 
@@ -1877,11 +1878,11 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             // where I switch the lineup around … so I have to toggle between
             // screens." Each candidate is the board's own entry for this spot
             // — kickoff, opponent, venue marks, the spot-aware projection —
-            // plus the week's matchup lean, and the list runs best first so
-            // the choice is usually the top row.
-            .map((p) => ({ p, e: entryFor(p.slug, slotDef.pos, pickerSlot), lean: matchupLean(wkRows[p.slug]) }))
+            // plus the position matchup graded red to green (v0.639.1), and
+            // the list runs best first so the choice is usually the top row.
+            .map((p) => ({ p, e: entryFor(p.slug, slotDef.pos, pickerSlot), grade: matchupGrade(wk.rows[p.slug], p.pos, wk.dvp) }))
             .sort((a, b) => (b.e?.proj ?? 0) - (a.e?.proj ?? 0) || a.p.full.localeCompare(b.p.full));
-          const anyLean = eligible.some((x) => x.lean && (x.e?.proj ?? 0) > 0);
+          const anyGrade = eligible.some((x) => x.grade && (x.e?.proj ?? 0) > 0);
           return (
             // The body must be able to SHRINK or the sheet clips its own bottom
             // — the one contract ui/Overlay asks of every caller, and the bug
@@ -1898,13 +1899,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
                 </Mono>
               )}
-              {eligible.map(({ p, e, lean }) => {
+              {eligible.map(({ p, e, grade }) => {
                 const bye = e?.opponent === 'BYE';
                 const game = e ? `${gameLineOf(e)}${e.state === 'pre' ? roofMark(e) : ''}` : 'no game listed';
                 const team = p.team || collegeNameFor(p.slug)?.school || '';
-                // No lean on a man the board prices at 0 (O/IR, a proven
+                // No grade on a man the board prices at 0 (O/IR, a proven
                 // bye): the injury tag and the BYE line already say it.
-                const showLean = lean && (e?.proj ?? 0) > 0;
+                const g = grade && (e?.proj ?? 0) > 0 ? grade : null;
                 return (
                 <Pressable key={p.slug} onPress={() => { tap(); void pickInto(pickerSlot, p.slug); }}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
@@ -1924,17 +1925,35 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   <PosPill pos={p.pos} />
                   <View style={{ width: 66, alignItems: 'flex-end' }}>
                     <Mono size={11} tone="dim" weight="700">{(e?.proj ?? 0).toFixed(1)}</Mono>
-                    {showLean && (
-                      <Mono size={7.5} weight="700" tone={lean === 'soft' ? 'you' : lean === 'tough' ? 'warn' : 'faint'}>{matchupLeanLabel(lean)}</Mono>
+                    {/* THE GRADE, AS A PILL (v0.639.1, founder: "more linear
+                        with more distinction — red / orange / yellow /
+                        yellow-green / green"). The percent is the opponent's
+                        factor against his position; the colour is its band. */}
+                    {g && (
+                      <View style={{ marginTop: 2, borderWidth: 1, borderColor: MATCHUP_BAND_COLOR[g.band], borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: MATCHUP_BAND_COLOR[g.band] }}>
+                          {`${g.basis === 'def' ? (p.pos === 'DEF' ? 'DST' : p.pos) : 'wk'} ${matchupGradeLabel(g)}`}
+                        </Text>
+                      </View>
                     )}
                   </View>
                 </Pressable>
                 );
               })}
-              {anyLean && (
-                <Mono size={8} tone="faint" style={{ lineHeight: 12, paddingTop: 8 }}>
-                  ▲ soft spot / ▼ tough spot: this week's projected line against his usual week — the defense he faces, home or away, the posted total.
-                </Mono>
+              {anyGrade && (
+                <View style={{ paddingTop: 8, gap: 3 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    {([1, 2, 3, 4, 5] as const).map((b) => (
+                      <View key={b} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: MATCHUP_BAND_COLOR[b] }} />
+                        <Mono size={7.5} tone="faint">{MATCHUP_BAND_WORD[b]}</Mono>
+                      </View>
+                    ))}
+                  </View>
+                  <Mono size={8} tone="faint" style={{ lineHeight: 12 }}>
+                    Matchup: what the defense he faces gives up to his position, against the league average. “wk” is his whole week’s line against his usual, where the defense table has no entry.
+                  </Mono>
+                </View>
               )}
             </ScrollView>
           );

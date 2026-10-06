@@ -2720,7 +2720,9 @@ export interface WeekProjRow {
 }
 export const leagueWeekProjections = (leagueId: string, week: number) =>
   rpc<{ ok?: boolean; error?: string; season?: string; week?: number; as_of?: string | null;
-        projections?: Record<string, number>; rows?: Record<string, WeekProjRow> }>(
+        projections?: Record<string, number>; rows?: Record<string, WeekProjRow>;
+        /** The season's defense-vs-position table (0443): team → position → factor vs average. */
+        def_vs_pos?: Record<string, Record<string, number>> }>(
     'league_week_projections', { p_league_id: leagueId, p_week: week });
 
 /** Every public id we can resolve for one player (0331). Absent keys mean the

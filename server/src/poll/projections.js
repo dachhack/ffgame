@@ -86,6 +86,26 @@ export function statheadRows(feed, week, playerIndex = null) {
   return rows;
 }
 
+/** THE DEFENSE-VS-POSITION TABLE (v0.639.1), out of the same file. The
+ *  feed publishes `defVsPos`: per defense, per position, what it concedes
+ *  against the league average (blended, shrunk, clamped ±18%) — the factor
+ *  the weekly multipliers are built from. Stored whole (0443) so the picker
+ *  can grade a position matchup instead of reading it back out of a
+ *  per-player number. Pure; non-numeric cells are dropped, not guessed. */
+export function defVsPosTable(feed) {
+  const out = {};
+  for (const [team, byPos] of Object.entries(feed?.defVsPos ?? {})) {
+    if (!byPos || typeof byPos !== 'object') continue;
+    const row = {};
+    for (const [pos, v] of Object.entries(byPos)) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) row[pos] = Math.round(n * 10000) / 10000;
+    }
+    if (Object.keys(row).length) out[String(team)] = row;
+  }
+  return out;
+}
+
 /** THE SEASON LINE, out of the same file (0335).
  *
  *  The weekly feed carries every player's season projection beside his weekly
@@ -379,7 +399,20 @@ export async function sweepProjections(season, weeks = [], log = () => {}, playe
       season_rows += Number(data?.rows ?? 0);
     }
   } catch (e) { log('season board', e.message); }
+  // The defense-vs-position table (v0.639.1), same file, same parse.
+  let def_vs_pos = 0;
+  try {
+    const feed = await statheadFeed(season);
+    const tbl = defVsPosTable(feed);
+    if (Object.keys(tbl).length) {
+      const { data, error } = await db().rpc('upsert_def_vs_pos', {
+        p_season: String(season), p_table: tbl,
+        p_as_of: feed?.baseGeneratedAt ?? feed?.generatedAt ?? null,
+      });
+      if (error) log('def vs pos', error.message); else def_vs_pos = Number(data?.teams ?? 0);
+    }
+  } catch (e) { log('def vs pos', e.message); }
 
   const n = await pollPlayerNews(log);
-  return { projections, season: season_rows, news: Number(n.rows ?? 0) };
+  return { projections, season: season_rows, def_vs_pos, news: Number(n.rows ?? 0) };
 }
