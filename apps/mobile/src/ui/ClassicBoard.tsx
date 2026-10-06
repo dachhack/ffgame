@@ -435,6 +435,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   const [names, setNames] = useState<{ me: string; opp: string }>({ me: 'YOU', opp: 'OPPONENT' });
   const [playsAt, setPlaysAt] = useState(0);
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
+  // THE BENCH'S ⇄ (v0.640.1): the bench player a spot is being chosen FOR.
+  const [benchPick, setBenchPick] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
   // ▦ FIELDS (v0.270.0): the all-fields sheet, and one game's field + play log
@@ -1297,6 +1299,23 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       return !!d && !!p && slotAllows(d, { id: cand, pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
     }, bestball));
 
+  /** THE OTHER DIRECTION (v0.640.1, founder: "put switch chips next to
+   *  players on the bench too"). The ⇄ on a starter asks "who goes here?";
+   *  the ⇄ on a bench player asks "where does HE go?" — every starting spot
+   *  he may legally fill that is still open to a change, with whoever stands
+   *  in it now. Same guards as the picker: not a best-ball spot, not sealed,
+   *  not holding a man whose game has begun. */
+  const spotsFor = (slug: string): { d: ClassicSlotDef; occupant: string | null }[] => {
+    const p = pool.find((x) => x.slug === slug);
+    if (!p) return [];
+    return slotDefs
+      .filter((d) => !bb.has(d.slot) && canEdit(d.slot) && effective.mine[d.slot] !== slug)
+      .filter((d) => slotAllows(d, { id: slug, pos: p.pos, team: p.team, exp: expMap[slug] ?? null }))
+      .map((d) => ({ d, occupant: effective.mine[d.slot] ?? null }));
+  };
+  /** May this bench player be offered a spot at all? Mine, legal, not kicked off, not stashed. */
+  const canBenchPick = (slug: string): boolean => !browsing && !illegalMine && !kickedOff(slug) && !stashed.has(slug);
+
   // ── AUTO-SLOT ON OPEN (v0.247.0) ─────────────────────────────────────────
   // The worker sets every classic team's lineup each week (autoSlotClassic-
   // Lineups), which is what makes an OPPONENT's board worth looking at. This
@@ -1766,6 +1785,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                     <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
                       {h ? <BoardCell e={h} align="left" onGame={gameOpener(h)}
                              onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <View style={{ flex: 1 }} />}
+                      {/* ⇄ ON THE BENCH TOO (v0.640.1, founder). The same
+                          26px box the starters rows keep, so the score
+                          columns line up card to card; filled only on MY
+                          bench, for a man who can still be started. */}
+                      <View style={{ width: 26, alignItems: 'center' }}>
+                        {h && k === 'bench' && canBenchPick(h.slug) && (
+                          <Pressable hitSlop={8} onPress={() => { tap(); setBenchPick(h.slug); }}
+                            style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 3 }}>
+                            <Mono size={9} tone="you" weight="700">⇄</Mono>
+                          </Pressable>
+                        )}
+                      </View>
                       <Mono size={12.5} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42, textAlign: 'right' }}>
                         {h ? (k === 'ir' && onIr.has(h.slug) && h.state === 'pre' ? '—' : scoreOf(h)) : ''}
                       </Mono>
@@ -1955,6 +1986,72 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   </Mono>
                 </View>
               )}
+            </ScrollView>
+          );
+        })()}
+      </Overlay>
+
+      {/* ── THE SPOT PICKER, for a bench player (v0.640.1) ─────────────────
+          The mirror of the sheet above: he is fixed, the spot is the
+          question. One row per spot he may take, with who stands in it now
+          (he goes to the bench) or EMPTY, and his own projection IN that
+          spot on the right — a flex and a WR spot can price him differently. */}
+      <Overlay
+        visible={!!benchPick}
+        title={benchPick ? `Start ${prettySlug(benchPick)}` : 'Start'}
+        subtitle="WHERE HE CAN GO · TAP A SPOT · HIS PROJECTION THERE, RIGHT"
+        onClose={() => setBenchPick(null)}>
+        {benchPick && (() => {
+          const me = entryFor(benchPick);
+          const spots = spotsFor(benchPick);
+          return (
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+              {!!me && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                  <Face slug={benchPick} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Display size={12.5}>{me.name}</Display>
+                      <InjuryNow slug={benchPick} size={8} />
+                    </View>
+                    <Mono size={8.5} tone={me.opponent === 'BYE' ? 'warn' : 'faint'} numberOfLines={1}>
+                      {`${me.pos}${me.team ? ` · ${me.team}` : ''} · ${gameLineOf(me)}${me.state === 'pre' ? roofMark(me) : ''}`}
+                    </Mono>
+                  </View>
+                  <Mono size={11} tone="dim" weight="700">{me.proj.toFixed(1)}</Mono>
+                </View>
+              )}
+              {spots.length === 0 && (
+                <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
+                  No spot he can take is open right now — every one that fits him has {vocab.started}, is best ball, or already holds him.
+                </Mono>
+              )}
+              {spots.map(({ d, occupant }) => {
+                const oe = occupant ? entryFor(occupant, d.pos, d.slot) : null;
+                const here = entryFor(benchPick, d.pos, d.slot);
+                return (
+                  <Pressable key={d.slot} onPress={() => { tap(); void pickInto(d.slot, benchPick); setBenchPick(null); }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                    <View style={{ width: 66, alignItems: 'center' }}>
+                      <SlotPill pos={d.pos} label={nameOf(d)} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      {oe ? (
+                        <>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Display size={12.5}>{oe.name}</Display>
+                            <InjuryNow slug={occupant!} size={8} />
+                          </View>
+                          <Mono size={8.5} tone="faint" numberOfLines={1}>{`${oe.proj.toFixed(1)} · ${gameLineOf(oe)} → bench`}</Mono>
+                        </>
+                      ) : (
+                        <Mono size={10} tone="you">+ EMPTY</Mono>
+                      )}
+                    </View>
+                    <Mono size={11} tone="you" weight="700" style={{ width: 36, textAlign: 'right' }}>{here ? here.proj.toFixed(1) : ''}</Mono>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           );
         })()}

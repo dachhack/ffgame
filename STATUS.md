@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.640.1 — ⇄ on the bench too
+
+> - Every player on your bench has a ⇄ chip now, like your starters do. Tap it and pick the spot to start him in: each spot he fits shows who holds it now (he goes to the bench) or EMPTY, and his projection in that spot on the right.
+
+Founder, with the Kickoff League's bench on screen: "Let's put switch
+chips next to players on the bench too."
+
+- **The other direction.** The starter's ⇄ asks "who goes here?"; the
+  bench's asks "where does he go?" `spotsFor(slug)` on both boards
+  (`apps/mobile/src/ui/ClassicBoard.tsx`, `src/screens/ClassicBoard.tsx`):
+  every starting spot that `slotAllows` him, is not best ball, and
+  `canEdit` (not sealed, not holding a man whose game has begun), with its
+  occupant. The chip shows on MY bench only, for a man who can still be
+  started (`canBenchPick`: not browsing, roster legal, not kicked off, not
+  stashed). The move is the same `pickInto` the picker uses — one write
+  from the bench, the displaced man to the bench.
+- **The sheet / modal**: his own line on top (face, game line, projection),
+  then one row per spot — spot pill, the occupant with his projection and
+  game line "→ bench" or "+ EMPTY", and the bench man's spot-aware
+  projection on the right (a flex and a WR spot can price him
+  differently). Empty-state text when nothing fits or everything has
+  kicked off.
+- The app's bench rows gain the same 26px chip column the starters rows
+  keep, so the score columns line up card to card; it stays empty on
+  TAXI / IR rows and on the opponent's side.
+- Not rendered from this environment; both hosts typecheck.
+
 ### v0.640.0 — the depth chart on the player card
 
 > - Every NFL player card has a TEAM DEPTH tab: his team's depth chart by position (QB · RB · WR · TE), the starter at the top of each, him marked, injury tags on. Tap any other name to open that player's card.
