@@ -8,7 +8,9 @@ import { useStore, PHOTO_SKINS } from '../app/store';
 import type { Phase } from '../app/store';
 import { PlayerImg, InjuryBadge, InjuryNow, FlagChip, useIsMobile, ModalBackdrop } from '../app/ui';
 import { flagFor, flagRulesFor } from '@drip/core/data/commish';
-import { windowsForWeek, gamesInWindow } from '@drip/core/data/nflSlate';
+import { windowsForWeek, gamesInWindow, nflGameForTeam } from '@drip/core/data/nflSlate';
+import { normTeam } from '@drip/core/data/slugMeta';
+import { projectedPoints } from '@drip/core/engine/projScoring';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import { powerupById, buffAppliesToSpot } from '@drip/core/data/powerups';
 import { GHOST_POINTS } from '@drip/core/engine/sim';
@@ -629,6 +631,18 @@ function MetricInfo({ metric, onClose }: { metric: Metric; onClose: () => void }
   );
 }
 
+/** "vs KC · 14.2" (v0.639.0) — the app's picker card has the member's words.
+ *  Off the week's slate the board installed; a team it doesn't list prints
+ *  no opponent rather than a guess. */
+function pickerLine(week: number, p: Player): string {
+  const g = nflGameForTeam(week, p.team);
+  const opp = g ? (normTeam(g.home) === normTeam(p.team) ? `vs ${g.away}` : `@ ${g.home}`) : null;
+  let proj: number | null = null;
+  try { proj = projectedPoints({ id: p.id, pos: p.pos, team: p.team }); } catch { proj = null; }
+  const pts = proj != null && Number.isFinite(proj) ? proj.toFixed(1) : null;
+  return [opp, pts].filter(Boolean).join(' · ');
+}
+
 // ── Player picker (tap a spot in setup) — choose from this window's roster ──
 export function PlayerPicker({ win, week, players, currentId, title = 'Pick a player', subtitle = 'YOUR PLAYERS WHOSE GAME FALLS IN THIS WINDOW', onPick, onRemove, onClose, gated, onGated, cards = false }: {
   win: WindowId; week: number; players: Player[]; currentId?: string; title?: string; subtitle?: string;
@@ -705,7 +719,7 @@ export function PlayerPicker({ win, week, players, currentId, title = 'Pick a pl
                     <InjuryBadge week={week} slug={p.id} /><FlagChip slug={p.id} />
                     <InfoDot player={p} week={week} />
                   </div>
-                  <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
+                  <span className="mono" style={{ fontSize: fs(8.5), color: 'var(--faint)' }}>{p.pos} · {p.team}{pickerLine(week, p) ? <span style={{ color: 'var(--dim)' }}> · {pickerLine(week, p)}</span> : null}</span>
                 </div>
                 {sel ? <span className="mono" style={{ fontSize: fs(8), color: 'var(--you)', flex: 'none' }}>CURRENT ✓</span>
                   : isGated ? <span title="Premium position — unlock premium" style={{ fontSize: 14, flex: 'none' }}>🔒</span> : null}

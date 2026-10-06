@@ -15,7 +15,7 @@ import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetS
 import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
-import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
+import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { setRuntimeSlate, boardWeekTitle, weekTitle, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
@@ -48,7 +48,8 @@ import { sportSettingsOf, type SportLeagueSettings } from '@drip/core/sports/lea
 import { openPlayerCard } from '../app/playerCard';
 import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { FieldGame } from './FieldGame';
-import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
+import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, leagueWeekProjections, type MatchupResult, type PlayerAdjustment, type WeekProjRow } from '@drip/core/data/liveApi';
+import { matchupLean, matchupLeanLabel } from '@drip/core/data/weekProj';
 import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
 
 /** The sub-card under a name: WHERE and WHEN the game is, and the number.
@@ -926,6 +927,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     installCollegeProjections(projWeek).then((n) => { if (alive && n) setProjVer((v) => v + 1); }).catch(() => {});
     return () => { alive = false; };
   }, [projWeek]);
+  // THE WEEK'S MATCHUP ROWS (v0.639.0), for the picker's lean — see the app's
+  // board. One read per week; a miss leaves the rows empty and no lean shows.
+  const [wkRows, setWkRows] = useState<Record<string, WeekProjRow>>({});
+  const wkLeague = ros?.leagueId ?? null;
+  useEffect(() => {
+    if (projWeek == null || !wkLeague) { setWkRows({}); return; }
+    let alive = true;
+    leagueWeekProjections(wkLeague, projWeek)
+      .then((r) => { if (alive) setWkRows(r?.rows ?? {}); })
+      .catch(() => { if (alive) setWkRows({}); });
+    return () => { alive = false; };
+  }, [wkLeague, projWeek]);
 
   // The league's configured lineup (0161) — slot names, types, eligibility.
   const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);
@@ -2036,7 +2049,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           // …but a BEST-BALL spot never holds anyone (v0.424.1, founder: "I
           // can't move him into my WR spot"): the fill parked him there and
           // will simply pick someone else once he starts manually.
-          .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); });
+          .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); })
+          // THE ROW CARRIES THE DECISION (v0.639.0) — the app's board has the
+          // member's words. Each candidate is the board's own entry for this
+          // spot (kickoff, opponent, venue marks, the spot-aware projection)
+          // plus the week's matchup lean; best first.
+          .map((p) => ({ p, e: d ? entryFor(p.slug, d.pos, pickerSlot) : null, lean: matchupLean(wkRows[p.slug]) }))
+          .sort((a, b) => (b.e?.proj ?? 0) - (a.e?.proj ?? 0) || a.p.full.localeCompare(b.p.full));
+        const anyLean = eligible.some((x) => x.lean && (x.e?.proj ?? 0) > 0);
         return (
           <div onClick={() => setPickerSlot(null)}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -2063,24 +2083,51 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                   Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
                 </div>
               )}
-              {eligible.map((p) => (
+              {eligible.map(({ p, e, lean }) => {
+                const bye = e?.opponent === 'BYE';
+                const started = !!e && !bye && e.state !== 'pre';
+                const game = !e ? 'no game listed'
+                  : bye ? 'BYE'
+                  : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
+                  : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
+                const roof = e && !started && e.roof && e.roof !== 'open' ? e.roof : null;
+                const team = p.team || collegeNameFor(p.slug)?.school || '';
+                const showLean = lean && (e?.proj ?? 0) > 0;
+                return (
                 <button key={p.slug} onClick={() => { void pickInto(pickerSlot, p.slug); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
                   <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
-                  <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0 }}>
-                    {shortName(p.full)}
-                    <InjuryNow slug={p.slug} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
-                    {spotOf.get(p.slug) && (
-                      <span className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginLeft: 6 }}>
-                        in {slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}
-                      </span>
-                    )}
+                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {shortName(p.full)}
+                      <InjuryNow slug={p.slug} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
+                      {spotOf.get(p.slug) && (
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginLeft: 6 }}>
+                          in {slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}
+                        </span>
+                      )}
+                    </span>
+                    <span className="mono" style={{ fontSize: 9, color: bye ? 'var(--warn, #c66)' : 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {team ? `${team} · ` : ''}{game}
+                      {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 4 }}>🏟</span>}
+                      {e && !started && e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
+                    </span>
                   </span>
                   <PosPill pos={p.pos as Pos} />
-                  <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', width: 30, textAlign: 'right' }}>{p.team}</span>
-                  <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)', width: 34, textAlign: 'right' }}>{projectedPoints({ id: p.slug, pos: p.pos ?? '', team: p.team }).toFixed(1)}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: 64, flex: 'none' }}>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)' }}>{(e?.proj ?? 0).toFixed(1)}</span>
+                    {showLean && (
+                      <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: lean === 'soft' ? 'var(--you)' : lean === 'tough' ? 'var(--warn, #c66)' : 'var(--faint)' }}>{matchupLeanLabel(lean)}</span>
+                    )}
+                  </span>
                 </button>
-              ))}
+                );
+              })}
+              {anyLean && (
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5, padding: '8px 2px 0' }}>
+                  ▲ soft spot / ▼ tough spot: this week's projected line against his usual week — the defense he faces, home or away, the posted total.
+                </div>
+              )}
             </div>
           </div>
         );

@@ -79,3 +79,32 @@ export function weekPointsFor(
   if (!Number.isFinite(pts)) return null;
   return { ...base, pts: Math.round(pts * 10) / 10, scored: false };
 }
+
+/** THE MATCHUP, AS ONE LEAN (v0.639.0). A member, from the matchup board:
+ *  "I can't always see the opponent for my players in the matchup screen
+ *  where I switch the lineup around … so I have to toggle between screens."
+ *  The founder: "richer info on the roster spot switcher — the players'
+ *  game, opponent, strength of matchup, projected points."
+ *
+ *  The STRENGTH is already in the row. `mult` is the source's week-over-
+ *  season scale — his opponent's defence against his position, the
+ *  home/away nudge, the market's implied total — renormalised so the season
+ *  sums to itself. So 1.0 is an average week for HIM, above it a softer
+ *  spot than his usual, below it a tougher one. Three words, not a number:
+ *  a manager choosing between two names needs the lean, and a percentage
+ *  invites a precision the feed does not have.
+ *
+ *  ±8% is the line. The nudges alone (home field, a posted total) move a
+ *  line a few percent; a defence that is genuinely soft or stiff against a
+ *  position moves it past that. Null when the source served no multiplier,
+ *  and when it served ZERO — that is "out", which the injury tag already
+ *  says, not a tough matchup. */
+export type MatchupLean = 'soft' | 'tough' | 'even';
+export function matchupLean(row: WeekProjRow | null | undefined): MatchupLean | null {
+  const mult = row?.mult == null ? NaN : Number(row.mult);
+  if (!Number.isFinite(mult) || mult <= 0) return null;
+  return mult >= 1.08 ? 'soft' : mult <= 0.92 ? 'tough' : 'even';
+}
+/** What the lean says on a row: "▲ soft spot" / "▼ tough spot" / "· even". */
+export const matchupLeanLabel = (lean: MatchupLean): string =>
+  lean === 'soft' ? '▲ soft spot' : lean === 'tough' ? '▼ tough spot' : '· even';

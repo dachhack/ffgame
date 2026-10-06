@@ -22,6 +22,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.639.0 — the spot switcher says who he plays
+
+> - Tap ⇄ on a starting spot and every candidate now shows his game: kickoff, opponent (vs KC / @ KC), the roof and night marks, and his projected points for that spot — best first. Where the week's matchup feed has him, a ▲ soft spot / ▼ tough spot tag says whether this week's line runs above or below his usual.
+> - The window picker on the drip board shows the opponent and projection under each card too.
+
+A member, from the Kickoff League's chat (#1138): "I can't always see the
+opponent for my players in the matchup screen where I switch the lineup
+around — so I have to toggle between screens, back and forth between matchup
+and my team, or Google, to look at the games." The founder: "richer info on
+the roster spot switcher — the players' game, opponent, strength of
+matchup, projected points."
+
+- **The classic picker row** (`apps/mobile/src/ui/ClassicBoard.tsx`,
+  `src/screens/ClassicBoard.tsx`) is now the board's own entry for the spot
+  (`entryFor(slug, spot.pos, spot)`): the same kickoff, opponent, venue marks
+  and spot-aware projection the cell prints once he is in — so the picker
+  and the board can't disagree about a man. `gameLineOf(e)` is the one
+  formatter (BYE / statline once live / kickoff + opponent before). Sorted
+  by projection, best first; the "in SLOT" tag rides the name line.
+- **Strength of matchup** is the week feed's multiplier (0330) read as a
+  lean: `matchupLean(row)` in `packages/core/src/data/weekProj.ts` — soft at
+  ≥1.08, tough at ≤0.92, even between, null without a multiplier or at zero
+  (that is OUT, which the injury tag already says). Both boards read
+  `league_week_projections` once per week; the row prints the lean under the
+  projection, and a footnote says what it means. Pinned in
+  `scripts/check-week-mult.mjs` (§10).
+- **The drip window picker** (`apps/mobile/src/ui/PlayerPicker.tsx`,
+  `src/screens/boardParts.tsx` list rows): "vs KC · 14.2" under the name,
+  off the week's installed slate and `projectedPoints`.
+- Not confirmed against the Kickoff League's data (no DB access from this
+  environment): the member's words name the screen and the missing fact,
+  and the fix is to the screen itself, not to a data path.
+
 ### v0.638.1 — the filter chips: compact, and capped where there is more
 
 > - The draft room's and the wire's filter rows are single-line strips of smaller chips that scroll sideways, with a › on the edge that has more behind it (tap it to page). Three rows of filters take about half the height they did, so the player list starts higher.
