@@ -520,6 +520,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   const [names, setNames] = useState<{ me: string; opp: string }>({ me: 'YOU', opp: 'OPPONENT' });
   const [playsAt, setPlaysAt] = useState(0); // bump → recompute points
   const [pickerSlot, setPickerSlot] = useState<string | null>(null);
+  // THE BENCH'S ⇄ (v0.640.1): the bench player a spot is being chosen FOR.
+  const [benchPick, setBenchPick] = useState<string | null>(null);
   // MATCHUP BOARD inputs (v0.228.0) — the extra reads the head-to-head view
   // needs beyond the lineup itself. All optional: every one degrades to a
   // quieter row rather than an empty board, because a missing kickoff or a
@@ -1441,6 +1443,20 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         return !!d && !!p && slotAllows(d, { id: cand, pos: p.pos, team: p.team, exp: expMap[cand] ?? null });
       }, bestball));
 
+  /** THE OTHER DIRECTION (v0.640.1, founder: "put switch chips next to
+   *  players on the bench too") — the app's board has the note. Every
+   *  starting spot he may legally fill that is still open to a change, with
+   *  whoever stands in it now. */
+  const spotsFor = (slug: string): { d: ClassicSlotDef; occupant: string | null }[] => {
+    const p = pool.find((x) => x.slug === slug);
+    if (!p) return [];
+    return slotDefs
+      .filter((d) => !bb.has(d.slot) && canEdit(d.slot) && effective.mine[d.slot] !== slug)
+      .filter((d) => slotAllows(d, { id: slug, pos: p.pos, team: p.team, exp: expMap[slug] ?? null }))
+      .map((d) => ({ d, occupant: effective.mine[d.slot] ?? null }));
+  };
+  const canBenchPick = (slug: string): boolean => !browsing && !illegalMine && !kickedOff(slug) && !stashed.has(slug);
+
   // ── AUTO-SLOT ON OPEN (v0.247.0) ─────────────────────────────────────────
   // The worker sets every classic team's lineup each week (autoSlotClassic-
   // Lineups), which is what makes an OPPONENT's board worth looking at. This
@@ -1962,7 +1978,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                   return (
                     <div key={i} style={{ padding: `9px ${rowPadX}px 11px`, borderTop: '1px solid var(--bd)' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${spotCol}px minmax(0, 1fr)`, alignItems: 'center', gap: colGap }}>
-                        {h ? <BoardCell e={h} align="left" face={faceSize} gap={cellGap} onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })} /> : <span />}
+                        {h ? <BoardCell e={h} align="left" face={faceSize} gap={cellGap} onName={() => openPlayerCard({ slug: h.slug, name: h.name, pos: h.pos, team: h.team ?? '', week: matchup?.week, userId })}
+                               /* ⇄ ON THE BENCH TOO (v0.640.1, founder): my bench, a man who can still be started. */
+                               action={k === 'bench' && canBenchPick(h.slug) ? (
+                                 <button onClick={() => setBenchPick(h.slug)} title="start him — pick a spot" aria-label={`start ${h.name}`} className="mono"
+                                   style={{ flex: 'none', fontSize: 9, fontWeight: 700, color: 'var(--you)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 3, padding: '1px 5px', lineHeight: 1.35, cursor: 'pointer' }}>⇄</button>
+                               ) : undefined} /> : <span />}
                         <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--faint)', border: '1px solid var(--bd)', borderRadius: 999, padding: '2px 8px' }}>
                           {k === 'bench' ? 'BN' : onIr.has((h ?? a)!.slug) ? 'IR' : 'TX'}
                         </span>
@@ -2140,6 +2161,69 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                     ))}
                   </div>
                   Matchup: what the defense he faces gives up to his position, against the league average. “wk” is his whole week’s line against his usual, where the defense table has no entry.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── THE SPOT PICKER, for a bench player (v0.640.1) ─────────────────
+          The mirror of the picker above: he is fixed, the spot is the
+          question. One row per spot he may take, with who stands in it now
+          (he goes to the bench) or EMPTY, and his own projection IN that spot
+          on the right. */}
+      {benchPick && (() => {
+        const me = entryFor(benchPick);
+        const spots = spotsFor(benchPick);
+        return (
+          <div onClick={() => setBenchPick(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Start {me?.name ?? prettySlug(benchPick)}</div>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>
+                    {me ? `${me.pos}${me.team ? ` · ${me.team}` : ''} · ${me.opponent === 'BYE' ? 'BYE' : (`${me.kickoff ?? ''} ${me.opponent ?? ''}`.trim() || 'no game listed')} · ${me.proj.toFixed(1)}` : ''}
+                    <span style={{ color: 'var(--you)' }}> · pick a spot</span>
+                  </div>
+                </div>
+                <button onClick={() => setBenchPick(null)} className="mono" aria-label="close"
+                  style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
+              </div>
+              {spots.length === 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6, padding: '6px 2px' }}>
+                  No spot he can take is open right now — every one that fits him has {vocab.started}, is best ball, or already holds him.
+                </div>
+              )}
+              {spots.map(({ d, occupant }) => {
+                const oe = occupant ? entryFor(occupant, d.pos, d.slot) : null;
+                const here = entryFor(benchPick, d.pos, d.slot);
+                return (
+                  <button key={d.slot} onClick={() => { void pickInto(d.slot, benchPick); setBenchPick(null); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
+                    <SlotPill pos={d.pos} label={nameOf(d)} width={spotCol} />
+                    <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {oe ? (
+                        <>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {oe.name}<InjuryNow slug={occupant!} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
+                          </span>
+                          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {`${oe.proj.toFixed(1)} · ${oe.opponent === 'BYE' ? 'BYE' : (`${oe.kickoff ?? ''} ${oe.opponent ?? ''}`.trim() || 'no game listed')} → bench`}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ EMPTY</span>
+                      )}
+                    </span>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--you)', width: 36, textAlign: 'right', flex: 'none' }}>{here ? here.proj.toFixed(1) : ''}</span>
+                  </button>
+                );
+              })}
+              {spots.length > 0 && (
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5, padding: '8px 2px 0' }}>
+                  The number on the right is his projection in that spot; the man he replaces goes to the bench.
                 </div>
               )}
             </div>

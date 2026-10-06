@@ -1,0 +1,14 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 0444 · THE GAME LOG READS THE LIVE SEASON.
+--
+-- Founder, on the player card: "Game logs on the player cards?"
+--
+-- The web card's GAME LOG read the baked 2025 season (v0.285.0) and the app's
+-- went with that bake (v0.502.0). The 2026 season is in live_play — every
+-- broadcast play, by week and player — and game_feed names the two teams of
+-- every game id. A card now reads one player's season straight out of
+-- live_play; this is the index that read wants: the existing one leads on
+-- week (the board's axis), a card reads the other axis (one player, every
+-- week).
+-- ═══════════════════════════════════════════════════════════════════════════
+create index if not exists live_play_player_week on live_play (player_slug, week);

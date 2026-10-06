@@ -19,10 +19,13 @@ import { depthChartFor } from '@drip/core/data/playerDepth';
 import { normTeam } from '@drip/core/data/slugMeta';
 import { statlineAt, fmtStat } from '@drip/core/engine/sim';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, ensureDepthChart, type NewsItem } from '@drip/core/data/liveApi';
+import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, ensureDepthChart, leagueGameMode, type NewsItem } from '@drip/core/data/liveApi';
 import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
-import { nflGameForTeam, kickoffLabel, weekLabel } from '@drip/core/data/nflSlate';
+import { nflGameForTeam, kickoffLabel, weekLabel, weekTick } from '@drip/core/data/nflSlate';
+import { liveSeasonLog } from '@drip/core/data/playerLog';
+import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
+import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projFor } from '@drip/core/data/poolSort';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
@@ -82,13 +85,34 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // beside them still answers.
   const [wkProj, setWkProj] = useState<WeekPoints | null>(null);
   const [news, setNews] = useState<NewsItem[] | null>(null);
-  // SUMMARY | TEAM | HISTORY. The TEAM tab (v0.640.0, founder: "add team
-  // depth charts to player cards, and allow clicking on players in the depth
-  // charts to bring up that player's card") is the 0293 chart the projected
-  // box already reads — it was "deliberately absent" while nothing here knew
-  // a team's depth order. The GAME LOG tab (v0.284.0) read the baked 2025
-  // season that shipped inside the app; it went with that bake in v0.502.0.
-  const [tab, setTab] = useState<'summary' | 'team' | 'history'>('summary');
+  // SUMMARY | GAME LOG | TEAM | HISTORY. The TEAM tab (v0.640.0, founder:
+  // "add team depth charts to player cards, and allow clicking on players in
+  // the depth charts to bring up that player's card") is the 0293 chart the
+  // projected box already reads. The GAME LOG tab (v0.284.0) read the baked
+  // 2025 season that shipped inside the app and went with that bake in
+  // v0.502.0; it is BACK as the live season (v0.641.0, founder: "Game logs
+  // on the player cards?") — read from live_play on open, nothing shipped.
+  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>('summary');
+  // The log, built only when its tab opens; reset when the sheet moves to
+  // another man (the host reuses one, v0.456.0).
+  const [log, setLog] = useState<GameLogWeek[] | null>(null);
+  const [logErr, setLogErr] = useState(false);
+  useEffect(() => { setLog(null); setLogErr(false); }, [slug]);
+  useEffect(() => {
+    if (tab !== 'log' || log !== null) return;
+    let dead = false;
+    (async () => {
+      try {
+        // The league's own scoring decides the points column; a drip league
+        // has no classic table, so buildGameLog prints statlines alone.
+        const gm = leagueId ? await leagueGameMode(leagueId).catch(() => null) : null;
+        const scoring = gm?.ok && gm.mode === 'classic' ? leagueCatalogOf(gm) : null;
+        const season = await liveSeasonLog(slug);
+        if (!dead) setLog(buildGameLog({ id: slug, name, pos, team: displayTeam(slug, team) }, season.weeks, scoring, season.games));
+      } catch { if (!dead) setLogErr(true); }
+    })();
+    return () => { dead = true; };
+  }, [tab, log, leagueId, slug, name, pos, team]);
   // A teammate tapped on the chart opens HIS card on this same sheet (the
   // host reuses one, v0.456.0) — and lands on his summary, as a card opened
   // from anywhere does.
@@ -273,9 +297,10 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
             appears only when the second has something to show. */}
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {(([['summary', 'SUMMARY'],
+              ['log', 'GAME LOG'],
               ['team', `${showTeam || 'TEAM'} DEPTH`],
               ...(leagueId ? [['history', `HISTORY${moves?.length ? ` (${moves.length})` : ''}`]] : [])] as const) as readonly (readonly [string, string])[]).map(([id, label]) => (
-            <Pressable key={id} onPress={() => setTab(id as 'summary' | 'team' | 'history')}
+            <Pressable key={id} onPress={() => setTab(id as 'summary' | 'log' | 'team' | 'history')}
               style={{ borderWidth: 1, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 6, borderColor: tab === id ? t.you : t.bd, backgroundColor: tab === id ? t.bg : 'transparent' }}>
               <Mono size={9} weight="700" tone={tab === id ? 'you' : 'dim'}>{label}</Mono>
             </Pressable>
@@ -338,6 +363,46 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
                   He sits on waivers for 24h — anyone in the league can claim him, and claims beat first-come.
                 </Mono>
               </View>
+            )}
+          </View>
+        )}
+
+        {/* GAME LOG (v0.641.0) — every week he has plays for this season,
+            scored under THIS league's rules; a drip league gets the statline
+            and no points column (see core/data/gameLog). */}
+        {tab === 'log' && (
+          <View style={{ gap: 0 }}>
+            {logErr && <Mono size={10} tone="opp">Couldn’t load his game log.</Mono>}
+            {!logErr && log === null && <Mono size={10} tone="faint">Loading his season…</Mono>}
+            {log?.length === 0 && (
+              <Mono size={10} tone="faint" style={{ lineHeight: 15 }}>
+                No plays recorded yet this season. Weeks appear here as the games are played.
+              </Mono>
+            )}
+            {!!log?.length && (
+              <View style={{ flexDirection: 'row', paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                <Mono size={8} tone="faint" weight="700" style={{ width: 30 }}>WK</Mono>
+                <Mono size={8} tone="faint" weight="700" style={{ width: 56 }}>OPP</Mono>
+                <Mono size={8} tone="faint" weight="700" style={{ flex: 1 }}>STAT LINE</Mono>
+                {log[0].points != null && <Mono size={8} tone="faint" weight="700" style={{ width: 44, textAlign: 'right' }}>FPTS</Mono>}
+              </View>
+            )}
+            {log?.map((r) => (
+              <View key={r.week} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                <Mono size={10} weight="700" style={{ width: 30 }}>{weekTick(r.week)}</Mono>
+                <Mono size={9.5} tone="dim" style={{ width: 56 }}>{r.opponent ?? '—'}</Mono>
+                <Mono size={9.5} tone={r.blank ? 'faint' : 'text'} style={{ flex: 1, lineHeight: 13 }}>{r.blank ? '—' : r.line}</Mono>
+                {r.points != null && (
+                  <Mono size={10.5} weight="700" tone={!r.blank && r.points > 0 ? 'you' : 'faint'} style={{ width: 44, textAlign: 'right' }}>
+                    {r.blank ? '—' : r.points.toFixed(1)}
+                  </Mono>
+                )}
+              </View>
+            ))}
+            {!!log?.length && log[0].points == null && (
+              <Mono size={9} tone="faint" style={{ marginTop: 8, lineHeight: 13 }}>
+                ◈ DRIP leagues score per window, with power-ups on top — there is no one season number to print here.
+              </Mono>
             )}
           </View>
         )}

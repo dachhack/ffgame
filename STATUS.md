@@ -22,6 +22,66 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.641.0 — the game log is this season's
+
+> - The player card's GAME LOG tab is back in the app and reads this season on both app and web: every week he has played, the opponent, his stat line, and his points under your league's scoring. It used to show last year's games on the web and was missing from the app.
+
+Founder, on the player card: "Game logs on the player cards?"
+
+- **What it read.** The web card's GAME LOG read the baked 2025 season
+  (`public/pbp/season.json`, v0.285.0) — right while the app was playtested
+  on last year's games, wrong from the first 2026 kickoff: a 2026 league's
+  card showed last year's weeks. The app dropped the tab with that bake
+  (v0.502.0, APK size).
+- **What it reads now.** `live_play` — every broadcast 2026 play, by week
+  and player, the rows the board scores from. `playerLivePlays(slug)`
+  (`liveApi`, paged, NFL weeks only, rehearsal `SIM` rows out) +
+  `gameFeedTeams(ids)` (the two teams of each game id, off `game_feed`) →
+  `liveSeasonLog(slug)` in `packages/core/src/data/playerLog.ts`, which
+  groups by week and names each week's game. `buildGameLog` takes the games:
+  the opponent is the game the plays came from (so a man since traded shows
+  the game he played), else the slate by his current team. Team codes
+  normalised on both sides (LAR is LA).
+- **Index** 0444 `live_play (player_slug, week)` — the existing index leads
+  on week (the board's axis); a card reads the other one.
+- **Both cards** (`src/app/playerCard.tsx`, `apps/mobile/src/ui/PlayerCardSheet.tsx`):
+  GAME LOG beside SUMMARY, built only when its tab opens, reset when the
+  sheet moves to another man. The v0.299.1 rookie guard is gone with the
+  bake: a rookie's live log is his own. The baked `seasonLog` reader stays
+  for `check:gamelog`'s decimal-parity assertions; no card calls it.
+- Pinned: `scripts/check-game-log.mjs` — the game names the opponent (@ /
+  vs / a pair for a traded man), code normalisation, the week grouping and
+  the slate fallback.
+- Not confirmed against live data from here (no DB access); the read is the
+  board's own table and decoder.
+
+### v0.640.1 — ⇄ on the bench too
+
+> - Every player on your bench has a ⇄ chip now, like your starters do. Tap it and pick the spot to start him in: each spot he fits shows who holds it now (he goes to the bench) or EMPTY, and his projection in that spot on the right.
+
+Founder, with the Kickoff League's bench on screen: "Let's put switch
+chips next to players on the bench too."
+
+- **The other direction.** The starter's ⇄ asks "who goes here?"; the
+  bench's asks "where does he go?" `spotsFor(slug)` on both boards
+  (`apps/mobile/src/ui/ClassicBoard.tsx`, `src/screens/ClassicBoard.tsx`):
+  every starting spot that `slotAllows` him, is not best ball, and
+  `canEdit` (not sealed, not holding a man whose game has begun), with its
+  occupant. The chip shows on MY bench only, for a man who can still be
+  started (`canBenchPick`: not browsing, roster legal, not kicked off, not
+  stashed). The move is the same `pickInto` the picker uses — one write
+  from the bench, the displaced man to the bench.
+- **The sheet / modal**: his own line on top (face, game line, projection),
+  then one row per spot — spot pill, the occupant with his projection and
+  game line "→ bench" or "+ EMPTY", and the bench man's spot-aware
+  projection on the right (a flex and a WR spot can price him
+  differently). Empty-state text when nothing fits or everything has
+  kicked off.
+- The app's bench rows gain the same 26px chip column the starters rows
+  keep, so the score columns line up card to card; it stays empty on
+  TAXI / IR rows and on the opponent's side.
+- Not rendered from this environment; both hosts typecheck.
+
 ### v0.640.0 — the depth chart on the player card
 
 > - Every NFL player card has a TEAM DEPTH tab: his team's depth chart by position (QB · RB · WR · TE), the starter at the top of each, him marked, injury tags on. Tap any other name to open that player's card.

@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { installRealWeek } from '../packages/core/src/data/realPbp';
 import { classicPoints } from '../packages/core/src/engine/classic';
 import { buildGameLog } from '../packages/core/src/data/gameLog';
+import { groupSeasonRows } from '../packages/core/src/data/playerLog';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -101,6 +102,24 @@ for (const [slug, pos, team] of CASES) {
 {
   const log = buildGameLog({ id: 'saquon-barkley', name: 'saquon-barkley', pos: 'RB', team: 'PHI' }, { 7: [] }, { ppr: 1 });
   ok('an empty week is marked blank and scores zero', log[0].blank === true && log[0].points === 0, log[0]);
+}
+
+// ── THE LIVE SEASON (v0.641.0): the game names the opponent ───────────────
+{
+  const plays = { 3: [{ c: 10, k: 'rush', y: 5, td: 0, ca: 0, tg: 0 }] };
+  const log = buildGameLog({ id: 'x', name: 'x', pos: 'RB', team: 'DET' }, plays, null, { 3: { away: 'DET', home: 'BAL' } });
+  ok('the game the plays came from names the opponent: away side reads @', log[0].opponent === '@ BAL', log[0].opponent);
+  const home = buildGameLog({ id: 'x', name: 'x', pos: 'RB', team: 'DET' }, plays, null, { 3: { away: 'BAL', home: 'DET' } });
+  ok('…home side reads vs', home[0].opponent === 'vs BAL', home[0].opponent);
+  const moved = buildGameLog({ id: 'x', name: 'x', pos: 'RB', team: 'KC' }, plays, null, { 3: { away: 'DET', home: 'BAL' } });
+  ok('a man since traded still shows the game he played, as a pair', moved[0].opponent === 'DET @ BAL', moved[0].opponent);
+  const codes = buildGameLog({ id: 'x', name: 'x', pos: 'RB', team: 'LAR' }, plays, null, { 3: { away: 'LA', home: 'SF' } });
+  ok('team codes are normalised on both sides (LAR is LA)', codes[0].opponent === '@ SF', codes[0].opponent);
+  const g = groupSeasonRows(
+    [{ week: 2, game_id: 'e1' }, { week: 2, game_id: 'e1' }, { week: 4, game_id: 'e9' }, { week: Number.NaN, game_id: 'e1' }],
+    { e1: { away: 'DET', home: 'GB' } });
+  ok('rows group by week and a week names its game once', Object.keys(g.byWeek).join(',') === '2,4' && g.byWeek[2].length === 2 && g.games[2]?.home === 'GB', g);
+  ok('a game the feed does not know leaves the week to the slate', g.games[4] === undefined, g.games[4]);
 }
 
 if (fails) { console.log(`\n${fails} GAME-LOG ASSERTION(S) FAILED`); process.exit(1); }
