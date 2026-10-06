@@ -19,6 +19,7 @@
 import type { Player, Pos } from '../types';
 import { classicPointsFrom, type ClassicScoring } from '../engine/classic';
 import { nflGameForTeam } from './nflSlate';
+import { normTeam } from './slugMeta';
 import { statlineFrom, rawPlaysFrom, fmtStat, type RawPlay } from '../engine/sim';
 import type { RealPlay } from './realPbp';
 
@@ -34,12 +35,19 @@ export interface GameLogWeek {
   blank: boolean;
 }
 
-/** Build the log. `weeksPlays` is playerSeasonLog's output (week → his plays);
- *  `scoring` null = drip. */
+/** The two teams of the game a week's plays came from (v0.641.0) — off the
+ *  game feed the plays name, so the opponent is the game's own and not the
+ *  slate's guess for the player's current team. */
+export interface LogGame { away: string; home: string }
+
+/** Build the log. `weeksPlays` is a player's season (week → his plays);
+ *  `scoring` null = drip; `games` the week's game where the reader knows it,
+ *  else the slate places him by team. */
 export function buildGameLog(
   player: { id: string; name: string; pos: string; team?: string | null },
   weeksPlays: Record<number, RealPlay[]>,
   scoring: Partial<ClassicScoring> | null,
+  games: Record<number, LogGame | undefined> = {},
 ): GameLogWeek[] {
   const weeks = Object.keys(weeksPlays).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   const out: GameLogWeek[] = [];
@@ -50,9 +58,16 @@ export function buildGameLog(
     const plays: RawPlay[] = rawPlaysFrom(weeksPlays[week] ?? []);
     const p: Player = { id: player.id, name: player.name, full: player.name, pos: player.pos as Pos, team: player.team ?? '', stats: ZERO() };
     const g = nflGameForTeam(week, player.team);
+    const fg = games[week];
+    const T = normTeam(player.team ?? '');
+    // The game the plays came from first: it knows which side he was on even
+    // if he has since changed teams. Then the slate, by his current team.
+    const opponent = fg
+      ? (normTeam(fg.home) === T ? `vs ${fg.away}` : normTeam(fg.away) === T ? `@ ${fg.home}` : `${fg.away} @ ${fg.home}`)
+      : g ? `${g.home === player.team ? 'vs' : '@'} ${g.home === player.team ? g.away : g.home}` : null;
     out.push({
       week,
-      opponent: g ? `${g.home === player.team ? 'vs' : '@'} ${g.home === player.team ? g.away : g.home}` : null,
+      opponent,
       line: fmtStat(player.pos as Pos, statlineFrom(plays, Number.MAX_SAFE_INTEGER), true),
       points: scoring ? classicPointsFrom(plays, p, scoring) : null,
       blank: plays.length === 0,

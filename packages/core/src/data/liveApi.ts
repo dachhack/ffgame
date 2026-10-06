@@ -630,6 +630,41 @@ export async function loadTeamOverrides(): Promise<number> {
   } catch { return 0; }
 }
 
+/** ONE PLAYER'S SEASON, out of live_play (v0.641.0). The board reads the
+ *  table by week; a card reads it by player, every NFL week (college weeks
+ *  sit above 200 and have their own card). Rehearsal rows (game_id 'SIM…')
+ *  are a simulator's, not a season's, and are left out. Paged like
+ *  weekLivePlays — a season of a busy RB runs past PostgREST's thousand.
+ *  Index 0444 (player_slug, week) makes this one range scan. */
+export async function playerLivePlays(slug: string): Promise<(LivePlayRow & { week: number })[]> {
+  const PAGE = 1000;
+  const rows: (LivePlayRow & { week: number })[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await (await client()).from('live_play')
+      .select('week, player_slug, c, t, pid, game_id, k, y, td, ca, tg, to, fd, cp, ic, sk, rk, tt, hf, p6')
+      .eq('player_slug', slug).lt('week', 100).not('game_id', 'like', 'SIM%')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as unknown as (LivePlayRow & { week: number })[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows;
+}
+
+/** The two teams of each game id (v0.641.0), off the game feed — so a log
+ *  names the opponent the plays were actually against. Missing ids are
+ *  simply absent; the caller falls back to the slate. */
+export async function gameFeedTeams(gameIds: string[]): Promise<Record<string, { week: number; away: string; home: string }>> {
+  const ids = [...new Set(gameIds.filter(Boolean))];
+  if (!ids.length) return {};
+  const { data } = await (await client()).from('game_feed').select('week, game_id, away, home').in('game_id', ids);
+  const out: Record<string, { week: number; away: string; home: string }> = {};
+  for (const r of (data ?? []) as { week: number; game_id: string; away: string; home: string }[]) out[r.game_id] = { week: r.week, away: r.away, home: r.home };
+  return out;
+}
+
 /** Load the worker-published depth chart (0293) into the playerDepth cache.
  *  A few hundred rows. Never throws — without it the projected sheet falls
  *  back to projection order, which is what it did before the chart existed. */

@@ -22,6 +22,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.641.0 — the game log is this season's
+
+> - The player card's GAME LOG tab is back in the app and reads this season on both app and web: every week he has played, the opponent, his stat line, and his points under your league's scoring. It used to show last year's games on the web and was missing from the app.
+
+Founder, on the player card: "Game logs on the player cards?"
+
+- **What it read.** The web card's GAME LOG read the baked 2025 season
+  (`public/pbp/season.json`, v0.285.0) — right while the app was playtested
+  on last year's games, wrong from the first 2026 kickoff: a 2026 league's
+  card showed last year's weeks. The app dropped the tab with that bake
+  (v0.502.0, APK size).
+- **What it reads now.** `live_play` — every broadcast 2026 play, by week
+  and player, the rows the board scores from. `playerLivePlays(slug)`
+  (`liveApi`, paged, NFL weeks only, rehearsal `SIM` rows out) +
+  `gameFeedTeams(ids)` (the two teams of each game id, off `game_feed`) →
+  `liveSeasonLog(slug)` in `packages/core/src/data/playerLog.ts`, which
+  groups by week and names each week's game. `buildGameLog` takes the games:
+  the opponent is the game the plays came from (so a man since traded shows
+  the game he played), else the slate by his current team. Team codes
+  normalised on both sides (LAR is LA).
+- **Index** 0444 `live_play (player_slug, week)` — the existing index leads
+  on week (the board's axis); a card reads the other one.
+- **Both cards** (`src/app/playerCard.tsx`, `apps/mobile/src/ui/PlayerCardSheet.tsx`):
+  GAME LOG beside SUMMARY, built only when its tab opens, reset when the
+  sheet moves to another man. The v0.299.1 rookie guard is gone with the
+  bake: a rookie's live log is his own. The baked `seasonLog` reader stays
+  for `check:gamelog`'s decimal-parity assertions; no card calls it.
+- Pinned: `scripts/check-game-log.mjs` — the game names the opponent (@ /
+  vs / a pair for a traded man), code normalisation, the week grouping and
+  the slate fallback.
+- Not confirmed against live data from here (no DB access); the read is the
+  board's own table and decoder.
+
 ### v0.640.1 — ⇄ on the bench too
 
 > - Every player on your bench has a ⇄ chip now, like your starters do. Tap it and pick the spot to start him in: each spot he fits shows who holds it now (he goes to the bench) or EMPTY, and his projection in that spot on the right.

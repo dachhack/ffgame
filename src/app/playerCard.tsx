@@ -23,7 +23,7 @@ import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { teamLogo } from '@drip/core/data/media';
 import { myFavorites, setFavorite, nativeRosters, matchupTeams, leagueRegister, leagueGameMode, nativeTeamState, dropPlayer, friendlyError, type RegisterRow , leagueWeekProjections, leagueNews, ensureDepthChart, type NewsItem } from '@drip/core/data/liveApi';
 import { weekPointsFor, type WeekPoints } from '@drip/core/data/weekProj';
-import { playerSeasonLog } from '@drip/core/data/seasonLog';
+import { liveSeasonLog } from '@drip/core/data/playerLog';
 import { notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
 import { nflGameForTeam, kickoffLabel, weekTick, weekLabel } from '@drip/core/data/nflSlate';
@@ -160,17 +160,17 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // his name is not his. Position already disambiguates the other famous
   // collision (Josh Allen QB vs Josh Allen LB); this is the one it can't.
   const rookie = bio?.exp === 0;
-  // THE GAME LOG (v0.284.0) — built ONLY when its tab is opened. The season
-  // bake is 1.5 MB; fetching and parsing it for a card nobody opened the log on
-  // would be work for nothing, and most cards are opened to read a name and
-  // close again.
+  // THE GAME LOG (v0.284.0) — built ONLY when its tab is opened: most cards
+  // are opened to read a name and close again. THE LIVE SEASON (v0.641.0,
+  // founder: "Game logs on the player cards?"): it read the baked 2025
+  // season, which a 2026 league has no use for; it reads live_play now — the
+  // rows the board scores from — so a rookie's log is his own and the
+  // v0.299.1 rookie guard is gone with the bake.
   const [log, setLog] = useState<GameLogWeek[] | null>(null);
   const [logErr, setLogErr] = useState(false);
+  useEffect(() => { setLog(null); setLogErr(false); }, [slug]);
   useEffect(() => {
-    // A ROOKIE HAS NO 2025 (v0.299.1). The log is keyed by slug and the slug
-    // comes from the NAME, so a rookie who shares one with last year's player
-    // inherits his whole season. Don't even fetch it.
-    if (tab !== 'log' || log !== null || rookie) return;
+    if (tab !== 'log' || log !== null) return;
     let dead = false;
     (async () => {
       try {
@@ -180,8 +180,8 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
         // leagueCatalogOf (0209): this spread had `ppr` last and defaulted
         // it to 1, so a league scoring 0.5 a catch priced players at 1.
         const scoring = gm?.ok && gm.mode === 'classic' ? leagueCatalogOf(gm) : null;
-        const weeks = await playerSeasonLog(slug);
-        if (!dead) setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, weeks, scoring));
+        const season = await liveSeasonLog(slug);
+        if (!dead) setLog(buildGameLog({ id: slug, name, pos, team: showTeam }, season.weeks, scoring, season.games));
       } catch { if (!dead) setLogErr(true); }
     })();
     return () => { dead = true; };
@@ -375,13 +375,8 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
         {tab === 'log' && (
           <div style={{ maxHeight: 320, overflowY: 'auto' }}>
             {logErr && <span className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Couldn’t load his game log.</span>}
-            {!rookie && !logErr && log === null && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading his season…</span>}
-            {rookie && (
-              <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6 }}>
-                Rookie — this is his first NFL season, so there are no games behind him yet.
-              </span>
-            )}
-            {!rookie && log?.length === 0 && (
+            {!logErr && log === null && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading his season…</span>}
+            {log?.length === 0 && (
               <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6 }}>
                 No plays recorded yet this season. Weeks appear here as the games are played.
               </span>
