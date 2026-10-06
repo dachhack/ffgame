@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.641.1 — the wire honours the commissioner's no-add flag up front
+
+> - A player the commissioner has flagged "no adds" shows a greyed 🚫 NO ADDS button on the wire instead of ADD / CLAIM / BID, with the flag's reason — you no longer find out from a refused claim.
+
+Founder: "Do we have custom lists where commish can disallow players from
+being picked up or bid for from waivers?" — we do (0144's flag rules,
+`no_add`, enforced by the roster trigger and the waiver sweep; bulk
+flagging by position / team / tenure in the commissioner kit). The gap:
+the wire still offered the button and the member learned from the
+server's refusal. "Let's do it."
+
+- Both wires (`apps/mobile/src/screens/Team.tsx`,
+  `src/screens/NativeLeague.tsx`): `flagRulesFor(slug).noAdd` greys the
+  row's button as 🚫 NO ADDS (web: the flag's label in the title), and
+  `addOrClaim` refuses with the reason on any other way in. The flag chip
+  on the row already carries the commissioner's label. The database stays
+  the enforcer; this is the courtesy layer the lineup picker has had for
+  `no_start` since 0144.
+
 ### v0.641.0 — the game log is this season's
 
 > - The player card's GAME LOG tab is back in the app and reads this season on both app and web: every week he has played, the opponent, his stat line, and his points under your league's scoring. It used to show last year's games on the web and was missing from the app.
