@@ -99,6 +99,27 @@ begin
   perform wp_true((league_week_projections(lid, 3) ->> 'ok')::boolean, 'wp4 the league''s own members always could');
 end $$;
 
+-- ── wp9. the position matchup table (0443) ──
+do $$
+declare r jsonb; lid uuid; seas text;
+begin
+  perform wp_as('01');
+  select id, season into lid, seas from league where name = 'WeekProj' limit 1;
+  r := upsert_def_vs_pos(seas, '{"WPH": {"RB": 1.1, "WR": 0.9, "DST": 1.05}, "WPA": {"RB": 0.95}}'::jsonb, now());
+  perform wp_true((r ->> 'ok')::boolean and (r ->> 'teams')::int = 2, 'wp9 the table is written, one row per season');
+  r := upsert_def_vs_pos(seas, '{"WPH": {"RB": 1.12}}'::jsonb, now());
+  perform wp_true((select count(*) from nfl_def_vs_pos where season = seas) = 1
+    and (select tbl -> 'WPH' ->> 'RB' from nfl_def_vs_pos where season = seas) = '1.12', 'wp9 a second sweep replaces it in place');
+  r := league_week_projections(lid, 3);
+  perform wp_true((r ->> 'ok')::boolean and (r -> 'def_vs_pos' -> 'WPH' ->> 'RB')::numeric = 1.12,
+    'wp9 the league reads the season table beside its rows');
+  perform wp_true((league_week_projections(lid, 3) -> 'rows') is not null, 'wp9 and the rows are still there');
+  perform wp_true(not (upsert_def_vs_pos(seas, '[]'::jsonb, null) ->> 'ok')::boolean, 'wp9 a list is not a table');
+  perform wp_true((league_week_projections(lid, 3) -> 'def_vs_pos') is not null, 'wp9 the key is always present');
+  delete from nfl_def_vs_pos where season = seas;
+  perform wp_true((league_week_projections(lid, 3) -> 'def_vs_pos') = '{}'::jsonb, 'wp9 no table yet reads as empty, not null');
+end $$;
+
 select 'ALL WEEK-PROJ PROBES PASS' as result;
 drop function if exists wp_true(boolean, text);
 drop function if exists wp_as(text);
