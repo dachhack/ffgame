@@ -10,7 +10,7 @@ import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetS
 import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
-import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
+import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
@@ -52,7 +52,8 @@ import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
-import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, type MatchupResult, type PlayerAdjustment } from '@drip/core/data/liveApi';
+import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, leagueWeekProjections, type MatchupResult, type PlayerAdjustment, type WeekProjRow } from '@drip/core/data/liveApi';
+import { matchupLean, matchupLeanLabel } from '@drip/core/data/weekProj';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
@@ -273,13 +274,7 @@ function BoardCell({ e, align, onGame, onName, empty }: {
   // to keep watching. The clock and score live one tap away in the field.
   const bye = e.opponent === 'BYE';
   const started = !bye && e.state !== 'pre';
-  const line = bye ? 'BYE'
-    // "Final · In progress" (v0.614.2, founder's screenshot of two college
-    // players): the statline is null while a man has no counted play, and
-    // once his game is final that is "no stats", not "in progress". The web
-    // board already prints the dash; the app said both words at once.
-    : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
-    : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
+  const line = gameLineOf(e);
   return (
     <View style={{ flex: 1, minWidth: 0 }}>
       {onName ? (
@@ -311,6 +306,21 @@ function BoardCell({ e, align, onGame, onName, empty }: {
       )}
     </View>
   );
+}
+
+/** The game line under a name — the board's cell and the picker's row say
+ *  the same thing about the same man (v0.639.0): "BYE", the statline once
+ *  the ball is live, and kickoff + opponent before it. */
+function gameLineOf(e: BoardEntry): string {
+  const bye = e.opponent === 'BYE';
+  const started = !bye && e.state !== 'pre';
+  return bye ? 'BYE'
+    // "Final · In progress" (v0.614.2, founder's screenshot of two college
+    // players): the statline is null while a man has no counted play, and
+    // once his game is final that is "no stats", not "in progress". The web
+    // board already prints the dash; the app said both words at once.
+    : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
+    : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
 }
 
 /** The game-line markers, as text so they cost no layout: 🏟 roofed, ☾ night. */
@@ -787,6 +797,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     installCollegeProjections(projWeek).then((n) => { if (alive && n) setProjVer((v) => v + 1); }).catch(() => {});
     return () => { alive = false; };
   }, [projWeek]);
+  // THE WEEK'S MATCHUP ROWS (v0.639.0), for the picker's lean: opponent and
+  // the source's week-over-season multiplier per player. One read per week
+  // (the player card reads the same RPC per open); a miss leaves the rows
+  // empty and the picker simply shows no lean.
+  const [wkRows, setWkRows] = useState<Record<string, WeekProjRow>>({});
+  useEffect(() => {
+    if (projWeek == null) { setWkRows({}); return; }
+    let alive = true;
+    leagueWeekProjections(leagueId, projWeek)
+      .then((r) => { if (alive) setWkRows(r?.rows ?? {}); })
+      .catch(() => { if (alive) setWkRows({}); });
+    return () => { alive = false; };
+  }, [leagueId, projWeek]);
 
   // The league's configured lineup (0161) — slot names, types, eligibility.
   const slotDefs = useMemo(() => leagueSlotDefs({ roster, slots: slotsSpec }), [roster, slotsSpec]);
@@ -1848,7 +1871,17 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             // …but a BEST-BALL spot never holds anyone (v0.424.1, founder:
             // "I can't move him into my WR spot"): the fill parked him there
             // and will simply pick someone else once he starts manually.
-            .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); });
+            .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); })
+            // THE ROW CARRIES THE DECISION (v0.639.0). A member: "I can't
+            // always see the opponent for my players in the matchup screen
+            // where I switch the lineup around … so I have to toggle between
+            // screens." Each candidate is the board's own entry for this spot
+            // — kickoff, opponent, venue marks, the spot-aware projection —
+            // plus the week's matchup lean, and the list runs best first so
+            // the choice is usually the top row.
+            .map((p) => ({ p, e: entryFor(p.slug, slotDef.pos, pickerSlot), lean: matchupLean(wkRows[p.slug]) }))
+            .sort((a, b) => (b.e?.proj ?? 0) - (a.e?.proj ?? 0) || a.p.full.localeCompare(b.p.full));
+          const anyLean = eligible.some((x) => x.lean && (x.e?.proj ?? 0) > 0);
           return (
             // The body must be able to SHRINK or the sheet clips its own bottom
             // — the one contract ui/Overlay asks of every caller, and the bug
@@ -1865,7 +1898,14 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
                 </Mono>
               )}
-              {eligible.map((p) => (
+              {eligible.map(({ p, e, lean }) => {
+                const bye = e?.opponent === 'BYE';
+                const game = e ? `${gameLineOf(e)}${e.state === 'pre' ? roofMark(e) : ''}` : 'no game listed';
+                const team = p.team || collegeNameFor(p.slug)?.school || '';
+                // No lean on a man the board prices at 0 (O/IR, a proven
+                // bye): the injury tag and the BYE line already say it.
+                const showLean = lean && (e?.proj ?? 0) > 0;
+                return (
                 <Pressable key={p.slug} onPress={() => { tap(); void pickInto(pickerSlot, p.slug); }}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
                   <Face slug={p.slug} />
@@ -1873,18 +1913,29 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <Display size={12.5}>{shortName(p.full)}</Display>
                       <InjuryNow slug={p.slug} size={8} />
+                      {!!spotOf.get(p.slug) && (
+                        <Mono size={8} tone="you">{`in ${slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}`}</Mono>
+                      )}
                     </View>
-                    {!!spotOf.get(p.slug) && (
-                      <Mono size={8} tone="you">{`in ${slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}`}</Mono>
-                    )}
+                    <Mono size={8.5} tone={bye ? 'warn' : 'faint'} numberOfLines={1} style={{ marginTop: 1 }}>
+                      {`${team ? `${team} · ` : ''}${game}`}
+                    </Mono>
                   </View>
                   <PosPill pos={p.pos} />
-                  <Mono size={8.5} tone="faint" style={{ width: 28, textAlign: 'right' }}>{p.team}</Mono>
-                  <Mono size={10} tone="dim" weight="700" style={{ width: 32, textAlign: 'right' }}>
-                    {projectedPoints({ id: p.slug, pos: p.pos ?? '', team: p.team }).toFixed(1)}
-                  </Mono>
+                  <View style={{ width: 66, alignItems: 'flex-end' }}>
+                    <Mono size={11} tone="dim" weight="700">{(e?.proj ?? 0).toFixed(1)}</Mono>
+                    {showLean && (
+                      <Mono size={7.5} weight="700" tone={lean === 'soft' ? 'you' : lean === 'tough' ? 'warn' : 'faint'}>{matchupLeanLabel(lean)}</Mono>
+                    )}
+                  </View>
                 </Pressable>
-              ))}
+                );
+              })}
+              {anyLean && (
+                <Mono size={8} tone="faint" style={{ lineHeight: 12, paddingTop: 8 }}>
+                  ▲ soft spot / ▼ tough spot: this week's projected line against his usual week — the defense he faces, home or away, the posted total.
+                </Mono>
+              )}
             </ScrollView>
           );
         })()}

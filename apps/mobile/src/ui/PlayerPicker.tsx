@@ -21,6 +21,9 @@ import { GROUP_TABS, groupTag } from './rosterGroup';
 import { openPlayerCard } from './PlayerCardSheet';
 import { flagFor, flagRulesFor } from '@drip/core/data/commish';
 import { injuryFor } from '@drip/core/data/injuries';
+import { nflGameForTeam } from '@drip/core/data/nflSlate';
+import { normTeam } from '@drip/core/data/slugMeta';
+import { projectedPoints } from '@drip/core/engine/projScoring';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -153,6 +156,7 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, u
             current={p.id === currentId}
             group={groupOf?.(p.id) ?? 'start'}
             injury={injuryFor(week, p.id)}
+            line={gameLine(week, p)}
             onInfo={() => openPlayerCard({ slug: p.id, name: p.full ?? p.name, pos: p.pos, team: p.team, week, userId })}
             gated={gated?.(p) ?? false}
             onPress={() => {
@@ -173,10 +177,28 @@ export function PlayerPicker({ visible, windowLabel, players, currentId, week, u
   );
 }
 
+/** THE CARD SAYS WHO HE PLAYS (v0.639.0). A member, from the matchup board:
+ *  "I can't always see the opponent for my players in the matchup screen
+ *  where I switch the lineup around." The window fixes the day; the opponent
+ *  and the projection are what decide between two names. Off the week's
+ *  slate the board installed — a team the slate doesn't list prints nothing
+ *  rather than guessing. */
+function gameLine(week: number, p: Player): string | null {
+  const g = nflGameForTeam(week, p.team);
+  const opp = g ? (normTeam(g.home) === normTeam(p.team) ? `vs ${g.away}` : `@ ${g.home}`) : null;
+  let proj: number | null = null;
+  try { proj = projectedPoints({ id: p.id, pos: p.pos, team: p.team }); } catch { proj = null; }
+  const pts = proj != null && Number.isFinite(proj) ? proj.toFixed(1) : null;
+  if (!opp && !pts) return null;
+  return [opp, pts].filter(Boolean).join(' · ');
+}
+
 /** A dealt mini card: position badge, team crest, headshot, name. Same cream
  *  stock as the board's cards so the picker reads as the same deck. */
-function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo }: {
+function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo, line }: {
   player: Player; current: boolean; group: PoolGroup; injury: string | null; gated: boolean; onPress: () => void; onInfo?: () => void;
+  /** "vs KC · 14.2" — opponent and projection, under the name. */
+  line?: string | null;
 }) {
   const barred = !!flagRulesFor(player.id).noStart;
   const t = useTheme();
@@ -243,6 +265,7 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo
       </View>
 
       <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '800', color: '#201C12', textAlign: 'center' }}>{player.name}</Text>
+      {!!line && <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8, color: '#6B6047', textAlign: 'center' }}>{line}</Text>}
       {current && <Mono size={8} weight="700" style={{ color: '#8A6A28' }}>CURRENT ✓</Mono>}
       {gated && <Text style={{ fontSize: 10 }}>🔒</Text>}
     </Pressable>

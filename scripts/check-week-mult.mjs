@@ -16,7 +16,7 @@
 // feed is checked by `npm run validate:weekmult`.
 import { readFileSync } from 'node:fs';
 import { statheadRows } from '../server/src/poll/projections.js';
-import { weekPointsFor } from '../packages/core/src/data/weekProj.ts';
+import { weekPointsFor, matchupLean, matchupLeanLabel } from '../packages/core/src/data/weekProj.ts';
 import { setLeagueProjScoring, projectedPoints } from '../packages/core/src/engine/projScoring.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
 import { slugMeta } from '../packages/core/src/data/slugMeta.ts';
@@ -129,6 +129,15 @@ ok(/when i\.status = 'D' then 0\.25/.test(inj), 'Doubtful to a quarter');
 ok(/'adjusted', f <> 1/.test(inj), 'and a number that was changed says so');
 ok(/round\(mult \* f, 4\)/.test(inj),
   'the multiplier carries the same discount as the points — a client that scales its own season number cannot miss it');
+
+// 10. the picker's matchup lean (v0.639.0) reads the multiplier as a lean, not a number
+ok(matchupLean({ mult: 1.2 }) === 'soft', 'a week 20% over his usual is a soft spot');
+ok(matchupLean({ mult: 0.8 }) === 'tough', 'a week 20% under is a tough spot');
+ok(matchupLean({ mult: 1.03 }) === 'even' && matchupLean({ mult: 0.95 }) === 'even', 'inside ±8% is even — the nudges alone do not make a lean');
+ok(matchupLean({ mult: 1.08 }) === 'soft' && matchupLean({ mult: 0.92 }) === 'tough', 'the line is inclusive at ±8%');
+ok(matchupLean({ mult: 0, status: 'OUT' }) === null, 'a zero multiplier is OUT, not a tough matchup');
+ok(matchupLean({ mult: null, pts: 12 }) === null && matchupLean(null) === null && matchupLean(undefined) === null, 'no multiplier, no lean');
+ok(matchupLeanLabel('soft').startsWith('▲') && matchupLeanLabel('tough').startsWith('▼'), 'the labels carry the arrow a row prints');
 
 console.log(fails === 0 ? '\nALL WEEK-MULT ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);
