@@ -3,7 +3,8 @@
 // Founder's revamp of the signed-out web flow, revised: the welcome and the
 // dreamers line, "Count me in! | Sign in" with no small print under it, then
 // the five feature groups — the chips stay — each with a rail of phone
-// screens rotating beside them, and the matchup card doubling as the door to
+// screens under them that the chips pick (v0.651.0; it turned on its own
+// before), and the matchup card doubling as the door to
 // the demo ("Click here for a demo"). Bullseye joined the competitive modes.
 //
 // The screens are the founder's phone screenshots, dropped into
@@ -31,59 +32,55 @@ let sessionChecked = false;
 
 /** One screen on a card's rail. `file` lives in public/brand/funnel/ (a phone
  *  screenshot, portrait) unless `dir` says otherwise; `label` is the caption
- *  under it and the placeholder's text until the file exists. */
-interface Shot { file: string; label: string; dir?: 'funnel' | 'brand' }
+ *  under it and the placeholder's text until the file exists; `chip` names
+ *  the chip on the card that shows it (v0.651.0: the chips drive the rail). */
+interface Shot { file: string; label: string; dir?: 'funnel' | 'brand'; chip?: string }
 
 /** THE SHOOTING LIST. Every file here is one the founder makes on a phone;
  *  the README beside them repeats this list with what each one should show.
  *  Keyed by the feature heading in LANDING_FEATURES. */
 export const FUNNEL_SHOTS: Record<string, Shot[]> = {
   'League types': [
-    { file: 'league-redraft.png', label: 'Redraft' },
-    { file: 'league-contract.png', label: 'Contract' },
-    { file: 'league-full-college.png', label: 'Full college' },
-    { file: 'league-mixed-college.png', label: 'Mixed college' },
-    { file: 'league-devy-market.png', label: 'Devy market' },
+    { file: 'league-redraft.png', label: 'Redraft · the matchup board', chip: 'Redraft' },
+    { file: 'league-contract.png', label: 'Contract · the cap sheet', chip: 'Contract' },
+    { file: 'league-full-college.png', label: 'Full college · the matchup board', chip: 'Full college' },
+    { file: 'league-mixed-college.png', label: 'Mixed college · two college spots', chip: 'Mixed college' },
+    { file: 'league-devy-market.png', label: 'Devy · the market', chip: 'Devy' },
   ],
   'Competitive modes': [
-    { file: 'mode-vampire.png', label: 'Vampire' },
-    { file: 'mode-guillotine.png', label: 'Guillotine' },
-    { file: 'mode-golf.png', label: 'Golf' },
-    { file: 'mode-bullseye.png', label: 'Bullseye' },
+    { file: 'mode-vampire.png', label: 'Vampire · the feeding log', chip: 'Vampire' },
+    { file: 'mode-guillotine.png', label: 'Guillotine · the chop report', chip: 'Guillotine' },
+    { file: 'mode-golf.png', label: 'Golf · low wins', chip: 'Golf' },
+    { file: 'mode-bullseye.png', label: 'Bullseye · aim at the number', chip: 'Bullseye' },
   ],
   'Positions': [
-    { file: 'positions-scoped.png', label: 'Scoped & named positions' },
-    { file: 'positions-hc-draft.png', label: 'HC draft' },
+    { file: 'positions-scoped.png', label: 'Scoped & named spots', chip: 'Scoped positions' },
+    { file: 'positions-hc-draft.png', label: 'A head-coach draft', chip: 'RET · FB · PUNT · HC' },
   ],
   'Scoring options': [
-    { file: 'scoring-bestball-mix.png', label: 'Best ball & non-roster, mixed' },
-    { file: 'scoring-scoped-bonuses.png', label: 'Scoped bonuses' },
+    { file: 'scoring-bestball-mix.png', label: 'Best ball and set spots, mixed', chip: 'Single-spot best ball' },
+    { file: 'scoring-scoped-bonuses.png', label: 'Scoped bonuses', chip: 'Scoped bonuses' },
   ],
-  // The matchup card rotates the drip screens the site already has (shot in
+  // The matchup card shows the drip screens the site already has (shot in
   // the running app, v0.614.1) — landscape, so it gets the wide frame.
   'Matchup style': [
-    { file: 'shot-drip-live.png', label: 'Drip · the Sunday window, live', dir: 'brand' },
+    { file: 'shot-drip-live.png', label: 'Drip · the Sunday window, live', dir: 'brand', chip: 'Drip' },
     { file: 'shot-sealed.jpg', label: 'Drip · sealed picks before kickoff', dir: 'brand' },
     { file: 'shot-duel.png', label: 'Drip · a live duel', dir: 'brand' },
-    { file: 'shot-classic.png', label: 'Classic · the board', dir: 'brand' },
+    { file: 'shot-classic.png', label: 'Classic · the board', dir: 'brand', chip: 'Classic' },
   ],
 };
 
-const ROTATE_MS = 3600;
-
-/** A rail of screens that rotates on its own: one frame, the shots crossfading
- *  through it, a caption and a dot per shot. Tap a dot to jump; the rail
- *  carries on from there. A missing file is a labelled placeholder, not a
- *  broken-image glyph, so the founder sees which slot each file fills. */
-function Rail({ shots, ratio, width, base, onTap }: { shots: Shot[]; ratio: string; width: number | string; base: string; onTap?: () => void }) {
-  const [i, setI] = useState(0);
+/** A rail of screens: one frame, the shots crossfading through it, a caption
+ *  and a dot per shot. It does not turn on its own (v0.651.0, founder: "let
+ *  users select the chips to rotate the images"): the card's chips pick the
+ *  shot, and the dots step it by hand. A missing file is a labelled
+ *  placeholder, not a broken-image glyph, so the founder sees which slot each
+ *  file fills. */
+function Rail({ shots, ratio, width, base, index, onIndex, onTap }: { shots: Shot[]; ratio: string; width: number | string; base: string; index: number; onIndex: (i: number) => void; onTap?: () => void }) {
+  const i = Math.min(index, shots.length - 1);
   const [missing, setMissing] = useState<Record<string, true>>({});
-  useEffect(() => {
-    if (shots.length < 2) return;
-    const t = setInterval(() => setI((n) => (n + 1) % shots.length), ROTATE_MS);
-    return () => clearInterval(t);
-  }, [shots.length, i]); // `i` in the deps: a tap on a dot restarts the clock from that shot.
-  const cur = shots[Math.min(i, shots.length - 1)];
+  const cur = shots[i];
   if (!cur) return null;
   const frame: React.CSSProperties = { position: 'relative', width, aspectRatio: ratio, overflow: 'hidden', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', flex: 'none' };
   return (
@@ -106,7 +103,7 @@ function Rail({ shots, ratio, width, base, onTap }: { shots: Shot[]; ratio: stri
       {shots.length > 1 && (
         <div style={{ display: 'flex', gap: 5 }}>
           {shots.map((s, k) => (
-            <button key={s.file} aria-label={s.label} onClick={() => setI(k)}
+            <button key={s.file} aria-label={s.label} onClick={() => onIndex(k)}
               style={{ width: 6, height: 6, borderRadius: 3, padding: 0, border: 'none', cursor: 'pointer', background: k === i ? 'var(--you)' : 'var(--bd)' }} />
           ))}
         </div>
@@ -121,6 +118,9 @@ export function Landing() {
   const [faq, setFaq] = useState(false);
   const [waitlist, setWaitlist] = useState(false);
   const [openNote, setOpenNote] = useState<string | null>(null);
+  // Which shot each card's rail shows (v0.651.0). A chip with a shot moves
+  // the rail to it; a dot opens the chip that shot belongs to.
+  const [railIdx, setRailIdx] = useState<Record<string, number>>({});
   const narrow = typeof window !== 'undefined' && window.innerWidth < 640;
 
   // A signed-in player who lands here (OAuth return, magic link in a fresh
@@ -185,6 +185,18 @@ export function Landing() {
             const open = g.notes.find((n: FormatNote) => openNote === `${g.heading}|${n.name}`);
             const matchup = g.heading === 'Matchup style';
             const shots = FUNNEL_SHOTS[g.heading] ?? [];
+            const idx = railIdx[g.heading] ?? 0;
+            const pickShot = (k: number) => {
+              setRailIdx((r) => ({ ...r, [g.heading]: k }));
+              const chip = shots[k]?.chip;
+              if (chip) setOpenNote(`${g.heading}|${chip}`);
+            };
+            const pickChip = (name: string) => {
+              const key = `${g.heading}|${name}`;
+              setOpenNote((o) => (o === key ? null : key));
+              const k = shots.findIndex((x) => x.chip === name);
+              if (k >= 0) setRailIdx((r) => ({ ...r, [g.heading]: k }));
+            };
             const chips = (
               <>
                 <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>{g.heading}</div>
@@ -194,7 +206,7 @@ export function Landing() {
                     const key = `${g.heading}|${n.name}`;
                     const lit = openNote === key;
                     return (
-                      <button key={n.name} className="mono" aria-pressed={lit} onClick={() => setOpenNote((o) => (o === key ? null : key))}
+                      <button key={n.name} className="mono" aria-pressed={lit} onClick={() => pickChip(n.name)}
                         style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '6px 10px', borderRadius: 5, cursor: 'pointer',
                           color: lit ? 'var(--on-accent)' : 'var(--text)', background: lit ? 'var(--you)' : 'var(--bg)', border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}` }}>
                         {n.icon ? <span style={{ marginRight: 5 }}>{n.icon}</span> : null}{n.name.toUpperCase()}
@@ -205,7 +217,7 @@ export function Landing() {
                 <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.55, marginTop: 10, minHeight: 18 }}>
                   {open
                     ? <><b style={{ color: 'var(--text)' }}>{open.name}.</b> {open.line}</>
-                    : <span style={{ color: 'var(--faint)' }}>Tap one to read what it changes.</span>}
+                    : <span style={{ color: 'var(--faint)' }}>Tap a chip to see it.</span>}
                 </div>
               </>
             );
@@ -216,7 +228,7 @@ export function Landing() {
                     <div style={{ width: '100%' }}>{chips}</div>
                     {/* The demo door: the drip screens rotate under one button. */}
                     <div style={{ position: 'relative', width: '100%' }}>
-                      <Rail shots={shots} ratio="16 / 9" width="100%" base={base} onTap={toDemo} />
+                      <Rail shots={shots} ratio="16 / 9" width="100%" base={base} index={idx} onIndex={pickShot} onTap={toDemo} />
                       <button onClick={toDemo} className="mono" title="Play a week of Drip — free, no sign-in"
                         style={{ ...cta, position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', padding: '11px 18px', boxShadow: '0 4px 18px rgba(0,0,0,0.35)' }}>
                         ▶ {FUNNEL.demo.toUpperCase()}
@@ -228,7 +240,7 @@ export function Landing() {
                     <div>{chips}</div>
                     {/* The phone frame sits centred under the chips, big enough to read. */}
                     <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <Rail shots={shots} ratio="9 / 19" width={narrow ? 200 : 220} base={base} />
+                      <Rail shots={shots} ratio="9 / 19" width={narrow ? 200 : 220} base={base} index={idx} onIndex={pickShot} />
                     </div>
                   </>
                 )}
