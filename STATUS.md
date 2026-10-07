@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.651.2 — the screens open on the score, and show more of the lineup
+
+> - The front page's screens no longer start with the app's header bar: each opens on the score card, the sheet, or the list, and the frame runs longer so four or five starters show.
+
+Founder: "Crop the header and make the image box longer so we get more of
+the players in." The thirteen files lose their top strip (the brand bar on
+the boards and the cap sheet; the dimmed page behind a sheet; the board
+grid above the draft's player list), and the mixed-college and scoped
+boards were re-shot on a row boundary. `Landing.tsx`: the frame is 3:4 on
+a phone and square on a wide screen, cropping from the top as before.
+
 ### v0.651.1 — the front page's screens run wide
 
 > - Each feature card's screen now fills the card's width, zoomed in on the top of the screen (the header, the score, the first rows) instead of a small full-height phone frame.

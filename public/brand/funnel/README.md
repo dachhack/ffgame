@@ -12,9 +12,9 @@ rotates through its files; a file that isn't here yet shows as a labelled
 fixed — `src/screens/Landing.tsx` (`FUNNEL_SHOTS`) reads them.
 
 Shoot in **portrait** on a phone, in the app, and save as PNG. The frame is
-9:19 and crops from the **top**, so the thing you're showing should sit in
-the upper two-thirds of the screen. The status bar is fine to leave in; the
-frame hides nothing that matters.
+wide (3:4 on a phone, square on a desktop) and crops from the **top**, so
+crop your shot to start right where the content starts (no status bar, no
+app header) and keep the thing you're showing in the upper half.
 
 | File | Card | Show |
 |---|---|---|
