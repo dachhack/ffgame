@@ -11,7 +11,7 @@ import { db } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
 import { autoSlotPlan, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
-import { clearLeagueBullseye } from '../../packages/core/src/engine/bullseye.ts';
+import { clearLeagueBullseye, setBullseyeRoster } from '../../packages/core/src/engine/bullseye.ts';
 import { installBullseye, bullseyeCardsFor, bullseyeCfgOf } from './bullseye.js';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
@@ -387,7 +387,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
     // BULLSEYE (v0.643.0): "the best lineup" is the one that lands closest to
     // the card, and autoSlotPlan aims through the engine's install. Same
     // terms as golf: per league, unconditional, cleared in the finally.
-    installBullseye(leagueId, week, mode, bullCards);
+    installBullseye(leagueId, week, mode, bullCards, matchups.flatMap((m) => [m.home_roster_id, m.away_roster_id]));
     // THE LEAGUE'S SCORING (v0.310.0), on the same terms and for the same
     // reason. `slateAwareProj` ranks candidates through `projectedPoints`, so
     // without this a league paying 6 for a passing touchdown, or a TE premium,
@@ -495,6 +495,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
           // A MANAGED seat: fill only the spots with no row at all. A row is a
           // decision — including a NULL a manager wrote on purpose.
           const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
+          setBullseyeRoster(rosterId);   // per-team deal: this seat's card
           for (const p of autoSlotPlan(slots, bestball, stored, roster, valueOf)) {
             humanPayload.push({
               matchup_id: m.id, app_user_id: uid, game_window: CLASSIC_WIN,
@@ -530,6 +531,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
           }
           cands = roster.filter((p) => !kickedOff(p.team));
         }
+        setBullseyeRoster(rosterId);   // per-team deal: this seat's card
         for (const p of autoSlotPlan(slots, bestball, lockedMap, cands, aiValueOf)) {
           if (current[p.slot] === p.player) continue;   // already right — no churn
           agentPayload.push({

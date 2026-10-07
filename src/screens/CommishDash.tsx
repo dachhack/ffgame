@@ -444,7 +444,9 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // up on a guess.
   const [golf, setGolf] = useState<boolean | null>(null);
   // BULLSEYE (v0.643.0): undefined until the mode load lands.
-  const [bullseye, setBullseye] = useState<'slots' | 'total' | null | undefined>(undefined);
+  const [bullseye, setBullseye] = useState<'slots' | 'total' | 'hybrid' | null | undefined>(undefined);
+  const [bullRings, setBullRings] = useState<'continuous' | 'fixed'>('continuous');
+  const [bullDeal, setBullDeal] = useState<'shared' | 'team'>('shared');
   // A SPORT LEAGUE (0426/0428): its lineup is the sport's standard shape and
   // its scoring page is SportSettings, not the football catalog.
   const [sport, setSport] = useState<Sport>('nfl');
@@ -466,13 +468,16 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     } finally { setBusy(false); }
   };
   // BULLSEYE (v0.643.0, docs/bullseye.md): slots, total or off.
-  const saveBullseye = async (variant: 'slots' | 'total' | null) => {
+  const saveBullseye = async (variant: 'slots' | 'total' | 'hybrid' | null, rings?: 'continuous' | 'fixed', deal?: 'shared' | 'team') => {
     if (busy) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueBullseye(leagueId, variant);
-      if (r.ok) { setBullseye(r.bullseye ?? null); setNote(variant ? `✓ bullseye on — ${variant === 'total' ? 'one number for the lineup' : 'a number per spot'}, closest wins` : '✓ bullseye off'); }
-      else setNote(r.error ?? 'failed');
+      const r = await setLeagueBullseye(leagueId, variant, null, rings ?? null, deal ?? null);
+      if (r.ok) {
+        setBullseye(r.bullseye ?? null); setBullRings(r.rings === 'fixed' ? 'fixed' : 'continuous'); setBullDeal(r.deal === 'team' ? 'team' : 'shared');
+        setNote(!variant ? '✓ bullseye off' : rings ? `✓ rings ${rings}` : deal ? `✓ ${deal === 'team' ? 'a card per team' : 'one shared card'}`
+          : `✓ bullseye on — ${variant === 'total' ? 'one number for the lineup' : variant === 'hybrid' ? 'a number per spot plus the lineup total' : 'a number per spot'}, closest wins`);
+      } else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
   // The roster POSITION BUILDER (0163, founder's sketch): draft rows edited
@@ -607,7 +612,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); setBullRings(r.bullseye_rings === 'fixed' ? 'fixed' : 'continuous'); setBullDeal(r.bullseye_deal === 'team' ? 'team' : 'shared'); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
         ? r.slots.map(toSpotDraft)
@@ -787,8 +792,26 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             <button onClick={() => void saveBullseye(null)} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === null)}>OFF</button>
             <button onClick={() => void saveBullseye('slots')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'slots')}>🎯 SLOTS</button>
             <button onClick={() => void saveBullseye('total')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'total')}>🎯 TOTAL</button>
+            <button onClick={() => void saveBullseye('hybrid')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'hybrid')}>🎯 HYBRID</button>
           </div>
         </div>
+        {bullseye && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+            <div className="mono" style={{ flex: 1, minWidth: 220, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5 }}>
+              <b>Rings</b>: SMOOTH banks radius − distance (a bullseye adds the radius); FIXED reads like a darts board — bullseye / inner / outer pay 20 / 10 / 5 and nothing between.
+              <b> Deal</b>: one SHARED card for the league, or every team its own card from its own seed.
+              {bullseye === 'hybrid' && <> <b>Hybrid</b> adds the lineup&apos;s total as one more dart, worth what one spot is worth.</>}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button onClick={() => void saveBullseye(bullseye, 'continuous')} disabled={busy} className="mono" style={pill(bullRings === 'continuous')}>SMOOTH</button>
+              <button onClick={() => void saveBullseye(bullseye, 'fixed')} disabled={busy} className="mono" style={pill(bullRings === 'fixed')}>FIXED RINGS</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button onClick={() => void saveBullseye(bullseye, undefined, 'shared')} disabled={busy} className="mono" style={pill(bullDeal === 'shared')}>SHARED CARD</button>
+              <button onClick={() => void saveBullseye(bullseye, undefined, 'team')} disabled={busy} className="mono" style={pill(bullDeal === 'team')}>CARD PER TEAM</button>
+            </div>
+          </div>
+        )}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Receptions, bonuses and every other value live under ⚖ SCORING — start from a preset there, then tune anything.
         </div>

@@ -25,7 +25,7 @@ import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor, flagFor, adjustmentFor } from '../data/commish';
 import { golfValue, zeroFill, leagueIsGolf, leagueGolfZeroPts } from './golf';
 import { golfExpectedScore } from './golfFloor';
-import { leagueBullseye, aimValue, applyBullseye, bullseyeTargetFor, type BullseyeSummary } from './bullseye';
+import { leagueBullseye, aimValue, applyBullseye, bullseyeTargetFor, setBullseyeRoster, type BullseyeSummary } from './bullseye';
 import { scopedAdjustFor } from './leagueScoring';
 import { projectedPoints, collegeHasGame } from './projScoring';
 import { normTeam } from '../data/slugMeta';
@@ -1417,6 +1417,9 @@ export function planSpotMove(
  *  right for every caller that has no rows to speak of. */
 export interface ClassicSide {
   picks: ClassicPick[]; roster?: Player[]; bestball?: string[]; hasLineup?: boolean;
+  /** BULLSEYE per-team deal (v0.645.0): which roster this side is, so its
+   *  fills and its darts read its own card. Absent: the shared card. */
+  rosterId?: number | null;
   /** Slugs provably ruled out (injury O/IR) for this week — the caller's own
    *  evidence (the worker reads injury_status). Feeds the unmanaged seat's
    *  value function; never a guess, so absent means no claim. */
@@ -1620,6 +1623,8 @@ export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week
   // only — no matter what else the player did that day.
   const specOf = new Map(slots.map((s) => [s.slot, s.pos as string[]]));
   const side = (s: ClassicSide, which: 'home' | 'away') => {
+    // BULLSEYE (v0.645.0): the fills below value THIS roster's card.
+    setBullseyeRoster(s.rosterId ?? null);
     const filled = new Map(classicLineup(s, week, scoring, slots).map((p) => [p.slot, p.player]));
     // THE ZERO-FILL RULE (v0.303.0) is why this walks the SLOTS rather than the
     // picks: a spot nobody filled now scores, so it has to produce a row. A
@@ -1638,6 +1643,7 @@ export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week
     return { rows, total: round1(rows.reduce((s2, r) => s2 + r.score, 0)) };
   };
   const h = side(home, 'home'), a = side(away, 'away');
+  setBullseyeRoster(null);
   const result: ClassicResult = {
     home: h.total, away: a.total,
     slots: [...h.rows, ...a.rows],
@@ -1648,5 +1654,5 @@ export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week
   // Applied HERE so every caller (the worker's resolve, both boards, the
   // dry-run twin, the probes) inherits it and none can forget.
   const bull = leagueBullseye();
-  return bull ? applyBullseye(result, bull.card, bull.cfg, slots.length) : result;
+  return bull ? applyBullseye(result, bull, slots.length, { home: home.rosterId, away: away.rosterId }) : result;
 }

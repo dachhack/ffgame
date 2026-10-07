@@ -215,11 +215,13 @@ export const modeOfSettings = (s) => ({
   golf: s?.golf === true,
   // BULLSEYE (0446): the variant ('slots' | 'total') and the radius override,
   // raw — the engine's bullseyeConfigOf owns the defaults and the clamps.
-  bullseye: s?.bullseye === 'slots' || s?.bullseye === 'total' ? s.bullseye : null,
+  bullseye: s?.bullseye === 'slots' || s?.bullseye === 'total' || s?.bullseye === 'hybrid' ? s.bullseye : null,
   bullseye_radius: Number.isFinite(Number(s?.bullseye_radius)) ? Number(s.bullseye_radius) : null,
+  bullseye_rings: s?.bullseye_rings === 'fixed' ? 'fixed' : null,
+  bullseye_deal: s?.bullseye_deal === 'team' ? 'team' : null,
 });
 async function leagueModeOf(leagueId, ctx) {
-  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false, bullseye: null, bullseye_radius: null };
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false, bullseye: null, bullseye_radius: null, bullseye_rings: null, bullseye_deal: null };
   const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
   return modeOfSettings(data?.settings_json);
 }
@@ -663,6 +665,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // today's roster says nothing about whether a team was legal back then.
     const illegal = matchup.home_final == null && bestball.length ? await illegalRostersOf(matchup.league_id, ctx) : new Set();
     const sideOf = (picks, rosterId) => ({
+      rosterId,   // BULLSEYE per-team deal (v0.645.0): which card this side aims at
       picks: classify(picks),
       hasLineup: hasRows(picks, rosterId),
       roster: rosters.get(rosterId) ?? [],
@@ -693,7 +696,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // BULLSEYE (v0.643.0) rides the same install on the same terms: the
     // league's card (published, else dealt from the seed — the same numbers)
     // and its setting, set unconditionally so no league inherits another's.
-    installBullseye(matchup.league_id, matchup.week, gameMode, bullCards);
+    installBullseye(matchup.league_id, matchup.week, gameMode, bullCards, [matchup.home_roster_id, matchup.away_roster_id]);
     // AND THE PROJECTION CATALOG (v0.310.0). An UNMANAGED seat has no stored
     // lineup, so `classicLineup` computes one through `slateAwareProj` — which
     // now ranks by the league's own scoring. Installed with exactly the catalog

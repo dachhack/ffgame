@@ -13,7 +13,7 @@ import {
 import {
   bullseyeConfigOf, dealBullseyeCard, drawSetFor, BULLSEYE_DRAWS, cardRows, cardFromRows,
   ringScore, ringLabel, aimValue, applyBullseye, rankByRing, bullseyeScaleOf, scaledDraw, bullseyeFit,
-  setLeagueBullseye, clearLeagueBullseye, leagueBullseye, bullseyeTargetFor,
+  setLeagueBullseye, clearLeagueBullseye, leagueBullseye, bullseyeTargetFor, setBullseyeRoster, bullseyeCardFor, cardsFromRows,
 } from '../packages/core/src/engine/bullseye.ts';
 import { projectedFor, setLeagueProjScoring, clearLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
 import { clearLeagueScoring } from '../packages/core/src/engine/leagueScoring.ts';
@@ -38,7 +38,7 @@ const QB = mk('josh-allen', 'QB', 'BUF');
 const WR = mk('ceedee-lamb', 'WR', 'DAL');
 const GHOST = mk('probe-ghost-player', 'RB', 'KC');   // nothing in the week-1 bake: a true zero
 const side = (picks, roster, extra = {}) => ({ picks, roster, hasLineup: true, bestball: [], ...extra });
-const CFG = { variant: 'slots', radius: 10 };
+const CFG = { variant: 'slots', radius: 10, rings: 'continuous', deal: 'shared' };
 const LEAGUE = '00000000-0000-4000-8000-00000000b011';
 
 // ── 1. THE DEAL IS DETERMINISTIC, AND EVERY TARGET IS A ROUND NUMBER ─────────
@@ -143,28 +143,32 @@ const LEAGUE = '00000000-0000-4000-8000-00000000b011';
   const picks = [{ slot: 'S1', player: QB }, { slot: 'S2', player: RB }, { slot: 'S3', player: WR }];
   const plain = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
   const exact = { targets: { S1: 0, S2: 0, S3: 0 }, total: plain.home };   // aim the lineup at its own points
-  setLeagueBullseye({ variant: 'total', radius: 10 }, exact);
+  setLeagueBullseye({ variant: 'total', radius: 10, rings: 'continuous', deal: 'shared' }, exact);
   const r = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
   ok('§7 a lineup on its total is a bullseye worth 2 × radius × spots', r.home === 60, r);
   ok('§7 rows carry no per-spot dart in TOTAL', r.slots.every((x) => !x.aim));
   ok('§7 the summary is the one dart', r.bullseye?.variant === 'total' && r.bullseye.home.dist === 0 && r.bullseye.home.ring === 60, r.bullseye);
-  setLeagueBullseye({ variant: 'total', radius: 10 }, { targets: {}, total: plain.home + 10 });
+  setLeagueBullseye({ variant: 'total', radius: 10, rings: 'continuous', deal: 'shared' }, { targets: {}, total: plain.home + 10 });
   const ten = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
   ok('§7 ten over on a 30-radius dart → 20', near(ten.home, 20), ten.home);
-  setLeagueBullseye({ variant: 'total', radius: 10 }, { targets: {}, total: plain.home + 90 });
+  setLeagueBullseye({ variant: 'total', radius: 10, rings: 'continuous', deal: 'shared' }, { targets: {}, total: plain.home + 90 });
   const far = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
   ok('§7 beyond the radius → 0', far.home === 0, far.home);
   clearLeagueBullseye();
   // applyBullseye is pure and scales the radius by the SLOT COUNT it is told.
-  const nine = applyBullseye(plain, { targets: {}, total: plain.home + 45 }, { variant: 'total', radius: 10 }, 9);
+  const nine = applyBullseye(plain, { cfg: { variant: 'total', radius: 10, rings: 'continuous', deal: 'shared' }, card: { targets: {}, total: plain.home + 45 } }, 9);
   ok('§7 nine spots → radius 90: 45 off banks 45', near(nine.home, 45), nine.home);
 }
 
 // ── 8. OFF MEANS OFF ─────────────────────────────────────────────────────────
 {
   ok('§8 no setting → no config', bullseyeConfigOf(null) === null && bullseyeConfigOf({}) === null && bullseyeConfigOf({ bullseye: 'on' }) === null);
+  ok('§8 hybrid parses; rings and deal default', JSON.stringify(bullseyeConfigOf({ bullseye: 'hybrid' })) === JSON.stringify({ variant: 'hybrid', radius: 10, rings: 'continuous', deal: 'shared' })
+    && bullseyeConfigOf({ bullseye: 'slots', bullseye_rings: 'fixed', bullseye_deal: 'team' }).rings === 'fixed'
+    && bullseyeConfigOf({ bullseye: 'slots', bullseye_rings: 'fixed', bullseye_deal: 'team' }).deal === 'team'
+    && bullseyeConfigOf({ bullseye: 'slots', bullseye_rings: 'odd', bullseye_deal: 'odd' }).rings === 'continuous');
   ok('§8 slots / total parse, radius defaults and clamps',
-    JSON.stringify(bullseyeConfigOf({ bullseye: 'slots' })) === JSON.stringify({ variant: 'slots', radius: 10 })
+    JSON.stringify(bullseyeConfigOf({ bullseye: 'slots' })) === JSON.stringify({ variant: 'slots', radius: 10, rings: 'continuous', deal: 'shared' })
     && bullseyeConfigOf({ bullseye: 'total', bullseye_radius: 25 }).radius === 25
     && bullseyeConfigOf({ bullseye: 'total', bullseye_radius: 99 }).radius === 10
     && bullseyeConfigOf({ bullseye: 'total', bullseye_radius: 1 }).radius === 10);
@@ -264,6 +268,80 @@ const LEAGUE = '00000000-0000-4000-8000-00000000b011';
   ok('§9 a QB only fits the QB spot', bullseyeFit('QB', 6, slots, card, 10)?.slot === 'S1' && bullseyeFit('QB', 6, slots, card, 10)?.dist === 14);
   ok('§9 a kicker fits nowhere on this lineup', bullseyeFit('K', 8, slots, card, 10) === null);
   ok('§9 no projection, no fit', bullseyeFit('RB', 0, slots, card, 10) === null && bullseyeFit('RB', 9, slots, null, 10) === null);
+}
+
+// ── 12. HYBRID: THE LINEUP'S SUM IS ONE MORE DART ───────────────────────────
+{
+  const slots = classicSlotsFromSpec([{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['WR'] }]);
+  const picks = [{ slot: 'S1', player: QB }, { slot: 'S2', player: RB }, { slot: 'S3', player: WR }];
+  const plain = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
+  const qb = classicPoints(QB, WEEK, { ppr: 1 }), rb = classicPoints(RB, WEEK, { ppr: 1 }), wr = classicPoints(WR, WEEK, { ppr: 1 });
+  const targets = { S1: 25, S2: 15, S3: 10 };
+  const slotRings = ringScore(qb, 25, 10) + ringScore(rb, 15, 10) + ringScore(wr, 10, 10);
+  // Aim the card's sum exactly at the lineup: the tenth dart is a bullseye
+  // on the TOTAL scale (2 × 30) divided by 3 spots → +20.
+  setLeagueBullseye({ variant: 'hybrid', radius: 10, rings: 'continuous', deal: 'shared' }, { targets, total: plain.home });
+  const r = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
+  ok('§3 hybrid = the slot rings + one spot\'s worth for the lineup total', near(r.home, slotRings + 20), { got: r.home, slotRings });
+  ok('§3 hybrid rows still carry their darts', r.slots.filter((x) => x.side === 'home').every((x) => x.aim));
+  setLeagueBullseye({ variant: 'hybrid', radius: 10, rings: 'continuous', deal: 'shared' }, { targets, total: plain.home + 100 });
+  const far = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
+  ok('§3 …and nothing extra when the sum misses', near(far.home, slotRings), far.home);
+  clearLeagueBullseye();
+}
+
+// ── 13. FIXED RINGS ──────────────────────────────────────────────────────────
+{
+  const f = (p) => ringScore(p, 10, 10, 'fixed');
+  ok('§2 fixed: bullseye pays double the radius', f(10) === 20 && f(10.5) === 20);
+  ok('§2 fixed: inner pays the radius', f(11) === 10 && f(8) === 10);
+  ok('§2 fixed: outer pays half', f(13) === 5 && f(5) === 5);
+  ok('§2 fixed: beyond outer is nothing — no edge', f(16) === 0 && f(19) === 0);
+  ok('§2 fixed: a zero is still a miss', f(0) === 0);
+  const slots = classicSlotsFromSpec([{ pos: ['RB'] }]);
+  setLeagueBullseye({ variant: 'slots', radius: 10, rings: 'fixed', deal: 'shared' }, { targets: { S1: Math.round(classicPoints(RB, WEEK, { ppr: 1 })) }, total: 10 });
+  const r = resolveClassicMatchup(side([{ slot: 'S1', player: RB }], [RB]), side([{ slot: 'S1', player: RB }], [RB]), WEEK, { ppr: 1 }, slots);
+  ok('§2 fixed through the resolver: a rounded target lands inner or better', r.home === 20 || r.home === 10, r.home);
+  clearLeagueBullseye();
+}
+
+// ── 14. A CARD PER TEAM ──────────────────────────────────────────────────────
+{
+  const slots = classicSlotsFromSpec([{ pos: ['RB'] }, { pos: ['WR'] }]);
+  const a = dealBullseyeCard(LEAGUE, 2, slots, null, 7), b = dealBullseyeCard(LEAGUE, 2, slots, null, 8), shared = dealBullseyeCard(LEAGUE, 2, slots);
+  ok('§4 a roster\'s seed deals its own card, stably', JSON.stringify(a) === JSON.stringify(dealBullseyeCard(LEAGUE, 2, slots, null, 7)) && JSON.stringify(dealBullseyeCard(LEAGUE, 2, slots, null, 0)) === JSON.stringify(shared));
+  // Rows round-trip with roster ids.
+  const rows = [...cardRows(shared).map((r) => ({ ...r, roster_id: 0 })), ...cardRows(a).map((r) => ({ ...r, roster_id: 7 })), ...cardRows(b).map((r) => ({ ...r, roster_id: 8 }))];
+  const cs = cardsFromRows(rows);
+  ok('§4 cardsFromRows sorts the shared card from the rosters\'', JSON.stringify(cs.card) === JSON.stringify(shared) && JSON.stringify(cs.cards[7]) === JSON.stringify(a) && JSON.stringify(cs.cards[8]) === JSON.stringify(b));
+  ok('§4 rows without roster ids are the shared card', JSON.stringify(cardsFromRows(cardRows(shared)).card) === JSON.stringify(shared) && Object.keys(cardsFromRows(cardRows(shared)).cards).length === 0);
+  // The install: focus picks the roster's card; no focus is the shared one.
+  const cardA = { targets: { S1: 5, S2: 20 }, total: 25 }, cardB = { targets: { S1: 20, S2: 5 }, total: 25 }, cardS = { targets: { S1: 10, S2: 10 }, total: 20 };
+  setLeagueBullseye({ variant: 'slots', radius: 10, rings: 'continuous', deal: 'team' }, cardS, { 7: cardA, 8: cardB });
+  ok('§4 no roster in focus → the shared card', bullseyeTargetFor('S1') === 10 && bullseyeCardFor() === cardS);
+  setBullseyeRoster(7);
+  ok('§4 roster 7 in focus → its card', bullseyeTargetFor('S1') === 5 && bullseyeTargetFor('S2') === 20);
+  ok('§4 …and an explicit roster beats the focus', bullseyeTargetFor('S1', 8) === 20);
+  ok('§4 an unknown roster falls back to the shared card', bullseyeTargetFor('S1', 99) === 10);
+  // The fill aims each roster at ITS card: with the same two players, roster
+  // 7 (RB wants 5, WR wants 20) and roster 8 (the reverse) swap them.
+  const roster = [{ id: 'small', pos: 'RB' }, { id: 'big', pos: 'RB' }];
+  const value = (p) => (p.id === 'small' ? 6 : 19);
+  const flex = classicSlotsFromSpec([{ pos: ['RB'] }, { pos: ['RB', 'WR'] }]);
+  setBullseyeRoster(7);
+  const for7 = autoSlotPlan(flex, [], {}, roster, value);
+  setBullseyeRoster(8);
+  const for8 = autoSlotPlan(flex, [], {}, roster, value);
+  ok('§4 the auto-slot aims each roster at its own card', for7.find((x) => x.slot === 'S1')?.player === 'small' && for8.find((x) => x.slot === 'S1')?.player === 'big', { for7, for8 });
+  setBullseyeRoster(null);
+  // The resolver: each side's darts read its own card, by rosterId on the side.
+  const rbPts = classicPoints(RB, WEEK, { ppr: 1 });
+  const two = classicSlotsFromSpec([{ pos: ['RB'] }]);
+  setLeagueBullseye({ variant: 'slots', radius: 10, rings: 'continuous', deal: 'team' }, { targets: { S1: 50 }, total: 50 }, { 7: { targets: { S1: Math.round(rbPts) }, total: 0 }, 8: { targets: { S1: 50 }, total: 50 } });
+  const r = resolveClassicMatchup({ ...side([{ slot: 'S1', player: RB }], [RB]), rosterId: 7 }, { ...side([{ slot: 'S1', player: RB }], [RB]), rosterId: 8 }, WEEK, { ppr: 1 }, two);
+  ok('§4 the same player scores differently against each side\'s card', r.home >= 9 && r.away === 0 && r.slots.find((x) => x.side === 'home')?.aim.target === Math.round(rbPts) && r.slots.find((x) => x.side === 'away')?.aim.target === 50, r);
+  ok('§4 the install clears the focus', (setLeagueBullseye(CFG, cardS), bullseyeCardFor() === cardS));
+  clearLeagueBullseye();
 }
 
 // ── 11. THE WEEK BOARD RANKS BY RING ─────────────────────────────────────────

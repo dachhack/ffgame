@@ -8,9 +8,10 @@
 > docs and get it going". Built the same day in migration
 > `0446_bullseye.sql` + `packages/core/src/engine/bullseye.ts`; the open
 > list worked the same day ("let's keep working on the open list") in
-> `0447_bullseye_across_leagues.sql`. See §12 for exactly what shipped and
-> §11 for what is still open. Founder's standing rule: **no power-ups in
-> this mode.**
+> `0447_bullseye_across_leagues.sql`, and the rest of it ("keep cooking") in
+> `0448_bullseye_knobs.sql`. See §12 for exactly what shipped and §11 for
+> what is still open. Founder's standing rules: **no power-ups in this
+> mode**, and **any zero counts for the did-not-play rule**.
 >
 > Pairs with `docs/rulebook.md` (the game it sits beside) and the golf notes
 > in migration `0200_golf_mode.sql` (the setting it is modelled on). §6's
@@ -67,11 +68,14 @@ week is small and concrete.
    the wrong rosters.
 
 ### Hard guardrails
-- **A zero scores nothing.** A spot whose player posts 0.0 is a MISS no
-  matter what the target was, or the 5 target is solved by starting an
+- **Any zero scores nothing** (founder: "we want any zero to count for the
+  did not play rule"). A spot whose player posts 0.0 is a MISS no matter
+  what the target was and no matter why — inactive, a healthy scratch, a
+  receiver who drew no targets — or the 5 target is solved by starting an
   injured player. (Same philosophy as golf: a zero is an absence, not a low
   score.) An unfilled spot is a miss. A spot carrying the **zero-fill rule**
-  (0200) banks its fill first, and the dart is thrown with the fill.
+  (0200) banks its fill first, and the dart is thrown with the fill — that
+  rule is the commissioner's own and says a blank is worth those points.
 - **Golf and bullseye are mutually exclusive.** Lowest ring score winning
   would reward the worst aim; each setter refuses while the other is on.
 - **Drip is untouched.** Nothing in this feature can reach a league whose
@@ -85,7 +89,7 @@ week is small and concrete.
 | **Target** | A round number a spot is aiming at. Drawn from a per-spot-type set (§4). |
 | **Distance** | `|points − target|`, in the league's own scoring. |
 | **Radius** | How far a dart can land and still score (default **10** for a spot). At or beyond it a spot scores 0. |
-| **Ring score** | What a spot banks: `max(0, radius − distance)`, plus a **bullseye bonus** of `radius` when distance ≤ `radius / 20` (half a point at radius 10). A bullseye is worth up to `2 × radius` — exactly double on the number, 19.5 at the edge of the band. |
+| **Ring score** | What a spot banks. **Smooth** (default): `max(0, radius − distance)`, plus a **bullseye bonus** of `radius` when distance ≤ `radius / 20` (half a point at radius 10) — up to `2 × radius`, exactly double on the number, 19.5 at the edge of the band. **Fixed** (`bullseye_rings = 'fixed'`, v0.645.0): the darts-board reading — bullseye `2 × radius`, inner (≤ radius/5) `radius`, outer (≤ radius/2) `radius / 2`, nothing beyond. |
 | **Bullseye / Inner / Outer / Edge / Miss** | The labels the boards print on a dart: distance ≤ radius/20 (0.5) / ≤ radius/5 (2) / ≤ radius/2 (5) / inside the radius / at or beyond it. Labels only — the score is the continuous formula above. |
 | **Weekly total** | The sum of the lineup's ring scores. This is the matchup score: what `matchup.home_final` holds, what the standings sum, what the playoffs compare. Higher wins, as always. |
 
@@ -98,10 +102,16 @@ aimed at a 10 from sinking the whole week any harder than a 20 would. The
 bullseye bonus keeps the darts moment: landing inside half a point is an event,
 and it doubles the spot.
 
-## 3. The two variants
+## 3. The variants
 
 **SLOTS** (`bullseye = 'slots'`, the default when turned on). Every starting
 spot carries its own target. Independent darts; the week is the sum.
+
+**HYBRID** (`bullseye = 'hybrid'`, v0.645.0). The SLOTS darts, plus the
+lineup's raw sum thrown as one more dart at the card's total on the TOTAL
+scale and divided by the spot count — so the tenth dart is worth exactly what
+one spot is worth (up to `2 × radius`). A lineup that lands its parts *and*
+its whole banks the most.
 
 **TOTAL** (`bullseye = 'total'`). The card is dealt exactly the same way, but
 only its **sum** is published: one number for the whole lineup. The lineup's
@@ -141,6 +151,18 @@ so a card is rarely all 20s or all 5s:
 Every target is a multiple of 5 and **never 0**: a zero target would ask for
 a player who does nothing, which is the one thing the guardrail refuses to
 reward.
+
+**Shared or per team** (`bullseye_deal`, v0.645.0). SHARED (default): one
+card for the league, every lineup aims at the same numbers. TEAM: every
+roster is dealt its own card from its own seed (league, week, roster), so
+two lineups in a matchup aim at different numbers — more varied, less fair.
+The shared card is still dealt and published (the wire and a seat with no
+roster read it), but no lineup is scored against it under a per-team deal.
+The board prints both targets on a spot when they differ ("🎯 10 | 15"). The
+engine keeps a *roster in focus* so a fill that asks for "the target of spot
+S" with no roster in hand gets the right card: the resolver sets it before
+each side, the auto-slot before each seat, a board before each side's
+best-ball fill.
 
 **When.** The worker publishes the card for the board week on every tick
 (`bullseye_card`, keyed `(league_id, week, slot)`, upsert — idempotent). In
@@ -224,25 +246,29 @@ where the database is involved, `scripts/db/bullseye-probes.sql`.
 
 ## 7. Data model + RPCs
 
-**`league.settings_json.bullseye`** — `'slots' | 'total'`, absent when off.
-`settings_json.bullseye_radius` — optional int 2..50, default 10. SQL stores
-the sanitized value; the engine (`bullseyeConfigOf`) owns every default.
+**`league.settings_json.bullseye`** — `'slots' | 'total' | 'hybrid'`, absent
+when off. `bullseye_radius` — optional int 2..50, default 10.
+`bullseye_rings` — `'continuous' | 'fixed'`, default continuous.
+`bullseye_deal` — `'shared' | 'team'`, default shared. SQL stores the
+sanitized values; the engine (`bullseyeConfigOf`) owns every default.
 
 **`bullseye_card`**
 ```
 league_id uuid  references league(id) on delete cascade
 week      int
+roster_id int     -- 0 = the shared card; a roster id under a per-team deal (0448)
 slot      text   -- a starting spot's slot id (S1…, or QB/RB1… for 0161 leagues), or 'TOTAL'
 target    numeric
 dealt_at  timestamptz default now()
-primary key (league_id, week, slot)
+primary key (league_id, week, roster_id, slot)
 ```
 RLS: members, commissioners and admins read; only the service role writes.
 
 **RPCs**
-- `set_league_bullseye(p_league_id, p_variant text, p_radius int default null)`
+- `set_league_bullseye(p_league_id, p_variant, p_radius, p_rings, p_deal)`
   — commissioner/admin; classic only; frozen at draft; refuses while golf is
-  on; `null`/`'off'` clears. Returns `{ok, bullseye, radius}`.
+  on; a null knob keeps its value; `null`/`'off'` on the variant clears every
+  key. Returns `{ok, bullseye, radius, rings, deal}`.
 - `set_league_golf` — one new rail: refused while bullseye is on.
 - `league_game_mode` — carries `bullseye` and `bullseye_radius`.
 - `bullseye_card(p_league_id, p_week)` — the published rows, members only.
@@ -319,20 +345,16 @@ name is said only to its own members, and roster ids never leave.
 
 ## 11. Open questions (argue here)
 
-- **A per-team card** (each team its own deal) is more varied and less fair.
-  Shared is the default; per-team could be a knob.
-- **Hybrid**: SLOTS card plus a bonus when the lineup's sum also lands within
-  a band of the card's sum.
-- **DNP vs zero.** v1 treats 0.0 points as a miss. A WR who played and drew
-  no targets is also a 0 — a true miss. A kicker with one missed FG is −1,
-  not 0, and throws his dart. Fine; revisit if a league finds a real exploit.
-- **Rings as fixed points** instead of the continuous formula, if the league
-  wants the darts board to read 50 / 25 / 10.
-- **Power-ups: closed.** Founder: "no power ups in this mode." Classic has
-  none and bullseye is a classic setting; nothing here spends coin.
-- **Settled (2026-10-07, v0.644.0):** projection-anchored draws → anchored to
-  the catalog (§4); cross-league weekly ranked → the darts board's ALL
-  LEAGUES view (§9), comparable by ring total rather than a shared card.
+Nothing open. The list as it was worked:
+
+- **Projection-anchored draws** → anchored to the catalog (§4, v0.644.0).
+- **Cross-league weekly ranked** → the darts board's ALL LEAGUES view (§9,
+  v0.644.0), comparable by ring total rather than a shared card.
+- **A per-team card** → `bullseye_deal = 'team'` (§4, v0.645.0).
+- **Hybrid** → the third variant (§3, v0.645.0).
+- **Rings as fixed points** → `bullseye_rings = 'fixed'` (§2, v0.645.0).
+- **DNP vs zero** → settled by the founder: any zero counts (§1 guardrail).
+- **Power-ups** → closed by the founder: none in this mode.
 
 ## 12. What v1 shipped (2026-10-07)
 
@@ -352,3 +374,9 @@ name is said only to its own members, and roster ids never leave.
   both hosts); the darts board under the standings, this league or all
   leagues (`bullseye_global_board`, 0447; `HubDartsBoard` on web,
   `DartsBoard` in the app). Power-ups closed by the founder's rule.
+- v0.645.0, the rest of the list: HYBRID; fixed rings; a card per team
+  (`0448_bullseye_knobs.sql`; `setBullseyeRoster` / `bullseyeCardFor` in the
+  engine; the worker publishes a card per enrolled seat and installs the two
+  sides' cards; the boards install both sides' and print both targets; the
+  wire aims at *your* card; SMOOTH / FIXED and SHARED / PER TEAM pills beside
+  the variant on both hosts). The zero rule confirmed as "any zero".

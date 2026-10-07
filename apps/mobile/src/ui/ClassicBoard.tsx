@@ -10,7 +10,7 @@ import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetS
 import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
-import { setLeagueBullseye, clearLeagueBullseye, bullseyeConfigOf, dealBullseyeCard, cardFromRows, ringLabel, type BullseyeConfig } from '@drip/core/engine/bullseye';
+import { setLeagueBullseye, clearLeagueBullseye, setBullseyeRoster, bullseyeConfigOf, dealBullseyeCard, cardsFromRows, ringLabel, type BullseyeConfig, type BullseyeCard } from '@drip/core/engine/bullseye';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
@@ -561,10 +561,19 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             const cfg = gm.mode === 'classic' ? bullseyeConfigOf(gm) : null;
             if (!cfg) { setLeagueBullseye(null, null); setBullseye(null); }
             else {
-              const dealt = dealBullseyeCard(leagueId, m.week, leagueSlotDefs(gm), leagueCatalogOf(gm));
+              const slots = leagueSlotDefs(gm), catalog = leagueCatalogOf(gm);
+              const dealt = dealBullseyeCard(leagueId, m.week, slots, catalog);
+              // PER-TEAM deal (v0.645.0): a card for each side of this matchup.
+              const rids = cfg.deal === 'team' ? [m.home_roster_id, m.away_roster_id] : [];
+              const dealtFor = (rid: number): BullseyeCard => dealBullseyeCard(leagueId, m.week, slots, catalog, rid);
+              const install = (pub: ReturnType<typeof cardsFromRows> | null) => {
+                const cards: Record<number, BullseyeCard> = {};
+                for (const rid of rids) cards[rid] = pub?.cards[rid] ?? dealtFor(rid);
+                setLeagueBullseye(cfg, pub?.card ?? dealt, cards); setBullseye(cfg);
+              };
               bullseyeCard(leagueId, m.week)
-                .then((c) => { setLeagueBullseye(cfg, (c.ok ? cardFromRows(c.card) : null) ?? dealt); setBullseye(cfg); })
-                .catch(() => { setLeagueBullseye(cfg, dealt); setBullseye(cfg); });
+                .then((c) => install(c.ok ? cardsFromRows(c.card) : null))
+                .catch(() => install(null));
             }
           }
           // A SPORT LEAGUE (0426) draws its week from locked slot-days.
@@ -1115,11 +1124,14 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       }
       return out;
     };
-    return {
-      mine: build(mine, pool.map((p) => p.slug), off(seat)),
-      theirs: build(theirs, oppPool.map((p) => p.slug), off(oppRid)),
-    };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, seat, sport]);
+    // BULLSEYE per-team deal (v0.645.0): each side's best-ball fill values ITS card.
+    setBullseyeRoster(seat ?? null);
+    const mineFx = build(mine, pool.map((p) => p.slug), off(seat));
+    setBullseyeRoster(oppRid ?? null);
+    const theirsFx = build(theirs, oppPool.map((p) => p.slug), off(oppRid));
+    setBullseyeRoster(null);
+    return { mine: mineFx, theirs: theirsFx };
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, seat, sport, bullseye]);
 
   const board = useMemo(() => {
     if (!matchup) return null;
@@ -1773,7 +1785,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   <View style={{ width: 66, alignItems: 'center' }}>
                     <SlotPill pos={row.pos} label={row.label} />
                     {auto && <Mono size={7} tone="you" numberOfLines={1}>🎯 AUTO</Mono>}
-                    {row.aim && <Mono size={8} tone="warn" weight="700" numberOfLines={1}>{`🎯 ${row.aim.target}`}</Mono>}
+                    {row.aim && <Mono size={8} tone="warn" weight="700" numberOfLines={1}>{`🎯 ${row.aim.awayTarget !== row.aim.target ? `${row.aim.target} | ${row.aim.awayTarget}` : row.aim.target}`}</Mono>}
                     {row.aim && bullseye && (row.aim.home || row.aim.away) && (
                       <Mono size={6.5} tone="faint" numberOfLines={1}>
                         {`${row.aim.home ? `${ringLabel(row.aim.home.dist, bullseye.radius)} ${row.aim.home.ring.toFixed(1)}` : '—'} · ${row.aim.away ? `${ringLabel(row.aim.away.dist, bullseye.radius)} ${row.aim.away.ring.toFixed(1)}` : '—'}`}

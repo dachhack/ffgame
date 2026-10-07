@@ -76,7 +76,7 @@ import { setDynFormat } from '@drip/core/data/dyn2026';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { setLeagueFlags, flagRulesFor, flagFor } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
-import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardFromRows, type BullseyeCard, type BullseyeConfig } from '@drip/core/engine/bullseye';
+import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardsFromRows, type BullseyeCard, type BullseyeConfig } from '@drip/core/engine/bullseye';
 import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc } from '@drip/core/data/liveApi';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
@@ -3335,13 +3335,16 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     if (!bullCfg || !gm) { setBullCard(null); return; }
     let alive = true;
     openWeekRpc(leagueId).then(async (wk) => {
-      const dealt = dealBullseyeCard(leagueId, wk, leagueSlotDefs({ roster: gm.roster ?? {}, slots: gm.slots ?? null }), leagueCatalogOf(gm));
+      // Under a per-team deal the wire aims at MY card (v0.645.0).
+      const rid = bullCfg.deal === 'team' && myRoster != null ? myRoster : 0;
+      const dealt = dealBullseyeCard(leagueId, wk, leagueSlotDefs({ roster: gm.roster ?? {}, slots: gm.slots ?? null }), leagueCatalogOf(gm), rid || null);
       const c = await bullseyeCardRpc(leagueId, wk).catch(() => null);
-      if (alive) setBullCard((c?.ok ? cardFromRows(c.card) : null) ?? dealt);
+      const pub = c?.ok ? cardsFromRows(c.card) : null;
+      if (alive) setBullCard((rid ? pub?.cards[rid] : pub?.card) ?? dealt);
     }).catch(() => { if (alive) setBullCard(null); });
     return () => { alive = false; };
-  }, [leagueId, gm, bullCfg]);
-  const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius) : null);
+  }, [leagueId, gm, bullCfg, myRoster]);
+  const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius, bullCfg.rings) : null);
   const bySpot = useMemo(() => {
     const active = shown.filter((p) => p.spot === 'active');
     const seat = assignSpots(slotDefs, active.map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })));

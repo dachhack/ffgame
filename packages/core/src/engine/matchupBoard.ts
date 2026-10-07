@@ -16,7 +16,7 @@ import type { Pos } from '../types';
 import type { ClassicSlotDef } from './classic';
 import type { Roof } from '../data/stadiums';
 import { leagueIsGolf } from './golf';
-import { leagueBullseye, ringScore, type Dart } from './bullseye';
+import { leagueBullseye, bullseyeCardFor, ringScore, type Dart } from './bullseye';
 
 /** One player as the board needs them — the caller resolves identity, we do
  *  the arithmetic. `live` is points ALREADY scored; `proj` is the full-game
@@ -60,7 +60,7 @@ export interface BoardEntry {
  *  dart once his game has started (null before kickoff, and for an empty
  *  spot with no zero-fill). Absent when the league does not play it or in
  *  the TOTAL variant, where no spot aims alone. */
-export interface SlotAim { target: number; home: Dart | null; away: Dart | null }
+export interface SlotAim { target: number; awayTarget: number; home: Dart | null; away: Dart | null }
 export interface BoardSlotRow {
   slot: string;
   /** The label the manager sees: a custom spot label, else FLEX/QB/… */
@@ -107,7 +107,7 @@ export interface BoardSide {
   record?: { wins: number; losses: number; ties: number; rank?: number | null } | null;
   /** BULLSEYE (v0.643.0): the side's RING totals — the headline when the
    *  league plays it. `live`/`projected` above stay the raw points. */
-  aim?: { variant: 'slots' | 'total'; target: number; live: number; projected: number; dist: number };
+  aim?: { variant: 'slots' | 'total' | 'hybrid'; target: number; live: number; projected: number; dist: number };
 }
 
 export interface MatchupBoard {
@@ -290,27 +290,37 @@ export function buildMatchupBoard(input: {
   // install, so the board's total is the one the worker will stamp.
   const bull = leagueBullseye();
   if (bull) {
-    const { cfg, card } = bull;
+    const { cfg } = bull;
+    const n = Math.max(1, slots.length);
     const dart = (pts: number, target: number | undefined, radius: number): Dart | null =>
-      target == null ? null : { target, dist: r2(Math.abs(pts - target)), ring: ringScore(pts, target, radius) };
+      target == null ? null : { target, dist: r2(Math.abs(pts - target)), ring: ringScore(pts, target, radius, cfg.rings) };
     const aimSide = (s: BoardSide, mine: (BoardEntry | null)[]): BoardSide => {
+      const card = bullseyeCardFor(s.rosterId) ?? bull.card;
       const pts = mine.reduce((a, e, i) => a + fillLive(e, slotOrder[i]), 0);
       const proj = mine.reduce((a, e, i) => a + fillProj(e, slotOrder[i]), 0);
+      const dist = r2(Math.abs(pts - card.total));
       if (cfg.variant === 'total') {
-        const radius = cfg.radius * Math.max(1, slots.length);
-        return { ...s, aim: { variant: 'total', target: card.total, live: ringScore(pts, card.total, radius), projected: ringScore(proj, card.total, radius), dist: r2(Math.abs(pts - card.total)) } };
+        const radius = cfg.radius * n;
+        return { ...s, aim: { variant: 'total', target: card.total, live: ringScore(pts, card.total, radius, cfg.rings), projected: ringScore(proj, card.total, radius, cfg.rings), dist } };
       }
-      const live = r2(mine.reduce((a, e, i) => a + ringScore(fillLive(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0));
-      const projected = r2(mine.reduce((a, e, i) => a + ringScore(fillProj(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0));
-      return { ...s, aim: { variant: 'slots', target: card.total, live, projected, dist: r2(Math.abs(pts - card.total)) } };
+      let live = mine.reduce((a, e, i) => a + ringScore(fillLive(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius, cfg.rings), 0);
+      let projected = mine.reduce((a, e, i) => a + ringScore(fillProj(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius, cfg.rings), 0);
+      if (cfg.variant === 'hybrid') {
+        live += ringScore(pts, card.total, cfg.radius * n, cfg.rings) / n;
+        projected += ringScore(proj, card.total, cfg.radius * n, cfg.rings) / n;
+      }
+      return { ...s, aim: { variant: cfg.variant, target: card.total, live: r2(live), projected: r2(projected), dist } };
     };
+    const homeCard = bullseyeCardFor(home.rosterId) ?? bull.card;
+    const awayCard = bullseyeCardFor(away.rosterId) ?? bull.card;
     for (const row of starters) {
-      const target = card.targets[row.slot];
-      if (target == null || cfg.variant === 'total') continue;
+      const target = homeCard.targets[row.slot];
+      const awayTarget = awayCard.targets[row.slot];
+      if (target == null || awayTarget == null || cfg.variant === 'total') continue;
       row.aim = {
-        target,
+        target, awayTarget,
         home: row.home && row.home.state !== 'pre' ? dart(fillLive(row.home, row.slot), target, cfg.radius) : null,
-        away: row.away && row.away.state !== 'pre' ? dart(fillLive(row.away, row.slot), target, cfg.radius) : null,
+        away: row.away && row.away.state !== 'pre' ? dart(fillLive(row.away, row.slot), awayTarget, cfg.radius) : null,
       };
     }
     return {

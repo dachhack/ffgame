@@ -15,7 +15,7 @@ import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetS
 import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
-import { setLeagueBullseye, clearLeagueBullseye, bullseyeConfigOf, dealBullseyeCard, cardFromRows, ringLabel, type BullseyeConfig } from '@drip/core/engine/bullseye';
+import { setLeagueBullseye, clearLeagueBullseye, setBullseyeRoster, bullseyeConfigOf, dealBullseyeCard, cardsFromRows, ringLabel, type BullseyeConfig, type BullseyeCard } from '@drip/core/engine/bullseye';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { setRuntimeSlate, boardWeekTitle, weekTitle, weekLabel } from '@drip/core/data/nflSlate';
@@ -679,10 +679,19 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
             const cfg = gm.mode === 'classic' ? bullseyeConfigOf(gm) : null;
             if (!cfg) { setLeagueBullseye(null, null); setBullseye(null); }
             else {
-              const dealt = dealBullseyeCard(r.leagueId, m.week, leagueSlotDefs(gm), leagueCatalogOf(gm));
+              const slots = leagueSlotDefs(gm), catalog = leagueCatalogOf(gm);
+              const dealt = dealBullseyeCard(r.leagueId, m.week, slots, catalog);
+              // PER-TEAM deal (v0.645.0): a card for each side of this matchup.
+              const rids = cfg.deal === 'team' ? [m.home_roster_id, m.away_roster_id] : [];
+              const dealtFor = (rid: number): BullseyeCard => dealBullseyeCard(r.leagueId, m.week, slots, catalog, rid);
+              const install = (pub: ReturnType<typeof cardsFromRows> | null) => {
+                const cards: Record<number, BullseyeCard> = {};
+                for (const rid of rids) cards[rid] = pub?.cards[rid] ?? dealtFor(rid);
+                setLeagueBullseye(cfg, pub?.card ?? dealt, cards); setBullseye(cfg);
+              };
               bullseyeCard(r.leagueId, m.week)
-                .then((c) => { setLeagueBullseye(cfg, (c.ok ? cardFromRows(c.card) : null) ?? dealt); setBullseye(cfg); })
-                .catch(() => { setLeagueBullseye(cfg, dealt); setBullseye(cfg); });
+                .then((c) => install(c.ok ? cardsFromRows(c.card) : null))
+                .catch(() => install(null));
             }
           }
           // A SPORT LEAGUE (0426) draws its week from locked slot-days, not
@@ -1264,11 +1273,14 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       }
       return out;
     };
-    return {
-      mine: build(mine, pool.map((p) => p.slug), off(myRid)),
-      theirs: build(theirs, oppPool.map((p) => p.slug), off(oppRid)),
-    };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, ros?.rosterId, sport]);
+    // BULLSEYE per-team deal (v0.645.0): each side's best-ball fill values ITS card.
+    setBullseyeRoster(myRid ?? null);
+    const mineFx = build(mine, pool.map((p) => p.slug), off(myRid));
+    setBullseyeRoster(oppRid ?? null);
+    const theirsFx = build(theirs, oppPool.map((p) => p.slug), off(oppRid));
+    setBullseyeRoster(null);
+    return { mine: mineFx, theirs: theirsFx };
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, ros?.rosterId, sport, bullseye]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
@@ -1964,7 +1976,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       <SlotPill pos={row.pos} label={row.label} width={spotCol} />
                       {auto && <span className="mono" title="best ball — fills itself with your best eligible player" style={{ fontSize: 8, color: 'var(--you)' }}>🎯 AUTO</span>}
-                      {row.aim && <span className="mono" title={`this spot aims at ${row.aim.target} points — closest wins`} style={{ fontSize: 9, fontWeight: 800, color: 'var(--warn)' }}>🎯 {row.aim.target}</span>}
+                      {row.aim && <span className="mono" title={row.aim.awayTarget !== row.aim.target ? `your spot aims at ${row.aim.target}, theirs at ${row.aim.awayTarget} — closest wins` : `this spot aims at ${row.aim.target} points — closest wins`} style={{ fontSize: 9, fontWeight: 800, color: 'var(--warn)' }}>🎯 {row.aim.awayTarget !== row.aim.target ? `${row.aim.target} | ${row.aim.awayTarget}` : row.aim.target}</span>}
                     </div>
                     <BoardCell e={row.away} align="right" face={faceSize} gap={cellGap}
                       empty={awayWhy ? offNote(awayWhy, true) : undefined}

@@ -31,8 +31,18 @@ import type { ClassicResult, ClassicSlotScore, ClassicScoring } from './classic'
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, scoringFor, slotEligiblePos } from './classic';
 import { scoreProjLine, scoreKickLine, scoreDstLine } from './projScoring';
 
-export type BullseyeVariant = 'slots' | 'total';
-export interface BullseyeConfig { variant: BullseyeVariant; radius: number }
+/** SLOTS: a target per spot. TOTAL: one number for the lineup. HYBRID
+ *  (v0.645.0): the SLOTS darts plus the lineup's sum as one more dart, scored
+ *  on the TOTAL scale and divided by the spot count — a tenth dart. */
+export type BullseyeVariant = 'slots' | 'total' | 'hybrid';
+/** How a dart banks (v0.645.0): CONTINUOUS is radius − distance (+ the
+ *  bullseye bonus); FIXED is the darts-board reading — 2×radius / radius /
+ *  radius÷2 / 0 by band. */
+export type BullseyeRings = 'continuous' | 'fixed';
+/** SHARED: one card for the league. TEAM (v0.645.0): every roster is dealt
+ *  its own card from its own seed. */
+export type BullseyeDeal = 'shared' | 'team';
+export interface BullseyeConfig { variant: BullseyeVariant; radius: number; rings: BullseyeRings; deal: BullseyeDeal }
 
 export const BULLSEYE_RADIUS = 10;
 export const BULLSEYE_RADIUS_MIN = 2;
@@ -41,12 +51,14 @@ export const BULLSEYE_RADIUS_MAX = 50;
 /** The league's bullseye setting, normalised — null when off. SQL stores the
  *  sanitized variant + radius; this owns the defaults (the classic rule:
  *  "this module owns every default; SQL stores sanitized overrides only"). */
-export function bullseyeConfigOf(mode?: { bullseye?: string | null; bullseye_radius?: number | null } | null): BullseyeConfig | null {
+export function bullseyeConfigOf(mode?: { bullseye?: string | null; bullseye_radius?: number | null; bullseye_rings?: string | null; bullseye_deal?: string | null } | null): BullseyeConfig | null {
   const v = mode?.bullseye;
-  if (v !== 'slots' && v !== 'total') return null;
+  if (v !== 'slots' && v !== 'total' && v !== 'hybrid') return null;
   const r = Number(mode?.bullseye_radius);
   const radius = Number.isFinite(r) && r >= BULLSEYE_RADIUS_MIN && r <= BULLSEYE_RADIUS_MAX ? Math.round(r) : BULLSEYE_RADIUS;
-  return { variant: v, radius };
+  const rings: BullseyeRings = mode?.bullseye_rings === 'fixed' ? 'fixed' : 'continuous';
+  const deal: BullseyeDeal = mode?.bullseye_deal === 'team' ? 'team' : 'shared';
+  return { variant: v, radius, rings, deal };
 }
 
 // ── The deal ────────────────────────────────────────────────────────────────
@@ -166,8 +178,11 @@ export function dealBullseyeCard(
   /** The league's scoring catalog (leagueCatalogOf) — anchors the sets to
    *  what the league actually pays. Omitted: the stock sets. */
   catalog?: number | Partial<ClassicScoring> | null,
+  /** PER-TEAM deal (v0.645.0): the roster this card is for; its own seed.
+   *  Omitted (or 0): the league's shared card. */
+  rosterId?: number | null,
 ): BullseyeCard {
-  const next = rng(`bullseye|${leagueId}|${week}`);
+  const next = rng(rosterId ? `bullseye|${leagueId}|${week}|${rosterId}` : `bullseye|${leagueId}|${week}`);
   const scale = bullseyeScaleOf(catalog);
   const targets: Record<string, number> = {};
   let total = 0;
@@ -183,11 +198,12 @@ export function dealBullseyeCard(
 
 /** A published card (the bullseye_card rows) back into the engine's shape.
  *  The 'TOTAL' row, when present, is the sum; otherwise it is summed here. */
-export function cardFromRows(rows: { slot: string; target: number | string }[] | null | undefined): BullseyeCard | null {
+export function cardFromRows(rows: { slot: string; target: number | string; roster_id?: number | null }[] | null | undefined, rosterId = 0): BullseyeCard | null {
   if (!rows?.length) return null;
   const targets: Record<string, number> = {};
   let total: number | null = null;
   for (const r of rows) {
+    if ((r.roster_id ?? 0) !== rosterId) continue;
     const t = Number(r.target);
     if (!Number.isFinite(t)) continue;
     if (r.slot === 'TOTAL') total = t;
@@ -202,6 +218,19 @@ export function cardRows(card: BullseyeCard): { slot: string; target: number }[]
   return [...Object.entries(card.targets).map(([slot, target]) => ({ slot, target })), { slot: 'TOTAL', target: card.total }];
 }
 
+/** Every card in a week's published rows: the shared one (roster 0) and,
+ *  under a per-team deal, one per roster. */
+export interface BullseyeCards { card: BullseyeCard | null; cards: Record<number, BullseyeCard> }
+export function cardsFromRows(rows: { slot: string; target: number | string; roster_id?: number | null }[] | null | undefined): BullseyeCards {
+  const out: BullseyeCards = { card: cardFromRows(rows, 0), cards: {} };
+  for (const rid of new Set((rows ?? []).map((r) => r.roster_id ?? 0))) {
+    if (rid === 0) continue;
+    const c = cardFromRows(rows, rid);
+    if (c) out.cards[rid] = c;
+  }
+  return out;
+}
+
 // ── The dart ────────────────────────────────────────────────────────────────
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
@@ -210,10 +239,20 @@ export const bullseyeBand = (radius: number): number => radius / 20;
 
 /** What a dart banks. A zero is a miss (see the module docblock); so is a
  *  spot with no target. */
-export function ringScore(points: number, target: number | null | undefined, radius: number): number {
+export function ringScore(points: number, target: number | null | undefined, radius: number, rings: BullseyeRings = 'continuous'): number {
   if (target == null || !Number.isFinite(target)) return 0;
+  // ANY ZERO IS A MISS (founder: "we want any zero to count for the did not
+  // play rule"): a spot whose player posted nothing banks nothing, whatever
+  // the target and whatever the reason.
   if (!Number.isFinite(points) || Math.abs(points) < 1e-9) return 0;
   const dist = Math.abs(points - target);
+  if (rings === 'fixed') {
+    // The darts-board reading: bullseye / inner / outer, nothing between.
+    if (dist <= bullseyeBand(radius) + 1e-9) return round1(2 * radius);
+    if (dist <= radius / 5 + 1e-9) return round1(radius);
+    if (dist <= radius / 2 + 1e-9) return round1(radius / 2);
+    return 0;
+  }
   const base = Math.max(0, radius - dist);
   return round1(base + (dist <= bullseyeBand(radius) + 1e-9 ? radius : 0));
 }
@@ -251,16 +290,34 @@ const CERTAIN_MISS = -1_000_000;
 // sets it synchronously before EACH classic matchup's resolve and each
 // league's auto-slot, UNCONDITIONALLY (a module global only set when true
 // leaves the previous league's card standing over the next one).
-let inst: { cfg: BullseyeConfig; card: BullseyeCard } | null = null;
+export interface BullseyeInstall { cfg: BullseyeConfig; card: BullseyeCard; cards?: Record<number, BullseyeCard> }
+let inst: BullseyeInstall | null = null;
+// THE ROSTER IN FOCUS (v0.645.0, per-team deal). A fill asks for "the target
+// of spot S" with no roster in hand (autoSlotPlan, bestballFillBy, the
+// unmanaged seat), so whoever is valuing a roster says which one first:
+// the resolver before each side, the auto-slot before each seat, a board
+// before each side's fill. Null means the shared card — which is also every
+// roster's card under a shared deal, so a caller that never sets it is right.
+let focus: number | null = null;
 
-export function setLeagueBullseye(cfg: BullseyeConfig | null | undefined, card: BullseyeCard | null | undefined): void {
-  inst = cfg && card ? { cfg, card } : null;
+export function setLeagueBullseye(cfg: BullseyeConfig | null | undefined, card: BullseyeCard | null | undefined, cards?: Record<number, BullseyeCard> | null): void {
+  inst = cfg && card ? { cfg, card, ...(cards && Object.keys(cards).length ? { cards } : {}) } : null;
+  focus = null;
 }
-export function clearLeagueBullseye(): void { inst = null; }
-/** The installed setting + card, null when this league does not play it. */
-export function leagueBullseye(): { cfg: BullseyeConfig; card: BullseyeCard } | null { return inst; }
-/** The installed target for a spot, undefined when none is installed. */
-export function bullseyeTargetFor(slot: string): number | undefined { return inst?.card.targets[slot]; }
+export function clearLeagueBullseye(): void { inst = null; focus = null; }
+/** The installed setting + shared card, null when this league does not play it. */
+export function leagueBullseye(): BullseyeInstall | null { return inst; }
+/** Say which roster the next fill values (per-team deal); null = shared. */
+export function setBullseyeRoster(rosterId: number | null | undefined): void { focus = rosterId ?? null; }
+/** The card a roster plays: its own under a per-team deal, else the shared. */
+export function bullseyeCardFor(rosterId?: number | null): BullseyeCard | undefined {
+  if (!inst) return undefined;
+  const rid = rosterId ?? focus;
+  return (rid != null ? inst.cards?.[rid] : undefined) ?? inst.card;
+}
+/** The installed target for a spot — the focused roster's, else the shared
+ *  card's; undefined when none is installed. */
+export function bullseyeTargetFor(slot: string, rosterId?: number | null): number | undefined { return bullseyeCardFor(rosterId)?.targets[slot]; }
 export const bullseyeRadius = (): number => inst?.cfg.radius ?? BULLSEYE_RADIUS;
 
 // ── Applying the card to a resolved matchup ─────────────────────────────────
@@ -275,26 +332,37 @@ export interface BullseyeSummary {
 /** Re-score a classic result under a card. Slot rows KEEP their raw `score`
  *  (the player's real points — what the row shows) and gain `aim`; the side
  *  totals and the 'wk' state become ring totals. Pure: returns a new result. */
-export function applyBullseye(r: ClassicResult, card: BullseyeCard, cfg: BullseyeConfig, slotCount: number): ClassicResult {
+export function applyBullseye(
+  r: ClassicResult, bull: BullseyeInstall, slotCount: number,
+  /** Per-team deal: which roster each side is, so each aims at its own card. */
+  rids?: { home?: number | null; away?: number | null },
+): ClassicResult {
+  const { cfg } = bull;
+  const n = Math.max(1, slotCount);
   const side = (which: 'home' | 'away'): { rows: ClassicSlotScore[]; dart: Dart & { points: number } } => {
+    const rid = which === 'home' ? rids?.home : rids?.away;
+    const card = (rid != null ? bull.cards?.[rid] : undefined) ?? bull.card;
     const mine = r.slots.filter((s) => s.side === which);
     const points = round1(mine.reduce((s, x) => s + x.score, 0));
+    const dist = round1(Math.abs(points - card.total));
     if (cfg.variant === 'total') {
       // One dart for the whole lineup, radius scaled to the lineup — rows
       // carry no per-spot aim, because no spot was aiming at anything alone.
-      const radius = cfg.radius * Math.max(1, slotCount);
-      const ring = ringScore(points, card.total, radius);
-      return { rows: mine, dart: { target: card.total, dist: round1(Math.abs(points - card.total)), ring, points } };
+      const ring = ringScore(points, card.total, cfg.radius * n, cfg.rings);
+      return { rows: mine, dart: { target: card.total, dist, ring, points } };
     }
     let ring = 0;
     const rows = mine.map((x) => {
       const target = card.targets[x.slot];
       if (target == null) return x;
-      const rs = ringScore(x.score, target, cfg.radius);
+      const rs = ringScore(x.score, target, cfg.radius, cfg.rings);
       ring += rs;
       return { ...x, aim: { target, dist: round1(Math.abs(x.score - target)), ring: rs } };
     });
-    return { rows, dart: { target: card.total, dist: round1(Math.abs(points - card.total)), ring: round1(ring), points } };
+    // HYBRID: the lineup's sum is one more dart, on the TOTAL scale divided
+    // by the spot count — worth exactly what one spot is worth.
+    if (cfg.variant === 'hybrid') ring += ringScore(points, card.total, cfg.radius * n, cfg.rings) / n;
+    return { rows, dart: { target: card.total, dist, ring: round1(ring), points } };
   };
   const h = side('home'), a = side('away');
   return {
@@ -323,7 +391,7 @@ export function rankByRing<T extends { ring: number }>(rows: T[]): (T & { rank: 
  *  the chip then simply doesn't print. Rows with the same projection fit the
  *  same spot, so the wire reads "who lands on my 5". */
 export function bullseyeFit(
-  pos: string, proj: number, slots: { slot: string; pos: string[] }[], card: BullseyeCard | null | undefined, radius: number,
+  pos: string, proj: number, slots: { slot: string; pos: string[] }[], card: BullseyeCard | null | undefined, radius: number, rings: BullseyeRings = 'continuous',
 ): { slot: string; target: number; dist: number; ring: number } | null {
   if (!card || !(proj > 0)) return null;
   let best: { slot: string; target: number; dist: number; ring: number } | null = null;
@@ -331,7 +399,7 @@ export function bullseyeFit(
     const target = card.targets[d.slot];
     if (target == null || !slotEligiblePos(d.pos).includes(pos)) continue;
     const dist = Math.round(Math.abs(proj - target) * 10) / 10;
-    if (!best || dist < best.dist) best = { slot: d.slot, target, dist, ring: ringScore(proj, target, radius) };
+    if (!best || dist < best.dist) best = { slot: d.slot, target, dist, ring: ringScore(proj, target, radius, rings) };
   }
   return best;
 }

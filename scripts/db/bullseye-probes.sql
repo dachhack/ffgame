@@ -69,7 +69,19 @@ begin
     'be3a …both stored');
   perform assert_err(set_league_bullseye(lid, 'total', 1), '2-50', 'be3b the radius is bounded below');
   perform assert_err(set_league_bullseye(lid, 'total', 51), '2-50', 'be3c …and above');
-  perform assert_err(set_league_bullseye(lid, 'darts'), 'slots, total or off', 'be3d an unknown variant is refused');
+  perform assert_err(set_league_bullseye(lid, 'darts'), 'slots, total, hybrid or off', 'be3d an unknown variant is refused');
+  -- THE KNOBS (0448)
+  perform assert_ok(set_league_bullseye(lid, 'hybrid'), 'be3e hybrid is a variant');
+  perform assert_true(league_bullseye(lid) = 'hybrid', 'be3f …and reads back');
+  r := set_league_bullseye(lid, 'hybrid', null, 'fixed', 'team');
+  perform assert_ok(r, 'be3g rings + deal store');
+  perform assert_true(r ->> 'rings' = 'fixed' and r ->> 'deal' = 'team', 'be3h …and echo');
+  gm := league_game_mode(lid);
+  perform assert_true(gm ->> 'bullseye_rings' = 'fixed' and gm ->> 'bullseye_deal' = 'team' and (gm ->> 'bullseye_radius')::int = 25,
+    'be3i the screens see all three knobs; a null keeps the radius');
+  perform assert_err(set_league_bullseye(lid, 'hybrid', null, 'round'), 'continuous or fixed', 'be3j bad rings refused');
+  perform assert_err(set_league_bullseye(lid, 'hybrid', null, null, 'each'), 'shared or team', 'be3k bad deal refused');
+  perform assert_ok(set_league_bullseye(lid, 'hybrid', null, 'continuous', 'shared'), 'be3l …and back');
   perform probe_as('b');
   perform assert_err(set_league_bullseye(lid, 'slots'), 'commissioner only', 'be4 a member cannot set it');
   perform probe_as('a');
@@ -78,8 +90,10 @@ begin
   perform assert_err(set_league_golf(lid, true), 'cannot both be on', 'be5 golf is refused while bullseye is on');
   perform assert_ok(set_league_bullseye(lid, 'off'), 'be5a off clears it');
   perform assert_true(league_bullseye(lid) is null and (league_game_mode(lid) -> 'bullseye') = 'null'::jsonb
-    and not ((select settings_json from league where id = lid) ? 'bullseye_radius'),
-    'be5b …the keys are gone, radius included');
+    and not ((select settings_json from league where id = lid) ? 'bullseye_radius')
+    and not ((select settings_json from league where id = lid) ? 'bullseye_rings')
+    and not ((select settings_json from league where id = lid) ? 'bullseye_deal'),
+    'be5b …the keys are gone, radius, rings and deal included');
   perform assert_ok(set_league_golf(lid, true), 'be5c golf goes on once bullseye is off');
   perform assert_err(set_league_bullseye(lid, 'slots'), 'cannot both be on', 'be5d bullseye is refused while golf is on');
   perform assert_ok(set_league_golf(lid, false), 'be5e golf off');
@@ -97,10 +111,15 @@ begin
   -- The worker (service role) deals; this probe plays the worker.
   insert into bullseye_card (league_id, week, slot, target) values
     (lid, 3, 'S1', 20), (lid, 3, 'S2', 10), (lid, 3, 'TOTAL', 30);
+  -- …and, under a per-team deal (0448), a card per roster beside it.
+  insert into bullseye_card (league_id, week, roster_id, slot, target) values
+    (lid, 3, 1, 'S1', 5), (lid, 3, 1, 'S2', 15), (lid, 3, 1, 'TOTAL', 20);
   r := bullseye_card(lid, 3);
   perform assert_ok(r, 'be7 a member reads the card');
-  perform assert_true(jsonb_array_length(r -> 'card') = 3 and r ->> 'bullseye' = 'slots', 'be7a all three rows, with the setting');
-  perform assert_true((r -> 'card' -> 2 ->> 'slot') = 'TOTAL', 'be7b the TOTAL row sorts last');
+  perform assert_true(jsonb_array_length(r -> 'card') = 6 and r ->> 'bullseye' = 'slots', 'be7a every row, with the setting');
+  perform assert_true((r -> 'card' -> 2 ->> 'slot') = 'TOTAL' and (r -> 'card' -> 2 ->> 'roster_id')::int = 0
+    and (r -> 'card' -> 5 ->> 'slot') = 'TOTAL' and (r -> 'card' -> 5 ->> 'roster_id')::int = 1,
+    'be7b the shared card first, each card''s TOTAL row last, roster ids carried');
   perform assert_true(jsonb_array_length(bullseye_card(lid, 4) -> 'card') = 0, 'be7c an undealt week is empty, not an error');
   perform probe_as('b');
   perform assert_ok(bullseye_card(lid, 3), 'be7d the other member reads it too');
@@ -111,8 +130,8 @@ begin
   perform probe_as('a');
   -- A dealt card never changes: the worker's upsert is ON CONFLICT DO NOTHING.
   insert into bullseye_card (league_id, week, slot, target) values (lid, 3, 'S1', 5)
-    on conflict (league_id, week, slot) do nothing;
-  perform assert_true((select target from bullseye_card where league_id = lid and week = 3 and slot = 'S1') = 20,
+    on conflict (league_id, week, roster_id, slot) do nothing;
+  perform assert_true((select target from bullseye_card where league_id = lid and week = 3 and roster_id = 0 and slot = 'S1') = 20,
     'be7g a re-deal leaves the card as dealt');
 
   -- ══ THE WEEK BOARD (§6.11) ══════════════════════════════════════════════
