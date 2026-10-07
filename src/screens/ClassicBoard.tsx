@@ -308,11 +308,18 @@ function TeamHead({ side, align, accent, mode }: {
   // BULLSEYE (v0.643.0): the headline is the RING total; the points and the
   // number aimed at sit beneath it, so the raw score is never hidden.
   const aim = side.aim;
+  // UNDER BULLSEYE THE HEADLINE IS THE DISTANCE (v0.646.1, founder: "the
+  // running score should be how far away from the target your team is with
+  // + or - and the actual total smaller in parentheses"). Signed: over is +,
+  // under is −; the raw total sits beneath in parentheses, the target under
+  // that, and the number that decides the matchup (the darts' sum) last.
+  const pts = mode === 'proj' ? side.projected : side.live;
+  const off = aim ? pts - aim.target : 0;
   const big = mode === 'hidden' ? '—'
-    : aim ? (mode === 'proj' ? aim.projected.toFixed(1) : aim.live.toFixed(1))
+    : aim ? `${off > 0 ? '+' : off < 0 ? '−' : ''}${Math.abs(off).toFixed(1)}`
     : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
   const sub = mode === 'hidden' ? 'sealed until kickoff'
-    : aim ? (mode === 'proj' ? `${side.projected.toFixed(1)} pts projected` : `${side.live.toFixed(1)} pts · ${aim.dist.toFixed(1)} off`)
+    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''})`
     : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <div style={{ textAlign: align, minWidth: 0 }}>
@@ -328,12 +335,15 @@ function TeamHead({ side, align, accent, mode }: {
         </div>
       )}
       <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, color: mode === 'hidden' ? 'var(--faint)' : 'var(--text)' }}>{big}</div>
+      <div className="mono" style={{ fontSize: aim ? 11 : 9.5, fontWeight: aim ? 700 : 400, color: mode === 'hidden' ? 'var(--faint)' : aim ? 'var(--dim)' : accent }}>{sub}</div>
       {/* THE TARGET (v0.646.0, founder: "make the top 'aim x' into Target x
           and make the font larger and bold. We need that to be clear"). */}
       {aim && mode !== 'hidden' && (
-        <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: 'var(--warn)', letterSpacing: '0.02em' }}>🎯 Target {aim.target}</div>
+        <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: 'var(--warn)', letterSpacing: '0.02em', marginTop: 2 }}>🎯 Target {aim.target}</div>
       )}
-      <div className="mono" style={{ fontSize: 9.5, color: mode === 'hidden' ? 'var(--faint)' : accent }}>{sub}</div>
+      {aim && mode !== 'hidden' && aim.variant === 'slots' && (
+        <div className="mono" style={{ fontSize: 9, color: accent }}>{mode === 'proj' ? `score ${aim.projected.toFixed(1)} proj` : `score ${aim.live.toFixed(1)}`}</div>
+      )}
     </div>
   );
 }
