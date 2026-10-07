@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.650.1 — the funnel's rails have screens; the Mode sheet fits a phone
+
+> - The front page's feature cards now rotate through real screens of the app — the create screen's league types and formats, the roster builder, the Bullseye and golf settings, the scoped bonuses, a draft with head coaches on the board — instead of "screen coming" placeholders.
+> - On a phone, the Mode & Season sheet's golf and Bullseye pills now drop under their text instead of squeezing it to a word a line.
+
+Founder: "can you take screen shots from mobile web and fill these in until I
+have app screenshots?"
+
+- **The thirteen screens** under `public/brand/funnel/` are stand-ins shot
+  from this build's web app at 390×844 (2×), signed in with a stub session
+  and every backend call answered locally with fixture data (a classic
+  league with a rookie-WR spot, a Cowboys-only spot and a head-coach spot;
+  four scoped bonuses; a snake draft with three coaches already taken), so
+  no real league was touched. Golf and best ball come from the demo's
+  classic board and the classic sim. The founder's own app screenshots
+  replace them file for file — the names and the README's shooting list
+  stand.
+- **The Mode sheet** (`CommishDash.tsx`): the golf and Bullseye rows were a
+  flex row with the pills `flexShrink: 0`, so at phone width the paragraph
+  beside them collapsed to one word a line. Both rows wrap now.
+
 ### v0.650.0 — the front door, revised: the welcome, rotating screens, Bullseye
 
 > - The site's front page opens on a new welcome — free, bespoke, built at warp speed with AI and you — and two buttons: Count me in! and Sign in. No small print under them.

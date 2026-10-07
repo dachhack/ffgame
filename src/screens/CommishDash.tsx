@@ -768,8 +768,8 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             It changes which end of the leaderboard you are aiming at, which is
             a fact about the GAME. Frozen at the draft for the same reason the
             game mode is: you draft a golf league inside out. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
             <div className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>⛳ GOLF MODE</div>
             <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
               The LOWEST weekly total wins the matchup — standings, tiebreaks and playoffs all read the other way. Nothing about scoring changes: a touchdown is worth what your catalog says. Pairs with the ⛳ zero-fill on each starting spot under ⚖ TEAMS &amp; ROSTERS, which makes an empty spot the worst thing that can happen to you rather than the best. Locks once the draft starts.
@@ -780,8 +780,9 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             <button onClick={() => void saveGolf(true)} disabled={busy || golf === null} className="mono" style={pill(golf === true)}>⛳ LOW WINS</button>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        {/* flexWrap (v0.650.1): on a phone the pills drop under the text instead of squeezing it to a word a line. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
             <div className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>🎯 BULLSEYE</div>
             <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
               Aim, don&apos;t pile up. Every week the CPU deals a card — a round number for each starting spot (SLOTS) or one number for the whole lineup (TOTAL) — and the closer a starter lands, the more the spot scores. Over counts the same as under; a zero is a miss; inside half a point is a bullseye and pays double. Standings and playoffs read as always: the higher score wins. Floor beats ceiling, so a steady RB2 and a kicker become weapons. Dealt Tuesday, before waivers. Not with golf. Locks once the draft starts.

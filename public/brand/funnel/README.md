@@ -1,6 +1,10 @@
 # The funnel's screens
 
-Phone screenshots for the landing's feature cards (v0.650.0). Each card
+Phone screenshots for the landing's feature cards (v0.650.0).
+
+**What's here now (v0.650.1) are stand-ins**: the same screens shot from the
+web app at phone size against fixture data, until the founder's app
+screenshots replace them. Overwrite file for file; the names are fixed. Each card
 rotates through its files; a file that isn't here yet shows as a labelled
 "SCREEN COMING" placeholder, so drop them in as you shoot them. The names are
 fixed — `src/screens/Landing.tsx` (`FUNNEL_SHOTS`) reads them.
