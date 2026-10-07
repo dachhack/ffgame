@@ -1817,11 +1817,6 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                 )}
               </button>
               {golf && <div style={{ color: 'var(--warn)', fontWeight: 700, marginTop: 4 }}>⛳ LOW WINS</div>}
-              {bullseye && (
-                <div className="mono" style={{ color: 'var(--warn)', fontWeight: 700, marginTop: 4, fontSize: 10 }} title={bullseye.variant === 'total' ? 'One number for the whole lineup — closest wins' : 'Every spot aims at its own number — closest wins'}>
-                  🎯 BULLSEYE{bullseye.variant === 'total' ? ' · ONE TOTAL' : ''}
-                </div>
-              )}
             </div>
             <TeamHead side={board.away} align="right" accent="var(--opp, var(--dim))" mode={locked ? 'live' : 'proj'} />
           </div>
