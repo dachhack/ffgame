@@ -64,7 +64,7 @@ export function installBullseye(leagueId, week, mode, published, rosterIds = [])
  *  card this call (0 on every tick but the week's first). */
 export async function publishBullseyeCards(week, log = () => {}) {
   const { data: lgs, error } = await db().from('league').select('id,settings_json')
-    .eq('settings_json->>game_mode', 'classic').in('settings_json->>bullseye', ['slots', 'total', 'hybrid']);
+    .eq('settings_json->>game_mode', 'classic').in('settings_json->>bullseye', ['slots', 'total']);
   if (error) { log('bullseye leagues', error.message); return 0; }
   if (!lgs?.length) return 0;
   let dealt = 0;

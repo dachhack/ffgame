@@ -3344,7 +3344,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     }).catch(() => { if (alive) setBullCard(null); });
     return () => { alive = false; };
   }, [leagueId, gm, bullCfg, myRoster]);
-  const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius, bullCfg.rings) : null);
+  const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius) : null);
   const bySpot = useMemo(() => {
     const active = shown.filter((p) => p.spot === 'active');
     const seat = assignSpots(slotDefs, active.map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })));
@@ -3981,7 +3981,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
                   const f = fitOf(p.slug, p.pos);
                   if (!f || !bullCfg || f.dist >= bullCfg.radius) return null;
                   return (
-                    <span className="mono" title={`projects ${f.dist.toFixed(1)} off the ${f.target} this week — worth ${f.ring.toFixed(1)} rings in ${slotNames[slotDefs.findIndex((d) => d.slot === f.slot)] ?? f.slot}`}
+                    <span className="mono" title={`projects ${f.dist.toFixed(1)} off the ${f.target} this week — worth ${f.ring.toFixed(1)} in ${slotNames[slotDefs.findIndex((d) => d.slot === f.slot)] ?? f.slot}`}
                       style={{ fontSize: 8.5, fontWeight: 700, color: f.dist <= bullCfg.radius / 5 ? 'var(--warn)' : 'var(--faint)', whiteSpace: 'nowrap' }}>
                       🎯{f.target} · {f.dist.toFixed(1)} off
                     </span>

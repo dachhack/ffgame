@@ -69,19 +69,22 @@ begin
     'be3a …both stored');
   perform assert_err(set_league_bullseye(lid, 'total', 1), '2-50', 'be3b the radius is bounded below');
   perform assert_err(set_league_bullseye(lid, 'total', 51), '2-50', 'be3c …and above');
-  perform assert_err(set_league_bullseye(lid, 'darts'), 'slots, total, hybrid or off', 'be3d an unknown variant is refused');
-  -- THE KNOBS (0448)
-  perform assert_ok(set_league_bullseye(lid, 'hybrid'), 'be3e hybrid is a variant');
-  perform assert_true(league_bullseye(lid) = 'hybrid', 'be3f …and reads back');
-  r := set_league_bullseye(lid, 'hybrid', null, 'fixed', 'team');
-  perform assert_ok(r, 'be3g rings + deal store');
-  perform assert_true(r ->> 'rings' = 'fixed' and r ->> 'deal' = 'team', 'be3h …and echo');
+  perform assert_err(set_league_bullseye(lid, 'darts'), 'slots, total or off', 'be3d an unknown variant is refused');
+  perform assert_err(set_league_bullseye(lid, 'hybrid'), 'slots, total or off', 'be3e hybrid is not a variant (0450)');
+  -- THE DEAL (0448; the rings knob went in 0450)
+  r := set_league_bullseye(lid, 'slots', null, 'team');
+  perform assert_ok(r, 'be3g the deal stores');
+  perform assert_true(r ->> 'deal' = 'team' and not (r ? 'rings'), 'be3h …and echoes, with no rings to speak of');
   gm := league_game_mode(lid);
-  perform assert_true(gm ->> 'bullseye_rings' = 'fixed' and gm ->> 'bullseye_deal' = 'team' and (gm ->> 'bullseye_radius')::int = 25,
-    'be3i the screens see all three knobs; a null keeps the radius');
-  perform assert_err(set_league_bullseye(lid, 'hybrid', null, 'round'), 'continuous or fixed', 'be3j bad rings refused');
-  perform assert_err(set_league_bullseye(lid, 'hybrid', null, null, 'each'), 'shared or team', 'be3k bad deal refused');
-  perform assert_ok(set_league_bullseye(lid, 'hybrid', null, 'continuous', 'shared'), 'be3l …and back');
+  perform assert_true(gm ->> 'bullseye_deal' = 'team' and (gm ->> 'bullseye_radius')::int = 25 and not (gm ? 'bullseye_rings'),
+    'be3i the screens see the deal and the radius; a null keeps the radius; rings is gone');
+  perform assert_err(set_league_bullseye(lid, 'slots', null, 'each'), 'shared or team', 'be3k bad deal refused');
+  perform assert_ok(set_league_bullseye(lid, 'slots', null, 'shared'), 'be3l …and back');
+  -- A league that carried the old knob is scrubbed on its next save.
+  update league set settings_json = settings_json || '{"bullseye_rings": "fixed"}'::jsonb where id = lid;
+  perform assert_ok(set_league_bullseye(lid, 'total'), 'be3m a save…');
+  perform assert_true(not ((select settings_json from league where id = lid) ? 'bullseye_rings'), 'be3n …drops a stale rings key');
+  perform assert_ok(set_league_bullseye(lid, 'slots'), 'be3o back to slots');
   perform probe_as('b');
   perform assert_err(set_league_bullseye(lid, 'slots'), 'commissioner only', 'be4 a member cannot set it');
   perform probe_as('a');

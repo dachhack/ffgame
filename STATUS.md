@@ -22,6 +22,46 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.646.0 — Bullseye: two ways to play, one way to score
+
+> - Bullseye is back to two ways to play — SLOTS (a number per spot) and TOTAL (one number for the lineup) — scored one way: the closer a starter lands, the more the spot scores, and inside half a point pays double. The HYBRID option and the fixed-points scale are gone.
+> - The app's Bullseye setting no longer gets squeezed: its buttons sit on their own row under the label. On the matchup screen each team's target is now printed bold under its score: 🎯 Target 115.
+
+Founder, with the app's MODE sheet: "Let's only do smooth rings so no
+setting needed and no need to say rings anywhere. Bulls eye info chip looks
+like it got cut off. Lets not do hybrid."
+
+- **0450**: `league_bullseye` admits slots/total only; a league on hybrid is
+  moved to slots and every `bullseye_rings` key is removed;
+  `set_league_bullseye(league, variant, radius, deal)` (the 0448 five-arg
+  form dropped; a save scrubs a stale rings key); `bullseye_card`,
+  `league_game_mode` and the global board stop reporting rings / admitting
+  hybrid. The per-team deal stays.
+- **Engine**: `BullseyeConfig` is `{variant, radius, deal}`; `ringScore` has
+  one scale; `applyBullseye` and `buildMatchupBoard` lose the hybrid branch;
+  `bullseyeFit` loses the rings argument. (The engine keeps the word in its
+  identifiers; no string a player sees carries it.)
+- **The target** (founder, with the matchup screen: "make the top 'aim x'
+  into Target x and make the font larger and bold. We need that to be
+  clear"): under each team's score the board prints 🎯 Target 115, bold and
+  a size up, with "x pts projected" / "x pts · y off" small beneath it.
+- **Copy**: a dart
+  reads "INNER · 1.4 off · +8.6"; the darts board says "Highest first"; the
+  commissioner text says "the higher score wins"; the wire's title says
+  "worth 8.6 in FLEX".
+- **The chip**: in the app the OFF / SLOTS / TOTAL pills sit on their own
+  row under 🎯 BULLSEYE (the K / D-ST FILL shape); three pills beside the
+  label had wrapped it to "BUL / LSEYE" and pushed the ⓘ off the edge. Web:
+  HYBRID pill and the rings row removed; the deal row stays.
+- Pinned: check-bullseye §8 (hybrid parses to off, rings is ignored);
+  bullseye-probes be3d–be3o (hybrid refused, the deal stores and echoes
+  with no rings, a stale rings key is scrubbed on save);
+  server/test/bullseye.mjs. Golf and game-mode suites green.
+- Noted in passing: `server/test/h2h-verify.mjs`'s soft check "coin totals
+  are positive" (expects both sides over 50; prints home 30 / away 15) fails
+  on main as well, with this change stashed — a drip coin test, untouched
+  here, and it does not fail the suite.
+
 ### v0.645.1 — the autodraft fills the default lineup
 
 > - A classic league whose commissioner never opened the roster builder now autodrafts a full starting lineup: the picker fills every open spot (RB 2 included) before it builds a bench, and takes a bench two deep per position before drafting by rank. It used to draft purely by rank in such a league, which left a starting spot empty while the bench filled with receivers.

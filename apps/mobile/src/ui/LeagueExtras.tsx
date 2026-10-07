@@ -1052,7 +1052,7 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
  *  that played it. Nothing elsewhere. */
 export function DartsBoard({ leagueId, myRoster, week }: { leagueId: string; myRoster: number | null; week: number | null }) {
   const t = useTheme();
-  const [on, setOn] = useState<'slots' | 'total' | 'hybrid' | null>(null);
+  const [on, setOn] = useState<'slots' | 'total' | null>(null);
   const [scope, setScope] = useState<'league' | 'all'>('league');
   const [rows, setRows] = useState<{ rank: number; team: string | null; final: number; league?: string | null; mine?: boolean }[] | null>(null);
   useEffect(() => {
@@ -1076,7 +1076,7 @@ export function DartsBoard({ leagueId, myRoster, week }: { leagueId: string; myR
         <Chip label="ALL LEAGUES" on={scope === 'all'} onPress={() => { tap(); setScope('all'); }} />
       </View>
       <Mono size={8} tone="faint" style={{ marginTop: 4 }}>
-        {`${on === 'total' ? 'One number for the lineup' : on === 'hybrid' ? 'A number per spot, plus the lineup total' : 'A number per spot'} — closest wins. Ring totals, highest first.`}
+        {`${on === 'total' ? 'One number for the lineup' : 'A number per spot'} — closest wins. Highest first.`}
       </Mono>
       {rows === null && <ActivityIndicator color={t.you} style={{ marginTop: 8 }} />}
       {rows?.length === 0 && <Mono size={9} tone="faint" style={{ marginTop: 8 }}>No finals yet this week.</Mono>}

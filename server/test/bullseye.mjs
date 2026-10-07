@@ -20,9 +20,10 @@ assert.strictEqual(modeOfSettings({ game_mode: 'classic', bullseye: 'darts' }).b
 assert.strictEqual(modeOfSettings(undefined).bullseye, null, 'no settings → off, not a throw');
 
 // ── The engine config: classic only, defaults owned by the engine ──────────
-assert.deepStrictEqual(bullseyeCfgOf(on), { variant: 'slots', radius: 25, rings: 'continuous', deal: 'shared' });
-assert.deepStrictEqual(bullseyeCfgOf(modeOfSettings({ game_mode: 'classic', bullseye: 'total' })), { variant: 'total', radius: 10, rings: 'continuous', deal: 'shared' });
-assert.deepStrictEqual(bullseyeCfgOf(modeOfSettings({ game_mode: 'classic', bullseye: 'hybrid', bullseye_rings: 'fixed', bullseye_deal: 'team' })), { variant: 'hybrid', radius: 10, rings: 'fixed', deal: 'team' });
+assert.deepStrictEqual(bullseyeCfgOf(on), { variant: 'slots', radius: 25, deal: 'shared' });
+assert.deepStrictEqual(bullseyeCfgOf(modeOfSettings({ game_mode: 'classic', bullseye: 'total' })), { variant: 'total', radius: 10, deal: 'shared' });
+assert.strictEqual(bullseyeCfgOf(modeOfSettings({ game_mode: 'classic', bullseye: 'hybrid' })), null, 'hybrid is gone (v0.646.0)');
+assert.deepStrictEqual(bullseyeCfgOf(modeOfSettings({ game_mode: 'classic', bullseye: 'total', bullseye_rings: 'fixed', bullseye_deal: 'team' })), { variant: 'total', radius: 10, deal: 'team' }, 'rings is ignored, the deal parses');
 assert.strictEqual(bullseyeCfgOf(plain), null);
 assert.strictEqual(bullseyeCfgOf(modeOfSettings({ game_mode: 'drip', bullseye: 'slots' })), null, 'a drip league never aims');
 
@@ -52,7 +53,7 @@ assert.ok(stdCard.total <= dealt.total, 'and it aims lower, since its catalog pa
 // ── The install: unconditional, so no league inherits another's ────────────
 clearLeagueBullseye();
 assert.strictEqual(installBullseye(LEAGUE, 5, on, new Map([[LEAGUE, { card: published, cards: {} }]])).card, published);
-assert.deepStrictEqual(leagueBullseye(), { cfg: { variant: 'slots', radius: 25, rings: 'continuous', deal: 'shared' }, card: published });
+assert.deepStrictEqual(leagueBullseye(), { cfg: { variant: 'slots', radius: 25, deal: 'shared' }, card: published });
 assert.strictEqual(installBullseye(LEAGUE, 5, plain, new Map([[LEAGUE, { card: published, cards: {} }]])), null, 'a league with it off installs nothing…');
 assert.strictEqual(leagueBullseye(), null, '…and CLEARS what the previous league left');
 installBullseye(LEAGUE, 6, on, new Map());

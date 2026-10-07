@@ -215,13 +215,12 @@ export const modeOfSettings = (s) => ({
   golf: s?.golf === true,
   // BULLSEYE (0446): the variant ('slots' | 'total') and the radius override,
   // raw — the engine's bullseyeConfigOf owns the defaults and the clamps.
-  bullseye: s?.bullseye === 'slots' || s?.bullseye === 'total' || s?.bullseye === 'hybrid' ? s.bullseye : null,
+  bullseye: s?.bullseye === 'slots' || s?.bullseye === 'total' ? s.bullseye : null,
   bullseye_radius: Number.isFinite(Number(s?.bullseye_radius)) ? Number(s.bullseye_radius) : null,
-  bullseye_rings: s?.bullseye_rings === 'fixed' ? 'fixed' : null,
   bullseye_deal: s?.bullseye_deal === 'team' ? 'team' : null,
 });
 async function leagueModeOf(leagueId, ctx) {
-  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false, bullseye: null, bullseye_radius: null, bullseye_rings: null, bullseye_deal: null };
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false, bullseye: null, bullseye_radius: null, bullseye_deal: null };
   const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
   return modeOfSettings(data?.settings_json);
 }

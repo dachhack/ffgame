@@ -107,7 +107,7 @@ export interface BoardSide {
   record?: { wins: number; losses: number; ties: number; rank?: number | null } | null;
   /** BULLSEYE (v0.643.0): the side's RING totals — the headline when the
    *  league plays it. `live`/`projected` above stay the raw points. */
-  aim?: { variant: 'slots' | 'total' | 'hybrid'; target: number; live: number; projected: number; dist: number };
+  aim?: { variant: 'slots' | 'total'; target: number; live: number; projected: number; dist: number };
 }
 
 export interface MatchupBoard {
@@ -293,7 +293,7 @@ export function buildMatchupBoard(input: {
     const { cfg } = bull;
     const n = Math.max(1, slots.length);
     const dart = (pts: number, target: number | undefined, radius: number): Dart | null =>
-      target == null ? null : { target, dist: r2(Math.abs(pts - target)), ring: ringScore(pts, target, radius, cfg.rings) };
+      target == null ? null : { target, dist: r2(Math.abs(pts - target)), ring: ringScore(pts, target, radius) };
     const aimSide = (s: BoardSide, mine: (BoardEntry | null)[]): BoardSide => {
       const card = bullseyeCardFor(s.rosterId) ?? bull.card;
       const pts = mine.reduce((a, e, i) => a + fillLive(e, slotOrder[i]), 0);
@@ -301,14 +301,10 @@ export function buildMatchupBoard(input: {
       const dist = r2(Math.abs(pts - card.total));
       if (cfg.variant === 'total') {
         const radius = cfg.radius * n;
-        return { ...s, aim: { variant: 'total', target: card.total, live: ringScore(pts, card.total, radius, cfg.rings), projected: ringScore(proj, card.total, radius, cfg.rings), dist } };
+        return { ...s, aim: { variant: 'total', target: card.total, live: ringScore(pts, card.total, radius), projected: ringScore(proj, card.total, radius), dist } };
       }
-      let live = mine.reduce((a, e, i) => a + ringScore(fillLive(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius, cfg.rings), 0);
-      let projected = mine.reduce((a, e, i) => a + ringScore(fillProj(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius, cfg.rings), 0);
-      if (cfg.variant === 'hybrid') {
-        live += ringScore(pts, card.total, cfg.radius * n, cfg.rings) / n;
-        projected += ringScore(proj, card.total, cfg.radius * n, cfg.rings) / n;
-      }
+      const live = mine.reduce((a, e, i) => a + ringScore(fillLive(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0);
+      const projected = mine.reduce((a, e, i) => a + ringScore(fillProj(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0);
       return { ...s, aim: { variant: cfg.variant, target: card.total, live: r2(live), projected: r2(projected), dist } };
     };
     const homeCard = bullseyeCardFor(home.rosterId) ?? bull.card;
