@@ -13,6 +13,7 @@
 // the read); the badge poll never marks anything.
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
+import { catchUpOf, catchUpLabel, type CatchUp } from '@drip/core/data/chatCatchUp';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -420,29 +421,80 @@ export function ChatPanel({ leagueId, onClose }: { leagueId: string; onClose: ()
 }
 
 /** Shared scrolling message body: newest at the bottom, pinned there while
- *  new messages arrive unless the reader has scrolled up into history. */
-function MessageScroll({ children, dep, onFile }: { children: React.ReactNode; dep: unknown; onFile?: (f: File | null) => void }) {
+ *  new messages arrive unless the reader has scrolled up into history.
+ *
+ *  v0.649.0: the pin holds through everything that grows the thread after
+ *  the first paint — pictures and GIFs finishing their load, the pane getting
+ *  its height a frame later — because a ResizeObserver re-pins while `stick`
+ *  is on. Before, the chat landed a few hundred pixels short of the newest
+ *  message whenever a picture above it loaded after the scroll.
+ *
+ *  `catchUp` floats a pill over the thread that jumps to the first message
+ *  the reader has not seen. It shows only while that message is off the top
+ *  of the pane, so a chat with two new lines in view carries no pill. Each
+ *  message row wears `data-mid` so the pill can find its target. */
+function MessageScroll({ children, dep, onFile, catchUp }: {
+  children: React.ReactNode; dep: unknown; onFile?: (f: File | null) => void; catchUp?: CatchUp | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   // 0349: dragging a picture onto the conversation posts it. The outline only
   // appears while something is actually over the thread, so the chat does not
   // grow a dashed box it never uses.
   const [over, setOver] = useState(false);
+  // The pill is gone for good once tapped or scrolled past; `above` is whether
+  // the target currently sits above the pane's top edge.
+  const [dismissed, setDismissed] = useState(false);
+  const [above, setAbove] = useState(false);
+  const targetEl = () => (catchUp && ref.current
+    ? ref.current.querySelector<HTMLElement>(`[data-mid="${catchUp.targetId}"]`) : null);
+  const judge = () => {
+    const el = ref.current; const t = targetEl();
+    setAbove(!!el && !!t && t.offsetTop < el.scrollTop);
+  };
+  const pin = () => { const el = ref.current; if (el && stick.current) el.scrollTop = el.scrollHeight; judge(); };
+  useEffect(() => { pin(); }, [dep]); // eslint-disable-line react-hooks/exhaustive-deps -- pin reads refs
   useEffect(() => {
     const el = ref.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [dep]);
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => pin());
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- observes the pane once
+  useEffect(() => { setDismissed(false); judge(); }, [catchUp?.targetId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const jump = () => {
+    const el = ref.current; const t = targetEl();
+    if (!el) return;
+    stick.current = false;
+    if (t) el.scrollTo({ top: Math.max(0, t.offsetTop - 8), behavior: 'smooth' });
+    else el.scrollTo({ top: 0, behavior: 'smooth' });
+    setDismissed(true);
+  };
+  const pill = catchUp && !dismissed && above;
   return (
-    <div ref={ref} onScroll={(e) => {
-      const el = e.currentTarget;
-      stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-    }}
-      onDragOver={onFile ? (e) => { e.preventDefault(); setOver(true); } : undefined}
-      onDragLeave={onFile ? () => setOver(false) : undefined}
-      onDrop={onFile ? (e) => { e.preventDefault(); setOver(false); onFile(droppedImage(e)); } : undefined}
-      style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', minHeight: 0,
-        ...(over ? { outline: '2px dashed var(--you)', outlineOffset: -4 } : {}) }}>
-      {children}
+    <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div ref={ref} onScroll={(e) => {
+        const el = e.currentTarget;
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+        judge();
+      }}
+        onDragOver={onFile ? (e) => { e.preventDefault(); setOver(true); } : undefined}
+        onDragLeave={onFile ? () => setOver(false) : undefined}
+        onDrop={onFile ? (e) => { e.preventDefault(); setOver(false); onFile(droppedImage(e)); } : undefined}
+        style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', minHeight: 0, position: 'relative',
+          ...(over ? { outline: '2px dashed var(--you)', outlineOffset: -4 } : {}) }}>
+        <div>{children}</div>
+      </div>
+      {pill && (
+        <button onClick={jump} className="mono" aria-label={`${catchUp.count} new messages, jump to the first`}
+          style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
+            background: 'var(--you)', color: 'var(--on-accent)', border: 'none', borderRadius: 999,
+            padding: '5px 12px', fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3, cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.25)', whiteSpace: 'nowrap' }}>
+          {catchUpLabel(catchUp)}
+        </button>
+      )}
     </div>
   );
 }
@@ -706,9 +758,17 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const fileRef = useRef<HTMLInputElement>(null);
   /** 0351: the one message being reworded, if any. */
   const [editing, setEditing] = useState<number | null>(null);
+  // v0.649.0: where the reader left off. Only the FIRST page knows — the
+  // fetch itself advances the mark, so every poll after it finds nothing new.
+  const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
+  const marked = useRef(false);
   const load = () => chatMessages(leagueId)
     .then((r) => {
-      if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); }
+      if (r.ok && r.messages) {
+        const list = [...r.messages].reverse();
+        setMsgs(list); setPins(r.pins ?? []);
+        if (!marked.current) { marked.current = true; setCatchUp(catchUpOf(list, r)); }
+      }
     })
     .catch(() => {});
   useEffect(() => {
@@ -798,11 +858,11 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
           ))}
         </div>
       )}
-      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick}>
+      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick} catchUp={catchUp}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
         {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Nothing yet — say hello to the league.</div>}
         {msgs?.map((m) => (
-          <div key={m.id} style={{ marginBottom: 10, ...(m.mentions_me ? { background: 'color-mix(in srgb, var(--you) 8%, transparent)', borderRadius: 6, padding: '4px 6px', margin: '0 -6px 10px' } : {}) }}>
+          <div key={m.id} data-mid={m.id} style={{ marginBottom: 10, ...(m.mentions_me ? { background: 'color-mix(in srgb, var(--you) 8%, transparent)', borderRadius: 6, padding: '4px 6px', margin: '0 -6px 10px' } : {}) }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: m.mine ? 'var(--you)' : 'var(--warn)' }}>{m.author}</span>
               <span className="mono" style={{ fontSize: 8, color: 'var(--faint)' }}>{fmtWhen(m.at)}</span>
@@ -1071,11 +1131,20 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
+  const marked = useRef(false);
   const load = (tid: string) => dmMessages(tid)
-    .then((r) => { if (r.ok && r.messages) setMsgs([...r.messages].reverse()); })
+    .then((r) => {
+      if (r.ok && r.messages) {
+        const list = [...r.messages].reverse();
+        setMsgs(list);
+        if (!marked.current) { marked.current = true; setCatchUp(catchUpOf(list, r)); }
+      }
+    })
     .catch(() => {});
   useEffect(() => {
     if (!thread.threadId) return;
+    marked.current = false; setCatchUp(null);
     void load(thread.threadId);
     const id = setInterval(() => { if (!document.hidden && thread.threadId) void load(thread.threadId); }, 8_000);
     return () => clearInterval(id);
@@ -1100,11 +1169,11 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         <button onClick={onBack} className="mono" style={linkBtn}>←</button>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{thread.peer}</span>
       </div>
-      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick}>
+      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick} catchUp={catchUp}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
         {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Say hello.</div>}
         {msgs?.map((m) => (
-          <div key={m.id} style={{ display: 'flex', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+          <div key={m.id} data-mid={m.id} style={{ display: 'flex', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <div style={{ maxWidth: '78%', borderRadius: 10, padding: '7px 11px', background: m.mine ? 'color-mix(in srgb, var(--you) 18%, var(--surface))' : 'var(--bg)', border: '1px solid var(--bd)' }}>
               {editing === m.id ? (
                 <EditBox m={m} onCancel={() => setEditing(null)}
