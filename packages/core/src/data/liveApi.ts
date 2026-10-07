@@ -2162,6 +2162,12 @@ export const bullseyeCard = (leagueId: string, week: number) =>
 export const bullseyeWeekBoard = (leagueId: string, week: number) =>
   rpc<{ ok: boolean; error?: string; bullseye?: 'slots' | 'total' | null; week?: number; board?: { rank: number; roster_id: number; team: string | null; final: number }[] }>('bullseye_week_board',
     { p_league_id: leagueId, p_week: week });
+/** Every team in every bullseye league, ranked by the week's ring total
+ *  (0447). A stranger sees a team name and a number; a league's name is said
+ *  only to its own members. */
+export const bullseyeGlobalBoard = (week: number, season?: string | null) =>
+  rpc<{ ok: boolean; error?: string; week?: number; board?: { rank: number; team: string | null; final: number; league: string | null; variant: 'slots' | 'total' | null; mine: boolean }[] }>('bullseye_global_board',
+    { p_week: week, p_season: season ?? null });
 export const setLeagueBestball = (leagueId: string, slots: string[]) =>
   tracked(rpc<{ ok: boolean; error?: string; bestball?: string[] }>('set_league_bestball',
     { p_league_id: leagueId, p_slots: slots }),

@@ -6,8 +6,11 @@
 > numbers 5, 10, 15, 20) randomly by the CPU. Could do head to head and weekly
 > ranked battles"), then "for classic mode", then "write it up as a spec in
 > docs and get it going". Built the same day in migration
-> `0446_bullseye.sql` + `packages/core/src/engine/bullseye.ts`; see §12 for
-> exactly what shipped and what is still open.
+> `0446_bullseye.sql` + `packages/core/src/engine/bullseye.ts`; the open
+> list worked the same day ("let's keep working on the open list") in
+> `0447_bullseye_across_leagues.sql`. See §12 for exactly what shipped and
+> §11 for what is still open. Founder's standing rule: **no power-ups in
+> this mode.**
 >
 > Pairs with `docs/rulebook.md` (the game it sits beside) and the golf notes
 > in migration `0200_golf_mode.sql` (the setting it is modelled on). §6's
@@ -145,11 +148,17 @@ practice that is Tuesday morning, when Sleeper rolls the week, which puts the
 card in front of the league **before Wednesday's waivers run**: "I need a
 5-point TE" is a real claim. The TOTAL row is published as slot `TOTAL`.
 
-**Not in v1 (§11):** anchoring the draw to projection quantiles under the
-league's own scoring, so a 20 for a WR means the same thing in half PPR as in
-full. v1's sets are tuned for full PPR and a standard catalog; a league far
-from that will find some targets harder than others, which is a feature until
-it isn't.
+**Anchored to the league's own scoring (v0.644.0).** The sets above are
+tuned for full PPR and the stock catalog, so each is **scaled** by what the
+league's catalog pays a *typical* season at that position against the stock
+catalog — a canonical mid-tier stat line per position (QB, RB, WR, TE, a K
+line, a DST line), scored under both, the ratio applied to every target and
+rounded back to a multiple of 5 (never below 5; targets that round together
+pool their weights). FLEX and REC FLEX price as WR, SUPERFLEX as QB; IDP,
+RET and a custom mix stay stock. Derived from the catalog alone, never from
+live data, so the deal stays reproducible from settings: a standard-scoring
+league deals a lower card than a full-PPR one from the same seed, and a
+six-point-passing-TD league asks more of its QB spot.
 
 ## 5. How a week scores
 
@@ -284,8 +293,17 @@ while golf is on.
 **The week board:** a ranked list of every team's ring total for the week
 (the `bullseye_week_board` read), reachable from the league's standings.
 
-**The waiver wire (v2):** a FIT column, `|projection − target|` against the
-open targets, so the wire reads as "who lands on my 5".
+**The waiver wire (v0.644.0):** each free agent carries a FIT chip —
+`🎯 10 · 1.2 off` — the spot he is eligible for whose target his projection
+sits closest to, with the distance; bright inside a fifth of the radius,
+hidden when he lands outside it. Published card first, dealt from the seed
+until the worker has published. So the wire reads as "who lands on my 5".
+
+**The darts board (v0.644.0):** under the league's standings on both hosts, a
+🎯 panel for the open week: THIS LEAGUE (every team's final ring total,
+ranked) or ALL LEAGUES (every team in every bullseye league that week). On
+the cross-league view a stranger sees a team name and a number; a league's
+name is said only to its own members, and roster ids never leave.
 
 ## 10. Rollout
 
@@ -301,25 +319,20 @@ open targets, so the wire reads as "who lands on my 5".
 
 ## 11. Open questions (argue here)
 
-- **Projection-anchored draws.** Draw each spot's target from the quantiles
-  of projected points under the league's own scoring, rounded to 5, so every
-  target is equally reachable in every catalog. Needs the projection catalog
-  at deal time (the worker has it; a board dealing on the fly does too).
 - **A per-team card** (each team its own deal) is more varied and less fair.
   Shared is the default; per-team could be a knob.
 - **Hybrid**: SLOTS card plus a bonus when the lineup's sum also lands within
   a band of the card's sum.
-- **Cross-league weekly ranked.** Every bullseye league shares a base card
-  (seeded by week alone) so a global board by ring total is comparable
-  across leagues. Cheap once the deal is seeded by week; needs a public read.
-- **Power-ups as coin sinks** (reroll one target before lock; call your shot
-  for a double bullseye; nudge a final dart by up to two points). Drip-coin
-  only, earned-only, never bought — the premium line holds.
 - **DNP vs zero.** v1 treats 0.0 points as a miss. A WR who played and drew
   no targets is also a 0 — a true miss. A kicker with one missed FG is −1,
   not 0, and throws his dart. Fine; revisit if a league finds a real exploit.
 - **Rings as fixed points** instead of the continuous formula, if the league
   wants the darts board to read 50 / 25 / 10.
+- **Power-ups: closed.** Founder: "no power ups in this mode." Classic has
+  none and bullseye is a classic setting; nothing here spends coin.
+- **Settled (2026-10-07, v0.644.0):** projection-anchored draws → anchored to
+  the catalog (§4); cross-league weekly ranked → the darts board's ALL
+  LEAGUES view (§9), comparable by ring total rather than a shared card.
 
 ## 12. What v1 shipped (2026-10-07)
 
@@ -334,5 +347,8 @@ open targets, so the wire reads as "who lands on my 5".
 - `scripts/check-bullseye.mjs` (in `check:parity`) and
   `scripts/db/bullseye-probes.sql` (in the scratch runner).
 - Web + app: the commissioner pills and the board's banner + per-spot aim.
-- Not yet: the waiver-wire FIT column, cross-league ranked, the
-  projection-anchored draw, power-ups.
+- v0.644.0, the open list: the deal anchored to the league's catalog
+  (`bullseyeScaleOf`, `scaledDraw`); the wire's FIT chip (`bullseyeFit`,
+  both hosts); the darts board under the standings, this league or all
+  leagues (`bullseye_global_board`, 0447; `HubDartsBoard` on web,
+  `DartsBoard` in the app). Power-ups closed by the founder's rule.

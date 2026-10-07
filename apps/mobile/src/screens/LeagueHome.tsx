@@ -14,7 +14,7 @@ import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { InjuryNow } from '../ui/rosterGroup';
 import { PushPrefs } from '../ui/SettingsModal';
-import { Standings, Playoffs, GuillotineCard, VampireCard } from '../ui/LeagueExtras';
+import { Standings, Playoffs, GuillotineCard, VampireCard, DartsBoard } from '../ui/LeagueExtras';
 import { ScoringView, RosterRulesView, RegisterView, RecruitView, ApiKeysView } from '../ui/LeagueInfo';
 import { LeagueHistoryView } from '../ui/LeagueHistory';
 import { useLeagueScroll } from '../ui/scrollChrome';
@@ -232,6 +232,7 @@ export function LeagueHome(props: {
       <GuillotineCard leagueId={leagueId} myRoster={rosterId} />
       <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
       <Standings leagueId={leagueId} myRoster={rosterId} />
+      <DartsBoard leagueId={leagueId} myRoster={rosterId} week={week} />
 
       {/* ── ACTIVITY ──────────────────────────────────────────────────────
           What the league just did. The register in full is long, so the page

@@ -24,6 +24,7 @@ import {
   type Enrollment, type LiveMatchup, type TeamInfo, type VampireState, type StandingsRow,
 } from '@drip/core/data/liveApi';
 import { VampirePanel } from './VampirePanel';
+import { leagueGameMode as gameModeRpc, bullseyeWeekBoard, bullseyeGlobalBoard, defaultOpenWeek as openWeekRpc } from '@drip/core/data/liveApi';
 import { GuillotinePanel } from './GuillotinePanel';
 import { LeagueHistory } from './LeagueHistory';
 import { buildLiveLeague } from '@drip/core/data/liveBoard';
@@ -130,6 +131,62 @@ function HubMatchups({ leagueId, myRoster, wide }: { leagueId: string; myRoster:
 // ── THE TABLE, INLINE (0341) ────────────────────────────────────────────────
 // It used to be a tile that opened the results PAGE — one click to learn where
 // you sit in your own league. The page is still there behind "every pairing".
+/** THE DARTS BOARD (v0.644.0, docs/bullseye.md §9): in a bullseye league,
+ *  this week's finals ranked by ring total — this league, or every league
+ *  that played it. Renders nothing elsewhere. */
+function HubDartsBoard({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
+  const [on, setOn] = useState<'slots' | 'total' | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [scope, setScope] = useState<'league' | 'all'>('league');
+  const [rows, setRows] = useState<{ rank: number; team: string | null; final: number; league?: string | null; mine?: boolean }[] | null>(null);
+  useEffect(() => {
+    gameModeRpc(leagueId).then((g) => setOn(g.ok && g.mode === 'classic' ? (g.bullseye ?? null) : null)).catch(() => setOn(null));
+    openWeekRpc(leagueId).then(setWeek).catch(() => setWeek(null));
+  }, [leagueId]);
+  useEffect(() => {
+    if (!on || week == null) return;
+    setRows(null);
+    const q = scope === 'league'
+      ? bullseyeWeekBoard(leagueId, week).then((r) => (r.ok ? (r.board ?? []).map((b) => ({ rank: b.rank, team: b.team, final: b.final, mine: myRoster != null && b.roster_id === myRoster })) : []))
+      : bullseyeGlobalBoard(week).then((r) => (r.ok ? (r.board ?? []) : []));
+    q.then(setRows).catch(() => setRows([]));
+  }, [on, week, scope, leagueId, myRoster]);
+  if (!on || week == null) return null;
+  const cell: React.CSSProperties = { fontSize: 11, color: 'var(--dim)', textAlign: 'right', padding: '5px 0' };
+  const tab = (id: 'league' | 'all', label: string) => (
+    <button onClick={() => setScope(id)} className="mono" style={{ ...linkBtn, fontSize: 10, fontWeight: 700, color: scope === id ? 'var(--you)' : 'var(--faint)' }}>{label}</button>
+  );
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>🎯 Darts board · wk {week}</div>
+        <div style={{ flex: 1 }} />
+        {tab('league', 'THIS LEAGUE')}{tab('all', 'ALL LEAGUES')}
+      </div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 6 }}>
+        {on === 'total' ? 'One number for the lineup — closest wins.' : 'A number per spot — closest wins.'} Ring totals, highest first{scope === 'all' ? '; every league playing bullseye this week' : ''}.
+      </div>
+      {rows == null && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>loading…</div>}
+      {rows?.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No finals yet this week.</div>}
+      {!!rows?.length && (
+        <table className="mono" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} style={{ borderTop: '1px solid var(--bd)', background: r.mine ? 'color-mix(in srgb, var(--you) 8%, transparent)' : undefined }}>
+                <td style={{ ...cell, textAlign: 'left', color: r.mine ? 'var(--you)' : 'var(--text)', fontWeight: r.mine ? 700 : 400 }}>
+                  <span style={{ color: 'var(--faint)', marginRight: 8 }}>{r.rank}</span>{r.team ?? '—'}
+                  {scope === 'all' && r.league && <span style={{ color: 'var(--faint)', marginLeft: 8, fontSize: 9.5 }}>{r.league}</span>}
+                </td>
+                <td style={{ ...cell, fontWeight: 700, color: 'var(--text)' }}>{Number(r.final).toFixed(1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function HubStandings({ leagueId, myRoster, onFull }: { leagueId: string; myRoster: number | null; onFull: () => void }) {
   const [rows, setRows] = useState<StandingsRow[] | null>(null);
   useEffect(() => {
@@ -495,6 +552,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           opened on a list of doors rather than on the league. */}
       <HubMatchups leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} wide={wide} />
       <HubStandings leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} onFull={onResults} />
+      <HubDartsBoard leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} />
       {native && (
         <div style={{ marginTop: 22 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>

@@ -22,6 +22,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.644.0 — Bullseye works its open list: the card fits your scoring, the wire says who lands on it, the darts board
+
+> - A bullseye league's weekly card is now sized to its own scoring: a standard-scoring league aims lower than a full-PPR one, and a six-point-passing-TD league asks more of its quarterback spot — every target still a round number.
+> - The waiver wire shows where each free agent would land on this week's card ("🎯 10 · 1.2 off"), so you can shop for the spot you need to hit.
+> - A 🎯 darts board under the standings ranks this week's finals by ring total — your league, or every league playing bullseye this week.
+
+Founder: "let's keep working on the open list" — and, mid-stream, "no power
+ups in this mode", which closes that item for good (spec §11).
+
+- **Anchored draws** (`bullseyeScaleOf`, `scaledDraw` in bullseye.ts): a
+  canonical mid-tier season per position scored under the league's catalog
+  and the stock one; the ratio scales that type's set and rounds it back to
+  multiples of 5 (never below 5, pooled weights). K and DST price from their
+  own lines; FLEX/WRT as WR, SFLX as QB; IDP/RET/custom stay stock. Catalog
+  only, never live data — the worker, both boards, the wire and the probes
+  deal alike. `dealBullseyeCard` takes the catalog; every deal site passes
+  `leagueCatalogOf(...)`.
+- **The wire's FIT** (`bullseyeFit`): the eligible spot whose target the
+  projection sits closest to, with the distance; chip on both wires beside
+  the trend arrow, bright inside radius/5, hidden beyond the radius. The
+  wire reads the open week (`defaultOpenWeek`) and the published card, else
+  deals the seed's.
+- **The darts board**: `bullseye_global_board(week)` (0447) — every team in
+  every bullseye league with a final that week, ranked; league name only to
+  its own members, roster ids never leave. `HubDartsBoard` (web hub, under
+  Standings) and `DartsBoard` (app LeagueHome, under Standings) with THIS
+  LEAGUE / ALL LEAGUES; nothing renders in a league without the setting.
+- Pinned: check-bullseye §4 (scale: stock is identity, standard scoring
+  lowers WR/TE/FLEX and TE more than RB, K/DEF untouched, 6-pt passing TDs
+  raise QB/SFLX only, rounding/pooling, a lower card from the same seed) and
+  §9 (fit); bullseye-probes be8g–be8l + be9c (the global board: stranger vs
+  member view, no roster ids, a golf league's finals never reach it);
+  server/test/bullseye.mjs (a standard-scoring league deals its own, lower
+  card).
+- Not confirmed against a live league from here; same watch as v0.643.0.
+
 ### v0.643.0 — Bullseye: aim your lineup at a number (a classic setting)
 
 > - A new classic-league setting, 🎯 BULLSEYE: every week the CPU deals the league a card — a round number (5, 10, 15, 20…) for each starting spot, or one number for the whole lineup — and the closer each starter lands the more the spot banks. Over counts the same as under, a zero is a miss, and landing inside half a point is a bullseye that pays double.

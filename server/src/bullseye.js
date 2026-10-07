@@ -11,6 +11,7 @@
 import { db } from './supabase.js';
 import { modeOfSettings } from './resolve.js';
 import { leagueSlotDefs } from '../../packages/core/src/engine/classic.ts';
+import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import {
   bullseyeConfigOf, dealBullseyeCard, cardRows, cardFromRows, setLeagueBullseye,
 } from '../../packages/core/src/engine/bullseye.ts';
@@ -36,7 +37,7 @@ export async function bullseyeCardsFor(leagueIds, week) {
 
 /** The card a league plays this week: the published one, else the seed's. */
 export function bullseyeCardOf(leagueId, week, mode, published) {
-  return published?.get(leagueId) ?? dealBullseyeCard(leagueId, week, leagueSlotDefs(mode));
+  return published?.get(leagueId) ?? dealBullseyeCard(leagueId, week, leagueSlotDefs(mode), leagueCatalogOf(mode));
 }
 
 /** Install the league's setting + card in the engine — UNCONDITIONALLY, as
@@ -61,7 +62,7 @@ export async function publishBullseyeCards(week, log = () => {}) {
   for (const l of lgs) {
     const mode = modeOfSettings(l.settings_json);
     if (!bullseyeCfgOf(mode)) continue;
-    const card = dealBullseyeCard(l.id, week, leagueSlotDefs(mode));
+    const card = dealBullseyeCard(l.id, week, leagueSlotDefs(mode), leagueCatalogOf(mode));
     const rows = cardRows(card).map((r) => ({ league_id: l.id, week, slot: r.slot, target: r.target }));
     const { data: ins, error: e2 } = await db().from('bullseye_card')
       .upsert(rows, { onConflict: 'league_id,week,slot', ignoreDuplicates: true }).select('slot');

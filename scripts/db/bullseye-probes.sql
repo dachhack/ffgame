@@ -135,7 +135,25 @@ begin
     'be8e the 88 is a win in the standings');
   perform probe_as('c');
   perform assert_err(bullseye_week_board(lid, 3), 'forbidden', 'be8f a stranger cannot read the board');
+  -- ══ ACROSS LEAGUES (0447) ═══════════════════════════════════════════════
+  -- Counted by OUR rows (a re-run of this suite leaves an earlier league's
+  -- finals on the same board; the real runner never repeats a suite).
+  st := bullseye_global_board(3);
+  perform assert_ok(st, 'be8g a signed-in stranger reads the global board');
+  perform assert_true((select count(*) from jsonb_array_elements(st -> 'board') e where e ->> 'team' = 'BE-B') >= 1,
+    'be8h the bullseye league''s teams are on it');
+  perform assert_true((select bool_and((e -> 'league') = 'null'::jsonb and (e ->> 'mine')::boolean = false and not e ? 'roster_id')
+                        from jsonb_array_elements(st -> 'board') e),
+    'be8i …league unnamed to a stranger, nothing marked mine, roster ids never leave');
+  perform assert_true((select min((e ->> 'rank')::int) from jsonb_array_elements(st -> 'board') e where e ->> 'team' = 'BE-B')
+                      < (select min((e ->> 'rank')::int) from jsonb_array_elements(st -> 'board') e where (e ->> 'final')::numeric = 61.5),
+    'be8j ranked by ring total, highest first');
   perform probe_as('a');
+  st := bullseye_global_board(3);
+  perform assert_true((select bool_and(e ->> 'league' = 'Bullseye') from jsonb_array_elements(st -> 'board') e where e ->> 'team' = 'BE-B' or (e ->> 'mine')::boolean)
+                      and (select count(*) from jsonb_array_elements(st -> 'board') e where (e ->> 'mine')::boolean) >= 1,
+    'be8k a member sees the league named and their own row marked');
+  perform assert_true(jsonb_array_length(bullseye_global_board(4) -> 'board') = 0, 'be8l a week with no finals is empty');
 
   -- ══ A LEAGUE THAT NEVER OPENS THE SETTING ═══════════════════════════════
   r := create_native_league('Not Bullseye', '2024', 2, 8, 60);
@@ -145,6 +163,11 @@ begin
   perform assert_true(league_bullseye(nlid) is null and (league_game_mode(nlid) -> 'bullseye') = 'null'::jsonb,
     'be9a it plays normally');
   perform assert_ok(set_league_golf(nlid, true), 'be9b …and may still play golf');
+  st := bullseye_global_board(3);
+  insert into matchup (id, league_id, week, home_roster_id, away_roster_id, status, home_final, away_final)
+    values (gen_random_uuid(), nlid, 3, 1, 2, 'final', 150, 140);
+  perform assert_true(jsonb_array_length(bullseye_global_board(3) -> 'board') = jsonb_array_length(st -> 'board'),
+    'be9c …and its finals never reach the bullseye board');
 
   raise notice 'bullseye probes done';
 end $$;

@@ -561,7 +561,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
             const cfg = gm.mode === 'classic' ? bullseyeConfigOf(gm) : null;
             if (!cfg) { setLeagueBullseye(null, null); setBullseye(null); }
             else {
-              const dealt = dealBullseyeCard(leagueId, m.week, leagueSlotDefs(gm));
+              const dealt = dealBullseyeCard(leagueId, m.week, leagueSlotDefs(gm), leagueCatalogOf(gm));
               bullseyeCard(leagueId, m.week)
                 .then((c) => { setLeagueBullseye(cfg, (c.ok ? cardFromRows(c.card) : null) ?? dealt); setBullseye(cfg); })
                 .catch(() => { setLeagueBullseye(cfg, dealt); setBullseye(cfg); });

@@ -12,7 +12,7 @@ import {
 } from '../packages/core/src/engine/classic.ts';
 import {
   bullseyeConfigOf, dealBullseyeCard, drawSetFor, BULLSEYE_DRAWS, cardRows, cardFromRows,
-  ringScore, ringLabel, aimValue, applyBullseye, rankByRing,
+  ringScore, ringLabel, aimValue, applyBullseye, rankByRing, bullseyeScaleOf, scaledDraw, bullseyeFit,
   setLeagueBullseye, clearLeagueBullseye, leagueBullseye, bullseyeTargetFor,
 } from '../packages/core/src/engine/bullseye.ts';
 import { projectedFor, setLeagueProjScoring, clearLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
@@ -233,6 +233,37 @@ const LEAGUE = '00000000-0000-4000-8000-00000000b011';
     console.log(`skip §9 unmanaged seat (projections ${pRB} / ${pQB} too close to test)`);
   }
   clearLeagueProjScoring();
+}
+
+// ── 1b. THE DEAL IS ANCHORED TO THE LEAGUE'S CATALOG ─────────────────────────
+{
+  ok('§4 a stock catalog scales nothing', Object.keys(bullseyeScaleOf({ ppr: 1 })).length === 0 && Object.keys(bullseyeScaleOf(null)).length === 0, bullseyeScaleOf({ ppr: 1 }));
+  const std = bullseyeScaleOf({ ppr: 0 });
+  ok('§4 standard scoring pays receivers less, so WR / TE / FLEX scale down', std.WR < 1 && std.TE < 1 && std.FLEX < 1 && std.WRT < 1, std);
+  ok('§4 …and the TE (who lives on catches) more than the RB', std.TE < std.RB, std);
+  ok('§4 …while K and DEF are untouched by PPR', std.K == null && std.DEF == null, std);
+  const six = bullseyeScaleOf({ passTd: 6 });
+  ok('§4 six-point passing TDs scale QB and SUPERFLEX up, nobody else', six.QB > 1 && six.SFLX > 1 && six.RB == null && six.WR == null, six);
+  ok('§4 a scaled set stays multiples of 5, never below 5, weights pooled',
+    JSON.stringify(scaledDraw([[5, 2], [10, 3], [15, 3], [20, 1]], 0.7)) === JSON.stringify([[5, 5], [10, 3], [15, 1]]), scaledDraw([[5, 2], [10, 3], [15, 3], [20, 1]], 0.7));
+  ok('§4 ratio 1 is the identity', scaledDraw(BULLSEYE_DRAWS.WR, 1) === BULLSEYE_DRAWS.WR);
+  const slots = leagueSlotDefs(null);
+  const ppr = dealBullseyeCard(LEAGUE, 7, slots, { ppr: 1 });
+  const none = dealBullseyeCard(LEAGUE, 7, slots, { ppr: 0 });
+  ok('§4 the stock catalog deals the unanchored card', JSON.stringify(ppr) === JSON.stringify(dealBullseyeCard(LEAGUE, 7, slots)));
+  ok('§4 a standard-scoring league aims lower from the same seed', none.total <= ppr.total && none.targets.K === ppr.targets.K && none.targets.DEF === ppr.targets.DEF, { ppr: ppr.targets, none: none.targets });
+  ok('§4 …and still deals round numbers', Object.values(none.targets).every((t) => t > 0 && t % 5 === 0));
+}
+
+// ── 9b. THE WIRE'S FIT ───────────────────────────────────────────────────────
+{
+  const slots = classicSlotsFromSpec([{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['WR'] }, { pos: ['RB', 'WR', 'TE'] }]);
+  const card = { targets: { S1: 20, S2: 10, S3: 15, S4: 5 }, total: 50 };
+  ok('§9 a 6-point RB fits the 5 flex, not the 10 RB spot', JSON.stringify(bullseyeFit('RB', 6, slots, card, 10)) === JSON.stringify({ slot: 'S4', target: 5, dist: 1, ring: 9 }), bullseyeFit('RB', 6, slots, card, 10));
+  ok('§9 a 14-point WR fits the 15 WR spot', bullseyeFit('WR', 14, slots, card, 10)?.slot === 'S3');
+  ok('§9 a QB only fits the QB spot', bullseyeFit('QB', 6, slots, card, 10)?.slot === 'S1' && bullseyeFit('QB', 6, slots, card, 10)?.dist === 14);
+  ok('§9 a kicker fits nowhere on this lineup', bullseyeFit('K', 8, slots, card, 10) === null);
+  ok('§9 no projection, no fit', bullseyeFit('RB', 0, slots, card, 10) === null && bullseyeFit('RB', 9, slots, null, 10) === null);
 }
 
 // ── 11. THE WEEK BOARD RANKS BY RING ─────────────────────────────────────────

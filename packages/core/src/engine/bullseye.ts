@@ -27,7 +27,9 @@
 //
 // Platform-free and dependency-free on purpose: classic.ts imports THIS (the
 // install, the score), never the other way round, so there is no cycle.
-import type { ClassicResult, ClassicSlotScore } from './classic';
+import type { ClassicResult, ClassicSlotScore, ClassicScoring } from './classic';
+import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, scoringFor, slotEligiblePos } from './classic';
+import { scoreProjLine, scoreKickLine, scoreDstLine } from './projScoring';
 
 export type BullseyeVariant = 'slots' | 'total';
 export interface BullseyeConfig { variant: BullseyeVariant; radius: number }
@@ -74,6 +76,58 @@ export function drawSetFor(d: { type?: string; pos: string[] }): [number, number
   return BULLSEYE_DRAWS[d.type ?? ''] ?? BULLSEYE_DRAWS[d.pos?.[0] ?? ''] ?? PLAIN_DRAW;
 }
 
+// ── ANCHORED TO THE LEAGUE'S OWN SCORING (spec §11 → shipped) ───────────────
+// The sets above are tuned for full PPR and the stock catalog. A 20 for a WR
+// means something else in standard scoring, and a 6-point-passing-TD league
+// makes a QB's 25 a different ask. So each set is SCALED by what the league's
+// catalog pays a TYPICAL season at that position against the stock catalog —
+// a canonical stat line per position, scored under both, the ratio applied to
+// every target and rounded back to a multiple of 5 (never below 5). Derived
+// from the catalog alone, never from live data, so the deal stays
+// reproducible from settings: the worker, a board and a probe scale alike.
+// The lines are round, mid-tier seasons (per 17 games), not any one player.
+const TYPICAL: Record<string, { passYd: number; passTd: number; int: number; rushYd: number; rushTd: number; rec: number; recYd: number; recTd: number }> = {
+  QB: { passYd: 3800, passTd: 25, int: 10, rushYd: 250, rushTd: 3, rec: 0, recYd: 0, recTd: 0 },
+  RB: { passYd: 0, passTd: 0, int: 0, rushYd: 950, rushTd: 7, rec: 40, recYd: 300, recTd: 2 },
+  WR: { passYd: 0, passTd: 0, int: 0, rushYd: 20, rushTd: 0, rec: 70, recYd: 950, recTd: 6 },
+  TE: { passYd: 0, passTd: 0, int: 0, rushYd: 0, rushTd: 0, rec: 55, recYd: 600, recTd: 4 },
+};
+const TYPICAL_K = { fga0: 7, fgm0: 7, fga30: 9, fgm30: 8.5, fga40: 9.5, fgm40: 7.5, fga50: 7, fgm50: 4.5, xpa: 38, xpm: 36 };
+const TYPICAL_DST = { paPg: 21, sack: 40, int: 12, fumRec: 8, defTd: 3, stTd: 1, safety: 1 };
+// Which typical line a spot type is priced by.
+const PRICED_AS: Record<string, string> = { QB: 'QB', SFLX: 'QB', RB: 'RB', WR: 'WR', FLEX: 'WR', WRT: 'WR', TE: 'TE', K: 'K', DEF: 'DEF' };
+
+/** Per spot type, how much the league's catalog pays a typical season at that
+ *  position against the stock catalog. 1 for every type when the catalog is
+ *  stock, or for types with no typical line (IDP, RET, a custom mix). */
+export function bullseyeScaleOf(catalog?: number | Partial<ClassicScoring> | null): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (catalog == null) return out;
+  const sc = normalizeClassicScoring(catalog);
+  const ratio = (mine: number, base: number): number => (base > 0 && mine > 0 ? mine / base : 1);
+  for (const [type, by] of Object.entries(PRICED_AS)) {
+    let r = 1;
+    if (by === 'K') r = ratio(scoreKickLine(TYPICAL_K, scoringFor(sc, 'K')), scoreKickLine(TYPICAL_K, DEFAULT_CLASSIC_SCORING));
+    else if (by === 'DEF') r = ratio(scoreDstLine(TYPICAL_DST, scoringFor(sc, 'DEF')), scoreDstLine(TYPICAL_DST, DEFAULT_CLASSIC_SCORING));
+    else r = ratio(scoreProjLine(TYPICAL[by], by, scoringFor(sc, by)), scoreProjLine(TYPICAL[by], by, DEFAULT_CLASSIC_SCORING));
+    if (Math.abs(r - 1) > 1e-9) out[type] = r;
+  }
+  return out;
+}
+
+/** A draw set scaled by the league's ratio for the spot, every target rounded
+ *  back to a multiple of 5 (never below 5); targets that round together pool
+ *  their weights. Identity at ratio 1. */
+export function scaledDraw(draw: [number, number][], ratio: number): [number, number][] {
+  if (!(ratio > 0) || Math.abs(ratio - 1) < 1e-9) return draw;
+  const pooled = new Map<number, number>();
+  for (const [t, w] of draw) {
+    const st = Math.max(5, Math.round((t * ratio) / 5) * 5);
+    pooled.set(st, (pooled.get(st) ?? 0) + w);
+  }
+  return [...pooled.entries()].sort((a, b) => a[0] - b[0]);
+}
+
 // mulberry32 over an FNV-1a string hash — the pods' own seeded RNG
 // (server/src/pods.js), copied rather than imported because core is
 // platform-free and the worker is not.
@@ -107,12 +161,20 @@ export interface BullseyeCard {
 
 /** Deal the week's card. Deterministic in (leagueId, week, the spots in
  *  order): the same inputs always deal the same card. */
-export function dealBullseyeCard(leagueId: string, week: number, slots: { slot: string; type?: string; pos: string[] }[]): BullseyeCard {
+export function dealBullseyeCard(
+  leagueId: string, week: number, slots: { slot: string; type?: string; pos: string[] }[],
+  /** The league's scoring catalog (leagueCatalogOf) — anchors the sets to
+   *  what the league actually pays. Omitted: the stock sets. */
+  catalog?: number | Partial<ClassicScoring> | null,
+): BullseyeCard {
   const next = rng(`bullseye|${leagueId}|${week}`);
+  const scale = bullseyeScaleOf(catalog);
   const targets: Record<string, number> = {};
   let total = 0;
   for (const d of slots) {
-    const t = weighted(drawSetFor(d), next());
+    const set = drawSetFor(d);
+    const r = scale[d.type ?? ''] ?? scale[PRICED_AS[d.pos?.[0] ?? ''] ? (d.pos?.[0] ?? '') : ''] ?? 1;
+    const t = weighted(scaledDraw(set, r), next());
     targets[d.slot] = t;
     total += t;
   }
@@ -252,4 +314,24 @@ export function rankByRing<T extends { ring: number }>(rows: T[]): (T & { rank: 
     if (prev === null || r.ring !== prev) { rank = i + 1; prev = r.ring; }
     return { ...r, rank };
   });
+}
+
+// ── The wire's FIT (spec §9 → shipped) ──────────────────────────────────────
+/** Where a free agent would land on this week's card: the spot he is
+ *  eligible for whose target his projection sits closest to, with the
+ *  distance. Null with no projection, no card, or no spot that takes him —
+ *  the chip then simply doesn't print. Rows with the same projection fit the
+ *  same spot, so the wire reads "who lands on my 5". */
+export function bullseyeFit(
+  pos: string, proj: number, slots: { slot: string; pos: string[] }[], card: BullseyeCard | null | undefined, radius: number,
+): { slot: string; target: number; dist: number; ring: number } | null {
+  if (!card || !(proj > 0)) return null;
+  let best: { slot: string; target: number; dist: number; ring: number } | null = null;
+  for (const d of slots) {
+    const target = card.targets[d.slot];
+    if (target == null || !slotEligiblePos(d.pos).includes(pos)) continue;
+    const dist = Math.round(Math.abs(proj - target) * 10) / 10;
+    if (!best || dist < best.dist) best = { slot: d.slot, target, dist, ring: ringScore(proj, target, radius) };
+  }
+  return best;
 }
