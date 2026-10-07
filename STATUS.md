@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.647.1 — no banner between the bullseye totals
+
+> - The "🎯 BULLSEYE · ONE TOTAL" line under the slate chip is gone from the matchup screen; each team's 🎯 Target line already says what the week is.
+
+Founder, with the matchup screen: "We don't need the 'bullseye one total'
+text." Removed on web and in the app (`ClassicBoard` on both); the Target
+lines and the per-spot 🎯 chips carry the setting. web only in effect for
+the next few minutes; the APK follows.
+
 ### v0.647.0 — the Taco Locker
 
 > - A commissioner can put a team in the 🌮 Taco Locker: it can't trade or drop players, and every Thursday at 9 AM Eastern its best lineup is set for it the way an AI team's is — a player whose game has started stays put. The league hears when a team goes in, comes out, and each Thursday the lineup is set.

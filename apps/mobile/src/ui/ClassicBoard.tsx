@@ -1590,7 +1590,6 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                 )}
               </Pressable>
               {golf && <Mono size={8} tone="warn" weight="700" style={{ marginTop: 3 }}>⛳ LOW WINS</Mono>}
-              {bullseye && <Mono size={8} tone="warn" weight="700" style={{ marginTop: 3 }}>{`🎯 BULLSEYE${bullseye.variant === 'total' ? ' · ONE TOTAL' : ''}`}</Mono>}
             </View>
             <TeamHead side={board.away} align="right" mode={locked ? 'live' : 'proj'} />
           </View>
