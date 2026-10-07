@@ -148,6 +148,9 @@ export const FORMAT_NOTES: FormatNote[] = [
   { name: 'Guillotine', icon: '🪓', line: 'The lowest score each week is eliminated and their whole roster hits the wire. Last team standing takes it.' },
   { name: 'Vampire', icon: '🧛', line: 'Vampires skip the draft and live off the pool. Win the week and they bite: one of yours for one of theirs.' },
   { name: 'Golf', icon: '⛳', line: 'The lowest weekly total wins. Every scoring value stays exactly the same — only the target moves.' },
+  // v0.650.0 — the landing's competitive modes gain Bullseye (docs/bullseye.md).
+  // "Rings" is never shown to a player, so the line says target and dart.
+  { name: 'Bullseye', icon: '🎯', line: 'The CPU deals a target number for every spot each week. Start the player who\u2019ll land closest — over is as bad as under, and a dead-on hit pays double.' },
 ];
 
 /** What CARRIES from one season to the next. */
@@ -207,6 +210,30 @@ export const SCORING_NOTES: FormatNote[] = [
   { name: 'K & D/ST', icon: '🦵', line: 'Kickers scored by distance, defenses by points allowed, sacks, takeaways and scores — on or off per league.' },
 ];
 
+// ── THE FUNNEL'S WORDS (v0.650.0) ─────────────────────────────────────────
+//
+// Founder's revision of the front door. These are the landing's lines and
+// only the landing's: the demo page and the title tag keep SITE_PITCH, the
+// create screen keeps GAME_NOTES. Nothing here promises a limit, a count or a
+// waiting list — "No sub text about limits or anything."
+export const FUNNEL = {
+  welcome: 'Welcome to the cutting edge of fantasy football!',
+  pitch: 'Drip is a 100% free, bespoke fantasy platform where development is at warp speed with help from AI, one unemployed fantasy-obsessed data scientist, and YOU.',
+  more: 'Find out more',
+  dreamers: 'Welcome dreamers.',
+  dreamersLine: 'If you\u2019ve ever imagined a league that doesn\u2019t fit an existing platform, this is the place for you!',
+  cta: 'Count me in!',
+  signIn: 'Sign in',
+  demo: 'Click here for a demo',
+} as const;
+
+/** The two games as the FUNNEL pitches them — the classic line is the one
+ *  everybody knows; the drip line is written at an existing league. */
+export const FUNNEL_GAMES: FormatNote[] = [
+  { name: 'Classic', icon: '🏈', line: 'You know, H2H fantasy football.' },
+  { name: 'Drip', icon: '💧', line: 'For active and existing leagues looking for an additional layer of fun and competition. H2H card battles with special effects and power-ups. (Works with existing leagues.)' },
+];
+
 // ── THE LANDING'S FEATURE BOARD (v0.614.0) ────────────────────────────────
 //
 // Founder's revamp of the signed-out web flow: "Get account · Features ·
@@ -222,7 +249,7 @@ export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote
     { name: 'Devy', icon: '🎓', line: 'College players on your roster before they’re drafted — as devy spots or as shares bought in a devy market, priced off StatHead’s rankings.' },
   ] },
   { heading: 'Competitive modes', sub: 'How the season ends differently.', notes: [
-    note(FORMAT_NOTES, 'Vampire'), note(FORMAT_NOTES, 'Guillotine'), note(FORMAT_NOTES, 'Golf'),
+    note(FORMAT_NOTES, 'Vampire'), note(FORMAT_NOTES, 'Guillotine'), note(FORMAT_NOTES, 'Golf'), note(FORMAT_NOTES, 'Bullseye'),
   ] },
   { heading: 'Positions', sub: 'Every spot a lineup can have, on or off per league.', notes: [
     { name: 'QB · RB · WR · TE', icon: '🏈', line: 'The core lineup, with flex and superflex spots shaped however the commissioner likes.' },
@@ -237,7 +264,7 @@ export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote
     { name: 'Others', icon: '🎚️', line: 'PPR at any value, TD bonuses, yardage multipliers, turnover penalties, per-metric overrides — every value a switch the commissioner holds.' },
   ] },
   { heading: 'Matchup style', sub: 'The game your week is played in.', notes: [
-    note(GAME_NOTES, 'Drip'), note(GAME_NOTES, 'Classic'),
+    note(FUNNEL_GAMES, 'Classic'), note(FUNNEL_GAMES, 'Drip'),
   ] },
 ];
 
