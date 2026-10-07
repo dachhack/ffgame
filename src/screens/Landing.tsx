@@ -240,9 +240,11 @@ export function Landing() {
                     <div>{chips}</div>
                     {/* WIDE, NOT TALL (v0.651.1, founder: "zoom them in and cut
                         off the bottoms so they fit wider"): the screen fills
-                        the card's width and the frame keeps only the top of
-                        it — the header, the score, the first rows. */}
-                    <Rail shots={shots} ratio={narrow ? '1 / 1' : '4 / 3'} width="100%" base={base} index={idx} onIndex={pickShot} />
+                        the card's width and the frame keeps the top of it.
+                        v0.651.2: the app's own header bar is cropped out of
+                        the files, and the frame runs longer ("so we get more
+                        of the players in"): the score and four or five rows. */}
+                    <Rail shots={shots} ratio={narrow ? '3 / 4' : '1 / 1'} width="100%" base={base} index={idx} onIndex={pickShot} />
                   </>
                 )}
               </div>
