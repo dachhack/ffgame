@@ -124,14 +124,17 @@ export function LocksCard({ leagueId }: { leagueId: string }) {
   };
   return (
     <Card>
-      <LabelInfo label="LOCKS" info={'The league-wide lock shuts every add, drop and claim — the worker\'s too. Your own force-moves under PLAYERS still work.\n\nA locked team cannot add, drop, claim, or offer and accept trades.'} />
+      <LabelInfo label="LOCKS" info={'The league-wide lock shuts every add, drop and claim — the worker\'s too. Your own force-moves under PLAYERS still work.'} />
       <Row>
         <Chip label={wire ? '🔒 ALL FA & WAIVER MOVES LOCKED' : '🔓 FA & WAIVER MOVES OPEN'} on={wire === true} disabled={busy || wire === null} onPress={() => { tap(); void toggleWire(); }} />
       </Row>
-      <Mono size={9} tone="faint" style={{ marginTop: 10 }}>LOCK A TEAM</Mono>
+      {/* THE TACO LOCKER (v0.647.0): 0320's per-team lock, named. */}
+      <View style={{ marginTop: 10 }}>
+        <LabelInfo label="🌮 TACO LOCKER" info={'A team in the Taco Locker can\'t trade or drop players (adds and claims that need a drop are refused too).\n\nEvery Thursday at 9 AM Eastern its best lineup is set for it, the way an AI team\'s is — a player whose game has started stays put.\n\nThe league hears when a team goes in or comes out.'} />
+      </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
         {members.map((m) => (
-          <Chip key={m.roster_id} label={`${locked.includes(m.roster_id) ? '🔒 ' : ''}${m.team ?? `Roster ${m.roster_id}`}`} on={locked.includes(m.roster_id)} disabled={busy}
+          <Chip key={m.roster_id} label={`${locked.includes(m.roster_id) ? '🌮 ' : ''}${m.team ?? `Roster ${m.roster_id}`}`} on={locked.includes(m.roster_id)} disabled={busy}
             onPress={() => { tap(); void toggleTeam(m.roster_id); }} />
         ))}
       </View>
