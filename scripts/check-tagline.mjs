@@ -4,7 +4,7 @@
 // different tagline." A classic league has no hidden picks and no effects, so
 // pitching them to a recruit is not a tone problem — it is a description of a
 // game they are not about to play.
-import { taglineFor, NEUTRAL_BLURB, joinDoorFor, readRecruitGame, recruitFraming, SITE_PITCH, LEAGUE_MENU, GAME_NOTES } from '../packages/core/src/data/leagueTagline';
+import { taglineFor, NEUTRAL_BLURB, joinDoorFor, readRecruitGame, recruitFraming, SITE_PITCH, LEAGUE_MENU, GAME_NOTES, FORMAT_NOTES, LANDING_FEATURES, FUNNEL, FUNNEL_GAMES } from '../packages/core/src/data/leagueTagline';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -126,13 +126,47 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   ok('the classic game line is never pitched hidden picks or effects', classic && !DRIP_WORDS.test(classic.line), classic?.line);
   ok('the menu opens on WHICH GAME — the create screen\'s first question', LEAGUE_MENU[0].heading === 'WHICH GAME' && LEAGUE_MENU[0].notes === GAME_NOTES);
   const names = LEAGUE_MENU.flatMap((g) => g.notes.map((n) => n.name));
-  for (const must of ['Guillotine', 'Vampire', 'Golf', 'Dynasty', 'Contract', 'Auction', 'Best ball', 'IDP']) {
+  for (const must of ['Guillotine', 'Vampire', 'Golf', 'Bullseye', 'Dynasty', 'Contract', 'Auction', 'Best ball', 'IDP']) {
     ok(`the menu names ${must}`, names.includes(must));
   }
   ok('every menu line is one sentence a manager can read, not a paragraph', LEAGUE_MENU.every((g) => g.notes.every((n) => n.line.length > 30 && n.line.length < 220)));
   ok('no two menu entries share a name', new Set(names).size === names.length, names);
   ok('every builder card has a glyph', LEAGUE_MENU.every((g) => g.notes.every((n) => typeof n.icon === 'string' && n.icon.length > 0)));
   ok('the plain shape is on the menu beside the wild ones', names.includes('Head-to-head'));
+}
+
+// ── THE FUNNEL (v0.650.0) ───────────────────────────────────────────────────
+// Founder's revision of the front door: the welcome, the dreamers line, two
+// buttons and nothing under them — "No sub text about limits or anything" —
+// and Bullseye on the competitive-modes card. The demo page keeps SITE_PITCH
+// and the create screen keeps GAME_NOTES, so the funnel's words are its own.
+{
+  ok('the funnel opens on the welcome', /cutting edge of fantasy football/i.test(FUNNEL.welcome), FUNNEL.welcome);
+  ok('the pitch says free, bespoke, and names who builds it', /100% free/.test(FUNNEL.pitch) && /bespoke/.test(FUNNEL.pitch) && /AI/.test(FUNNEL.pitch) && /YOU/.test(FUNNEL.pitch), FUNNEL.pitch);
+  ok('the dreamers line is there', /^Welcome dreamers\./.test(FUNNEL.dreamers) && /doesn.t fit an existing platform/i.test(FUNNEL.dreamersLine), FUNNEL.dreamersLine);
+  ok('the two buttons are Count me in! and Sign in', FUNNEL.cta === 'Count me in!' && FUNNEL.signIn === 'Sign in', FUNNEL);
+  // Nothing in the funnel's copy promises a spot count, a cap or a waiting
+  // list — that line is gone from under the buttons.
+  const all = Object.values(FUNNEL).join(' ');
+  ok('the funnel never mentions limits, spots or a waiting list', !/spot|waiting list|waitlist|limit|cap\b/i.test(all), all);
+  ok('the demo door says click here', /click here for a demo/i.test(FUNNEL.demo), FUNNEL.demo);
+
+  const classic = FUNNEL_GAMES.find((n) => n.name === 'Classic');
+  const drip = FUNNEL_GAMES.find((n) => n.name === 'Drip');
+  ok('the funnel\'s classic line is the one everybody knows', classic && /H2H fantasy football/.test(classic.line) && !DRIP_WORDS.test(classic.line), classic?.line);
+  ok('the funnel\'s drip line is written at an existing league', drip && /existing leagues/i.test(drip.line) && /card battles/i.test(drip.line) && /power-ups/i.test(drip.line), drip?.line);
+
+  const bullseye = FORMAT_NOTES.find((n) => n.name === 'Bullseye');
+  ok('Bullseye is a format, beside golf', !!bullseye && FORMAT_NOTES.findIndex((n) => n.name === 'Golf') < FORMAT_NOTES.findIndex((n) => n.name === 'Bullseye'));
+  ok('…its line says target and closest, and never "rings"', bullseye && /target/i.test(bullseye.line) && /closest/i.test(bullseye.line) && !/ring/i.test(bullseye.line), bullseye?.line);
+  const modes = LANDING_FEATURES.find((g) => g.heading === 'Competitive modes');
+  ok('the competitive-modes card names Vampire, Guillotine, Golf and Bullseye, in that order',
+    modes && modes.notes.map((n) => n.name).join(',') === 'Vampire,Guillotine,Golf,Bullseye', modes?.notes.map((n) => n.name));
+  const matchup = LANDING_FEATURES.find((g) => g.heading === 'Matchup style');
+  ok('the matchup card speaks the funnel\'s lines, Classic first', matchup && matchup.notes[0]?.name === 'Classic' && matchup.notes[1]?.line === drip?.line, matchup?.notes.map((n) => n.name));
+  ok('the five cards are still the five the founder named',
+    LANDING_FEATURES.map((g) => g.heading).join('|') === 'League types|Competitive modes|Positions|Scoring options|Matchup style', LANDING_FEATURES.map((g) => g.heading));
+  ok('every landing chip has a glyph and a line', LANDING_FEATURES.every((g) => g.notes.every((n) => n.icon && n.line.length > 20)));
 }
 
 if (fails) { console.log(`\n${fails} TAGLINE ASSERTION(S) FAILED`); process.exit(1); }

@@ -1,22 +1,23 @@
-// THE FRONT DOOR (v0.614.0). Founder's revamp of the signed-out web flow:
+// THE FRONT DOOR (v0.614.0; the funnel's revision, v0.650.0).
 //
-//   Not logged in: Get account · Features (League Types · Competitive Modes ·
-//   Positions · Scoring Options · Matchup Style) · Drip demo image, click to
-//   demo. "Get account based on available counts … or get on waiting list."
+// Founder's revamp of the signed-out web flow, revised: the welcome and the
+// dreamers line, "Count me in! | Sign in" with no small print under it, then
+// the five feature groups — the chips stay — each with a rail of phone
+// screens rotating beside them, and the matchup card doubling as the door to
+// the demo ("Click here for a demo"). Bullseye joined the competitive modes.
 //
-// The demo used to BE the landing (DemoBoard, with the menu of switches above
-// it). Now the landing is a page: the account door first — open while there
-// is a spot (0422's cap), the waitlist when there isn't — then the five
-// feature groups the founder named, each chip opening one line, then the
-// demo as a picture you click into. The demo keeps its own route and its
-// explainer; nothing there changed. Signed-in visitors never see this: the
-// boot route sends them to their leagues, and a session found here does too.
+// The screens are the founder's phone screenshots, dropped into
+// public/brand/funnel/ under the names FUNNEL_SHOTS lists (the README there
+// is the shooting list). A file that is not there yet draws as a labelled
+// placeholder in the same frame, so the page keeps its shape while the rail
+// fills in. Signed-in visitors never see this: the boot route sends them to
+// their leagues, and a session found here does too.
 import { useEffect, useState } from 'react';
 import { useStore } from '../app/store';
 import { SiteSettings } from '../app/ui';
 import { Faq } from './Faq';
 import { RequestCodeModal } from './RequestCode';
-import { SITE_PITCH, LANDING_FEATURES, type FormatNote } from '@drip/core/data/leagueTagline';
+import { FUNNEL, LANDING_FEATURES, type FormatNote } from '@drip/core/data/leagueTagline';
 import { signupOpen, getSession } from '@drip/core/data/liveApi';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { markBootSessionChecked } from './DemoBoard';
@@ -27,14 +28,87 @@ const linkBtn: React.CSSProperties = { background: 'none', border: 'none', fontS
 
 let sessionChecked = false;
 
-/** Real screens from the running app (headless Chromium, v0.614.1). The
- *  ratio keeps every tile the same shape whatever the crop. */
-const SITE_SHOTS: { file: string; title: string; line: string; alt: string; ratio: string; fit?: 'cover' | 'contain'; route: { name: 'demo'; view?: 'board' } | { name: 'classicSim' } }[] = [
-  { file: 'shot-sealed.jpg', title: 'Sealed picks', line: 'Your opponent’s cards stay face-down until kickoff. Scout their pool, not their picks.', alt: 'A Drip lineup before kickoff: open spots on your side, the opponent’s picks shown as card backs', ratio: '4 / 3', route: { name: 'demo' } },
-  { file: 'shot-duel.png', title: 'Live duels', line: 'Each spot is a head-to-head duel; every real NFL play drips points onto one side or the other.', alt: 'A Thursday-night duel: J. Jacobs against D. Samuel, the play log dripping points as the game runs', ratio: '4 / 3', route: { name: 'demo', view: 'board' } },
-  { file: 'shot-classic.png', title: 'Classic board', line: 'A positional lineup and weekly totals, scored live. PPR, half, standard and best ball at a tap.', alt: 'The Classic board: two nine-man lineups side by side with live totals', ratio: '7 / 4', route: { name: 'classicSim' } },
-  { file: 'shot-fields.png', title: 'Every game on a field', line: 'Each real game drawn live: the ball spot, the drive, the last play — one field per game on the slate.', alt: 'A live field: Jaguars at Bengals, the ball at the Cincinnati 16, second and fourteen', ratio: '7 / 4', fit: 'contain', route: { name: 'classicSim' } },
-];
+/** One screen on a card's rail. `file` lives in public/brand/funnel/ (a phone
+ *  screenshot, portrait) unless `dir` says otherwise; `label` is the caption
+ *  under it and the placeholder's text until the file exists. */
+interface Shot { file: string; label: string; dir?: 'funnel' | 'brand' }
+
+/** THE SHOOTING LIST. Every file here is one the founder makes on a phone;
+ *  the README beside them repeats this list with what each one should show.
+ *  Keyed by the feature heading in LANDING_FEATURES. */
+export const FUNNEL_SHOTS: Record<string, Shot[]> = {
+  'League types': [
+    { file: 'league-redraft.png', label: 'Redraft' },
+    { file: 'league-contract.png', label: 'Contract' },
+    { file: 'league-full-college.png', label: 'Full college' },
+    { file: 'league-mixed-college.png', label: 'Mixed college' },
+    { file: 'league-devy-market.png', label: 'Devy market' },
+  ],
+  'Competitive modes': [
+    { file: 'mode-vampire.png', label: 'Vampire' },
+    { file: 'mode-guillotine.png', label: 'Guillotine' },
+    { file: 'mode-golf.png', label: 'Golf' },
+    { file: 'mode-bullseye.png', label: 'Bullseye' },
+  ],
+  'Positions': [
+    { file: 'positions-scoped.png', label: 'Scoped & named positions' },
+    { file: 'positions-hc-draft.png', label: 'HC draft' },
+  ],
+  'Scoring options': [
+    { file: 'scoring-bestball-mix.png', label: 'Best ball & non-roster, mixed' },
+    { file: 'scoring-scoped-bonuses.png', label: 'Scoped bonuses' },
+  ],
+  // The matchup card rotates the drip screens the site already has (shot in
+  // the running app, v0.614.1) — landscape, so it gets the wide frame.
+  'Matchup style': [
+    { file: 'shot-drip-live.png', label: 'Drip · the Sunday window, live', dir: 'brand' },
+    { file: 'shot-sealed.jpg', label: 'Drip · sealed picks before kickoff', dir: 'brand' },
+    { file: 'shot-duel.png', label: 'Drip · a live duel', dir: 'brand' },
+    { file: 'shot-classic.png', label: 'Classic · the board', dir: 'brand' },
+  ],
+};
+
+const ROTATE_MS = 3600;
+
+/** A rail of screens that rotates on its own: one frame, the shots crossfading
+ *  through it, a caption and a dot per shot. Tap a dot to jump; the rail
+ *  carries on from there. A missing file is a labelled placeholder, not a
+ *  broken-image glyph, so the founder sees which slot each file fills. */
+function Rail({ shots, ratio, width, base, onTap }: { shots: Shot[]; ratio: string; width: number | string; base: string; onTap?: () => void }) {
+  const [i, setI] = useState(0);
+  const [missing, setMissing] = useState<Record<string, true>>({});
+  useEffect(() => {
+    if (shots.length < 2) return;
+    const t = setInterval(() => setI((n) => (n + 1) % shots.length), ROTATE_MS);
+    return () => clearInterval(t);
+  }, [shots.length, i]); // `i` in the deps: a tap on a dot restarts the clock from that shot.
+  const cur = shots[Math.min(i, shots.length - 1)];
+  if (!cur) return null;
+  const frame: React.CSSProperties = { position: 'relative', width, aspectRatio: ratio, overflow: 'hidden', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--bd)', flex: 'none' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 'none', width }}>
+      <div role={onTap ? 'button' : undefined} onClick={onTap} style={{ ...frame, cursor: onTap ? 'pointer' : 'default' }}>
+        {shots.map((s, k) => {
+          const src = `${base}brand/${s.dir === 'brand' ? '' : 'funnel/'}${s.file}`;
+          const on = k === i;
+          return missing[s.file]
+            ? (on && <div key={s.file} className="mono" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 10, fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--faint)', lineHeight: 1.5 }}>{s.label.toUpperCase()}<br />SCREEN COMING</div>)
+            : <img key={s.file} src={src} alt={s.label} loading={k === 0 ? 'eager' : 'lazy'} onError={() => setMissing((m) => ({ ...m, [s.file]: true }))}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', opacity: on ? 1 : 0, transition: 'opacity 600ms ease' }} />;
+        })}
+      </div>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: '0.06em', color: 'var(--dim)', textAlign: 'center', lineHeight: 1.4, minHeight: 13 }}>{cur.label.toUpperCase()}</div>
+      {shots.length > 1 && (
+        <div style={{ display: 'flex', gap: 5 }}>
+          {shots.map((s, k) => (
+            <button key={s.file} aria-label={s.label} onClick={() => setI(k)}
+              style={{ width: 6, height: 6, borderRadius: 3, padding: 0, border: 'none', cursor: 'pointer', background: k === i ? 'var(--you)' : 'var(--bd)' }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Landing() {
   const { navigate } = useStore();
@@ -52,17 +126,21 @@ export function Landing() {
     getSession().then((s) => { if (s) { markBootSessionChecked(); navigate({ name: 'live' }); } }).catch(() => {});
   }, [navigate]);
   useEffect(() => { let dead = false; signupOpen().then((d) => { if (!dead) setDoor(d); }); return () => { dead = true; }; }, []);
+  // The door still has a cap (0422): when it is shut, "Count me in!" takes
+  // the waiting-list form instead of the sign-up — the page says nothing
+  // about it either way.
   const full = door != null && !door.open;
   const base = import.meta.env.BASE_URL;
 
-  const getAccount = () => navigate({ name: 'live', view: 'signup' });
+  const countMeIn = () => (full ? setWaitlist(true) : navigate({ name: 'live', view: 'signup' }));
+  const toDemo = () => navigate({ name: 'demo' });
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', gap: 8, flexWrap: 'wrap' }}>
         <img src={`${base}brand/hero-wordmark.png`} alt="Drip Fantasy" style={{ height: 26, width: 'auto' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => navigate({ name: 'demo' })} className="mono" style={linkBtn}>demo</button>
+          <button onClick={toDemo} className="mono" style={linkBtn}>demo</button>
           <span style={{ color: 'var(--faint)' }}>·</span>
           <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>FAQ</button>
           <span style={{ color: 'var(--faint)' }}>·</span>
@@ -72,113 +150,81 @@ export function Landing() {
       </header>
 
       {/* minWidth 0: a flex item's automatic minimum is its min-content width,
-          and the demo picture below (a percentage-width img) would otherwise
-          hand the whole page its intrinsic 1280px and a sideways scroll on a
-          phone. */}
+          and a percentage-width img inside would otherwise hand the whole
+          page its intrinsic width and a sideways scroll on a phone. */}
       <main style={{ flex: 1, width: '100%', minWidth: 0, maxWidth: 880, margin: '0 auto', padding: '8px 16px 40px', boxSizing: 'border-box' }}>
-        {/* ── GET ACCOUNT ─────────────────────────────────────────────── */}
+        {/* ── WELCOME ─────────────────────────────────────────────────── */}
         <section style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', padding: '18px 0 8px' }}>
           <img src={`${base}brand/hero-mark.png`} alt="" style={{ height: narrow ? 150 : 210, width: 'auto', flex: 'none', margin: '0 auto' }} />
           <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--you)' }}>{SITE_PITCH.kicker}</div>
-            <h1 className="grotesk" style={{ fontSize: 'clamp(26px, 5.2vw, 40px)', fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.08, margin: '8px 0 0', color: 'var(--text)' }}>{SITE_PITCH.headline}</h1>
-            <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.55, margin: '12px 0 0', maxWidth: '58ch' }}>{SITE_PITCH.sub}</p>
+            <h1 className="grotesk" style={{ fontSize: 'clamp(24px, 4.6vw, 36px)', fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, margin: 0, color: 'var(--text)' }}>{FUNNEL.welcome}</h1>
+            <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.55, margin: '12px 0 0', maxWidth: '58ch' }}>
+              {FUNNEL.pitch}{' '}
+              <button onClick={() => setFaq(true)} className="mono" style={{ ...linkBtn, color: 'var(--you)', padding: 0, fontSize: 11 }}>({FUNNEL.more})</button>
+            </p>
+            <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginTop: 18, letterSpacing: '-0.01em' }}>{FUNNEL.dreamers}</div>
+            <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.55, margin: '6px 0 0', maxWidth: '58ch' }}>{FUNNEL.dreamersLine}</p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 18 }}>
-              {full ? (
-                <>
-                  <button onClick={() => setWaitlist(true)} className="mono" style={cta}>Get on the waiting list →</button>
-                  <button onClick={() => navigate({ name: 'live' })} className="mono" style={ghost}>Sign in</button>
-                </>
-              ) : (
-                <>
-                  <button onClick={getAccount} className="mono" style={cta}>Get account →</button>
-                  <button onClick={() => navigate({ name: 'live' })} className="mono" style={ghost}>Sign in</button>
-                </>
-              )}
-            </div>
-            <div className="mono" style={{ fontSize: 9.5, color: full ? 'var(--warn, #c96)' : 'var(--faint)', letterSpacing: '0.06em', marginTop: 10, lineHeight: 1.6 }}>
-              {door == null || !(door.cap > 0) ? 'FREE WHILE THERE’S A SPOT · ANY ACCOUNT CAN START A LEAGUE, BRING ONE IN, OR JOIN ONE'
-                : full ? `FULL RIGHT NOW — ALL ${door.cap.toLocaleString()} SPOTS TAKEN. LEAVE YOUR EMAIL AND WE’LL TELL YOU WHEN ONE OPENS.`
-                : `FREE · ${Math.max(0, door.cap - door.count).toLocaleString()} OF ${door.cap.toLocaleString()} SPOTS OPEN · ANY ACCOUNT CAN START A LEAGUE, BRING ONE IN, OR JOIN ONE`}
+              <button onClick={countMeIn} className="mono" style={cta}>{FUNNEL.cta}</button>
+              <button onClick={() => navigate({ name: 'live' })} className="mono" style={ghost}>{FUNNEL.signIn}</button>
             </div>
           </div>
         </section>
 
-        {/* ── FEATURES ────────────────────────────────────────────────── */}
-        <section style={{ marginTop: 26 }}>
-          <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)', marginBottom: 10 }}>FEATURES · EVERY ONE A SWITCH A COMMISSIONER HAS · TAP A CHIP</div>
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
-            {LANDING_FEATURES.map((g) => {
-              const open = g.notes.find((n: FormatNote) => openNote === `${g.heading}|${n.name}`);
-              return (
-                <div key={g.heading} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 12px', display: 'flex', flexDirection: 'column' }}>
-                  <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>{g.heading}</div>
-                  <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 3 }}>{g.sub.toUpperCase()}</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                    {g.notes.map((n: FormatNote) => {
-                      const key = `${g.heading}|${n.name}`;
-                      const lit = openNote === key;
-                      return (
-                        <button key={n.name} className="mono" aria-pressed={lit} onClick={() => setOpenNote((o) => (o === key ? null : key))}
-                          style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '6px 10px', borderRadius: 5, cursor: 'pointer',
-                            color: lit ? 'var(--on-accent)' : 'var(--text)', background: lit ? 'var(--you)' : 'var(--bg)', border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}` }}>
-                          {n.icon ? <span style={{ marginRight: 5 }}>{n.icon}</span> : null}{n.name.toUpperCase()}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.55, marginTop: 10, minHeight: 18 }}>
-                    {open
-                      ? <><b style={{ color: 'var(--text)' }}>{open.name}.</b> {open.line}</>
-                      : <span style={{ color: 'var(--faint)' }}>Tap one to read what it changes.</span>}
-                  </div>
+        {/* ── FEATURES: the chips, with a rail of screens beside each group.
+            The matchup card is the last one and the door to the demo. ──── */}
+        <section style={{ marginTop: 26, display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'repeat(auto-fit, minmax(380px, 1fr))', gap: 10 }}>
+          {LANDING_FEATURES.map((g) => {
+            const open = g.notes.find((n: FormatNote) => openNote === `${g.heading}|${n.name}`);
+            const matchup = g.heading === 'Matchup style';
+            const shots = FUNNEL_SHOTS[g.heading] ?? [];
+            const chips = (
+              <>
+                <div className="grotesk" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>{g.heading}</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: '0.06em', marginTop: 3 }}>{g.sub.toUpperCase()}</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                  {g.notes.map((n: FormatNote) => {
+                    const key = `${g.heading}|${n.name}`;
+                    const lit = openNote === key;
+                    return (
+                      <button key={n.name} className="mono" aria-pressed={lit} onClick={() => setOpenNote((o) => (o === key ? null : key))}
+                        style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '6px 10px', borderRadius: 5, cursor: 'pointer',
+                          color: lit ? 'var(--on-accent)' : 'var(--text)', background: lit ? 'var(--you)' : 'var(--bg)', border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}` }}>
+                        {n.icon ? <span style={{ marginRight: 5 }}>{n.icon}</span> : null}{n.name.toUpperCase()}
+                      </button>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ── PICTURES FROM THE SITE (founder: "Include pictures from the
-            site") — real screens, shot from the running app, each one a door
-            into the demo. ──────────────────────────────────────────────── */}
-        <section style={{ marginTop: 26 }}>
-          <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--faint)', marginBottom: 10 }}>FROM THE SITE · TAP ONE TO PLAY IT</div>
-          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-            {SITE_SHOTS.map((s) => (
-              <button key={s.file} onClick={() => navigate(s.route)} title={s.title}
-                style={{ padding: 0, textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ aspectRatio: s.ratio, overflow: 'hidden', background: 'var(--bg)' }}>
-                  <img src={`${base}brand/${s.file}`} alt={s.alt} loading="lazy" style={{ display: 'block', width: '100%', height: '100%', objectFit: s.fit ?? 'cover', objectPosition: 'top' }} />
+                <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.55, marginTop: 10, minHeight: 18 }}>
+                  {open
+                    ? <><b style={{ color: 'var(--text)' }}>{open.name}.</b> {open.line}</>
+                    : <span style={{ color: 'var(--faint)' }}>Tap one to read what it changes.</span>}
                 </div>
-                <div style={{ padding: '10px 12px 12px' }}>
-                  <div className="grotesk" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{s.title}</div>
-                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.5, marginTop: 3 }}>{s.line}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* ── THE DEMO ────────────────────────────────────────────────── */}
-        <section style={{ marginTop: 26 }}>
-          <button onClick={() => navigate({ name: 'demo' })} title="Play a week of Drip — free, no sign-in"
-            style={{ display: 'block', width: '100%', padding: 0, textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}>
-            <div style={{ position: 'relative' }}>
-              <img src={`${base}brand/shot-drip-live.png`} alt="The Drip demo board live: the Sunday 1pm window battle, three duels dripping points, and a nuke caption" style={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto' }} />
-              {!narrow && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--surface) 92%, transparent) 100%)' }} />}
-              {/* The caption rides the picture on a wide screen and sits under
-                  it on a phone, where the picture is too small to carry it. */}
-              <div className="mono" style={narrow
-                ? { padding: '12px 14px 14px', display: 'flex', flexDirection: 'column', gap: 10 }
-                : { position: 'absolute', left: 16, bottom: 14, right: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                <span>
-                  <span className="grotesk" style={{ display: 'block', fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>Play a week of Drip</span>
-                  <span style={{ fontSize: 10, color: 'var(--dim)', letterSpacing: '0.06em', lineHeight: 1.5 }}>SEALED PICKS · LIVE EFFECTS · REAL NFL PLAY-BY-PLAY · FREE, NO SIGN-IN</span>
-                </span>
-                <span style={{ ...cta, padding: '11px 18px', textAlign: 'center' }}>▶ OPEN THE DEMO</span>
+              </>
+            );
+            return (
+              <div key={g.heading} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 12px', display: 'flex', flexDirection: matchup ? 'column' : 'row', gap: 14, alignItems: 'flex-start', gridColumn: matchup && !narrow ? '1 / -1' : undefined }}>
+                {matchup ? (
+                  <>
+                    <div style={{ width: '100%' }}>{chips}</div>
+                    {/* The demo door: the drip screens rotate under one button. */}
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <Rail shots={shots} ratio="16 / 9" width="100%" base={base} onTap={toDemo} />
+                      <button onClick={toDemo} className="mono" title="Play a week of Drip — free, no sign-in"
+                        style={{ ...cta, position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', padding: '11px 18px', boxShadow: '0 4px 18px rgba(0,0,0,0.35)' }}>
+                        ▶ {FUNNEL.demo.toUpperCase()}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Rail shots={shots} ratio="9 / 19" width={narrow ? 112 : 132} base={base} />
+                    <div style={{ flex: '1 1 0', minWidth: 0 }}>{chips}</div>
+                  </>
+                )}
               </div>
-            </div>
-          </button>
+            );
+          })}
         </section>
 
         <footer style={{ display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center', marginTop: 30, flexWrap: 'wrap' }}>

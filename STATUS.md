@@ -22,6 +22,59 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.650.1 — the funnel's rails have screens; the Mode sheet fits a phone
+
+> - The front page's feature cards now rotate through real screens of the app — the create screen's league types and formats, the roster builder, the Bullseye and golf settings, the scoped bonuses, a draft with head coaches on the board — instead of "screen coming" placeholders.
+> - On a phone, the Mode & Season sheet's golf and Bullseye pills now drop under their text instead of squeezing it to a word a line.
+
+Founder: "can you take screen shots from mobile web and fill these in until I
+have app screenshots?"
+
+- **The thirteen screens** under `public/brand/funnel/` are stand-ins shot
+  from this build's web app at 390×844 (2×), signed in with a stub session
+  and every backend call answered locally with fixture data (a classic
+  league with a rookie-WR spot, a Cowboys-only spot and a head-coach spot;
+  four scoped bonuses; a snake draft with three coaches already taken), so
+  no real league was touched. Golf and best ball come from the demo's
+  classic board and the classic sim. The founder's own app screenshots
+  replace them file for file — the names and the README's shooting list
+  stand.
+- **The Mode sheet** (`CommishDash.tsx`): the golf and Bullseye rows were a
+  flex row with the pills `flexShrink: 0`, so at phone width the paragraph
+  beside them collapsed to one word a line. Both rows wrap now.
+
+### v0.650.0 — the front door, revised: the welcome, rotating screens, Bullseye
+
+> - The site's front page opens on a new welcome — free, bespoke, built at warp speed with AI and you — and two buttons: Count me in! and Sign in. No small print under them.
+> - Each feature card now rotates through phone screens of the thing it lists, and Bullseye joins Vampire, Guillotine and Golf under competitive modes.
+> - The matchup card is the door to the demo: tap "Click here for a demo" over the rotating Drip screens.
+
+Founder: "Let's keep working on the new user funnel flow. Let's keep the
+feature listings, but I want to do rotating images for each category … We
+also need to add bullseye mode. … No sub text about limits or anything."
+
+Web only (the signed-out landing, `src/screens/Landing.tsx`):
+
+- **The words** live in `FUNNEL` and `FUNNEL_GAMES`
+  (`packages/core/src/data/leagueTagline.ts`), beside `SITE_PITCH`, which
+  the demo page and the title tag keep. "(Find out more)" opens the FAQ.
+  "Count me in!" is the sign-up while the door is open (0422's cap) and the
+  waiting-list form when it isn't; the page says nothing about which.
+- **The rails.** `FUNNEL_SHOTS` names a portrait phone screenshot per slot
+  under `public/brand/funnel/` (the README there is the shooting list: five
+  league types, four modes, two position screens, two scoring screens). A
+  file not yet shot draws as a labelled "SCREEN COMING" placeholder in the
+  same 9:19 frame, so the page keeps its shape while the founder shoots. The
+  matchup card rotates the site's existing drip and classic screens,
+  landscape, under the demo button; the old "From the site" grid and the
+  separate demo banner folded into it.
+- **Bullseye** is a `FORMAT_NOTES` entry after Golf (the setting it is
+  modelled on), so the demo page's "how the season ends" strip lists it too.
+  The line says target and closest, never "rings".
+
+`check:tagline` holds the funnel's words (no limits, spots or waiting list in
+them), the Bullseye line, the card order and the five headings.
+
 ### v0.649.0 — the chat opens on the newest message, with a way back
 
 > - Opening a league chat or a DM now lands on the newest message every time, even when pictures above it are still loading.
