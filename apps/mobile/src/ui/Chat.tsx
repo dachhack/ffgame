@@ -22,6 +22,7 @@ import { canEditDm, canEditMessage, editNote, editSeed, editTarget } from '@drip
 import { pickChatImage } from './imagePost';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
+import { catchUpOf, catchUpLabel, type CatchUp } from '@drip/core/data/chatCatchUp';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardInset } from './keyboard';
@@ -559,16 +560,64 @@ function ImageButton({ onPick, busy }: { onPick: () => void; busy: boolean }) {
   );
 }
 
-/** Scroll body pinned to the newest message unless the reader scrolled up. */
-function useStickyScroll() {
+/** Scroll body pinned to the newest message unless the reader scrolled up.
+ *
+ *  v0.649.0: the pin is re-applied on the pane's own layout too (the list
+ *  gets its height a frame after the first page arrives, and a scrollToEnd
+ *  before that lands short), and once more a beat after each content growth
+ *  so a picture finishing its load cannot leave the newest message under the
+ *  composer. `catchUp` floats a pill that jumps to the first unseen message;
+ *  the target row reports its y through `rowLayout`, and the pill shows only
+ *  while that y is above the pane's top edge. */
+function useStickyScroll(catchUp?: CatchUp | null) {
   const ref = useRef<ScrollView>(null);
   const stick = useRef(true);
+  const offset = useRef(0);
+  const targetY = useRef<number | null>(null);
+  const [above, setAbove] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const judge = () => setAbove(targetY.current != null && targetY.current < offset.current - 4);
+  const pin = () => {
+    if (!stick.current) return;
+    ref.current?.scrollToEnd({ animated: false });
+    setTimeout(() => { if (stick.current) ref.current?.scrollToEnd({ animated: false }); }, 60);
+  };
   const onScroll = (e: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    offset.current = contentOffset.y;
     stick.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
+    judge();
   };
-  const onContentSizeChange = () => { if (stick.current) ref.current?.scrollToEnd({ animated: false }); };
-  return { ref, onScroll, onContentSizeChange };
+  const onContentSizeChange = () => { pin(); };
+  const onLayout = () => { pin(); };
+  useEffect(() => { targetY.current = null; setDismissed(false); setAbove(false); }, [catchUp?.targetId]);
+  /** The onLayout for the one row the pill points at (undefined for the rest). */
+  const rowLayout = (id: number) => (catchUp && id === catchUp.targetId
+    ? (e: { nativeEvent: { layout: { y: number } } }) => { targetY.current = e.nativeEvent.layout.y; judge(); }
+    : undefined);
+  const jump = () => {
+    stick.current = false;
+    ref.current?.scrollTo({ y: Math.max(0, (targetY.current ?? 0) - 8), animated: true });
+    setDismissed(true);
+  };
+  const pill = !!catchUp && !dismissed && above;
+  return { ref, onScroll, onContentSizeChange, onLayout, rowLayout, jump, pill };
+}
+
+/** The "↑ N new · catch up" pill, floated over the top of a message list. */
+function CatchUpPill({ sticky, catchUp }: { sticky: ReturnType<typeof useStickyScroll>; catchUp: CatchUp | null }) {
+  const t = useTheme();
+  if (!sticky.pill || !catchUp) return null;
+  return (
+    <View pointerEvents="box-none" style={{ position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center', zIndex: 2 }}>
+      <Pressable onPress={() => { tap(); sticky.jump(); }} accessibilityRole="button"
+        accessibilityLabel={`${catchUp.count} new messages, jump to the first`}
+        style={{ backgroundColor: t.you, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6,
+          shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}>
+        <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.3, color: t.onAccent }}>{catchUpLabel(catchUp)}</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 function Composer({ draft, setDraft, busy, err, onSend, placeholder, image }: {
@@ -743,12 +792,22 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   const [plusOpen, setPlusOpen] = useState(false);
   /** 0351: the one message being reworded, if any. */
   const [editing, setEditing] = useState<number | null>(null);
-  const sticky = useStickyScroll();
+  // v0.649.0: where the reader left off. Only the FIRST page knows — the
+  // fetch itself advances the mark, so every poll after it finds nothing new.
+  const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
+  const marked = useRef(false);
+  const sticky = useStickyScroll(catchUp);
   // The message list shrinks by the keyboard's height when it opens, which
   // would slide the newest message out of view under the composer. Re-pin.
   useEffect(() => { if (kb > 0) sticky.ref.current?.scrollToEnd({ animated: true }); }, [kb]); // eslint-disable-line react-hooks/exhaustive-deps -- the ref is stable
   const load = () => chatMessages(leagueId)
-    .then((r) => { if (r.ok && r.messages) { setMsgs([...r.messages].reverse()); setPins(r.pins ?? []); } })
+    .then((r) => {
+      if (r.ok && r.messages) {
+        const list = [...r.messages].reverse();
+        setMsgs(list); setPins(r.pins ?? []);
+        if (!marked.current) { marked.current = true; setCatchUp(catchUpOf(list, r)); }
+      }
+    })
     .catch(() => {});
   useEffect(() => { track(Ev.chatOpened, { dm: false }); }, [leagueId]);
   useEffect(() => {
@@ -835,12 +894,13 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
           ))}
         </View>
       )}
-      <ScrollView ref={sticky.ref} onScroll={sticky.onScroll} onContentSizeChange={sticky.onContentSizeChange}
+      <View style={{ flex: 1 }}>
+      <ScrollView ref={sticky.ref} onScroll={sticky.onScroll} onContentSizeChange={sticky.onContentSizeChange} onLayout={sticky.onLayout}
         scrollEventThrottle={64} style={{ flex: 1 }}>
         {msgs == null && <Mono size={10} tone="faint">Loading…</Mono>}
         {msgs?.length === 0 && <Mono size={10} tone="faint">Nothing yet — say hello to the league.</Mono>}
         {msgs?.map((m) => (
-          <Pressable key={m.id} onLongPress={() => menu(m)} delayLongPress={350}
+          <Pressable key={m.id} onLongPress={() => menu(m)} delayLongPress={350} onLayout={sticky.rowLayout(m.id)}
             style={{ marginBottom: 10, ...(m.mentions_me ? { backgroundColor: alpha(t.you, 8), borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, marginHorizontal: -6 } : {}) }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
               <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: m.mine ? t.you : t.warn }}>{m.author}</Text>
@@ -880,6 +940,8 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
         ))}
         <View style={{ height: 6 }} />
       </ScrollView>
+      <CatchUpPill sticky={sticky} catchUp={catchUp} />
+      </View>
       {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
       {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
       {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
@@ -1033,16 +1095,25 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const sticky = useStickyScroll();
+  const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
+  const marked = useRef(false);
+  const sticky = useStickyScroll(catchUp);
   const kb = useKeyboardInset();
   // The message list shrinks by the keyboard's height when it opens, which
   // would slide the newest message out of view under the composer. Re-pin.
   useEffect(() => { if (kb > 0) sticky.ref.current?.scrollToEnd({ animated: true }); }, [kb]); // eslint-disable-line react-hooks/exhaustive-deps -- the ref is stable
   const load = (tid: string) => dmMessages(tid)
-    .then((r) => { if (r.ok && r.messages) setMsgs([...r.messages].reverse()); })
+    .then((r) => {
+      if (r.ok && r.messages) {
+        const list = [...r.messages].reverse();
+        setMsgs(list);
+        if (!marked.current) { marked.current = true; setCatchUp(catchUpOf(list, r)); }
+      }
+    })
     .catch(() => {});
   useEffect(() => {
     if (!thread.threadId) return;
+    marked.current = false; setCatchUp(null);
     void load(thread.threadId);
     const id = setInterval(() => { if (thread.threadId) void load(thread.threadId); }, 8_000);
     return () => clearInterval(id);
@@ -1070,12 +1141,13 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         </Pressable>
         <Text style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{thread.peer}</Text>
       </View>
-      <ScrollView ref={sticky.ref} onScroll={sticky.onScroll} onContentSizeChange={sticky.onContentSizeChange}
+      <View style={{ flex: 1 }}>
+      <ScrollView ref={sticky.ref} onScroll={sticky.onScroll} onContentSizeChange={sticky.onContentSizeChange} onLayout={sticky.onLayout}
         scrollEventThrottle={64} style={{ flex: 1, paddingTop: 8 }}>
         {msgs == null && <Mono size={10} tone="faint">Loading…</Mono>}
         {msgs?.length === 0 && <Mono size={10} tone="faint">Say hello.</Mono>}
         {msgs?.map((m) => (
-          <View key={m.id} style={{ flexDirection: 'row', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+          <View key={m.id} onLayout={sticky.rowLayout(m.id)} style={{ flexDirection: 'row', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             {/* 0351: the same long press as the league channel, offering the
                 one thing that applies here — your own words, reworded. */}
             <Pressable onLongPress={() => { if (canEditDm(m)) { tap(); setEditing(m.id); } }} delayLongPress={350}
@@ -1102,6 +1174,8 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         ))}
         <View style={{ height: 6 }} />
       </ScrollView>
+      <CatchUpPill sticky={sticky} catchUp={catchUp} />
+      </View>
       <Composer draft={draft} setDraft={setDraft} busy={busy} err={err} onSend={() => void sendBody(draft.trim())}
         placeholder={`message ${thread.peer}…`}
         image={{ pick: () => void img.pick(), busy: img.busy, error: img.error,

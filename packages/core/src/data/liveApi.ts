@@ -3335,9 +3335,13 @@ export const chatPin = (leagueId: string, id: number, on: boolean) =>
 /** The weekly report behind a chat line of kind 'report' (0275). */
 export const leagueReport = (leagueId: string, week: number) =>
   rpc<{ ok: boolean; error?: string; report?: import('./weekReport').WeekReport; at?: string }>('league_report_get', { p_league_id: leagueId, p_week: week });
+/** What a latest-page fetch found before it advanced the read mark (0452):
+ *  `last_read` is the newest message id the reader had seen (0 for never),
+ *  `unread` how many messages sit above it. Both 0 on an older page. */
+export interface ChatReadMark { last_read?: number; unread?: number }
 /** Latest page (no `before`) marks the channel read and carries the pin strip. */
 export const chatMessages = (leagueId: string, before?: number) =>
-  rpc<{ ok: boolean; error?: string; messages?: ChatMessage[]; pins?: ChatMessage[] }>('chat_messages', {
+  rpc<{ ok: boolean; error?: string; messages?: ChatMessage[]; pins?: ChatMessage[] } & ChatReadMark>('chat_messages', {
     p_league_id: leagueId, p_before: before ?? null, p_limit: 50,
   });
 /** TOGGLE a quick reaction (0210). Returns the message's whole reaction set so
@@ -3419,7 +3423,7 @@ export const dmThreads = (leagueId: string) =>
   rpc<{ ok: boolean; error?: string; threads?: DmThreadRow[] }>('dm_threads', { p_league_id: leagueId });
 /** Latest page (no `before`) marks the thread read. */
 export const dmMessages = (threadId: string, before?: number) =>
-  rpc<{ ok: boolean; error?: string; messages?: DmMessage[]; peer?: string }>('dm_messages', {
+  rpc<{ ok: boolean; error?: string; messages?: DmMessage[]; peer?: string } & ChatReadMark>('dm_messages', {
     p_thread_id: threadId, p_before: before ?? null, p_limit: 50,
   });
 /** Badge counts only — never marks anything read. `mention` counts unread messages naming YOU. */

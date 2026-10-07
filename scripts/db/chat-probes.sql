@@ -106,8 +106,20 @@ begin
   perform assert_true((r ->> 'league')::int = 1, 'ch16 one unread for c');
   r := chat_unread(lid);
   perform assert_true((r ->> 'league')::int = 1, 'ch17 badge RPC does not mark read');
-  perform assert_ok(chat_messages(lid), 'ch18 open the chat');
+  r := chat_messages(lid);
+  perform assert_ok(r, 'ch18 open the chat');
   perform assert_true((chat_unread(lid) ->> 'league')::int = 0, 'ch19 latest-page fetch marked read');
+  -- 0452: the page carries the mark it found, and how many sat above it —
+  -- c had read through 'commish here' (ch9), so exactly the new one is above.
+  perform assert_true((r ->> 'unread')::int = 1, 'ch19a one message above the mark c came in with');
+  perform assert_true((r ->> 'last_read')::bigint = (r -> 'messages' -> 1 ->> 'id')::bigint, 'ch19b last_read is the message c had seen');
+  perform assert_true((r -> 'messages' -> 0 ->> 'id')::bigint > (r ->> 'last_read')::bigint, 'ch19c the newest is above it');
+  r := chat_messages(lid);
+  perform assert_true((r ->> 'unread')::int = 0 and (r ->> 'last_read')::bigint = (r -> 'messages' -> 0 ->> 'id')::bigint,
+    'ch19d a second open finds the mark advanced, nothing above');
+  perform probe_as('b');
+  r := chat_messages(lid, (r -> 'messages' -> 0 ->> 'id')::bigint);
+  perform assert_true((r ->> 'unread')::int = 0 and (r ->> 'last_read')::bigint = 0, 'ch19e an older page never reads or moves the mark');
   reset role;
 end $$;
 
@@ -156,8 +168,13 @@ begin
   perform assert_true(jsonb_array_length(th) = 1, 'dm6 one thread listed');
   perform assert_true(th -> 0 ->> 'peer' = 'CH-C', 'dm7 peer named by team');
   perform assert_true((th -> 0 ->> 'unread')::int = 1, 'dm8 thread unread count');
-  perform assert_ok(dm_messages(t1), 'dm9 open the thread');
+  r := dm_messages(t1);
+  perform assert_ok(r, 'dm9 open the thread');
   perform assert_true((chat_unread(lid) ->> 'dm')::int = 0, 'dm10 open cleared it');
+  -- 0452: b had never opened the thread — mark 0, the one message above it.
+  perform assert_true((r ->> 'last_read')::bigint = 0 and (r ->> 'unread')::int = 1, 'dm10a first open: mark 0, one new');
+  r := dm_messages(t1);
+  perform assert_true((r ->> 'unread')::int = 0 and (r ->> 'last_read')::bigint = (r -> 'messages' -> 0 ->> 'id')::bigint, 'dm10b second open: caught up');
   r := dm_send(lid, '00000000-0000-0000-0000-00000000000c', 'listening…');
   perform assert_ok(r, 'dm11 reply');
   t2 := (r ->> 'thread_id')::uuid;

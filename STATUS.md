@@ -22,6 +22,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.649.0 — the chat opens on the newest message, with a way back
+
+> - Opening a league chat or a DM now lands on the newest message every time, even when pictures above it are still loading.
+> - When you've missed more than a message or two, a "↑ N new · catch up" pill floats at the top of the thread; tap it to jump to the first message you haven't seen.
+
+Founder: "When you open chat, it should automatically go to the bottom
+where the most recent message is. We also need an overlay chip for you to
+go back to most recently read message so you can catch up."
+
+Two things, both hosts, league chat and DMs alike:
+
+- **The landing.** The scroll pinned to the bottom on each page load, but a
+  picture or GIF that finished loading afterwards grew the thread under the
+  pin, leaving the newest message a screen short. Web: a ResizeObserver on
+  the pane and its content re-pins while the reader is at the bottom. Phone:
+  the pin re-applies on the list's own layout and a beat after each content
+  growth.
+- **Catch up.** Migration 0452 has `chat_messages` and `dm_messages` read the
+  reader's mark BEFORE advancing it and return it as `last_read` with
+  `unread` (how many sit above it). `catchUpOf` in
+  `packages/core/src/data/chatCatchUp.ts` turns that into the target (the
+  first loaded message above the mark; the oldest loaded, with a "+" on the
+  count, when the page does not reach back that far) and both hosts float
+  the pill only while that message is off the top of the pane. One new
+  message is no pill: it is the one on screen. Tapping scrolls to it and
+  retires the pill; so does scrolling up past it. Only the first page of an
+  open knows the mark, since the fetch itself advances it.
+
+`check:chatcatchup` (in `check:parity`) holds the decision and the SQL
+order; `chat-probes.sql` gains ch19a–e and dm10a–b for the RPCs.
+
 ### v0.648.1 — the penalty fits
 
 > - On the matchup screen the penalty now has its own short red line under the total — "🚫 −10 penalty" — instead of wrapping inside the parentheses, and a no-show's row tag is "🚫 −10", which fits beside the score.
