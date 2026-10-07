@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.648.1 — the penalty fits
+
+> - On the matchup screen the penalty now has its own short red line under the total — "🚫 −10 penalty" — instead of wrapping inside the parentheses, and a no-show's row tag is "🚫 −10", which fits beside the score.
+
+Founder, with the app: "Penalty text doesn't quite show up and the score
+in parends with the penalty would look better if there was a way we could
+display it without wrapping." The 42-px score column truncated "PENALTY
+−10" to "PENAL…", and "(89.2 proj · 1 penalty)" broke across two lines.
+Both hosts: the subline is `(89.2 proj)` on one line; the penalties are a
+line of their own, `🚫 −10 penalty` / `🚫 −20 penalties` (what they cost,
+not a word that needs the width); the row tag is `🚫 −10`.
+
 ### v0.648.0 — Bullseye: a no-show is a penalty
 
 > - In a bullseye league a starter who posts a zero now costs you: each no-show pushes your team 10 further from its target (in SLOTS, 10 off your score). The row says 🚫 PENALTY −10, the big number already includes it, and the line under it counts them. A player on IR or bye wears the tag before kickoff; a man still to play does not.
