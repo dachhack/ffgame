@@ -227,14 +227,14 @@ export function Landing() {
                 {matchup ? (
                   <>
                     <div style={{ width: '100%' }}>{chips}</div>
-                    {/* The demo door: the drip screens rotate under one button. */}
-                    <div style={{ position: 'relative', width: '100%' }}>
-                      <Rail shots={shots} ratio="16 / 9" width="100%" base={base} index={idx} onIndex={pickShot} onTap={toDemo} />
-                      <button onClick={toDemo} className="mono" title="Play a week of Drip — free, no sign-in"
-                        style={{ ...cta, position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', padding: '11px 18px', boxShadow: '0 4px 18px rgba(0,0,0,0.35)' }}>
-                        ▶ {FUNNEL.demo.toUpperCase()}
-                      </button>
-                    </div>
+                    {/* The demo door (v0.652.1, founder: "after the paragraph,
+                        not on the image"): the button sits under the chips'
+                        line, and the picture is just the picture. */}
+                    <button onClick={toDemo} className="mono" title="Play a week of Drip — free, no sign-in"
+                      style={{ ...cta, alignSelf: 'flex-start', padding: '11px 18px' }}>
+                      ▶ {FUNNEL.demo.toUpperCase()}
+                    </button>
+                    <Rail shots={shots} ratio="16 / 9" width="100%" base={base} index={idx} onIndex={pickShot} onTap={toDemo} />
                   </>
                 ) : (
                   <>
