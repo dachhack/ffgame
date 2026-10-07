@@ -25,6 +25,7 @@ import { playsForPlayer, type RawPlay } from './sim';
 import { flagRulesFor, flagFor, adjustmentFor } from '../data/commish';
 import { golfValue, zeroFill, leagueIsGolf, leagueGolfZeroPts } from './golf';
 import { golfExpectedScore } from './golfFloor';
+import { leagueBullseye, aimValue, applyBullseye, bullseyeTargetFor, type BullseyeSummary } from './bullseye';
 import { scopedAdjustFor } from './leagueScoring';
 import { projectedPoints, collegeHasGame } from './projScoring';
 import { normTeam } from '../data/slugMeta';
@@ -915,11 +916,17 @@ export function classicPointsFrom(plays: RawPlay[], player: Player, sc?: number 
 export interface ClassicPick { slot: string; player: Player }
 /** `slug` is null only for an UNFILLED spot carrying a zero-fill rule
  *  (v0.303.0): the spot scores, so it has to appear, but nobody played it. */
-export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string | null; metric: null; score: number }
+/** `aim` (v0.643.0) is the spot's DART under bullseye (bullseye.ts): the
+ *  target it was thrown at, how far it landed, and what it banked. `score`
+ *  stays the player's real points either way. */
+export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string | null; metric: null; score: number; aim?: { target: number; dist: number; ring: number } }
 export interface ClassicResult {
   home: number; away: number;
   slots: ClassicSlotScore[];
   states: { window: string; home: number; away: number }[];
+  /** Present when the league plays bullseye: `home`/`away` above are then
+   *  RING totals, and this says what each lineup was aiming at. */
+  bullseye?: BullseyeSummary;
 }
 
 /** BEST BALL (0159): fill the flagged slots with the highest-scoring eligible
@@ -1016,6 +1023,12 @@ export function bestballFillBy(
     // fill the zero stays a zero and golfValue keeps its rule that a zero is
     // an absence, not a low score. Outside golf nothing changes.
     const banked = leagueIsGolf() ? zeroFill(Number.isFinite(v) ? v : 0, d.zeroPts) : (Number.isFinite(v) ? v : 0);
+    // BULLSEYE (v0.643.0): the fill takes the player who lands CLOSEST to the
+    // spot's target — a per-pair value, which is exactly what this search was
+    // built for. A zero-fill spot throws its fill (banked), as the resolver
+    // does. Golf and bullseye are mutually exclusive (the setters refuse).
+    const bull = leagueBullseye();
+    if (bull) return aimValue(banked, bullseyeTargetFor(d.slot), bull.cfg.radius);
     // GOLF (v0.303.0): the fill takes the LOWEST scorer there. Re-expressing
     // the value keeps this search — and its tie canonicalization below —
     // exactly as written; only what "more valuable" means changes.
@@ -1312,8 +1325,39 @@ export function autoSlotPlan(
     .filter(([slot, slug]) => slug && !bb.has(slot)).map(([, slug]) => slug as string));
   const cands = roster.filter((p) => !taken.has(p.id) && !flagRulesFor(p.id).noStart);
   if (!cands.length) return [];
+  // BULLSEYE (v0.643.0): "best" is "closest to each spot's target" — a
+  // per-pair value, so the search is the assignment, not the matroid greedy.
+  if (leagueBullseye()) {
+    return aimFill(open, cands, valueOf).flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player.id }] : []));
+  }
   return optimalLineup(open, cands, valueOf).spots
     .flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player.id }] : []));
+}
+
+// ── AIMING A LINEUP (v0.643.0) ──────────────────────────────────────────────
+// Under bullseye (bullseye.ts) a player is worth a DIFFERENT number in every
+// spot — a 9-point projection is gold in a 10 spot and nothing in a 25 spot —
+// so the one-value-per-player greedy `optimalLineup` runs cannot rank him.
+// That is the general assignment problem `assignByValue` already solves for
+// best ball, with the aim (`aimValue`: radius − |projection − target|) as the
+// pair value: every spot that can fill does, and among full fills the
+// expected ring total is maximal. Used by the auto-slot (autoSlotPlan) and
+// the unmanaged seat (unmanagedStart) when the install is live; the
+// best-ball fill reaches the same rule inside bestballFillBy.
+export function aimFill<T extends SpotPlayer>(
+  slots: ClassicSlotDef[],
+  players: T[],
+  valueOf: (p: T, d?: ClassicSlotDef) => number,
+): { def: ClassicSlotDef; player: T | null }[] {
+  const bull = leagueBullseye();
+  const radius = bull?.cfg.radius ?? 10;
+  const w = slots.map((d) => players.map((p) => {
+    if (!slotAllows(d, p)) return -Infinity;
+    const v = valueOf(p, d);
+    return aimValue(Number.isFinite(v) ? v : 0, bullseyeTargetFor(d.slot), radius);
+  }));
+  const heldBy = assignByValue(slots.length, players.length, w);
+  return slots.map((d, si) => ({ def: d, player: heldBy[si] >= 0 ? players[heldBy[si]] : null }));
 }
 
 // ── Moving a player between spots (the picker's other half) ────────────────
@@ -1542,6 +1586,10 @@ function unmanagedStart(s: ClassicSide, slots: ClassicSlotDef[], bb: Set<string>
       ? (slug) => (s.ruledOut?.has(slug) ? true : (s.playRisk?.(slug) ?? 0))
       : undefined,
     { discountRisk: true });
+  // BULLSEYE (v0.643.0): the seat nobody manages aims at the card too.
+  if (leagueBullseye()) {
+    return aimFill(open, cands, value).flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player }] : []));
+  }
   return optimalLineup(open, cands, value)
     .spots.flatMap((r) => (r.player ? [{ slot: r.def.slot, player: r.player }] : []));
 }
@@ -1590,9 +1638,15 @@ export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week
     return { rows, total: round1(rows.reduce((s2, r) => s2 + r.score, 0)) };
   };
   const h = side(home, 'home'), a = side(away, 'away');
-  return {
+  const result: ClassicResult = {
     home: h.total, away: a.total,
     slots: [...h.rows, ...a.rows],
     states: [{ window: CLASSIC_WIN, home: h.total, away: a.total }],
   };
+  // BULLSEYE (v0.643.0): the installed card re-scores the result — rows keep
+  // their real points and gain their dart; the totals become ring totals.
+  // Applied HERE so every caller (the worker's resolve, both boards, the
+  // dry-run twin, the probes) inherits it and none can forget.
+  const bull = leagueBullseye();
+  return bull ? applyBullseye(result, bull.card, bull.cfg, slots.length) : result;
 }

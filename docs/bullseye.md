@@ -1,0 +1,338 @@
+# Bullseye — aim your lineup at a number
+
+> **Status: v1 BUILT — a classic-league setting, off by default.** Spec written
+> 2026-10-07 from the founder's brief ("have your players try to get as close
+> as possible to a final total and/or totals for each spot are assigned (even
+> numbers 5, 10, 15, 20) randomly by the CPU. Could do head to head and weekly
+> ranked battles"), then "for classic mode", then "write it up as a spec in
+> docs and get it going". Built the same day in migration
+> `0446_bullseye.sql` + `packages/core/src/engine/bullseye.ts`; see §12 for
+> exactly what shipped and what is still open.
+>
+> Pairs with `docs/rulebook.md` (the game it sits beside) and the golf notes
+> in migration `0200_golf_mode.sql` (the setting it is modelled on). §6's
+> scenarios are the acceptance criteria and are asserted one-for-one in
+> `scripts/check-bullseye.mjs` (engine) and `scripts/db/bullseye-probes.sql`
+> (database).
+
+## 1. The idea
+
+Every other fantasy format asks one question: *how many points can you
+score?* Bullseye asks a different one: **can you land on the number?**
+
+Each week the CPU deals the league a **card** — a target for every starting
+spot (round numbers: 5, 10, 15, 20 …). You fill the spot with the player from
+your roster you think will finish *closest* to that number. Over is as bad as
+under. A dart that lands within half a point is a **bullseye** and pays
+double.
+
+Why this belongs in a **classic** league specifically — three things the code
+already does for classic, and nothing else does:
+
+1. **Each starter locks at his own kickoff** (0178). A Thursday starter is
+   final Thursday; your 1pm, 4pm, SNF and MNF starters each stay open until
+   their own game. In the ONE TOTAL variant (§3) that is a live correction
+   game: you watch the real number come in and re-aim what is still open,
+   four or five times across a weekend. Nobody else can offer it.
+2. **You aim with your own roster.** A drafted league means every dart comes
+   from your bench. Depth becomes the resource, and a bench of boring 8-point
+   bodies is suddenly a quiver. Bench players, waivers and FAAB get a purpose
+   they never have in normal fantasy, where bench points are dead points.
+3. **Lineups are public and the card is public.** Classic hides nothing
+   (0178), so neither does bullseye: everyone sees the same card and
+   everyone's lineup. No sealed-card variant here — that is drip's game.
+
+And one thing it changes about what a player is *worth*: **floor beats
+ceiling**. A kicker is a precision tool for a 5. A dull RB2 who always posts 8
+is a star. That is a fresh skill axis — reading variance rather than chasing
+a ceiling — and it is friendly to a new manager because the question each
+week is small and concrete.
+
+### Design goals
+1. **A setting, not a mode.** Bullseye lives beside golf and best ball on a
+   classic league: the roster builder, the scoring catalog, the draft, the
+   waiver wire, the standings and the playoffs are all untouched. Only what a
+   starter's points *mean* changes.
+2. **One rule, everywhere.** The resolver, the auto-slot, the AI seats, the
+   best-ball fill and both boards read the same card through the same engine
+   module, so a board can never show a lead the resolver will score as a loss.
+3. **Auditable.** The card is dealt from a seed (league, week), published to a
+   table the whole league can read, and re-dealable to the same numbers.
+4. **Nothing changes under a drafted roster.** Frozen at the draft like golf
+   and the game mode (0157, 0200): you draft a bullseye league for floor, not
+   ceiling, so flipping it mid-season would be a different league played with
+   the wrong rosters.
+
+### Hard guardrails
+- **A zero scores nothing.** A spot whose player posts 0.0 is a MISS no
+  matter what the target was, or the 5 target is solved by starting an
+  injured player. (Same philosophy as golf: a zero is an absence, not a low
+  score.) An unfilled spot is a miss. A spot carrying the **zero-fill rule**
+  (0200) banks its fill first, and the dart is thrown with the fill.
+- **Golf and bullseye are mutually exclusive.** Lowest ring score winning
+  would reward the worst aim; each setter refuses while the other is on.
+- **Drip is untouched.** Nothing in this feature can reach a league whose
+  `game_mode` isn't `classic`.
+
+## 2. Definitions
+
+| Term | Meaning |
+|---|---|
+| **Card** | The week's targets: one per starting spot (SLOTS variant) or one number for the lineup (TOTAL variant). Same card for every team in the league. |
+| **Target** | A round number a spot is aiming at. Drawn from a per-spot-type set (§4). |
+| **Distance** | `|points − target|`, in the league's own scoring. |
+| **Radius** | How far a dart can land and still score (default **10** for a spot). At or beyond it a spot scores 0. |
+| **Ring score** | What a spot banks: `max(0, radius − distance)`, plus a **bullseye bonus** of `radius` when distance ≤ `radius / 20` (half a point at radius 10). A bullseye is worth up to `2 × radius` — exactly double on the number, 19.5 at the edge of the band. |
+| **Bullseye / Inner / Outer / Edge / Miss** | The labels the boards print on a dart: distance ≤ radius/20 (0.5) / ≤ radius/5 (2) / ≤ radius/2 (5) / inside the radius / at or beyond it. Labels only — the score is the continuous formula above. |
+| **Weekly total** | The sum of the lineup's ring scores. This is the matchup score: what `matchup.home_final` holds, what the standings sum, what the playoffs compare. Higher wins, as always. |
+
+### Why a continuous score rather than fixed ring points
+Fixed rings (50 / 25 / 10 / 0) read beautifully but tie constantly — a nine-
+spot lineup with three outer rings is 30, and so is the other guy's. A
+continuous `radius − distance` keeps every tenth of a point alive, makes
+"closer" always better, and the cap at `radius` stops one 40-point explosion
+aimed at a 10 from sinking the whole week any harder than a 20 would. The
+bullseye bonus keeps the darts moment: landing inside half a point is an event,
+and it doubles the spot.
+
+## 3. The two variants
+
+**SLOTS** (`bullseye = 'slots'`, the default when turned on). Every starting
+spot carries its own target. Independent darts; the week is the sum.
+
+**TOTAL** (`bullseye = 'total'`). The card is dealt exactly the same way, but
+only its **sum** is published: one number for the whole lineup. The lineup's
+raw points are compared to it as a single dart with a wider radius
+(`radius × starters`, so 90 for nine spots), scored by the same formula
+(bullseye band = `radius × starters / 20`, i.e. 4.5 points). The SLOTS card is
+still dealt underneath so the two variants aim at reachable numbers and a
+league can flip between them pre-draft without the card changing shape.
+
+Per-player locks make TOTAL the most skill-heavy version: after Thursday you
+know you are 7 over, so you cool Sunday; after the 1pm games you re-tune 4pm,
+SNF and MNF. The MNF starter is the last throw.
+
+## 4. The deal — how a card is made
+
+The card is **deterministic**: seeded by `(league_id, week)` through the same
+mulberry32-over-FNV hash the pods use, so the worker, a board that has not yet
+seen the published rows, a re-run and a probe all deal the same numbers.
+
+Targets are drawn **per spot type** from the commissioner's own lineup
+(`leagueSlotDefs` — the roster builder spec, else the 0161 counts, else the
+default nine), each spot from the set for its type, weighted toward the middle
+so a card is rarely all 20s or all 5s:
+
+| Spot type | Targets (weight) |
+|---|---|
+| QB | 15 (2) · 20 (3) · 25 (3) · 30 (1) |
+| SUPERFLEX | 10 (2) · 15 (3) · 20 (3) · 25 (1) |
+| RB, WR, FLEX, REC FLEX | 5 (2) · 10 (3) · 15 (3) · 20 (1) |
+| TE | 5 (3) · 10 (3) · 15 (1) |
+| K | 5 (2) · 10 (3) · 15 (1) |
+| D/ST | 5 (3) · 10 (3) · 15 (1) |
+| DL, LB, DB, IDP FLEX | 5 (3) · 10 (3) · 15 (1) |
+| RET | 5 (3) · 10 (1) |
+| anything else | 5 · 10 · 15 (equal) |
+
+Every target is a multiple of 5 and **never 0**: a zero target would ask for
+a player who does nothing, which is the one thing the guardrail refuses to
+reward.
+
+**When.** The worker publishes the card for the board week on every tick
+(`bullseye_card`, keyed `(league_id, week, slot)`, upsert — idempotent). In
+practice that is Tuesday morning, when Sleeper rolls the week, which puts the
+card in front of the league **before Wednesday's waivers run**: "I need a
+5-point TE" is a real claim. The TOTAL row is published as slot `TOTAL`.
+
+**Not in v1 (§11):** anchoring the draw to projection quantiles under the
+league's own scoring, so a 20 for a WR means the same thing in half PPR as in
+full. v1's sets are tuned for full PPR and a standard catalog; a league far
+from that will find some targets harder than others, which is a feature until
+it isn't.
+
+## 5. How a week scores
+
+For each starting spot, in the lineup the resolver already fields
+(`classicLineup`: manual picks, the unmanaged-seat fill, best-ball fills):
+
+1. The spot's points, exactly as classic scores them today (`classicPoints`,
+   flags, scoped rules, adjustments, the zero-fill rule) — this is the number
+   the row shows, and it never changes.
+2. If the points are **0**, or the spot has no target (a card that has not
+   been dealt), the spot's ring score is **0**.
+3. Otherwise `distance = |points − target|` and
+   `ring = max(0, radius − distance) + (distance ≤ radius/20 ? radius : 0)`,
+   rounded to a tenth.
+4. The side's total is the sum of its ring scores. That total is what
+   `matchup_state.home_score` / `away_score` carry live and what
+   `matchup.home_final` / `away_final` stamp at the end.
+
+Each slot row in `matchup_state.slot_scores` keeps its **raw** `score` and
+gains an `aim` object: `{ target, dist, ring }`. The per-player number is
+always the player's real fantasy points; the aim is beside it.
+
+**Live.** Nothing scores before kickoff (a player at 0 is a miss until he
+produces, which keeps the live total honest). A dart can get worse as the game
+goes on — a garbage-time touchdown that blows a bullseye is the feature's
+signature drama beat, and the boards should say so.
+
+**Standings, playoffs, tiebreaks.** Untouched. Higher weekly total wins;
+points-for is the sum of ring scores; nothing inverts.
+
+## 6. Scenarios, played out
+
+Each of these is a named case in `scripts/check-bullseye.mjs` (engine) and,
+where the database is involved, `scripts/db/bullseye-probes.sql`.
+
+1. **The deal is deterministic.** Dealing (league L, week 3) twice gives the
+   same card; week 4 gives a different one; every target is a positive
+   multiple of 5 from its spot type's set; the TOTAL is the sum.
+2. **A dart scores by distance.** Target 10: 10.0 → 20 (bullseye); 10.4 →
+   19.6 (bullseye); 10.6 → 9.4; 12 → 8; 15 → 5; 20 → 0; 50 → 0; 2 → 2.
+3. **A zero is a miss.** Target 5, player posts 0.0 → 0, not 5.
+4. **An unfilled spot is a miss.** No player, no zero-fill → 0, and no row.
+5. **The zero-fill throws the dart.** Spot with `zero_pts: 10`, target 10,
+   player posts 0 → the fill banks 10, the dart lands on 10 → 20.
+6. **The lineup's raw points still show.** The slot row's `score` is the
+   player's real points; `aim.ring` is the dart; the side total is the sum of
+   rings, not of points.
+7. **TOTAL is one dart.** Nine spots, card sum 110, radius 90: lineup posts
+   110.0 → 180; 120 → 80; 200 → 0.
+8. **Off means off.** A league with no bullseye setting resolves bit-for-bit
+   as before — same totals, same rows, no `aim`.
+9. **The fill aims.** Given a target of 10 and a roster with a 22-point WR
+   and a 9-point WR, the unmanaged seat, the auto-slot and the best-ball fill
+   all seat the 9. Across the whole lineup the fill is the assignment that
+   maximises expected ring score, not projected points.
+10. **The setter's rails** (probes): commissioner only; classic only;
+    refused once the draft has started; refused while golf is on, and golf is
+    refused while bullseye is on; `league_game_mode` reports it; the card
+    reader returns the published rows to a member and nothing to a stranger.
+11. **The week board** (probes): `bullseye_week_board(league, week)` ranks
+    every team by its final ring total, highest first, with the raw points
+    beside it.
+
+## 7. Data model + RPCs
+
+**`league.settings_json.bullseye`** — `'slots' | 'total'`, absent when off.
+`settings_json.bullseye_radius` — optional int 2..50, default 10. SQL stores
+the sanitized value; the engine (`bullseyeConfigOf`) owns every default.
+
+**`bullseye_card`**
+```
+league_id uuid  references league(id) on delete cascade
+week      int
+slot      text   -- a starting spot's slot id (S1…, or QB/RB1… for 0161 leagues), or 'TOTAL'
+target    numeric
+dealt_at  timestamptz default now()
+primary key (league_id, week, slot)
+```
+RLS: members, commissioners and admins read; only the service role writes.
+
+**RPCs**
+- `set_league_bullseye(p_league_id, p_variant text, p_radius int default null)`
+  — commissioner/admin; classic only; frozen at draft; refuses while golf is
+  on; `null`/`'off'` clears. Returns `{ok, bullseye, radius}`.
+- `set_league_golf` — one new rail: refused while bullseye is on.
+- `league_game_mode` — carries `bullseye` and `bullseye_radius`.
+- `bullseye_card(p_league_id, p_week)` — the published rows, members only.
+- `bullseye_week_board(p_league_id, p_week)` — every team's final ring total
+  for the week, ranked, with raw points beside it (the "weekly ranked" read).
+
+**Engine** (`packages/core/src/engine/bullseye.ts`, pure, platform-free):
+`bullseyeConfigOf(mode)`, `dealBullseyeCard(leagueId, week, slots, cfg)`,
+`ringScore(points, target, radius)`, `applyBullseye(result, card, cfg)`,
+`setLeagueBullseye / clearLeagueBullseye / leagueBullseye` (the per-league
+install, same contract as `setLeagueGolf`), `aimFill(...)` (the per-pair
+assignment every fill uses when the install is live).
+
+**Worker** (`server/src/`): `modeOfSettings` carries `bullseye` +
+`bullseye_radius`; the tick publishes the board week's card before auto-slot;
+`resolve.js` installs the card beside golf before each classic resolve;
+`lock.js` and the unmanaged-seat path aim through the install.
+
+## 8. AI seats and the fill
+
+Every automatic lineup — the Tuesday auto-slot for a human who hasn't opened
+the app, the hourly re-plan of an AI seat, the unmanaged seat computed at
+resolve, and a best-ball spot — asks the same question: **which player on this
+roster is worth the most in this spot?** Under bullseye the honest answer is
+the **expected ring score**, `radius − |projection − target|`, and it is a
+per-pair number (a 9-point projection is gold in a 10 spot and nothing in a
+25 spot). That is the assignment problem `assignByValue` already solves for
+best ball, so under the install every fill routes through it with the aim as
+the pair value. No new search.
+
+A player on bye or ruled out projects 0, which is a miss, which is the lowest
+value — so the fill benches him for a live body as it always has.
+
+## 9. UI
+
+**Commissioner (web `CommishDash` → League settings; app `CommishTools` →
+Game mode card):** beside the HIGH / LOW golf pills, a 🎯 BULLSEYE row with
+OFF / SLOTS / TOTAL. Disabled with the reason once the draft has started or
+while golf is on.
+
+**The lineup board (both hosts), when on:**
+- a 🎯 BULLSEYE banner between the two totals, like golf's ⛳ LOW WINS;
+- each spot shows its **target** ("🎯 10") and, once he has played, the
+  distance and ring label ("−1.4 · INNER") beside his real points;
+- TOTAL variant: the one target over the lineup, the running distance, and
+  the spots still to play (the correction-loop readout).
+
+**The week board:** a ranked list of every team's ring total for the week
+(the `bullseye_week_board` read), reachable from the league's standings.
+
+**The waiver wire (v2):** a FIT column, `|projection − target|` against the
+open targets, so the wire reads as "who lands on my 5".
+
+## 10. Rollout
+
+1. Engine + checks (this PR). `check:bullseye` in the parity battery.
+2. Migration 0446 + probes (this PR). Off everywhere; nothing changes for a
+   league that never opens the setting.
+3. Worker install + card publish (this PR).
+4. Commissioner toggle + board readout on web and app (this PR, minimal).
+5. Flip it on in a test league pre-draft; watch one full week: the card is
+   published Tuesday, the auto-slot aims, the live board's total matches the
+   worker's `matchup_state`, the finals stamp the ring totals.
+6. Then the open questions.
+
+## 11. Open questions (argue here)
+
+- **Projection-anchored draws.** Draw each spot's target from the quantiles
+  of projected points under the league's own scoring, rounded to 5, so every
+  target is equally reachable in every catalog. Needs the projection catalog
+  at deal time (the worker has it; a board dealing on the fly does too).
+- **A per-team card** (each team its own deal) is more varied and less fair.
+  Shared is the default; per-team could be a knob.
+- **Hybrid**: SLOTS card plus a bonus when the lineup's sum also lands within
+  a band of the card's sum.
+- **Cross-league weekly ranked.** Every bullseye league shares a base card
+  (seeded by week alone) so a global board by ring total is comparable
+  across leagues. Cheap once the deal is seeded by week; needs a public read.
+- **Power-ups as coin sinks** (reroll one target before lock; call your shot
+  for a double bullseye; nudge a final dart by up to two points). Drip-coin
+  only, earned-only, never bought — the premium line holds.
+- **DNP vs zero.** v1 treats 0.0 points as a miss. A WR who played and drew
+  no targets is also a 0 — a true miss. A kicker with one missed FG is −1,
+  not 0, and throws his dart. Fine; revisit if a league finds a real exploit.
+- **Rings as fixed points** instead of the continuous formula, if the league
+  wants the darts board to read 50 / 25 / 10.
+
+## 12. What v1 shipped (2026-10-07)
+
+- `packages/core/src/engine/bullseye.ts` — the deal, the score, the install,
+  the aim-aware fill. `resolveClassicMatchup` applies the installed card; the
+  unmanaged-seat fill, `autoSlotPlan`'s callers and `bestballFillBy` aim
+  through it.
+- `supabase/migrations/0446_bullseye.sql` — the setting, the rails, the card
+  table + reader, the week board, `league_game_mode`.
+- Worker: `modeOfSettings`, the card publish in `tickContext`, the install in
+  `resolve.js` and `lock.js`.
+- `scripts/check-bullseye.mjs` (in `check:parity`) and
+  `scripts/db/bullseye-probes.sql` (in the scratch runner).
+- Web + app: the commissioner pills and the board's banner + per-spot aim.
+- Not yet: the waiver-wire FIT column, cross-league ranked, the
+  projection-anchored draw, power-ups.

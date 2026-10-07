@@ -4,7 +4,7 @@ import type { GameModeInfo } from '@drip/core/data/liveApi';
 import { SportLineup } from './SportLineup';
 import { draftState } from '@drip/core/data/liveApi';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueBullseye, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
@@ -443,6 +443,8 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // GOLF (v0.303.0): null until the mode load lands, so neither button lights
   // up on a guess.
   const [golf, setGolf] = useState<boolean | null>(null);
+  // BULLSEYE (v0.643.0): undefined until the mode load lands.
+  const [bullseye, setBullseye] = useState<'slots' | 'total' | null | undefined>(undefined);
   // A SPORT LEAGUE (0426/0428): its lineup is the sport's standard shape and
   // its scoring page is SportSettings, not the football catalog.
   const [sport, setSport] = useState<Sport>('nfl');
@@ -460,6 +462,16 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     try {
       const r = await setLeagueGolf(leagueId, on);
       if (r.ok) { setGolf(r.golf === true); setNote(on ? '✓ golf mode on — lowest total wins' : '✓ golf mode off'); }
+      else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
+  // BULLSEYE (v0.643.0, docs/bullseye.md): slots, total or off.
+  const saveBullseye = async (variant: 'slots' | 'total' | null) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueBullseye(leagueId, variant);
+      if (r.ok) { setBullseye(r.bullseye ?? null); setNote(variant ? `✓ bullseye on — ${variant === 'total' ? 'one number for the lineup' : 'a number per spot'}, closest wins` : '✓ bullseye off'); }
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
@@ -595,7 +607,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
         ? r.slots.map(toSpotDraft)
@@ -762,6 +774,19 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <button onClick={() => void saveGolf(false)} disabled={busy || golf === null} className="mono" style={pill(golf === false)}>HIGH WINS</button>
             <button onClick={() => void saveGolf(true)} disabled={busy || golf === null} className="mono" style={pill(golf === true)}>⛳ LOW WINS</button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>🎯 BULLSEYE</div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+              Aim, don&apos;t pile up. Every week the CPU deals a card — a round number for each starting spot (SLOTS) or one number for the whole lineup (TOTAL) — and the closer a starter lands, the more the spot banks. Over counts the same as under; a zero is a miss; inside half a point is a bullseye and pays double. Standings and playoffs read as always: higher ring total wins. Floor beats ceiling, so a steady RB2 and a kicker become weapons. Dealt Tuesday, before waivers. Not with golf. Locks once the draft starts.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button onClick={() => void saveBullseye(null)} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === null)}>OFF</button>
+            <button onClick={() => void saveBullseye('slots')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'slots')}>🎯 SLOTS</button>
+            <button onClick={() => void saveBullseye('total')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'total')}>🎯 TOTAL</button>
           </div>
         </div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>

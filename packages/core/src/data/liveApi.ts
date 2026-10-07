@@ -2120,7 +2120,7 @@ export const leagueLiveBuffs = (leagueId: string) =>
 /** 'drip' (default) or 'classic' — classic = standard scoring, one weekly
  *  QB/RB/RB/WR/WR/TE/FLEX/K/DEF lineup, no bonuses, no power-ups. Frozen once
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
-export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean;
+export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; bullseye?: 'slots' | 'total' | null; bullseye_radius?: number | null; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean;
   /** 0426: which sport the league plays ('nfl' for every league before it) and its sport block. */
   sport?: Sport; sport_settings?: Record<string, unknown> | null }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
@@ -2143,6 +2143,25 @@ export const setLeagueGolf = (leagueId: string, on: boolean) =>
   tracked(rpc<{ ok: boolean; error?: string; golf?: boolean }>('set_league_golf',
     { p_league_id: leagueId, p_on: on }),
     Ev.commishAction, { tool: 'golf', on });
+/** BULLSEYE (0446): aim each starting spot (or the lineup) at a dealt
+ *  number. 'slots' | 'total' | null (off); radius 2..50 or null for the
+ *  engine default. Classic only, commissioner, frozen at the draft, refused
+ *  while golf is on. docs/bullseye.md. */
+export const setLeagueBullseye = (leagueId: string, variant: 'slots' | 'total' | null, radius?: number | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; bullseye?: 'slots' | 'total' | null; radius?: number | null }>('set_league_bullseye',
+    { p_league_id: leagueId, p_variant: variant, p_radius: radius ?? null }),
+    Ev.commishAction, { tool: 'bullseye', variant: variant ?? 'off' });
+/** The week's published card: [{slot, target}] with the TOTAL row last;
+ *  empty until the worker deals it (the boards then deal the same card from
+ *  the same seed — engine dealBullseyeCard). */
+export const bullseyeCard = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; bullseye?: 'slots' | 'total' | null; radius?: number | null; card?: { slot: string; target: number }[] }>('bullseye_card',
+    { p_league_id: leagueId, p_week: week });
+/** Every team's final for a week, ranked highest first — the week's darts
+ *  board in a bullseye league. */
+export const bullseyeWeekBoard = (leagueId: string, week: number) =>
+  rpc<{ ok: boolean; error?: string; bullseye?: 'slots' | 'total' | null; week?: number; board?: { rank: number; roster_id: number; team: string | null; final: number }[] }>('bullseye_week_board',
+    { p_league_id: leagueId, p_week: week });
 export const setLeagueBestball = (leagueId: string, slots: string[]) =>
   tracked(rpc<{ ok: boolean; error?: string; bestball?: string[] }>('set_league_bestball',
     { p_league_id: leagueId, p_slots: slots }),

@@ -16,6 +16,7 @@ import type { Pos } from '../types';
 import type { ClassicSlotDef } from './classic';
 import type { Roof } from '../data/stadiums';
 import { leagueIsGolf } from './golf';
+import { leagueBullseye, ringScore, type Dart } from './bullseye';
 
 /** One player as the board needs them — the caller resolves identity, we do
  *  the arithmetic. `live` is points ALREADY scored; `proj` is the full-game
@@ -55,6 +56,11 @@ export interface BoardEntry {
   primetime?: boolean;
 }
 
+/** A spot's darts under bullseye (v0.643.0): the target, and each side's
+ *  dart once his game has started (null before kickoff, and for an empty
+ *  spot with no zero-fill). Absent when the league does not play it or in
+ *  the TOTAL variant, where no spot aims alone. */
+export interface SlotAim { target: number; home: Dart | null; away: Dart | null }
 export interface BoardSlotRow {
   slot: string;
   /** The label the manager sees: a custom spot label, else FLEX/QB/… */
@@ -63,6 +69,7 @@ export interface BoardSlotRow {
   pos: Pos[];
   home: BoardEntry | null;
   away: BoardEntry | null;
+  aim?: SlotAim;
 }
 
 export interface BoardSide {
@@ -98,6 +105,9 @@ export interface BoardSide {
   /** Win chance 0..1 — see winProbability below for what it is and isn't. */
   winPct: number;
   record?: { wins: number; losses: number; ties: number; rank?: number | null } | null;
+  /** BULLSEYE (v0.643.0): the side's RING totals — the headline when the
+   *  league plays it. `live`/`projected` above stay the raw points. */
+  aim?: { variant: 'slots' | 'total'; target: number; live: number; projected: number; dist: number };
 }
 
 export interface MatchupBoard {
@@ -271,11 +281,54 @@ export function buildMatchupBoard(input: {
   const homeStarters = starters.map((r) => r.home);
   const awayStarters = starters.map((r) => r.away);
 
+  const homeSide = side(home, homeStarters, awayStarters);
+  const awaySide = side(away, awayStarters, homeStarters);
+  // BULLSEYE (v0.643.0): under the installed card each spot is a dart, and
+  // the side's headline is its RING total — live from the points on the board
+  // (zero-fill aware, like `live` above) and projected from the projections.
+  // Same arithmetic as the resolver's applyBullseye, read through the same
+  // install, so the board's total is the one the worker will stamp.
+  const bull = leagueBullseye();
+  if (bull) {
+    const { cfg, card } = bull;
+    const dart = (pts: number, target: number | undefined, radius: number): Dart | null =>
+      target == null ? null : { target, dist: r2(Math.abs(pts - target)), ring: ringScore(pts, target, radius) };
+    const aimSide = (s: BoardSide, mine: (BoardEntry | null)[]): BoardSide => {
+      const pts = mine.reduce((a, e, i) => a + fillLive(e, slotOrder[i]), 0);
+      const proj = mine.reduce((a, e, i) => a + fillProj(e, slotOrder[i]), 0);
+      if (cfg.variant === 'total') {
+        const radius = cfg.radius * Math.max(1, slots.length);
+        return { ...s, aim: { variant: 'total', target: card.total, live: ringScore(pts, card.total, radius), projected: ringScore(proj, card.total, radius), dist: r2(Math.abs(pts - card.total)) } };
+      }
+      const live = r2(mine.reduce((a, e, i) => a + ringScore(fillLive(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0));
+      const projected = r2(mine.reduce((a, e, i) => a + ringScore(fillProj(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0));
+      return { ...s, aim: { variant: 'slots', target: card.total, live, projected, dist: r2(Math.abs(pts - card.total)) } };
+    };
+    for (const row of starters) {
+      const target = card.targets[row.slot];
+      if (target == null || cfg.variant === 'total') continue;
+      row.aim = {
+        target,
+        home: row.home && row.home.state !== 'pre' ? dart(fillLive(row.home, row.slot), target, cfg.radius) : null,
+        away: row.away && row.away.state !== 'pre' ? dart(fillLive(row.away, row.slot), target, cfg.radius) : null,
+      };
+    }
+    return {
+      week, locked,
+      home: aimSide(homeSide, homeStarters),
+      away: aimSide(awaySide, awayStarters),
+      starters,
+      bench: { home: home.bench ?? [], away: away.bench ?? [] },
+      ir: { home: home.ir ?? [], away: away.ir ?? [] },
+      taxi: { home: home.taxi ?? [], away: away.taxi ?? [] },
+    };
+  }
+
   return {
     week,
     locked,
-    home: side(home, homeStarters, awayStarters),
-    away: side(away, awayStarters, homeStarters),
+    home: homeSide,
+    away: awaySide,
     starters,
     bench: { home: home.bench ?? [], away: away.bench ?? [] },
     ir: { home: home.ir ?? [], away: away.ir ?? [] },

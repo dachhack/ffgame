@@ -10,6 +10,7 @@ import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetS
 import { setLeagueFlags, flagsLeague, setLeagueAdjustments, clearLeagueAdjustments, adjustmentsLeague } from '@drip/core/data/commish';
 import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine/leagueScoring';
 import { setLeagueGolf } from '@drip/core/engine/golf';
+import { setLeagueBullseye, clearLeagueBullseye, bullseyeConfigOf, dealBullseyeCard, cardFromRows, ringLabel, type BullseyeConfig } from '@drip/core/engine/bullseye';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
 import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
@@ -37,7 +38,7 @@ import { boardStatline } from '@drip/core/engine/sim';
 import {
   myMatchup, defaultOpenWeek, leagueWeekRole, myPool, myPicks, savePicks, getRevealedPicks, matchupTeams,
   liveSlate, leagueStandings,
-  leagueGameMode, sportLeagueGames, sportLeagueMarket, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
+  leagueGameMode, bullseyeCard, sportLeagueGames, sportLeagueMarket, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
   nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides, loadDepthChart,
   vampireState, feedingBell, bittenNotice, type VampireState,
@@ -177,8 +178,14 @@ function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'rig
   const t = useTheme();
   const rec = side.record;
   const right = align === 'right';
-  const big = mode === 'hidden' ? '—' : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
-  const sub = mode === 'hidden' ? 'sealed until kickoff' : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
+  // BULLSEYE (v0.643.0): the headline is the RING total, the points beneath.
+  const aim = side.aim;
+  const big = mode === 'hidden' ? '—'
+    : aim ? (mode === 'proj' ? aim.projected.toFixed(1) : aim.live.toFixed(1))
+    : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
+  const sub = mode === 'hidden' ? 'sealed until kickoff'
+    : aim ? (mode === 'proj' ? `rings · aim ${aim.target}` : `${side.live.toFixed(1)} pts · ${aim.dist.toFixed(1)} off ${aim.target}`)
+    : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
       <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
@@ -377,6 +384,8 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // on screen, because a total that means the opposite of what it looks like
   // is the one thing this screen must never let happen.
   const [golf, setGolf] = useState(false);
+  // BULLSEYE (v0.643.0): the setting once the card is installed.
+  const [bullseye, setBullseye] = useState<BullseyeConfig | null>(null);
   const [sport, setSport] = useState<Sport>('nfl');
   const [sportSettings, setSportSettings] = useState<SportLeagueSettings | null>(null);
   // THE SPORT'S OWN SLATE (v0.625.0) — the web twin's: the period's games.
@@ -546,6 +555,18 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
           // GOLF (v0.303.0) rides the same load: a league setting the engine
           // reads at scoring time, installed like the scoring adjustments.
           if (gm.ok) { if (gm.ppr != null) setPpr(Number(gm.ppr)); setBestball(leagueBestball(gm)); setScoring(gm.scoring ?? {}); setRosterCfg(gm.roster ?? {}); setSlotsSpec(gm.slots ?? null); setLeagueGolf(gm.golf === true, leagueGolfZeroPtsOf(gm)); setGolf(gm.golf === true); }
+          // BULLSEYE (v0.643.0): the setting from the mode, the week's card
+          // from the table — else dealt here from the same seed.
+          if (gm.ok) {
+            const cfg = gm.mode === 'classic' ? bullseyeConfigOf(gm) : null;
+            if (!cfg) { setLeagueBullseye(null, null); setBullseye(null); }
+            else {
+              const dealt = dealBullseyeCard(leagueId, m.week, leagueSlotDefs(gm));
+              bullseyeCard(leagueId, m.week)
+                .then((c) => { setLeagueBullseye(cfg, (c.ok ? cardFromRows(c.card) : null) ?? dealt); setBullseye(cfg); })
+                .catch(() => { setLeagueBullseye(cfg, dealt); setBullseye(cfg); });
+            }
+          }
           // A SPORT LEAGUE (0426) draws its week from locked slot-days.
           if (gm.ok) {
             setSport(gm.sport ?? 'nfl'); setSportSettings(gm.sport && gm.sport !== 'nfl' ? sportSettingsOf({ sport: gm.sport_settings }) : null);
@@ -865,7 +886,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
     return () => { alive = false; clearInterval(id); sub.remove(); if (issuesRef.current === get) issuesRef.current = null; };
   }, [leagueId]);
   // Cleared on leaving the league, not on changing week (keyed by week).
-  useEffect(() => () => clearLeagueAdjustments(), [leagueId]);
+  useEffect(() => () => { clearLeagueAdjustments(); clearLeagueBullseye(); }, [leagueId]);
   const pts = useMemo(() => {
     void playsAt; void flagsVer;
     if (!matchup) return () => 0;
@@ -1127,7 +1148,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       // wired up.
       away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, benchOf(oppPool, effective.theirs)),
     });
-  }, [matchup, seat, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked]);
+  }, [matchup, seat, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked, bullseye]);
 
   // EVERY GAME'S SCORE (v0.323.0). `gameFeeds` is the whole week's feeds, and
   // the worker polls every live game rather than only rostered ones, so this is
@@ -1548,6 +1569,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                 )}
               </Pressable>
               {golf && <Mono size={8} tone="warn" weight="700" style={{ marginTop: 3 }}>⛳ LOW WINS</Mono>}
+              {bullseye && <Mono size={8} tone="warn" weight="700" style={{ marginTop: 3 }}>{`🎯 BULLSEYE${bullseye.variant === 'total' ? ' · ONE TOTAL' : ''}`}</Mono>}
             </View>
             <TeamHead side={board.away} align="right" mode={locked ? 'live' : 'proj'} />
           </View>
@@ -1751,6 +1773,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                   <View style={{ width: 66, alignItems: 'center' }}>
                     <SlotPill pos={row.pos} label={row.label} />
                     {auto && <Mono size={7} tone="you" numberOfLines={1}>🎯 AUTO</Mono>}
+                    {row.aim && <Mono size={8} tone="warn" weight="700" numberOfLines={1}>{`🎯 ${row.aim.target}`}</Mono>}
+                    {row.aim && bullseye && (row.aim.home || row.aim.away) && (
+                      <Mono size={6.5} tone="faint" numberOfLines={1}>
+                        {`${row.aim.home ? `${ringLabel(row.aim.home.dist, bullseye.radius)} ${row.aim.home.ring.toFixed(1)}` : '—'} · ${row.aim.away ? `${ringLabel(row.aim.away.dist, bullseye.radius)} ${row.aim.away.ring.toFixed(1)}` : '—'}`}
+                      </Mono>
+                    )}
                   </View>
                   <Mono size={12.5} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42 }}>
                     {scoreOf(row.away)}

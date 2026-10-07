@@ -11,6 +11,8 @@ import { db } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
 import { autoSlotPlan, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
+import { clearLeagueBullseye } from '../../packages/core/src/engine/bullseye.ts';
+import { installBullseye, bullseyeCardsFor, bullseyeCfgOf } from './bullseye.js';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { autoLineup, liveTeamOf } from './engine.js';
@@ -368,6 +370,9 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
     byLeague.get(m.league_id).push(m);
   }
   if (!byLeague.size) return 0;
+  // BULLSEYE (0446): the published cards for the leagues that play it, once
+  // per tick; a league whose card is not yet published deals the seed's.
+  const bullCards = await bullseyeCardsFor([...byLeague.keys()].filter((id) => bullseyeCfgOf(modeOf.get(id))), week);
 
   let slotted = 0;
   try {
@@ -379,6 +384,10 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
     // the false case would leave the previous league's rule in force over this
     // one, which is how one golf league would quietly mis-slot the whole tick.
     setLeagueGolf(mode?.golf === true, leagueGolfZeroPtsOf(mode));
+    // BULLSEYE (v0.643.0): "the best lineup" is the one that lands closest to
+    // the card, and autoSlotPlan aims through the engine's install. Same
+    // terms as golf: per league, unconditional, cleared in the finally.
+    installBullseye(leagueId, week, mode, bullCards);
     // THE LEAGUE'S SCORING (v0.310.0), on the same terms and for the same
     // reason. `slateAwareProj` ranks candidates through `projectedPoints`, so
     // without this a league paying 6 for a passing touchdown, or a TE premium,
@@ -558,6 +567,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
     // The install is a module global; nothing downstream in this tick should
     // inherit the last league's rule.
     clearLeagueGolf();
+    clearLeagueBullseye();
     clearLeagueProjScoring();
   }
   return slotted;
