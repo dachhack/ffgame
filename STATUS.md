@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.650.3 — the funnel's screens are the game, not the settings
+
+> - The front page's rotating screens now show the game itself: matchup boards for redraft, college, mixed, golf, Bullseye and best-ball leagues; the cap sheet; the devy market; the vampire's feeding log; the chop report; a lineup with scoped spots; a draft filtered to head coaches.
+
+Founder's list, slot by slot: "Redraft: matchup board · Contract: contracts
+view · Full college: matchup board with a roster of top college players ·
+Mixed college: NFL board with two college slots · Devy Market · Vampire: bite
+view · Guillotine: chop report · Golf: matchup with players projected close
+to 0 · Bullseye: bullseye matchup board · Scoped: roster with an NFC Only
+spot and a rookie-only SF best ball · HC draft: a draft filtered to HC ·
+Scoring: a matchup with mixed best-ball and set spots · Scoped bonuses as
+is."
+
+Still stand-ins, shot from this build's web app at phone size against
+fixture data (a classic ten-team league on a pre-kick week 5: two full
+lineups, a slate, projections, college games and lines, a cap sheet, a devy
+book, a vampire's season, three chopped seats, a live snake draft). No real
+league was touched; the founder's app screenshots replace them file for
+file. `scoring-scoped-bonuses.png` is unchanged.
+
 ### v0.650.2 — the front page is one column, the screens under the chips
 
 > - The front page's feature cards now run in a single column, each with its rotating phone screen under the chips instead of beside them, so the screens are big enough to read.
