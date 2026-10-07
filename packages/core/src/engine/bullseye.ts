@@ -31,18 +31,14 @@ import type { ClassicResult, ClassicSlotScore, ClassicScoring } from './classic'
 import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, scoringFor, slotEligiblePos } from './classic';
 import { scoreProjLine, scoreKickLine, scoreDstLine } from './projScoring';
 
-/** SLOTS: a target per spot. TOTAL: one number for the lineup. HYBRID
- *  (v0.645.0): the SLOTS darts plus the lineup's sum as one more dart, scored
- *  on the TOTAL scale and divided by the spot count — a tenth dart. */
-export type BullseyeVariant = 'slots' | 'total' | 'hybrid';
-/** How a dart banks (v0.645.0): CONTINUOUS is radius − distance (+ the
- *  bullseye bonus); FIXED is the darts-board reading — 2×radius / radius /
- *  radius÷2 / 0 by band. */
-export type BullseyeRings = 'continuous' | 'fixed';
+/** SLOTS: a target per spot. TOTAL: one number for the lineup. (A HYBRID of
+ *  the two and a fixed-rings scale shipped in v0.645.0 and were taken back
+ *  out in v0.646.0 at the founder's call: two ways to play, one way to score.) */
+export type BullseyeVariant = 'slots' | 'total';
 /** SHARED: one card for the league. TEAM (v0.645.0): every roster is dealt
  *  its own card from its own seed. */
 export type BullseyeDeal = 'shared' | 'team';
-export interface BullseyeConfig { variant: BullseyeVariant; radius: number; rings: BullseyeRings; deal: BullseyeDeal }
+export interface BullseyeConfig { variant: BullseyeVariant; radius: number; deal: BullseyeDeal }
 
 export const BULLSEYE_RADIUS = 10;
 export const BULLSEYE_RADIUS_MIN = 2;
@@ -51,14 +47,13 @@ export const BULLSEYE_RADIUS_MAX = 50;
 /** The league's bullseye setting, normalised — null when off. SQL stores the
  *  sanitized variant + radius; this owns the defaults (the classic rule:
  *  "this module owns every default; SQL stores sanitized overrides only"). */
-export function bullseyeConfigOf(mode?: { bullseye?: string | null; bullseye_radius?: number | null; bullseye_rings?: string | null; bullseye_deal?: string | null } | null): BullseyeConfig | null {
+export function bullseyeConfigOf(mode?: { bullseye?: string | null; bullseye_radius?: number | null; bullseye_deal?: string | null } | null): BullseyeConfig | null {
   const v = mode?.bullseye;
-  if (v !== 'slots' && v !== 'total' && v !== 'hybrid') return null;
+  if (v !== 'slots' && v !== 'total') return null;
   const r = Number(mode?.bullseye_radius);
   const radius = Number.isFinite(r) && r >= BULLSEYE_RADIUS_MIN && r <= BULLSEYE_RADIUS_MAX ? Math.round(r) : BULLSEYE_RADIUS;
-  const rings: BullseyeRings = mode?.bullseye_rings === 'fixed' ? 'fixed' : 'continuous';
   const deal: BullseyeDeal = mode?.bullseye_deal === 'team' ? 'team' : 'shared';
-  return { variant: v, radius, rings, deal };
+  return { variant: v, radius, deal };
 }
 
 // ── The deal ────────────────────────────────────────────────────────────────
@@ -239,20 +234,13 @@ export const bullseyeBand = (radius: number): number => radius / 20;
 
 /** What a dart banks. A zero is a miss (see the module docblock); so is a
  *  spot with no target. */
-export function ringScore(points: number, target: number | null | undefined, radius: number, rings: BullseyeRings = 'continuous'): number {
+export function ringScore(points: number, target: number | null | undefined, radius: number): number {
   if (target == null || !Number.isFinite(target)) return 0;
   // ANY ZERO IS A MISS (founder: "we want any zero to count for the did not
   // play rule"): a spot whose player posted nothing banks nothing, whatever
   // the target and whatever the reason.
   if (!Number.isFinite(points) || Math.abs(points) < 1e-9) return 0;
   const dist = Math.abs(points - target);
-  if (rings === 'fixed') {
-    // The darts-board reading: bullseye / inner / outer, nothing between.
-    if (dist <= bullseyeBand(radius) + 1e-9) return round1(2 * radius);
-    if (dist <= radius / 5 + 1e-9) return round1(radius);
-    if (dist <= radius / 2 + 1e-9) return round1(radius / 2);
-    return 0;
-  }
   const base = Math.max(0, radius - dist);
   return round1(base + (dist <= bullseyeBand(radius) + 1e-9 ? radius : 0));
 }
@@ -348,20 +336,17 @@ export function applyBullseye(
     if (cfg.variant === 'total') {
       // One dart for the whole lineup, radius scaled to the lineup — rows
       // carry no per-spot aim, because no spot was aiming at anything alone.
-      const ring = ringScore(points, card.total, cfg.radius * n, cfg.rings);
+      const ring = ringScore(points, card.total, cfg.radius * n);
       return { rows: mine, dart: { target: card.total, dist, ring, points } };
     }
     let ring = 0;
     const rows = mine.map((x) => {
       const target = card.targets[x.slot];
       if (target == null) return x;
-      const rs = ringScore(x.score, target, cfg.radius, cfg.rings);
+      const rs = ringScore(x.score, target, cfg.radius);
       ring += rs;
       return { ...x, aim: { target, dist: round1(Math.abs(x.score - target)), ring: rs } };
     });
-    // HYBRID: the lineup's sum is one more dart, on the TOTAL scale divided
-    // by the spot count — worth exactly what one spot is worth.
-    if (cfg.variant === 'hybrid') ring += ringScore(points, card.total, cfg.radius * n, cfg.rings) / n;
     return { rows, dart: { target: card.total, dist, ring: round1(ring), points } };
   };
   const h = side('home'), a = side('away');
@@ -391,7 +376,7 @@ export function rankByRing<T extends { ring: number }>(rows: T[]): (T & { rank: 
  *  the chip then simply doesn't print. Rows with the same projection fit the
  *  same spot, so the wire reads "who lands on my 5". */
 export function bullseyeFit(
-  pos: string, proj: number, slots: { slot: string; pos: string[] }[], card: BullseyeCard | null | undefined, radius: number, rings: BullseyeRings = 'continuous',
+  pos: string, proj: number, slots: { slot: string; pos: string[] }[], card: BullseyeCard | null | undefined, radius: number,
 ): { slot: string; target: number; dist: number; ring: number } | null {
   if (!card || !(proj > 0)) return null;
   let best: { slot: string; target: number; dist: number; ring: number } | null = null;
@@ -399,7 +384,7 @@ export function bullseyeFit(
     const target = card.targets[d.slot];
     if (target == null || !slotEligiblePos(d.pos).includes(pos)) continue;
     const dist = Math.round(Math.abs(proj - target) * 10) / 10;
-    if (!best || dist < best.dist) best = { slot: d.slot, target, dist, ring: ringScore(proj, target, radius, rings) };
+    if (!best || dist < best.dist) best = { slot: d.slot, target, dist, ring: ringScore(proj, target, radius) };
   }
   return best;
 }

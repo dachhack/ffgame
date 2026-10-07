@@ -135,7 +135,7 @@ function HubMatchups({ leagueId, myRoster, wide }: { leagueId: string; myRoster:
  *  this week's finals ranked by ring total — this league, or every league
  *  that played it. Renders nothing elsewhere. */
 function HubDartsBoard({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
-  const [on, setOn] = useState<'slots' | 'total' | 'hybrid' | null>(null);
+  const [on, setOn] = useState<'slots' | 'total' | null>(null);
   const [week, setWeek] = useState<number | null>(null);
   const [scope, setScope] = useState<'league' | 'all'>('league');
   const [rows, setRows] = useState<{ rank: number; team: string | null; final: number; league?: string | null; mine?: boolean }[] | null>(null);
@@ -164,7 +164,7 @@ function HubDartsBoard({ leagueId, myRoster }: { leagueId: string; myRoster: num
         {tab('league', 'THIS LEAGUE')}{tab('all', 'ALL LEAGUES')}
       </div>
       <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 6 }}>
-        {on === 'total' ? 'One number for the lineup — closest wins.' : on === 'hybrid' ? 'A number per spot, plus the lineup total — closest wins.' : 'A number per spot — closest wins.'} Ring totals, highest first{scope === 'all' ? '; every league playing bullseye this week' : ''}.
+        {on === 'total' ? 'One number for the lineup — closest wins.' : 'A number per spot — closest wins.'} Highest first{scope === 'all' ? '; every league playing bullseye this week' : ''}.
       </div>
       {rows == null && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>loading…</div>}
       {rows?.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No finals yet this week.</div>}

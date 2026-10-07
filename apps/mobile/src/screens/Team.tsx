@@ -610,7 +610,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     }).catch(() => { if (alive) setBullCard(null); });
     return () => { alive = false; };
   }, [leagueId, gm, bullCfg, myRoster]);
-  const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius, bullCfg.rings) : null);
+  const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius) : null);
   const bySpot = useMemo(() => {
     const active = shown.filter((p) => p.spot === 'active');
     const seat = assignSpots(slotDefs, active.map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })));

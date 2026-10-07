@@ -312,7 +312,7 @@ function TeamHead({ side, align, accent, mode }: {
     : aim ? (mode === 'proj' ? aim.projected.toFixed(1) : aim.live.toFixed(1))
     : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
   const sub = mode === 'hidden' ? 'sealed until kickoff'
-    : aim ? (mode === 'proj' ? `rings · ${side.projected.toFixed(1)} pts proj · aim ${aim.target}` : `${side.live.toFixed(1)} pts · ${aim.dist.toFixed(1)} off ${aim.target}`)
+    : aim ? (mode === 'proj' ? `${side.projected.toFixed(1)} pts projected` : `${side.live.toFixed(1)} pts · ${aim.dist.toFixed(1)} off`)
     : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <div style={{ textAlign: align, minWidth: 0 }}>
@@ -328,6 +328,11 @@ function TeamHead({ side, align, accent, mode }: {
         </div>
       )}
       <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, color: mode === 'hidden' ? 'var(--faint)' : 'var(--text)' }}>{big}</div>
+      {/* THE TARGET (v0.646.0, founder: "make the top 'aim x' into Target x
+          and make the font larger and bold. We need that to be clear"). */}
+      {aim && mode !== 'hidden' && (
+        <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: 'var(--warn)', letterSpacing: '0.02em' }}>🎯 Target {aim.target}</div>
+      )}
       <div className="mono" style={{ fontSize: 9.5, color: mode === 'hidden' ? 'var(--faint)' : accent }}>{sub}</div>
     </div>
   );
@@ -482,7 +487,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // is the one thing this screen must never let happen.
   const [golf, setGolf] = useState(false);
   // BULLSEYE (v0.643.0): the league's setting once the card is installed —
-  // the board re-derives its totals as rings when this lands.
+  // the board re-derives its totals as darts when this lands.
   const [bullseye, setBullseye] = useState<BullseyeConfig | null>(null);
   const [sport, setSport] = useState<Sport>('nfl');
   const [sportSettings, setSportSettings] = useState<SportLeagueSettings | null>(null);
@@ -1995,7 +2000,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                     <div className="mono" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 4, fontSize: 9, fontWeight: 700 }}>
                       {([['left', row.aim.home], ['right', row.aim.away]] as const).map(([al, d]) => (
                         <div key={al} style={{ textAlign: al, color: d ? (d.ring > 0 ? 'var(--warn)' : 'var(--faint)') : 'var(--faint)' }}>
-                          {d ? `${ringLabel(d.dist, bullseye.radius)} · ${d.dist.toFixed(1)} off · ${d.ring.toFixed(1)} rings` : ''}
+                          {d ? `${ringLabel(d.dist, bullseye.radius)} · ${d.dist.toFixed(1)} off · +${d.ring.toFixed(1)}` : ''}
                         </div>
                       ))}
                     </div>

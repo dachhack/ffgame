@@ -9,9 +9,12 @@
 > `0446_bullseye.sql` + `packages/core/src/engine/bullseye.ts`; the open
 > list worked the same day ("let's keep working on the open list") in
 > `0447_bullseye_across_leagues.sql`, and the rest of it ("keep cooking") in
-> `0448_bullseye_knobs.sql`. See §12 for exactly what shipped and §11 for
-> what is still open. Founder's standing rules: **no power-ups in this
-> mode**, and **any zero counts for the did-not-play rule**.
+> `0448_bullseye_knobs.sql`; then trimmed in `0450_bullseye_two_ways_one_scale.sql`
+> ("only smooth rings so no setting needed … lets not do hybrid"). See §12
+> for exactly what shipped and §11 for what is still open. Founder's
+> standing rules: **no power-ups in this mode**, **any zero counts for the
+> did-not-play rule**, **two ways to play, one way to score**, and the word
+> "rings" is never shown to a player.
 >
 > Pairs with `docs/rulebook.md` (the game it sits beside) and the golf notes
 > in migration `0200_golf_mode.sql` (the setting it is modelled on). §6's
@@ -89,7 +92,7 @@ week is small and concrete.
 | **Target** | A round number a spot is aiming at. Drawn from a per-spot-type set (§4). |
 | **Distance** | `|points − target|`, in the league's own scoring. |
 | **Radius** | How far a dart can land and still score (default **10** for a spot). At or beyond it a spot scores 0. |
-| **Ring score** | What a spot banks. **Smooth** (default): `max(0, radius − distance)`, plus a **bullseye bonus** of `radius` when distance ≤ `radius / 20` (half a point at radius 10) — up to `2 × radius`, exactly double on the number, 19.5 at the edge of the band. **Fixed** (`bullseye_rings = 'fixed'`, v0.645.0): the darts-board reading — bullseye `2 × radius`, inner (≤ radius/5) `radius`, outer (≤ radius/2) `radius / 2`, nothing beyond. |
+| **Score** (the engine calls it the ring score; a player only ever sees "score" or "+8.6") | What a spot banks: `max(0, radius − distance)`, plus a **bullseye bonus** of `radius` when distance ≤ `radius / 20` (half a point at radius 10) — up to `2 × radius`, exactly double on the number, 19.5 at the edge of the band. The one and only scale: a fixed-points alternative shipped in v0.645.0 and was taken out in v0.646.0. |
 | **Bullseye / Inner / Outer / Edge / Miss** | The labels the boards print on a dart: distance ≤ radius/20 (0.5) / ≤ radius/5 (2) / ≤ radius/2 (5) / inside the radius / at or beyond it. Labels only — the score is the continuous formula above. |
 | **Weekly total** | The sum of the lineup's ring scores. This is the matchup score: what `matchup.home_final` holds, what the standings sum, what the playoffs compare. Higher wins, as always. |
 
@@ -106,12 +109,6 @@ and it doubles the spot.
 
 **SLOTS** (`bullseye = 'slots'`, the default when turned on). Every starting
 spot carries its own target. Independent darts; the week is the sum.
-
-**HYBRID** (`bullseye = 'hybrid'`, v0.645.0). The SLOTS darts, plus the
-lineup's raw sum thrown as one more dart at the card's total on the TOTAL
-scale and divided by the spot count — so the tenth dart is worth exactly what
-one spot is worth (up to `2 × radius`). A lineup that lands its parts *and*
-its whole banks the most.
 
 **TOTAL** (`bullseye = 'total'`). The card is dealt exactly the same way, but
 only its **sum** is published: one number for the whole lineup. The lineup's
@@ -246,10 +243,10 @@ where the database is involved, `scripts/db/bullseye-probes.sql`.
 
 ## 7. Data model + RPCs
 
-**`league.settings_json.bullseye`** — `'slots' | 'total' | 'hybrid'`, absent
-when off. `bullseye_radius` — optional int 2..50, default 10.
-`bullseye_rings` — `'continuous' | 'fixed'`, default continuous.
-`bullseye_deal` — `'shared' | 'team'`, default shared. SQL stores the
+**`league.settings_json.bullseye`** — `'slots' | 'total'`, absent when off.
+`bullseye_radius` — optional int 2..50, default 10. `bullseye_deal` —
+`'shared' | 'team'`, default shared. (`bullseye_rings` and the `'hybrid'`
+variant existed for one build, v0.645.0, and are scrubbed by 0450.) SQL stores the
 sanitized values; the engine (`bullseyeConfigOf`) owns every default.
 
 **`bullseye_card`**
@@ -265,7 +262,7 @@ primary key (league_id, week, roster_id, slot)
 RLS: members, commissioners and admins read; only the service role writes.
 
 **RPCs**
-- `set_league_bullseye(p_league_id, p_variant, p_radius, p_rings, p_deal)`
+- `set_league_bullseye(p_league_id, p_variant, p_radius, p_deal)`
   — commissioner/admin; classic only; frozen at draft; refuses while golf is
   on; a null knob keeps its value; `null`/`'off'` on the variant clears every
   key. Returns `{ok, bullseye, radius, rings, deal}`.
@@ -351,8 +348,9 @@ Nothing open. The list as it was worked:
 - **Cross-league weekly ranked** → the darts board's ALL LEAGUES view (§9,
   v0.644.0), comparable by ring total rather than a shared card.
 - **A per-team card** → `bullseye_deal = 'team'` (§4, v0.645.0).
-- **Hybrid** → the third variant (§3, v0.645.0).
-- **Rings as fixed points** → `bullseye_rings = 'fixed'` (§2, v0.645.0).
+- **Hybrid** → built in v0.645.0, removed in v0.646.0 at the founder's call.
+- **Rings as fixed points** → built in v0.645.0, removed in v0.646.0: one
+  scale, no setting, and the word "rings" is never shown to a player.
 - **DNP vs zero** → settled by the founder: any zero counts (§1 guardrail).
 - **Power-ups** → closed by the founder: none in this mode.
 
@@ -378,5 +376,8 @@ Nothing open. The list as it was worked:
   (`0448_bullseye_knobs.sql`; `setBullseyeRoster` / `bullseyeCardFor` in the
   engine; the worker publishes a card per enrolled seat and installs the two
   sides' cards; the boards install both sides' and print both targets; the
-  wire aims at *your* card; SMOOTH / FIXED and SHARED / PER TEAM pills beside
-  the variant on both hosts). The zero rule confirmed as "any zero".
+  wire aims at *your* card; SHARED / PER TEAM pills beside the variant on
+  both hosts). The zero rule confirmed as "any zero".
+- v0.646.0: HYBRID and the fixed-rings knob removed (`0450`), "rings" struck
+  from every player-facing string, the app's commissioner pills moved onto
+  their own row so the 🎯 BULLSEYE chip no longer wraps.
