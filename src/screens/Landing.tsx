@@ -238,10 +238,11 @@ export function Landing() {
                 ) : (
                   <>
                     <div>{chips}</div>
-                    {/* The phone frame sits centred under the chips, big enough to read. */}
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <Rail shots={shots} ratio="9 / 19" width={narrow ? 200 : 220} base={base} index={idx} onIndex={pickShot} />
-                    </div>
+                    {/* WIDE, NOT TALL (v0.651.1, founder: "zoom them in and cut
+                        off the bottoms so they fit wider"): the screen fills
+                        the card's width and the frame keeps only the top of
+                        it — the header, the score, the first rows. */}
+                    <Rail shots={shots} ratio={narrow ? '1 / 1' : '4 / 3'} width="100%" base={base} index={idx} onIndex={pickShot} />
                   </>
                 )}
               </div>

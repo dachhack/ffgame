@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.651.1 — the front page's screens run wide
+
+> - Each feature card's screen now fills the card's width, zoomed in on the top of the screen (the header, the score, the first rows) instead of a small full-height phone frame.
+
+Founder: "Pics look good. Can we zoom them in and cut off the bottoms so
+they fit wider?" `Landing.tsx`: the rail's frame is the card's full width,
+square on a phone and 4:3 on a wide screen, cropping from the top as before.
+The files are untouched; the matchup card keeps its 16:9 frame.
+
 ### v0.651.0 — the chips pick the screen, and the screens are mark-free
 
 > - On the front page the screens no longer turn on their own: tap a chip and its screen comes up; the dots under a screen still step through by hand, and light the chip they land on.
