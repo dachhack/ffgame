@@ -35,6 +35,7 @@ import { setLeagueFlags, setLeagueAdjustments } from '../../packages/core/src/da
 import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
+import { installBullseye, bullseyeCardsFor, bullseyeCfgOf } from './bullseye.js';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -212,9 +213,15 @@ export const modeOfSettings = (s) => ({
   // seat agents — has to know, and they all read the league through this
   // mapper. The SCORES don't change; which end of them is good does.
   golf: s?.golf === true,
+  // BULLSEYE (0446): the variant ('slots' | 'total') and the radius override,
+  // raw — the engine's bullseyeConfigOf owns the defaults and the clamps.
+  bullseye: s?.bullseye === 'slots' || s?.bullseye === 'total' || s?.bullseye === 'hybrid' ? s.bullseye : null,
+  bullseye_radius: Number.isFinite(Number(s?.bullseye_radius)) ? Number(s.bullseye_radius) : null,
+  bullseye_rings: s?.bullseye_rings === 'fixed' ? 'fixed' : null,
+  bullseye_deal: s?.bullseye_deal === 'team' ? 'team' : null,
 });
 async function leagueModeOf(leagueId, ctx) {
-  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false };
+  if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false, bullseye: null, bullseye_radius: null, bullseye_rings: null, bullseye_deal: null };
   const { data } = await db().from('league').select('settings_json').eq('id', leagueId).maybeSingle();
   return modeOfSettings(data?.settings_json);
 }
@@ -312,7 +319,11 @@ export async function prefetchTick(live, week) {
     if (!illegal.has(r.league_id)) illegal.set(r.league_id, new Set());
     illegal.get(r.league_id).add(r.roster_id);
   }
-  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents, adjust, illegal };
+  // BULLSEYE (0446): the published cards for the leagues that play it, so the
+  // install before each classic resolve is a lookup, not a read.
+  const bullLeagues = [...mode].filter(([, gm]) => bullseyeCfgOf(gm)).map(([id]) => id);
+  const cards = await bullseyeCardsFor(bullLeagues, week);
+  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents, adjust, illegal, cards };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -600,6 +611,11 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const rosters = new Map();
     const bestball = leagueBestball(gameMode);
     const slotDefs = leagueSlotDefs(gameMode);
+    // BULLSEYE (0446): the week's card, read here (an await region) so the
+    // install below stays synchronous. The tick prefetches it; a lone
+    // resolve reads it; a league with the setting off reads nothing.
+    const bullCards = !bullseyeCfgOf(gameMode) ? null
+      : (ctx?.cards ?? await bullseyeCardsFor([matchup.league_id], matchup.week));
     {
       const { data: ros } = await db().from('native_roster').select('roster_id,slug,added_at')
         .eq('league_id', matchup.league_id).eq('spot', 'active') // taxi/IR stashes never fill (0164)
@@ -649,6 +665,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // today's roster says nothing about whether a team was legal back then.
     const illegal = matchup.home_final == null && bestball.length ? await illegalRostersOf(matchup.league_id, ctx) : new Set();
     const sideOf = (picks, rosterId) => ({
+      rosterId,   // BULLSEYE per-team deal (v0.645.0): which card this side aims at
       picks: classify(picks),
       hasLineup: hasRows(picks, rosterId),
       roster: rosters.get(rosterId) ?? [],
@@ -676,6 +693,10 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     // UNCONDITIONALLY: it is a module global, so skipping the false case would
     // leave the previous matchup's golf league in force over this one.
     setLeagueGolf(gameMode.golf === true, leagueGolfZeroPtsOf(gameMode));
+    // BULLSEYE (v0.643.0) rides the same install on the same terms: the
+    // league's card (published, else dealt from the seed — the same numbers)
+    // and its setting, set unconditionally so no league inherits another's.
+    installBullseye(matchup.league_id, matchup.week, gameMode, bullCards, [matchup.home_roster_id, matchup.away_roster_id]);
     // AND THE PROJECTION CATALOG (v0.310.0). An UNMANAGED seat has no stored
     // lineup, so `classicLineup` computes one through `slateAwareProj` — which
     // now ranks by the league's own scoring. Installed with exactly the catalog
@@ -782,9 +803,11 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const slotsFor = (win) => visSlots
     .filter((s) => s.win === win)
     .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))
-    .map(({ side, slot, slug, metric, score, hot, nuked }) => ({
+    .map(({ side, slot, slug, metric, score, hot, nuked, aim }) => ({
       side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0),
       ...(hot && !gameOver(slug) ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
+      // BULLSEYE (v0.643.0): the spot's dart rides beside its real points.
+      ...(aim ? { aim } : {}),
     }));
 
   // THE READ-ONLY EXIT (v0.472.0). Everything above is computation; everything
@@ -794,8 +817,8 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     return {
       home: round(homeTotal), away: round(awayTotal), coin, dry: true,
       states: states.map((s) => ({ ...s })),
-      slots: slotRows.map(({ side, slot, slug, metric, score, win }) => ({
-        side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0), win,
+      slots: slotRows.map(({ side, slot, slug, metric, score, win, aim }) => ({
+        side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0), win, ...(aim ? { aim } : {}),
       })),
     };
   }

@@ -37,6 +37,7 @@ import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { fixTeam } from '../../scripts/espn/espnAdapter.mjs';
 import { ensureSeatAgents } from './agents.js';
+import { publishBullseyeCards } from './bullseye.js';
 import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
 import { sweepRescores } from './rescore.js';
 import { postWeekReports, sweepRequests } from './report.js';
@@ -707,6 +708,13 @@ async function tickContext(ctx, season) {
   // College players' per-game lines and this week's has-a-game (0373), so the
   // fill, the AI seats and the seat wire rank them instead of seeing zeros.
   await installCollegeProj(week);
+  // BULLSEYE (0446): the week's card is published BEFORE the fill, so the
+  // lineup a seat starts the week with is aimed at the card the league sees.
+  // Idempotent — one insert per league-week, then a no-op every tick.
+  try {
+    const dealt = await publishBullseyeCards(week, log);
+    if (dealt) log(`[${ctx.tag}] bullseye dealt`, dealt, 'cards');
+  } catch (e) { log(`[${ctx.tag}] bullseye deal`, e.message); }
   try {
     // The tick's own slate rides along (v0.252.0) so the fill can prove byes;
     // injuries come from injury_status inside.

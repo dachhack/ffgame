@@ -19,6 +19,7 @@ import { InjuryNow } from './rosterGroup';
 import { LabelInfo } from './InfoChip';
 import { seedStart, seedsCustom, moveSeed } from '@drip/core/data/seeds';
 import { weekLabel } from '@drip/core/data/nflSlate';
+import { leagueGameMode as gameModeRpc, bullseyeWeekBoard, bullseyeGlobalBoard } from '@drip/core/data/liveApi';
 
 // ── Standings: wins, points, differential ────────────────────────────────────
 type StandSort = 'record' | 'pf' | 'diff';
@@ -1042,6 +1043,53 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
           </View>
         </View>
       </Overlay>
+    </Card>
+  );
+}
+
+/** THE DARTS BOARD (v0.644.0, docs/bullseye.md §9): in a bullseye league,
+ *  the week's finals ranked by ring total — this league, or every league
+ *  that played it. Nothing elsewhere. */
+export function DartsBoard({ leagueId, myRoster, week }: { leagueId: string; myRoster: number | null; week: number | null }) {
+  const t = useTheme();
+  const [on, setOn] = useState<'slots' | 'total' | 'hybrid' | null>(null);
+  const [scope, setScope] = useState<'league' | 'all'>('league');
+  const [rows, setRows] = useState<{ rank: number; team: string | null; final: number; league?: string | null; mine?: boolean }[] | null>(null);
+  useEffect(() => {
+    gameModeRpc(leagueId).then((g) => setOn(g.ok && g.mode === 'classic' ? (g.bullseye ?? null) : null)).catch(() => setOn(null));
+  }, [leagueId]);
+  useEffect(() => {
+    if (!on || week == null) return;
+    setRows(null);
+    const q = scope === 'league'
+      ? bullseyeWeekBoard(leagueId, week).then((r) => (r.ok ? (r.board ?? []).map((b) => ({ rank: b.rank, team: b.team, final: b.final, mine: myRoster != null && b.roster_id === myRoster })) : []))
+      : bullseyeGlobalBoard(week).then((r) => (r.ok ? (r.board ?? []) : []));
+    q.then(setRows).catch(() => setRows([]));
+  }, [on, week, scope, leagueId, myRoster]);
+  if (!on || week == null) return null;
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <Mono size={9} tone="faint" track={0.12}>{`🎯 DARTS BOARD · WK ${week}`}</Mono>
+        <View style={{ flex: 1 }} />
+        <Chip label="THIS LEAGUE" on={scope === 'league'} onPress={() => { tap(); setScope('league'); }} />
+        <Chip label="ALL LEAGUES" on={scope === 'all'} onPress={() => { tap(); setScope('all'); }} />
+      </View>
+      <Mono size={8} tone="faint" style={{ marginTop: 4 }}>
+        {`${on === 'total' ? 'One number for the lineup' : on === 'hybrid' ? 'A number per spot, plus the lineup total' : 'A number per spot'} — closest wins. Ring totals, highest first.`}
+      </Mono>
+      {rows === null && <ActivityIndicator color={t.you} style={{ marginTop: 8 }} />}
+      {rows?.length === 0 && <Mono size={9} tone="faint" style={{ marginTop: 8 }}>No finals yet this week.</Mono>}
+      {!!rows?.length && rows.map((r, i) => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd }}>
+          <Mono size={9} tone="faint" style={{ width: 18 }}>{String(r.rank)}</Mono>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Mono size={10} tone={r.mine ? 'you' : 'text'} weight={r.mine ? '700' : '400'} numberOfLines={1}>{r.team ?? '—'}</Mono>
+            {scope === 'all' && !!r.league && <Mono size={7.5} tone="faint" numberOfLines={1}>{r.league}</Mono>}
+          </View>
+          <Mono size={11} weight="700" tone="text" style={{ width: 52, textAlign: 'right' }}>{Number(r.final).toFixed(1)}</Mono>
+        </View>
+      ))}
     </Card>
   );
 }

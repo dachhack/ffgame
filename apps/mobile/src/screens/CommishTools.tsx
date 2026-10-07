@@ -24,6 +24,7 @@ import {
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, type GameModeInfo, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter,
   setLeagueGolf,
+  setLeagueBullseye,
   setTaxiRules, setIrRules, setOutRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
@@ -1858,6 +1859,10 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // GOLF (v0.303.0): null until the mode load lands, so neither pill lights up
   // on a guess.
   const [golf, setGolf] = useState<boolean | null>(null);
+  // BULLSEYE (v0.643.0): undefined until the mode load lands.
+  const [bullseye, setBullseye] = useState<'slots' | 'total' | 'hybrid' | null | undefined>(undefined);
+  const [bullRings, setBullRings] = useState<'continuous' | 'fixed'>('continuous');
+  const [bullDeal, setBullDeal] = useState<'shared' | 'team'>('shared');
   // A DAILY SPORT (v0.625.0): classic only, its own lineup builder, no golf.
   const [sport, setSport] = useState<Sport>('nfl');
   const [gmInfo, setGmInfo] = useState<GameModeInfo | null>(null);
@@ -1869,6 +1874,19 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       const r = await setLeagueGolf(leagueId, on);
       if (r.ok) { commit(); setGolf(r.golf === true); setNote(on ? '✓ golf mode on — lowest wins' : '✓ golf mode off'); }
       else { warn(); setNote(r.error ?? 'failed'); }
+    } finally { setBusy(false); }
+  };
+  // BULLSEYE (v0.643.0, docs/bullseye.md): slots, total or off.
+  const saveBullseye = async (variant: 'slots' | 'total' | 'hybrid' | null, rings?: 'continuous' | 'fixed', deal?: 'shared' | 'team') => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueBullseye(leagueId, variant, null, rings ?? null, deal ?? null);
+      if (r.ok) {
+        commit(); setBullseye(r.bullseye ?? null); setBullRings(r.rings === 'fixed' ? 'fixed' : 'continuous'); setBullDeal(r.deal === 'team' ? 'team' : 'shared');
+        setNote(!variant ? '✓ bullseye off' : rings ? `✓ rings ${rings}` : deal ? `✓ ${deal === 'team' ? 'a card per team' : 'one shared card'}`
+          : `✓ bullseye on — ${variant === 'total' ? 'one number' : variant === 'hybrid' ? 'per spot + the total' : 'a number per spot'}, closest wins`);
+      } else { warn(); setNote(r.error ?? 'failed'); }
     } finally { setBusy(false); }
   };
   // The roster POSITION BUILDER (0163): draft rows, one SAVE writes the spec.
@@ -2035,7 +2053,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
     draftStateOf(leagueId).then((d) => setDrafted(!!d.status && d.status !== 'pending')).catch(() => {});
     leagueGameMode(leagueId).then((r) => { if (r.ok) {
       setSport(r.sport ?? 'nfl'); setGmInfo(r);
-      setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {});
+      setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); setBullRings(r.bullseye_rings === 'fixed' ? 'fixed' : 'continuous'); setBullDeal(r.bullseye_deal === 'team' ? 'team' : 'shared'); scInit(r.scoring ?? {});
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
         ? r.slots.map(toSpotDraft)
@@ -2226,6 +2244,47 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               <Pill on={golf === true} label="⛳ LOW" onPress={() => void saveGolf(true)} />
             </View>
           </View>
+        </View>
+      )}
+      {/* BULLSEYE (v0.643.0): aim each spot (or the lineup) at a dealt
+          number; closest wins. A classic setting beside golf, frozen at the
+          draft like it, and never with it. */}
+      {mode === 'classic' && sport === 'nfl' && (
+        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <LabelInfo label="🎯 BULLSEYE"
+                info={'Aim, don’t pile up. Every week the CPU deals a card — a round number for each starting spot (SLOTS) or one number for the whole lineup (TOTAL) — and the closer a starter lands, the more the spot banks. Over counts the same as under; a zero is a miss; inside half a point is a bullseye and pays double.\n\nStandings and playoffs read as always: higher ring total wins. Floor beats ceiling, so a steady RB2 and a kicker become weapons. The card is dealt Tuesday, before waivers.\n\nNot with golf. Locks once the draft starts.'} />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <Pill on={bullseye === null} label="OFF" onPress={() => void saveBullseye(null)} />
+              <Pill on={bullseye === 'slots'} label="🎯 SLOTS" onPress={() => void saveBullseye('slots')} />
+              <Pill on={bullseye === 'total'} label="🎯 TOTAL" onPress={() => void saveBullseye('total')} />
+              <Pill on={bullseye === 'hybrid'} label="🎯 HYBRID" onPress={() => void saveBullseye('hybrid')} />
+            </View>
+          </View>
+          {!!bullseye && (
+            <View style={{ marginTop: 8, gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <LabelInfo label="RINGS" info={'SMOOTH banks radius − distance (a bullseye adds the radius).\n\nFIXED reads like a darts board — bullseye / inner / outer pay 20 / 10 / 5 and nothing between.'} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <Pill on={bullRings === 'continuous'} label="SMOOTH" onPress={() => void saveBullseye(bullseye, 'continuous')} />
+                  <Pill on={bullRings === 'fixed'} label="FIXED" onPress={() => void saveBullseye(bullseye, 'fixed')} />
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <LabelInfo label="DEAL" info={'SHARED: one card for the whole league each week.\n\nPER TEAM: every team is dealt its own card from its own seed — more varied, less fair.'} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <Pill on={bullDeal === 'shared'} label="SHARED" onPress={() => void saveBullseye(bullseye, undefined, 'shared')} />
+                  <Pill on={bullDeal === 'team'} label="PER TEAM" onPress={() => void saveBullseye(bullseye, undefined, 'team')} />
+                </View>
+              </View>
+            </View>
+          )}
         </View>
       )}
       {/* K/DST FILL (v0.225.0) — a setup decision about what the league

@@ -34,7 +34,7 @@ import { DevyMarketTab } from '../ui/DevyShares';
 import { isCollegeSlug, teamLabel, collegeStartsHere } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
 import { leagueSlotDefs, slotDisplayNames, slotBadgeLabel, assignSpots, leagueEligiblePos, leagueSuperflex } from '@drip/core/engine/classic';
-import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
+import { sortPool, POOL_SORTS, poolSortValue, installLiveMarket, clearLiveMarket, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions, projFor } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/tenure';
 import { headshot } from '@drip/core/data/media';
@@ -53,6 +53,8 @@ import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { FlagChip, InjuryBadge, InjuryNow } from '../ui/rosterGroup';
 import { setLeagueFlags, flagRulesFor, flagFor } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
+import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardsFromRows, type BullseyeCard, type BullseyeConfig } from '@drip/core/engine/bullseye';
+import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc } from '@drip/core/data/liveApi';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { weekTitle } from '@drip/core/data/nflSlate';
 
@@ -590,6 +592,25 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     () => leagueSlotDefs({ roster: gm?.roster ?? {}, slots: gm?.slots ?? null }),
     [gm]);
   const slotNames = useMemo(() => slotDisplayNames(slotDefs), [slotDefs]);
+  // BULLSEYE (v0.644.0): the week's card, so the wire can say where a free
+  // agent would LAND — the spot he fits whose number his projection sits
+  // closest to. Published card first; dealt from the seed until it is.
+  const bullCfg = useMemo<BullseyeConfig | null>(() => (gm?.mode === 'classic' ? bullseyeConfigOf(gm) : null), [gm]);
+  const [bullCard, setBullCard] = useState<BullseyeCard | null>(null);
+  useEffect(() => {
+    if (!bullCfg || !gm) { setBullCard(null); return; }
+    let alive = true;
+    openWeekRpc(leagueId).then(async (wk) => {
+      // Under a per-team deal the wire aims at MY card (v0.645.0).
+      const rid = bullCfg.deal === 'team' && myRoster != null ? myRoster : 0;
+      const dealt = dealBullseyeCard(leagueId, wk, leagueSlotDefs({ roster: gm.roster ?? {}, slots: gm.slots ?? null }), leagueCatalogOf(gm), rid || null);
+      const c = await bullseyeCardRpc(leagueId, wk).catch(() => null);
+      const pub = c?.ok ? cardsFromRows(c.card) : null;
+      if (alive) setBullCard((rid ? pub?.cards[rid] : pub?.card) ?? dealt);
+    }).catch(() => { if (alive) setBullCard(null); });
+    return () => { alive = false; };
+  }, [leagueId, gm, bullCfg, myRoster]);
+  const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius, bullCfg.rings) : null);
   const bySpot = useMemo(() => {
     const active = shown.filter((p) => p.spot === 'active');
     const seat = assignSpots(slotDefs, active.map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null })));
@@ -1272,6 +1293,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
                       ↗{adds >= 1_000_000 ? `${(adds / 1_000_000).toFixed(1)}M` : adds >= 1000 ? `${Math.round(adds / 1000)}K` : adds}
                     </Mono>
                   )}
+                  {/* FIT (v0.644.0): where he'd land on this week's card. */}
+                  {(() => {
+                    const f = fitOf(p.slug, p.pos);
+                    if (!f || !bullCfg || f.dist >= bullCfg.radius) return null;
+                    return <Mono size={8.5} tone={f.dist <= bullCfg.radius / 5 ? 'warn' : 'faint'} weight="700">{`🎯${f.target} · ${f.dist.toFixed(1)} off`}</Mono>;
+                  })()}
                 </View>
               </Pressable>
               {ownRid != null ? (

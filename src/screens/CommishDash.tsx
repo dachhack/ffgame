@@ -4,7 +4,7 @@ import type { GameModeInfo } from '@drip/core/data/liveApi';
 import { SportLineup } from './SportLineup';
 import { draftState } from '@drip/core/data/liveApi';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
-import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
+import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueBullseye, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
@@ -443,6 +443,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // GOLF (v0.303.0): null until the mode load lands, so neither button lights
   // up on a guess.
   const [golf, setGolf] = useState<boolean | null>(null);
+  // BULLSEYE (v0.643.0): undefined until the mode load lands.
+  const [bullseye, setBullseye] = useState<'slots' | 'total' | 'hybrid' | null | undefined>(undefined);
+  const [bullRings, setBullRings] = useState<'continuous' | 'fixed'>('continuous');
+  const [bullDeal, setBullDeal] = useState<'shared' | 'team'>('shared');
   // A SPORT LEAGUE (0426/0428): its lineup is the sport's standard shape and
   // its scoring page is SportSettings, not the football catalog.
   const [sport, setSport] = useState<Sport>('nfl');
@@ -461,6 +465,19 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       const r = await setLeagueGolf(leagueId, on);
       if (r.ok) { setGolf(r.golf === true); setNote(on ? '✓ golf mode on — lowest total wins' : '✓ golf mode off'); }
       else setNote(r.error ?? 'failed');
+    } finally { setBusy(false); }
+  };
+  // BULLSEYE (v0.643.0, docs/bullseye.md): slots, total or off.
+  const saveBullseye = async (variant: 'slots' | 'total' | 'hybrid' | null, rings?: 'continuous' | 'fixed', deal?: 'shared' | 'team') => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueBullseye(leagueId, variant, null, rings ?? null, deal ?? null);
+      if (r.ok) {
+        setBullseye(r.bullseye ?? null); setBullRings(r.rings === 'fixed' ? 'fixed' : 'continuous'); setBullDeal(r.deal === 'team' ? 'team' : 'shared');
+        setNote(!variant ? '✓ bullseye off' : rings ? `✓ rings ${rings}` : deal ? `✓ ${deal === 'team' ? 'a card per team' : 'one shared card'}`
+          : `✓ bullseye on — ${variant === 'total' ? 'one number for the lineup' : variant === 'hybrid' ? 'a number per spot plus the lineup total' : 'a number per spot'}, closest wins`);
+      } else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
   // The roster POSITION BUILDER (0163, founder's sketch): draft rows edited
@@ -595,7 +612,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
-    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
+    leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); setBullRings(r.bullseye_rings === 'fixed' ? 'fixed' : 'continuous'); setBullDeal(r.bullseye_deal === 'team' ? 'team' : 'shared'); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
         ? r.slots.map(toSpotDraft)
@@ -764,6 +781,37 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             <button onClick={() => void saveGolf(true)} disabled={busy || golf === null} className="mono" style={pill(golf === true)}>⛳ LOW WINS</button>
           </div>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>🎯 BULLSEYE</div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
+              Aim, don&apos;t pile up. Every week the CPU deals a card — a round number for each starting spot (SLOTS) or one number for the whole lineup (TOTAL) — and the closer a starter lands, the more the spot banks. Over counts the same as under; a zero is a miss; inside half a point is a bullseye and pays double. Standings and playoffs read as always: higher ring total wins. Floor beats ceiling, so a steady RB2 and a kicker become weapons. Dealt Tuesday, before waivers. Not with golf. Locks once the draft starts.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button onClick={() => void saveBullseye(null)} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === null)}>OFF</button>
+            <button onClick={() => void saveBullseye('slots')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'slots')}>🎯 SLOTS</button>
+            <button onClick={() => void saveBullseye('total')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'total')}>🎯 TOTAL</button>
+            <button onClick={() => void saveBullseye('hybrid')} disabled={busy || bullseye === undefined} className="mono" style={pill(bullseye === 'hybrid')}>🎯 HYBRID</button>
+          </div>
+        </div>
+        {bullseye && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+            <div className="mono" style={{ flex: 1, minWidth: 220, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5 }}>
+              <b>Rings</b>: SMOOTH banks radius − distance (a bullseye adds the radius); FIXED reads like a darts board — bullseye / inner / outer pay 20 / 10 / 5 and nothing between.
+              <b> Deal</b>: one SHARED card for the league, or every team its own card from its own seed.
+              {bullseye === 'hybrid' && <> <b>Hybrid</b> adds the lineup&apos;s total as one more dart, worth what one spot is worth.</>}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button onClick={() => void saveBullseye(bullseye, 'continuous')} disabled={busy} className="mono" style={pill(bullRings === 'continuous')}>SMOOTH</button>
+              <button onClick={() => void saveBullseye(bullseye, 'fixed')} disabled={busy} className="mono" style={pill(bullRings === 'fixed')}>FIXED RINGS</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button onClick={() => void saveBullseye(bullseye, undefined, 'shared')} disabled={busy} className="mono" style={pill(bullDeal === 'shared')}>SHARED CARD</button>
+              <button onClick={() => void saveBullseye(bullseye, undefined, 'team')} disabled={busy} className="mono" style={pill(bullDeal === 'team')}>CARD PER TEAM</button>
+            </div>
+          </div>
+        )}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Receptions, bonuses and every other value live under ⚖ SCORING — start from a preset there, then tune anything.
         </div>
