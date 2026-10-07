@@ -22,6 +22,39 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.648.0 — Bullseye: a no-show is a penalty
+
+> - In a bullseye league a starter who posts a zero now costs you: each no-show pushes your team 10 further from its target (in SLOTS, 10 off your score). The row says 🚫 PENALTY −10, the big number already includes it, and the line under it counts them. A player on IR or bye wears the tag before kickoff; a man still to play does not.
+
+Founder, with the matchup screen (Etienne, RB · NO · IR, 0.0 in a TOTAL
+week): "Etiënne with 0 needs to have a 'PENALTY' with the penalty value
++/-10 or something like that."
+
+- **Engine** (`bullseye.ts`): `bullseyePenalty(radius)` = the radius (a
+  no-show costs exactly what a bullseye earns); `isZeroScore`;
+  `ringFromDist` (TOTAL's dart once penalties are in the distance).
+  `applyBullseye` counts a side's zeros — rows at 0.0 plus spots with no
+  row (unfilled, no zero-fill) — and: TOTAL `dist = |points − total| +
+  10·zeros`, the dart from that distance; SLOTS `score = max(0, Σ darts −
+  10·zeros)`. `SideDart` carries `zeros` and `penalty`; a zero row's `aim`
+  carries `penalty` (in TOTAL too, so the board can tag it). A zero-fill
+  spot banks its fill and is never a no-show.
+- **Board** (`matchupBoard.ts`): the same, settled the way the zero-fill
+  is — an empty spot from the first whistle, a filled spot once DONE at
+  zero, and before kickoff when he PROJECTS to nothing (ruled out, IR,
+  bye); a man playing right now is never one. `BoardSide.aim` gains
+  `projDist`, `zeros`, `projZeros`, `penalty`; `BoardSlotRow.penalty`
+  says which side's starter is (live) or will be (projected) a no-show.
+- **Both hosts**: the headline distance is the penalised one, signed the
+  way the team is already off; the subline reads `(89.2 proj · 1 penalty)`;
+  the row shows 🚫 PENALTY −10 (web, under the game cards; app, under the
+  score).
+- Pinned: check-bullseye §3 (the scoreless starter wears the penalty), §3b
+  (SLOTS takes 10 off and floors at 0; an unfilled spot is a no-show; the
+  distance carries it; TOTAL on the number with one no-show → 10 off on the
+  lineup dart, the zero row tagged, the live row not; a zero-fill spot is
+  not a no-show), §7 (a told-nine-filled-three result counts six).
+
 ### v0.647.1 — no banner between the bullseye totals
 
 > - The "🎯 BULLSEYE · ONE TOTAL" line under the slate chip is gone from the matchup screen; each team's 🎯 Target line already says what the week is.

@@ -919,7 +919,7 @@ export interface ClassicPick { slot: string; player: Player }
 /** `aim` (v0.643.0) is the spot's DART under bullseye (bullseye.ts): the
  *  target it was thrown at, how far it landed, and what it banked. `score`
  *  stays the player's real points either way. */
-export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string | null; metric: null; score: number; aim?: { target: number; dist: number; ring: number } }
+export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string | null; metric: null; score: number; aim?: { target: number; dist: number; ring: number; penalty?: number } }
 export interface ClassicResult {
   home: number; away: number;
   slots: ClassicSlotScore[];

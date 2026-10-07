@@ -245,6 +245,26 @@ export function ringScore(points: number, target: number | null | undefined, rad
   return round1(base + (dist <= bullseyeBand(radius) + 1e-9 ? radius : 0));
 }
 
+/** THE ZERO PENALTY (v0.648.0, founder, with an IR back posting 0.0 in a
+ *  TOTAL week: "Etienne with 0 needs to have a PENALTY with the penalty value
+ *  +/-10 or something like that"). A zero was already a miss — it banked
+ *  nothing. Now it COSTS: each starter who posts a zero (or an empty spot)
+ *  pushes the team `radius` further from its target. In TOTAL that is
+ *  `radius` more distance on the one dart; in SLOTS it is `radius` off the
+ *  team's score (floored at 0). A zero-fill spot banks its fill and is not a
+ *  zero. The same scale as a bullseye's bonus, so a no-show costs exactly
+ *  what a perfect dart earns. */
+export const bullseyePenalty = (radius: number): number => radius;
+/** Did this spot post a zero? (The resolver's rule: a 0.0 is a miss.) */
+export const isZeroScore = (points: number | null | undefined): boolean => points == null || !Number.isFinite(points) || Math.abs(points) < 1e-9;
+/** A dart scored from its distance alone — TOTAL's dart once penalties are
+ *  added to it. Same curve as ringScore. */
+export function ringFromDist(dist: number, radius: number): number {
+  if (!Number.isFinite(dist) || dist < 0) return 0;
+  const base = Math.max(0, radius - dist);
+  return round1(base + (dist <= bullseyeBand(radius) + 1e-9 ? radius : 0));
+}
+
 export type RingLabel = 'BULLSEYE' | 'INNER' | 'OUTER' | 'EDGE' | 'MISS';
 /** The label the boards print on a dart: BULLSEYE inside the band, INNER
  *  within a fifth of the radius (2 at 10), OUTER within half (5 at 10), EDGE
@@ -310,11 +330,15 @@ export const bullseyeRadius = (): number => inst?.cfg.radius ?? BULLSEYE_RADIUS;
 
 // ── Applying the card to a resolved matchup ─────────────────────────────────
 export interface Dart { target: number; dist: number; ring: number }
+/** A side's dart plus what it was penalised: how many starters posted a
+ *  zero and what each cost. `dist` already includes the penalties. */
+export interface SideDart extends Dart { points: number; zeros: number; penalty: number }
 export interface BullseyeSummary {
   variant: BullseyeVariant; radius: number;
   /** Per side: the lineup's raw points, the number it was aiming at (the
-   *  card's sum in both variants), how far off, and the side's ring total. */
-  home: Dart & { points: number }; away: Dart & { points: number };
+   *  card's sum in both variants), how far off (penalties included), and the
+   *  side's score. */
+  home: SideDart; away: SideDart;
 }
 
 /** Re-score a classic result under a card. Slot rows KEEP their raw `score`
@@ -327,17 +351,24 @@ export function applyBullseye(
 ): ClassicResult {
   const { cfg } = bull;
   const n = Math.max(1, slotCount);
-  const side = (which: 'home' | 'away'): { rows: ClassicSlotScore[]; dart: Dart & { points: number } } => {
+  const penalty = bullseyePenalty(cfg.radius);
+  const side = (which: 'home' | 'away'): { rows: ClassicSlotScore[]; dart: SideDart } => {
     const rid = which === 'home' ? rids?.home : rids?.away;
     const card = (rid != null ? bull.cards?.[rid] : undefined) ?? bull.card;
     const mine = r.slots.filter((s) => s.side === which);
     const points = round1(mine.reduce((s, x) => s + x.score, 0));
-    const dist = round1(Math.abs(points - card.total));
+    // THE ZERO PENALTY: every spot that posted nothing — a row at 0.0, or a
+    // spot with no row at all (unfilled, no zero-fill). The resolver runs on
+    // final numbers, so every zero here is a no-show.
+    const zeros = Math.max(0, n - mine.length) + mine.filter((x) => isZeroScore(x.score)).length;
+    const dist = round1(Math.abs(points - card.total) + penalty * zeros);
     if (cfg.variant === 'total') {
       // One dart for the whole lineup, radius scaled to the lineup — rows
-      // carry no per-spot aim, because no spot was aiming at anything alone.
-      const ring = ringScore(points, card.total, cfg.radius * n);
-      return { rows: mine, dart: { target: card.total, dist, ring, points } };
+      // carry no per-spot aim, because no spot was aiming at anything alone;
+      // a zero row still carries its penalty so the board can say so.
+      const rows = mine.map((x) => (isZeroScore(x.score) ? { ...x, aim: { target: card.total, dist: 0, ring: 0, penalty } } : x));
+      const ring = ringFromDist(dist, cfg.radius * n);
+      return { rows, dart: { target: card.total, dist, ring, points, zeros, penalty } };
     }
     let ring = 0;
     const rows = mine.map((x) => {
@@ -345,9 +376,10 @@ export function applyBullseye(
       if (target == null) return x;
       const rs = ringScore(x.score, target, cfg.radius);
       ring += rs;
-      return { ...x, aim: { target, dist: round1(Math.abs(x.score - target)), ring: rs } };
+      const zero = isZeroScore(x.score);
+      return { ...x, aim: { target, dist: round1(Math.abs(x.score - target)), ring: rs, ...(zero ? { penalty } : {}) } };
     });
-    return { rows, dart: { target: card.total, dist, ring: round1(ring), points } };
+    return { rows, dart: { target: card.total, dist, ring: round1(Math.max(0, ring - penalty * zeros)), points, zeros, penalty } };
   };
   const h = side('home'), a = side('away');
   return {

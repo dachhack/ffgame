@@ -314,12 +314,16 @@ function TeamHead({ side, align, accent, mode }: {
   // under is −; the raw total sits beneath in parentheses, the target under
   // that, and the number that decides the matchup (the darts' sum) last.
   const pts = mode === 'proj' ? side.projected : side.live;
-  const off = aim ? pts - aim.target : 0;
+  // THE ZERO PENALTY (v0.648.0): the distance shown already includes every
+  // no-show's penalty, pushed in the direction the team is already off.
+  const dist = aim ? (mode === 'proj' ? aim.projDist : aim.dist) : 0;
+  const zeros = aim ? (mode === 'proj' ? aim.projZeros : aim.zeros) : 0;
+  const off = aim ? (pts - aim.target > 0 ? dist : -dist) : 0;
   const big = mode === 'hidden' ? '—'
     : aim ? `${off > 0 ? '+' : off < 0 ? '−' : ''}${Math.abs(off).toFixed(1)}`
     : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
   const sub = mode === 'hidden' ? 'sealed until kickoff'
-    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''})`
+    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''}${zeros ? ` · ${zeros} penalt${zeros === 1 ? 'y' : 'ies'}` : ''})`
     : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <div style={{ textAlign: align, minWidth: 0 }}>
@@ -1997,6 +2001,17 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 7 }}>
                       {row.home ? <GameCard e={row.home} align="left" onOpen={fieldOpener(row.home)} /> : <div />}
                       {row.away ? <GameCard e={row.away} align="right" onOpen={fieldOpener(row.away)} /> : <div />}
+                    </div>
+                  )}
+                  {/* THE ZERO PENALTY (v0.648.0): a starter who posts nothing
+                      costs the team the radius — said on his row. */}
+                  {row.penalty && (row.penalty.home || row.penalty.away) && (
+                    <div className="mono" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 4, fontSize: 9.5, fontWeight: 800 }}>
+                      {([['left', row.penalty.home], ['right', row.penalty.away]] as const).map(([al, on]) => (
+                        <div key={al} style={{ textAlign: al, color: 'var(--opp, var(--warn))' }} title={on ? `a starter who posts nothing costs ${row.penalty!.points} — ${locked ? 'he is' : 'he projects to'} a no-show` : undefined}>
+                          {on ? `🚫 PENALTY −${row.penalty!.points}` : ''}
+                        </div>
+                      ))}
                     </div>
                   )}
                   {/* THE DARTS (v0.643.0): once a man has played, how far he

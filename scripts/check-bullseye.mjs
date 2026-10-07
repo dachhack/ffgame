@@ -12,7 +12,7 @@ import {
 } from '../packages/core/src/engine/classic.ts';
 import {
   bullseyeConfigOf, dealBullseyeCard, drawSetFor, BULLSEYE_DRAWS, cardRows, cardFromRows,
-  ringScore, ringLabel, aimValue, applyBullseye, rankByRing, bullseyeScaleOf, scaledDraw, bullseyeFit,
+  ringScore, ringLabel, aimValue, applyBullseye, rankByRing, bullseyeScaleOf, scaledDraw, bullseyeFit, ringFromDist, bullseyePenalty, isZeroScore,
   setLeagueBullseye, clearLeagueBullseye, leagueBullseye, bullseyeTargetFor, setBullseyeRoster, bullseyeCardFor, cardsFromRows,
 } from '../packages/core/src/engine/bullseye.ts';
 import { projectedFor, setLeagueProjScoring, clearLeagueProjScoring } from '../packages/core/src/engine/projScoring.ts';
@@ -93,6 +93,35 @@ const LEAGUE = '00000000-0000-4000-8000-00000000b011';
   setLeagueBullseye(CFG, { targets: { S1: 5 }, total: 5 });
   const r = resolveClassicMatchup(side([{ slot: 'S1', player: GHOST }], [GHOST]), side([{ slot: 'S1', player: RB }], [RB]), WEEK, { ppr: 1 }, slots);
   ok('§3 through the resolver: a scoreless starter banks 0', r.home === 0 && r.slots.find((x) => x.side === 'home').aim.ring === 0, r.slots);
+  ok('§3 …and wears the penalty', r.slots.find((x) => x.side === 'home').aim.penalty === 10 && r.bullseye.home.zeros === 1 && r.bullseye.home.penalty === 10, r.bullseye);
+  clearLeagueBullseye();
+}
+
+// ── 3b. THE ZERO PENALTY (v0.648.0) ─────────────────────────────────────────
+{
+  ok('§3b the penalty is the radius', bullseyePenalty(10) === 10 && bullseyePenalty(25) === 25);
+  ok('§3b a zero is a zero', isZeroScore(0) && isZeroScore(null) && isZeroScore(0.00001) === false && isZeroScore(-1) === false);
+  ok('§3b a dart from its distance matches ringScore', ringFromDist(0, 10) === 20 && ringFromDist(2, 10) === 8 && ringFromDist(10, 10) === 0 && ringFromDist(-1, 10) === 0);
+  // SLOTS: two spots, one scoreless → the live spot's dart minus the penalty, floored at 0.
+  const slots = classicSlotsFromSpec([{ pos: ['RB'] }, { pos: ['QB'] }]);
+  const rb = classicPoints(RB, WEEK, { ppr: 1 });
+  setLeagueBullseye(CFG, { targets: { S1: Math.round(rb), S2: 20 }, total: Math.round(rb) + 20 });
+  const r = resolveClassicMatchup(side([{ slot: 'S1', player: RB }, { slot: 'S2', player: GHOST }], [RB, GHOST]), side([{ slot: 'S1', player: RB }], [RB]), WEEK, { ppr: 1 }, slots);
+  const dart = ringScore(rb, Math.round(rb), 10);
+  ok('§3b SLOTS: the no-show takes 10 off the team', near(r.home, Math.max(0, dart - 10)) && r.bullseye.home.zeros === 1, { got: r.home, dart, bull: r.bullseye.home });
+  ok('§3b SLOTS: an UNFILLED spot is a no-show too', r.bullseye.away.zeros === 1 && near(r.away, Math.max(0, dart - 10)), r.bullseye.away);
+  ok('§3b the distance carries the penalty', near(r.bullseye.home.dist, Math.abs(rb - (Math.round(rb) + 20)) + 10), r.bullseye.home);
+  // TOTAL: the penalty is distance on the one dart.
+  const picks = [{ slot: 'S1', player: RB }, { slot: 'S2', player: GHOST }];
+  setLeagueBullseye({ variant: 'total', radius: 10, deal: 'shared' }, { targets: {}, total: rb });   // aimed exactly at the points
+  const t = resolveClassicMatchup(side(picks, [RB, GHOST]), side(picks, [RB, GHOST]), WEEK, { ppr: 1 }, slots);
+  ok('§3b TOTAL: on the number but a no-show → 10 off on a 20-radius dart', near(t.home, 10) && near(t.bullseye.home.dist, 10) && t.bullseye.home.zeros === 1, t.bullseye.home);
+  ok('§3b TOTAL: the zero row wears the penalty, the live row none', t.slots.find((x) => x.side === 'home' && x.slot === 'S2').aim?.penalty === 10 && !t.slots.find((x) => x.side === 'home' && x.slot === 'S1').aim);
+  // A zero-fill spot banks its fill: not a zero, no penalty.
+  const zf = classicSlotsFromSpec([{ pos: ['RB'] }, { pos: ['QB'], zero_pts: 10 }]);
+  setLeagueBullseye(CFG, { targets: { S1: Math.round(rb), S2: 10 }, total: Math.round(rb) + 10 });
+  const z = resolveClassicMatchup(side(picks, [RB, GHOST]), side(picks, [RB, GHOST]), WEEK, { ppr: 1 }, zf);
+  ok('§3b a zero-fill spot is not a no-show', z.bullseye.home.zeros === 0 && near(z.home, dart + 20), z.bullseye.home);
   clearLeagueBullseye();
 }
 
@@ -156,8 +185,10 @@ const LEAGUE = '00000000-0000-4000-8000-00000000b011';
   ok('§7 beyond the radius → 0', far.home === 0, far.home);
   clearLeagueBullseye();
   // applyBullseye is pure and scales the radius by the SLOT COUNT it is told.
-  const nine = applyBullseye(plain, { cfg: { variant: 'total', radius: 10, deal: 'shared' }, card: { targets: {}, total: plain.home + 45 } }, 9);
-  ok('§7 nine spots → radius 90: 45 off banks 45', near(nine.home, 45), nine.home);
+  const three = applyBullseye(plain, { cfg: { variant: 'total', radius: 10, deal: 'shared' }, card: { targets: {}, total: plain.home + 15 } }, 3);
+  ok('§7 three spots → radius 30: 15 off banks 15', near(three.home, 15), three.home);
+  const nine = applyBullseye(plain, { cfg: { variant: 'total', radius: 10, deal: 'shared' }, card: { targets: {}, total: plain.home } }, 9);
+  ok('§7 told nine spots with three filled: six no-shows, 60 off a 90-radius dart → 30', near(nine.home, 30) && nine.bullseye.home.zeros === 6, nine.bullseye.home);
 }
 
 // ── 8. OFF MEANS OFF ─────────────────────────────────────────────────────────
