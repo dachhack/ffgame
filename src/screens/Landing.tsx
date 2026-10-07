@@ -41,7 +41,7 @@ interface Shot { file: string; label: string; dir?: 'funnel' | 'brand'; chip?: s
  *  Keyed by the feature heading in LANDING_FEATURES. */
 export const FUNNEL_SHOTS: Record<string, Shot[]> = {
   'League types': [
-    { file: 'league-redraft.png', label: 'Redraft · the matchup board', chip: 'Redraft' },
+    { file: 'league-redraft.png', label: 'The matchup board', chip: 'Redraft · Keeper · Dynasty' },
     { file: 'league-contract.png', label: 'Contract · the cap sheet', chip: 'Contract' },
     { file: 'league-full-college.png', label: 'Full college · the matchup board', chip: 'Full college' },
     { file: 'league-mixed-college.png', label: 'Mixed college · two college spots', chip: 'Mixed college' },
@@ -54,8 +54,8 @@ export const FUNNEL_SHOTS: Record<string, Shot[]> = {
     { file: 'mode-bullseye.png', label: 'Bullseye · aim at the number', chip: 'Bullseye' },
   ],
   'Positions': [
+    { file: 'positions-roster.png', label: 'The roster builder', chip: 'Every position' },
     { file: 'positions-scoped.png', label: 'Scoped & named spots', chip: 'Scoped positions' },
-    { file: 'positions-hc-draft.png', label: 'A head-coach draft', chip: 'RET · FB · PUNT · HC' },
   ],
   'Scoring options': [
     { file: 'scoring-bestball-mix.png', label: 'Best ball and set spots, mixed', chip: 'Single-spot best ball' },
@@ -209,7 +209,8 @@ export function Landing() {
                       <button key={n.name} className="mono" aria-pressed={lit} onClick={() => pickChip(n.name)}
                         style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', padding: '6px 10px', borderRadius: 5, cursor: 'pointer',
                           color: lit ? 'var(--on-accent)' : 'var(--text)', background: lit ? 'var(--you)' : 'var(--bg)', border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}` }}>
-                        {n.icon ? <span style={{ marginRight: 5 }}>{n.icon}</span> : null}{n.name.toUpperCase()}
+                        {/* no glyph (v0.652.0, founder: "get rid of the 'this screams AI' icons") */}
+                        {n.name.toUpperCase()}
                       </button>
                     );
                   })}

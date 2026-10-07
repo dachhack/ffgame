@@ -245,9 +245,10 @@ export const FUNNEL_GAMES: FormatNote[] = [
 const note = (list: FormatNote[], name: string): FormatNote => list.find((n) => n.name === name) ?? { name, line: '' };
 export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote[] }[] = [
   { heading: 'League types', sub: 'What carries from one season to the next.', notes: [
-    note(CONTINUITY_NOTES, 'Redraft'), note(CONTINUITY_NOTES, 'Dynasty'), note(CONTINUITY_NOTES, 'Keeper'), note(CONTINUITY_NOTES, 'Contract'),
-    // v0.651.0: the college shapes get chips of their own, so every screen on
-    // the card's rail has a chip that opens it.
+    // v0.652.0: the three plain shapes are one chip (founder: "Redraft/Keeper/
+    // Dynasty can all be one chip"); the college shapes (v0.651.0) keep theirs.
+    { name: 'Redraft · Keeper · Dynasty', icon: '🔁', line: 'Start fresh every year, hold a few through the offseason, or keep the lot — rookie drafts each spring and future picks you can trade years ahead.' },
+    note(CONTINUITY_NOTES, 'Contract'),
     { name: 'Full college', icon: '🏟️', line: 'No NFL players at all: every spot takes college players and the season runs Saturday by Saturday, on the college calendar.' },
     { name: 'Mixed college', icon: '🔀', line: 'College-only starting spots beside your NFL lineup — college and NFL players score in the same week.' },
     { name: 'Devy', icon: '🎓', line: 'College players on your roster before they’re drafted — as devy spots or as shares bought in a devy market, priced off StatHead’s rankings.' },
@@ -256,16 +257,15 @@ export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote
     note(FORMAT_NOTES, 'Vampire'), note(FORMAT_NOTES, 'Guillotine'), note(FORMAT_NOTES, 'Golf'), note(FORMAT_NOTES, 'Bullseye'),
   ] },
   { heading: 'Positions', sub: 'Every spot a lineup can have, on or off per league.', notes: [
-    { name: 'QB · RB · WR · TE', icon: '🏈', line: 'The core lineup, with flex and superflex spots shaped however the commissioner likes.' },
-    { name: 'K · D/ST', icon: '🦵', line: 'Kickers scored by distance, defenses by points allowed, sacks, takeaways and scores.' },
-    { name: 'DL · DE · LB · DB', icon: '🛡️', line: 'IDP: defensive linemen, ends, linebackers and backs as real starters, with tackles, sacks and takeaways scored live.' },
-    { name: 'RET · FB · PUNT · HC', icon: '🧢', line: 'Returners scored on returns alone, fullbacks, punters, and head coaches scored on the team’s result.' },
+    // v0.652.0: one chip for the lot (founder: "All positions can just be one
+    // chip that shows the roster builder"); the scoped spot keeps its own.
+    { name: 'Every position', icon: '🏈', line: 'QB, RB, WR, TE, flex and superflex; kickers and defenses; DL, LB and DB for IDP; returners, fullbacks, punters and head coaches — each spot on or off, shaped in the roster builder.' },
     { name: 'Scoped positions', icon: '🎯', line: 'A spot limited to a team, a tenure (rookies, years 2–3, vets) or a position group — "one rookie WR", "a Cowboy every week".' },
   ] },
   { heading: 'Scoring options', sub: 'Knob by knob, or by the rule.', notes: [
     { name: 'Single-spot best ball', icon: '🤖', line: 'Flag any one spot (or all of them) as best ball: it starts the top scorer you didn’t field by hand, after the fact.' },
     { name: 'Scoped bonuses', icon: '✨', line: 'Bonus points or multipliers that apply only to players matching a filter — a team, a position, a tenure — stacked as many as you like.' },
-    { name: 'Others', icon: '🎚️', line: 'PPR at any value, TD bonuses, yardage multipliers, turnover penalties, per-metric overrides — every value a switch the commissioner holds.' },
+    // v0.652.0: the "Others" chip is gone (founder) — the knobs live under ⚖ SCORING.
   ] },
   { heading: 'Matchup style', sub: 'The game your week is played in.', notes: [
     note(FUNNEL_GAMES, 'Classic'), note(FUNNEL_GAMES, 'Drip'),

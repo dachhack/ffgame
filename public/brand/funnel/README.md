@@ -2,7 +2,7 @@
 
 Phone screenshots for the landing's feature cards (v0.650.0).
 
-**What's here now (v0.651.0) are stand-ins**: the in-game screens shot from the
+**What's here now (v0.652.0) are stand-ins**: the in-game screens shot from the
 web app at phone size against fixture data, mark-free (no NFL logos or
 headshots), until the founder's app screenshots replace them. Overwrite file
 for file; the names are fixed. Shoot yours mark-free too (Settings, or
@@ -18,17 +18,17 @@ app header) and keep the thing you're showing in the upper half.
 
 | File | Card | Show |
 |---|---|---|
-| `league-redraft.png` | League types | The classic matchup board, a redraft league |
+| `league-redraft.png` | League types | The classic matchup board (the Redraft · Keeper · Dynasty chip) |
 | `league-contract.png` | League types | The cap sheet: every deal, its salary and years, under the cap |
-| `league-full-college.png` | League types | A matchup board where every spot is a college player, Saturday games |
-| `league-mixed-college.png` | League types | An NFL matchup board with two college spots beside the nine |
+| `league-full-college.png` | League types | A matchup board where every spot is a 2026 college player, Saturday games |
+| `league-mixed-college.png` | League types | An NFL matchup board (no K or D/ST) with two college spots |
 | `league-devy-market.png` | League types | The devy market: prices, stakes, and BUY |
 | `mode-vampire.png` | Competitive modes | The vampire's feeding log: each win and the bite it earned |
 | `mode-guillotine.png` | Competitive modes | The chop report: one finished week on the block, who fell |
-| `mode-golf.png` | Competitive modes | A golf matchup board: LOW WINS, every starter projected near zero |
+| `mode-golf.png` | Competitive modes | A golf matchup board: LOW WINS, real low-usage starters projected a point or two |
 | `mode-bullseye.png` | Competitive modes | A bullseye matchup board: the target per spot and the distance from it |
-| `positions-scoped.png` | Positions | A lineup with an NFC Only spot and a rookie-only superflex that fills itself |
-| `positions-hc-draft.png` | Positions | The draft room with the pool filtered to head coaches |
+| `positions-roster.png` | Positions | The roster builder with every kind of spot (the Every position chip) |
+| `positions-scoped.png` | Positions | A lineup with an NFC Only spot and a rookie-only superflex that fills itself, on 2026 rosters |
 | `scoring-bestball-mix.png` | Scoring options | A matchup board mixing best-ball spots (AUTO) with hand-set ones |
 | `scoring-scoped-bonuses.png` | Scoring options | Scoring → Adjustments: the scoped bonuses |
 
