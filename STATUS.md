@@ -22,6 +22,58 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.642.0 — AI teams come off IR to work the wire, and follow the trend
+
+> - AI-run teams now bring a healed player back off IR even when the roster is full, cutting their least valuable bench body (or the healed player himself if he is worth less than everyone) — so their roster is legal and their waiver claims and pickups go through, including Wednesday's run.
+> - Their pickups weigh Sleeper's trending adds on top of the season projection: a player everyone is grabbing ranks higher to add, but momentum never makes an AI team drop a player with more rest-of-season value.
+
+Founder: "I need AI controlled teams to move guys out of IR when they need
+to make a waiver pick up or bid. Especially on Wednesday when waivers run
+after games. They need to decide net positive moves and pickup trending
+and higher ranked players without dropping players that have good long
+term season long value."
+
+THE REVIEW, before the fixes:
+- Lineups, IR stashing, FAAB claims and adds, net-positive judgement (holes
+  on any gain, upgrades past 2 pts/wk, never a starter dropped, never a
+  player worth more for the season than the one coming in): all in place
+  since v0.426.0–v0.561.4, hourly, through the same RPCs a manager calls.
+  "Higher ranked" is the live season rate (`installLiveProjRate` runs
+  before every sweep), not the August bake.
+- **The deadlock** (pinned as expected behaviour in agent-wire aw10j/aw10k):
+  a player on IR whose designation cleared could not come back while the
+  active roster was full (0198), and while he sat there healed the roster
+  was illegal (0360) — every add and claim refused. The sweep waited for
+  an active place a full roster never opens. The worker could not drop
+  (`drop_player` admitted owner / commissioner / admin only), so the seat
+  was frozen on the wire for as long as the man stayed healed on IR.
+- **Trending** (0340's board) was read by no AI decision.
+
+- **0445** `drop_player` admits the worker on 0213's terms (`auth.uid() is
+  null and agent_wire_seat(...)`): an unclaimed seat or an AI seat nobody
+  holds; a human's seat is never cut over, auto-pilot included. Body copied
+  from 0320 with the one marked change.
+- **`legalizeIrDrop`** (`packages/core/src/engine/seatWaivers.ts`, pure):
+  the cheapest season body who would not start with the healed man back
+  (never a starter); if nobody is worth less than him, he is the cut. The
+  sweep (`server/src/seatWire.js`) activates into an open place as before,
+  else cuts and activates, before it plans — so the roster is legal at the
+  league's run.
+- **Momentum**: `trendMomentum(adds, drops)` = net adds over 25,000 per
+  point/week, capped +2 / −1; `WireOpts.momentumOf`. Added to a candidate's
+  season lens (the upgrade's `rosGain`, the depth pick, a bench stash's
+  hold value) and to the shortlist's ranking; never to a drop's value —
+  the drop rails stay pure season value. The sweep reads `trend_board`
+  once (rows fresher than 48h) and logs `trend +x` on a filed claim.
+- Pinned: `scripts/check-seat-waivers.mjs` §21 (momentum, the rail holds,
+  depth prefers the trend) and §22 (who goes: cheapest non-starter, a
+  returning star bumps a starter and the cheapest still goes, the dud cuts
+  himself, starters never); `scripts/db/agent-wire-probes.sql` aw10k3–k8
+  (illegal again when healed, D's player not the worker's to cut, the
+  worker cuts for its seat, the healed man comes back, a swap goes through).
+- Not confirmed against live leagues from here; the probes build the
+  deadlock and walk out of it on a scratch Postgres.
+
 ### v0.641.1 — the wire honours the commissioner's no-add flag up front
 
 > - A player the commissioner has flagged "no adds" shows a greyed 🚫 NO ADDS button on the wire instead of ADD / CLAIM / BID, with the flag's reason — you no longer find out from a refused claim.

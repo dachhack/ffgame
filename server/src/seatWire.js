@@ -49,7 +49,7 @@ import { db } from './supabase.js';
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj } from '../../packages/core/src/engine/classic.ts';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
-import { seatWirePlan, shortlistWire, wireInstrument } from '../../packages/core/src/engine/seatWaivers.ts';
+import { seatWirePlan, shortlistWire, wireInstrument, trendMomentum, legalizeIrDrop } from '../../packages/core/src/engine/seatWaivers.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projectedPoints } from '../../packages/core/src/engine/projScoring.ts';
 import { modeOfSettings } from './resolve.js';
@@ -118,6 +118,25 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
   const { data: drafts } = await db().from('draft')
     .select('league_id,status').in('league_id', leagueIds);
   const complete = new Set((drafts ?? []).filter((d) => d.status === 'complete').map((d) => d.league_id));
+
+  // ── THE WIRE'S MOMENTUM (v0.642.0) ──────────────────────────────────────
+  // Founder: AI teams should "pickup trending and higher ranked players".
+  // Sleeper's trending adds and drops (0340, refreshed by the worker), read
+  // once per sweep and turned into points per week by core's trendMomentum.
+  // A stale board (two days) says nothing rather than yesterday's news.
+  const momentumOf = await (async () => {
+    const by = new Map();
+    try {
+      const { data: rows } = await db().from('trend_board').select('slug,adds,drops,fetched_at').not('slug', 'is', null);
+      const fresh = Date.now() - 48 * 3600e3;
+      for (const r of rows ?? []) {
+        const at = r.fetched_at ? Date.parse(r.fetched_at) : NaN;
+        if (Number.isFinite(at) && at < fresh) continue;
+        by.set(r.slug, trendMomentum(r.adds, r.drops));
+      }
+    } catch (e) { log('seat wire', 'trend board', e.message); }
+    return (p) => by.get(p.id) ?? 0;
+  })();
 
   let done = 0;
   const irTagsOf = new Map();
@@ -328,9 +347,37 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
             await move(row, 'out');
           }
         }
+        // A HEALED MAN COMES BACK, FULL ROSTER OR NOT (v0.642.0). Founder: "move
+        // guys out of IR when they need to make a waiver pick up or bid." Left
+        // on the shelf healed he makes the roster illegal (0360) and every add
+        // and claim is refused — the seat is frozen until an active place
+        // opens, which a full roster never does. So when there is no place,
+        // core's legalizeIrDrop names the cheapest season body who would not
+        // start with him back, the worker cuts him (0445), and he comes
+        // back; when nobody is worth less than him, he is the cut.
+        const toPlayer = (slug) => { const m = meta.get(slug); return m ? { id: slug, pos: m.pos, team: m.team, exp: m.exp ?? null, sleeperId: m.sleeper_id ?? null } : null; };
+        const cut = async (row, why) => {
+          try {
+            const r = await db().rpc('drop_player', { p_league_id: lg.id, p_roster_id: seat.roster_id, p_slug: row.slug });
+            if (r?.data?.ok === true) {
+              const i = mine.indexOf(row); if (i >= 0) mine.splice(i, 1);
+              log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, 'cut', row.slug, why);
+              return true;
+            }
+            if (r?.data?.error) log('seat wire refused', lg.id, seat.roster_id, 'cut', row.slug, r.data.error);
+          } catch (e) { log('seat wire', lg.id, seat.roster_id, 'cut', row.slug, e.message); }
+          return false;
+        };
         for (const row of mine.filter((r) => (r.spot === 'ir' && !qualifies(r.slug)) || (r.spot === 'out' && !qualifiesOut(r.slug)))) {
-          if (mine.filter((r) => r.spot === 'active').length >= activeSeats) break;
-          await move(row, 'active');
+          if (mine.filter((r) => r.spot === 'active').length < activeSeats) { await move(row, 'active'); continue; }
+          const healed = toPlayer(row.slug);
+          const activeNow = mine.filter((r) => r.spot === 'active').map((r) => toPlayer(r.slug)).filter(Boolean);
+          if (!healed || !activeNow.length) continue;
+          const goes = legalizeIrDrop(slots, activeNow, healed, statusesRos);
+          if (goes === row.slug) { await cut(row, `(healed on ${row.spot.toUpperCase()}, worth less than every bench body — ros ${Math.round(statusesRos(healed) * 10) / 10})`); continue; }
+          const victim = mine.find((r) => r.slug === goes);
+          if (!victim) continue;
+          if (await cut(victim, `(to bring ${row.slug} back from ${row.spot.toUpperCase()} — ros ${Math.round(statusesRos(toPlayer(goes) ?? healed) * 10) / 10} vs ${Math.round(statusesRos(healed) * 10) / 10})`)) await move(row, 'active');
         }
 
         // taxi/IR never start, so they are neither lineup value nor a drop the
@@ -419,7 +466,9 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // by the season rather than the week so a bye-week starter is still
         // on the list for a depth add, and this week's value still decides
         // a hole.
-        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id) && !p.wait), rosValueOf);
+        // Ranked by the season PLUS momentum (v0.642.0), so a trending body
+        // makes the list even when the August line has not caught up with him.
+        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id) && !p.wait), (p) => rosValueOf(p) + momentumOf(p));
 
         // Replacement level: the best FREE body at a position — what anyone
         // could sign for nothing this minute — so a claim is measured over
@@ -452,6 +501,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
           rosValueOf,
           healthyValueOf,
           market,
+          momentumOf,
         });
         // What each claim weighed (v0.561.4): season values on both sides, so
         // a move nobody would make is explainable from the log.
@@ -492,7 +542,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
               owned.add(c.add);
               const i = available.findIndex((p) => p.id === c.add);
               if (i >= 0) available.splice(i, 1);
-              log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, c.kind, c.add, `(ros ${rosById(c.add)})`,
+              log('seat wire', lg.id, `${seat.kind} seat`, seat.roster_id, c.kind, c.add, `(ros ${rosById(c.add)}${momentumOf({ id: c.add }) ? `, trend +${Math.round(momentumOf({ id: c.add }) * 10) / 10}` : ''})`,
                 c.drop ? `for ${c.drop} (ros ${rosById(c.drop)})` : '(open seat)', faab ? `$${c.bid}` : '',
                 `gain ${Math.round(c.gain * 10) / 10} / ros ${Math.round(c.rosGain * 10) / 10}`);
             } else if (r?.data?.error) {

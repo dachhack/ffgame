@@ -403,6 +403,22 @@ begin
   update injury_status set status = 'O' where player_slug = 'awir-1';
   perform assert_ok(add_free_agent(lid, bot_seat, 'awir-9', 'awir-8'),
     'aw10k2 ruled out again, the swap goes through (a swap keeps the count where it is)');
+  -- 0445: THE WAY OUT OF THE DEADLOCK. Healed again with the active roster
+  -- full, the worker cuts a body for its seat, brings him back, and the
+  -- roster is legal — a pickup goes through again.
+  update injury_status set status = 'Q' where player_slug = 'awir-1';
+  perform assert_err(add_free_agent(lid, bot_seat, 'awir-8', 'awir-9'), 'isn''t designated',
+    'aw10k3 healed on IR, the roster is illegal again (0360)');
+  perform assert_err(drop_player(lid, d_seat, 'awir-12'), 'forbidden',
+    'aw10k4 D''s player is not the worker''s to cut');
+  perform assert_ok(drop_player(lid, bot_seat, 'awir-9'),
+    'aw10k5 the worker cuts a body for the seat it manages (0445)');
+  perform assert_ok(set_roster_spot(lid, 'awir-1', 'active'),
+    'aw10k6 …and the healed man comes back into the freed place');
+  perform assert_true((select spot from native_roster where league_id = lid and slug = 'awir-1') = 'active',
+    'aw10k7 he is active');
+  perform assert_ok(add_free_agent(lid, bot_seat, 'awir-7', 'awir-5'),
+    'aw10k8 the roster is legal again — a swap goes through');
   perform probe_as('a');
   perform assert_ok(set_team_controller(lid, bot_seat, 'human'), 'aw10l the seat handed back');
   perform probe_as_worker();
