@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.652.1 — the demo button under the line; the demo page is just the demo
+
+> - On the front page the "Click here for a demo" button sits under the matchup chips' line instead of on top of the picture.
+> - The demo page opens straight on the demo: its own pitch and menu of switches are gone, since the front page carries them now. Closing the demo returns to the front page.
+
+Founder: "Let's have the click here for a drip demo be after the paragraph,
+not on the image. The drip demo click should take you straight to the demo
+portion of the demo page. We can get rid of the rest of the page, it's
+redundant with the new flow."
+
+- `Landing.tsx`: the matchup card is chips, the line, the button, then the
+  picture (which still opens the demo on a tap).
+- `DemoBoard.tsx`: the hero (SITE_PITCH + LEAGUE_MENU, "Start a league",
+  "Request an invite") is removed; `game` opens on DRIP unless a recruit link
+  asked for classic (the old menu was the only way to pick one); the band's
+  ✕ goes back to the landing rather than to an empty page. SITE_PITCH still
+  titles the page and LEAGUE_MENU still serves `check:tagline`.
+
 ### v0.652.0 — the front page's chips, trimmed; the screens on 2026 players
 
 > - The front page's chips lose their emoji; Redraft, Keeper and Dynasty are one chip; Positions is one chip for every position (it opens the roster builder) plus Scoped positions; the "Others" scoring chip is gone.

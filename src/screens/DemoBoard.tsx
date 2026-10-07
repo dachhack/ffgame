@@ -8,7 +8,7 @@ import { METRICS } from '@drip/core/data/metrics';
 import { loadRealWeek } from '@drip/core/data/realPbp';
 import { gamesInWindow, windowsForWeek } from '@drip/core/data/nflSlate';
 import { FX_COLOR, fmtClock, buildBeats, type Beat } from '@drip/core/data/demoNarration';
-import { readRecruitGame, recruitFraming, SITE_PITCH, LEAGUE_MENU, type FormatNote } from '@drip/core/data/leagueTagline';
+import { readRecruitGame, recruitFraming } from '@drip/core/data/leagueTagline';
 import { ClassicDemo } from './ClassicDemo';
 import { classifyEvent } from '@drip/core/engine/moments';
 import { avatarUrl } from '@drip/core/data/media';
@@ -512,7 +512,9 @@ export function DemoBoard() {
   // drip scoring for a drip demo." The menu IS the page; a demo board appears
   // only when a game is tapped in its WHICH GAME row (or the recruit link
   // named one), and the page scrolls to it.
-  const [game, setGame] = useState<'drip' | 'classic' | null>(recruited);
+  // v0.652.1: no menu to pick a game from any more, so the page opens on
+  // DRIP (the front door's demo) unless a recruit link asked for classic.
+  const [game, setGame] = useState<'drip' | 'classic' | null>(recruited ?? 'drip');
   const framing = recruitFraming(recruited, game ?? 'drip');
   const boardRef = useRef<HTMLDivElement | null>(null);
   const [scrollOnOpen, setScrollOnOpen] = useState(false);
@@ -549,7 +551,7 @@ export function DemoBoard() {
               border: `1px solid ${game === g ? 'var(--you)' : 'var(--bd)'}`,
             }}>{g.toUpperCase()}</button>
         ))}
-        <button onClick={() => setGame(null)} className="mono" title="Close the demo" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer', color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)' }}>✕</button>
+        <button onClick={() => navigate({ name: 'landing' })} className="mono" title="Close the demo" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer', color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)' }}>✕</button>
       </div>
     </div>
   );
@@ -572,84 +574,12 @@ export function DemoBoard() {
   // MascotBuilder (v0.420.0/v0.421.0) stays in the tree, unmounted, with its
   // art brief in public/mascot/README.md, until the stickers exist; the
   // landing shows the v0.419.1 menu of switches again, exactly as it did.
-  const [openNote, setOpenNote] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState<string | undefined>(undefined);
-  const hero = (
-    <section style={{ width: '100%', maxWidth: 760, minWidth: 0, boxSizing: 'border-box', margin: '0 auto', padding: '10px 14px 4px' }}>
-      {/* width:100% + minWidth:0 — this section is a flex item, and a flex
-          item's automatic minimum is its min-content width, which the card
-          strips (four cards abreast before they scroll) would otherwise push
-          past a phone's viewport and give the whole page a sideways scroll. */}
-      <div style={{ textAlign: 'center' }}>
-        <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--you)' }}>
-          {SITE_PITCH.kicker}
-        </div>
-        <div className="grotesk" style={{ fontSize: 'clamp(22px, 6.5vw, 32px)', fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, margin: '8px 0 0', color: 'var(--text)' }}>
-          {SITE_PITCH.headline}
-        </div>
-        <div style={{ fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.5, margin: '10px auto 0', maxWidth: '62ch' }}>
-          {SITE_PITCH.sub}
-        </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 14 }}>
-          <button onClick={() => navigate({ name: 'live' })} className="mono" style={{ ...cta, width: 'auto', padding: '11px 18px' }}>Start a league →</button>
-          <button onClick={() => setRequesting(true)} className="mono" style={{ ...cta, width: 'auto', padding: '11px 18px', background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--bd)' }}>◈ Request an invite</button>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 18, background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '10px 12px 4px' }}>
-        <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', marginBottom: 8 }}>
-          EVERY SWITCH A COMMISSIONER HAS · TAP ONE
-        </div>
-        {LEAGUE_MENU.map(({ heading, notes }) => {
-          const isGame = heading === 'WHICH GAME';
-          const open = notes.find((n: FormatNote) => openNote === `${heading}|${n.name}`);
-          return (
-            <div key={heading} style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 8px', flexWrap: 'wrap' }}>
-                <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.14em', color: 'var(--faint)', width: 128, flex: 'none' }}>{heading}</span>
-                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-                  {notes.map((n: FormatNote) => {
-                    const key = `${heading}|${n.name}`;
-                    const lit = isGame ? game === n.name.toLowerCase() : openNote === key;
-                    return (
-                      <button key={n.name} className="mono" aria-pressed={lit}
-                        onClick={() => {
-                          setOpenNote((o) => (o === key && !isGame ? null : key));
-                          if (isGame) openGame(n.name.toLowerCase() as 'drip' | 'classic');
-                        }}
-                        style={{
-                          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', padding: '4px 9px', borderRadius: 4, cursor: 'pointer',
-                          color: lit ? 'var(--on-accent)' : 'var(--text)',
-                          background: lit ? 'var(--you)' : 'var(--bg)',
-                          border: `1px solid ${lit ? 'var(--you)' : 'var(--bd)'}`,
-                        }}>{n.name.toUpperCase()}</button>
-                    );
-                  })}
-                  {isGame && !game && (
-                    <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)', alignSelf: 'center' }}>▶ TAP ONE TO PLAY A WEEK — FREE, NO SIGN-IN</span>
-                  )}
-                </div>
-              </div>
-              {open && (
-                <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, margin: '6px 0 2px', paddingLeft: narrow ? 0 : 136 }}>
-                  <b style={{ color: 'var(--text)' }}>{open.name}.</b> {open.line}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {!game && (
-        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-          <button onClick={() => navigate({ name: 'live' })} className="mono" style={linkBtn}><GameIcon name={BRAND_MARK} emoji="◈" size="1.3em" /> Already invited? Sign in</button>
-          <span style={{ color: 'var(--faint)' }}>·</span>
-          <button onClick={() => setFaq(true)} className="mono" style={linkBtn}>Read the FAQ</button>
-        </div>
-      )}
-      <div style={{ height: 14 }} />
-    </section>
-  );
+  // THE PITCH AND THE MENU OF SWITCHES ARE GONE FROM HERE (v0.652.1).
+  // Founder: "We can get rid of the rest of the page, it's redundant with the
+  // new flow." The front door (Landing.tsx) carries the product pitch and the
+  // feature cards now, so this page is the demo and nothing else: a visitor
+  // arriving from "Click here for a demo" lands on the band and the board.
 
   const header = (
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', flexWrap: 'wrap', gap: 8 }}>
@@ -808,7 +738,6 @@ export function DemoBoard() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {header}
-      {hero}
       <div ref={boardRef} style={{ scrollMarginTop: 8 }} />
       {game && band}
       {/* THE OTHER GAME (v0.358.0). Its own board rather than a branch through
