@@ -152,7 +152,7 @@ export function Landing() {
       {/* minWidth 0: a flex item's automatic minimum is its min-content width,
           and a percentage-width img inside would otherwise hand the whole
           page its intrinsic width and a sideways scroll on a phone. */}
-      <main style={{ flex: 1, width: '100%', minWidth: 0, maxWidth: 880, margin: '0 auto', padding: '8px 16px 40px', boxSizing: 'border-box' }}>
+      <main style={{ flex: 1, width: '100%', minWidth: 0, maxWidth: 640, margin: '0 auto', padding: '8px 16px 40px', boxSizing: 'border-box' }}>
         {/* ── WELCOME ─────────────────────────────────────────────────── */}
         <section style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', padding: '18px 0 8px' }}>
           <img src={`${base}brand/hero-mark.png`} alt="" style={{ height: narrow ? 150 : 210, width: 'auto', flex: 'none', margin: '0 auto' }} />
@@ -171,9 +171,11 @@ export function Landing() {
           </div>
         </section>
 
-        {/* ── FEATURES: the chips, with a rail of screens beside each group.
-            The matchup card is the last one and the door to the demo. ──── */}
-        <section style={{ marginTop: 26, display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'repeat(auto-fit, minmax(380px, 1fr))', gap: 10 }}>
+        {/* ── FEATURES: one column (v0.650.2, founder: "a single column page
+            with the screen shots under the chips"). Each card is the chips,
+            then its rail of screens under them. The matchup card is the last
+            one and the door to the demo. ─────────────────────────────── */}
+        <section style={{ marginTop: 26, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {LANDING_FEATURES.map((g) => {
             const open = g.notes.find((n: FormatNote) => openNote === `${g.heading}|${n.name}`);
             const matchup = g.heading === 'Matchup style';
@@ -203,7 +205,7 @@ export function Landing() {
               </>
             );
             return (
-              <div key={g.heading} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 12px', display: 'flex', flexDirection: matchup ? 'column' : 'row', gap: 14, alignItems: 'flex-start', gridColumn: matchup && !narrow ? '1 / -1' : undefined }}>
+              <div key={g.heading} style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '14px 14px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {matchup ? (
                   <>
                     <div style={{ width: '100%' }}>{chips}</div>
@@ -218,8 +220,11 @@ export function Landing() {
                   </>
                 ) : (
                   <>
-                    <Rail shots={shots} ratio="9 / 19" width={narrow ? 112 : 132} base={base} />
-                    <div style={{ flex: '1 1 0', minWidth: 0 }}>{chips}</div>
+                    <div>{chips}</div>
+                    {/* The phone frame sits centred under the chips, big enough to read. */}
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <Rail shots={shots} ratio="9 / 19" width={narrow ? 200 : 220} base={base} />
+                    </div>
                   </>
                 )}
               </div>
