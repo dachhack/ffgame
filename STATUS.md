@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.650.2 — the front page is one column, the screens under the chips
+
+> - The front page's feature cards now run in a single column, each with its rotating phone screen under the chips instead of beside them, so the screens are big enough to read.
+
+Founder: "Let's do a single column page with the screen shots under the
+chips." `Landing.tsx`: the feature section is a flex column (no two-up grid
+on a wide screen), the page narrows to 640px, and each card is the heading,
+the chips, the open line, then the rail centred under them at 200–220px
+wide. The matchup card keeps its wide frame and the demo button.
+
 ### v0.650.1 — the funnel's rails have screens; the Mode sheet fits a phone
 
 > - The front page's feature cards now rotate through real screens of the app — the create screen's league types and formats, the roster builder, the Bullseye and golf settings, the scoped bonuses, a draft with head coaches on the board — instead of "screen coming" placeholders.
