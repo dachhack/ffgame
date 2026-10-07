@@ -18,6 +18,7 @@ import { SiteSettings } from '../app/ui';
 import { Faq } from './Faq';
 import { RequestCodeModal } from './RequestCode';
 import { FUNNEL, LANDING_FEATURES, type FormatNote } from '@drip/core/data/leagueTagline';
+import { APP_VERSION } from '@drip/core/version';
 import { signupOpen, getSession } from '@drip/core/data/liveApi';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import { markBootSessionChecked } from './DemoBoard';
@@ -89,7 +90,11 @@ function Rail({ shots, ratio, width, base, onTap }: { shots: Shot[]; ratio: stri
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 'none', width }}>
       <div role={onTap ? 'button' : undefined} onClick={onTap} style={{ ...frame, cursor: onTap ? 'pointer' : 'default' }}>
         {shots.map((s, k) => {
-          const src = `${base}brand/${s.dir === 'brand' ? '' : 'funnel/'}${s.file}`;
+          // VERSIONED (v0.650.4): the service worker keeps images cache-first
+          // by URL, so a screen replaced under the same name never reached an
+          // installed browser. The version on the query makes each release a
+          // new URL; the file on disk keeps its name.
+          const src = `${base}brand/${s.dir === 'brand' ? '' : 'funnel/'}${s.file}?v=${APP_VERSION}`;
           const on = k === i;
           return missing[s.file]
             ? (on && <div key={s.file} className="mono" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 10, fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--faint)', lineHeight: 1.5 }}>{s.label.toUpperCase()}<br />SCREEN COMING</div>)

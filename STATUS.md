@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.650.4 — the front page's screens refresh with each release
+
+> - The front page's rotating screens now update the moment a new version is live, instead of a browser keeping the old pictures.
+
+Founder, after v0.650.3 went live: "it's still showing the league setup
+pages and not matchups." The files on the server were the new ones; the
+service worker (`public/sw.js`) keeps images cache-first by URL, and the
+thirteen screens were replaced under the same names, so an installed
+browser kept serving the old copies. `Landing.tsx` now puts `APP_VERSION`
+on each screen's query string: a release is a new URL, the file keeps its
+name, and the shooting list in the README is unchanged.
+
 ### v0.650.3 — the funnel's screens are the game, not the settings
 
 > - The front page's rotating screens now show the game itself: matchup boards for redraft, college, mixed, golf, Bullseye and best-ball leagues; the cap sheet; the devy market; the vampire's feeding log; the chop report; a lineup with scoped spots; a draft filtered to head coaches.
