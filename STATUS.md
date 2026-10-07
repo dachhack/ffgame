@@ -22,6 +22,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.645.1 — the autodraft fills the default lineup
+
+> - A classic league whose commissioner never opened the roster builder now autodrafts a full starting lineup: the picker fills every open spot (RB 2 included) before it builds a bench, and takes a bench two deep per position before drafting by rank. It used to draft purely by rank in such a league, which left a starting spot empty while the bench filled with receivers.
+
+Founder, from a fresh classic league ("Bullseye Test") after an autodraft,
+with a screenshot: "Autodrafted a team but no RB2." The roster was the
+pool's rank order at every pick — one RB in round 1, then receiver after
+receiver (six on the bench), RB 2 empty, K and D/ST forced in the last two.
+
+- **The cause, confirmed on the old picker.** The autopick's two
+  lineup-aware steps — "the lineup before the bench" (0377, via
+  `_autopick_open_spots`) and the bench depth chart (0381, `spotn`) — read
+  `settings_json.roster_slots`, the roster BUILDER's spec, and only that. A
+  classic league that never opened the builder has no spec: it plays the
+  0161 counts or the default nine, which every screen renders through
+  `leagueSlotDefs`. For such a league the open-spot read came back empty
+  and `spotn` stayed null, so both steps were skipped and every pick fell
+  through to the plain rank pick with 0071's caps. Reproduced on a scratch
+  Postgres with the 0383/0441 bodies restored and the founder's first six
+  rounds held (RB, WR, QB, WR, WR, TE): open spots `[]`, round 7 =
+  `adl-WR-4`. With 0449: open spots `[RB]`, round 7 = `adl-RB-2`. Nothing
+  about bullseye — any classic league without a builder spec drafted this
+  way.
+- **0449**: `_league_slot_spec(league)` answers "what is this league's
+  lineup" with `leagueSlotDefs`' precedence — the builder spec as stored,
+  else the 0161 counts expanded in catalog order, else the default nine —
+  and both steps read it. A league with a spec is untouched. `league_pos_cap`
+  keeps 0071's shape for a spec-less league: this changes what the autopick
+  aims for, not what a league may roster.
+- Pinned: `scripts/db/autodraft-default-lineup-probes.sql` (in the scratch
+  runner): the default nine (RB 2 filled in round 7, then depth by rank),
+  the 0161 counts (an open RB spot filled with the flex held by receivers),
+  a builder spec still wins. The autodraft-mixed, lineup-after-draft,
+  pos-default, devy-draft, college-rules, mixed-devy and devy-shares suites
+  stay green.
+- Not confirmed against the founder's league from here (workflow dispatch
+  is refused to this session): `scripts/db/autodraft-lineup-diag.sql` is a
+  read-only query for Actions → "Run a database query" that prints whether
+  the league carries a spec and each seat's picks in order. The screenshot
+  rules the alternatives out — with a spec present and RB 2 open, no round-7
+  receiver is possible. The drafted roster stands; a re-draft, or an RB from
+  the wire into RB 2, is the manager's move.
+
 ### v0.645.0 — Bullseye finishes its list: hybrid, fixed rings, a card per team; any zero is a miss
 
 > - Two more ways to play bullseye: HYBRID (every spot aims at its number and the whole lineup aims at the card's total, worth one extra spot) and FIXED RINGS (a dart pays 20 / 10 / 5 like a darts board instead of sliding with distance).
