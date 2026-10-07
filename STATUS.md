@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.646.1 — the bullseye headline is your distance from the target
+
+> - On a bullseye matchup each team's big number is now how far it sits from its target, signed (+3.2 over, −12.5 under), with the actual total smaller in parentheses beneath it and 🎯 Target under that.
+
+Founder: "the running score should be how far away from the target your
+team is with + or - and the actual total smaller in parentheses."
+
+- Both `TeamHead`s (web `ClassicBoard`, app `ClassicBoard`): under bullseye
+  the headline is `points − target`, signed, from the live points once the
+  games are on and from the projection before; the subline is `(67.7)` (or
+  `(67.7 proj)`), a size up and bold; 🎯 Target N follows. In the SLOTS
+  variant a faint `score 61.5` line keeps the number that decides the
+  matchup (the darts' sum) visible, since there the distance of the sum is
+  not what wins. In TOTAL the distance is the game. Outside bullseye nothing
+  changes.
+
 ### v0.646.0 — Bullseye: two ways to play, one way to score
 
 > - Bullseye is back to two ways to play — SLOTS (a number per spot) and TOTAL (one number for the lineup) — scored one way: the closer a starter lands, the more the spot scores, and inside half a point pays double. The HYBRID option and the fixed-points scale are gone.

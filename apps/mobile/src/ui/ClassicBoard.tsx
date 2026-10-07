@@ -180,11 +180,16 @@ function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'rig
   const right = align === 'right';
   // BULLSEYE (v0.643.0): the headline is the RING total, the points beneath.
   const aim = side.aim;
+  // UNDER BULLSEYE THE HEADLINE IS THE DISTANCE (v0.646.1, founder: "the
+  // running score should be how far away from the target your team is with
+  // + or - and the actual total smaller in parentheses").
+  const pts = mode === 'proj' ? side.projected : side.live;
+  const off = aim ? pts - aim.target : 0;
   const big = mode === 'hidden' ? '—'
-    : aim ? (mode === 'proj' ? aim.projected.toFixed(1) : aim.live.toFixed(1))
+    : aim ? `${off > 0 ? '+' : off < 0 ? '−' : ''}${Math.abs(off).toFixed(1)}`
     : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
   const sub = mode === 'hidden' ? 'sealed until kickoff'
-    : aim ? (mode === 'proj' ? `${side.projected.toFixed(1)} pts projected` : `${side.live.toFixed(1)} pts · ${aim.dist.toFixed(1)} off`)
+    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''})`
     : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
@@ -202,10 +207,11 @@ function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'rig
         </Mono>
       )}
       <Display size={24} style={{ marginTop: 3 }}>{big}</Display>
+      <Mono size={aim ? 10.5 : 8.5} weight={aim ? '700' : '400'} tone={mode === 'hidden' ? 'faint' : 'dim'}>{sub}</Mono>
       {/* THE TARGET (v0.646.0, founder: "make the top 'aim x' into Target x
           and make the font larger and bold. We need that to be clear"). */}
-      {!!aim && mode !== 'hidden' && <Mono size={12} tone="warn" weight="700">{`🎯 Target ${aim.target}`}</Mono>}
-      <Mono size={8.5} tone={mode === 'hidden' ? 'faint' : 'dim'}>{sub}</Mono>
+      {!!aim && mode !== 'hidden' && <Mono size={12} tone="warn" weight="700" style={{ marginTop: 2 }}>{`🎯 Target ${aim.target}`}</Mono>}
+      {!!aim && mode !== 'hidden' && aim.variant === 'slots' && <Mono size={8} tone="dim">{mode === 'proj' ? `score ${aim.projected.toFixed(1)} proj` : `score ${aim.live.toFixed(1)}`}</Mono>}
     </View>
   );
 }
