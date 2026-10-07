@@ -246,6 +246,10 @@ const note = (list: FormatNote[], name: string): FormatNote => list.find((n) => 
 export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote[] }[] = [
   { heading: 'League types', sub: 'What carries from one season to the next.', notes: [
     note(CONTINUITY_NOTES, 'Redraft'), note(CONTINUITY_NOTES, 'Dynasty'), note(CONTINUITY_NOTES, 'Keeper'), note(CONTINUITY_NOTES, 'Contract'),
+    // v0.651.0: the college shapes get chips of their own, so every screen on
+    // the card's rail has a chip that opens it.
+    { name: 'Full college', icon: '🏟️', line: 'No NFL players at all: every spot takes college players and the season runs Saturday by Saturday, on the college calendar.' },
+    { name: 'Mixed college', icon: '🔀', line: 'College-only starting spots beside your NFL lineup — college and NFL players score in the same week.' },
     { name: 'Devy', icon: '🎓', line: 'College players on your roster before they’re drafted — as devy spots or as shares bought in a devy market, priced off StatHead’s rankings.' },
   ] },
   { heading: 'Competitive modes', sub: 'How the season ends differently.', notes: [

@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.651.0 — the chips pick the screen, and the screens are mark-free
+
+> - On the front page the screens no longer turn on their own: tap a chip and its screen comes up; the dots under a screen still step through by hand, and light the chip they land on.
+> - League types gains Full college and Mixed college chips, so every screen on that card has a chip that opens it.
+> - The screens themselves are re-shot mark-free: no NFL logos or headshots.
+
+Founder: "let's do mark free though on these images. Let's not auto rotate,
+but let users select the chips to rotate the images."
+
+- `Landing.tsx`: the rail's clock is gone; each card keeps its own shot
+  index, a chip with a shot (`FUNNEL_SHOTS[...].chip`) moves the rail to
+  it, and a dot opens the chip its shot belongs to. Chips without a shot
+  (Keeper, Dynasty, the core lineup chips, Others) open their line and
+  leave the rail where it is.
+- `leagueTagline.ts`: Full college and Mixed college chips on League types,
+  with lines; `check:tagline` still holds the card list and the
+  competitive-modes order.
+- The thirteen screens were re-shot with `?markfree=1` — the same fixture
+  league, the same frames, no marks. Scoped bonuses carried no marks and is
+  unchanged.
+
 ### v0.650.4 — the front page's screens refresh with each release
 
 > - The front page's rotating screens now update the moment a new version is live, instead of a browser keeping the old pictures.
