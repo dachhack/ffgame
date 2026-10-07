@@ -166,7 +166,14 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   ok('the matchup card speaks the funnel\'s lines, Classic first', matchup && matchup.notes[0]?.name === 'Classic' && matchup.notes[1]?.line === drip?.line, matchup?.notes.map((n) => n.name));
   ok('the five cards are still the five the founder named',
     LANDING_FEATURES.map((g) => g.heading).join('|') === 'League types|Competitive modes|Positions|Scoring options|Matchup style', LANDING_FEATURES.map((g) => g.heading));
-  ok('every landing chip has a glyph and a line', LANDING_FEATURES.every((g) => g.notes.every((n) => n.icon && n.line.length > 20)));
+  ok('every landing chip has a line', LANDING_FEATURES.every((g) => g.notes.every((n) => n.line.length > 20)));
+  // v0.652.0 — founder: one chip for the plain shapes, one for every position, no "Others".
+  const lt = LANDING_FEATURES.find((g) => g.heading === 'League types');
+  ok('League types opens on one chip for redraft, keeper and dynasty', lt?.notes[0]?.name === 'Redraft · Keeper · Dynasty', lt?.notes.map((n) => n.name));
+  const pos = LANDING_FEATURES.find((g) => g.heading === 'Positions');
+  ok('Positions is two chips: every position, and the scoped spot', pos?.notes.map((n) => n.name).join('|') === 'Every position|Scoped positions', pos?.notes.map((n) => n.name));
+  const sc = LANDING_FEATURES.find((g) => g.heading === 'Scoring options');
+  ok('Scoring options has no "Others" chip', sc && !sc.notes.some((n) => n.name === 'Others'), sc?.notes.map((n) => n.name));
 }
 
 if (fails) { console.log(`\n${fails} TAGLINE ASSERTION(S) FAILED`); process.exit(1); }

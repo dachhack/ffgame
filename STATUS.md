@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.652.0 — the front page's chips, trimmed; the screens on 2026 players
+
+> - The front page's chips lose their emoji; Redraft, Keeper and Dynasty are one chip; Positions is one chip for every position (it opens the roster builder) plus Scoped positions; the "Others" scoring chip is gone.
+> - The college screens show players in college this season, the golf board real low-usage starters projected a point or two, the mixed-college board has no kicker or defense, and the scoped board's rookie spot holds a 2026 rookie.
+
+Founder: "Let's make sure the college players shown are all 2026 college
+players. The golf guys should be players who are technically starters but
+only projection score a couple points. Let's get rid of the 'this screams
+AI' icons. Redraft/Keeper/Dynasty can all be one chip. For mixed college,
+let's not have dst or k on the roster. All positions can just be one chip
+that shows the roster builder. Scoped positions, let's use 2026 rosters for
+the example. We can drop the 'others' chip."
+
+- `leagueTagline.ts` `LANDING_FEATURES`: League types opens on
+  "Redraft · Keeper · Dynasty"; Positions is "Every position" + "Scoped
+  positions"; no "Others". The notes keep their glyphs for the demo page's
+  builder cards; the landing just stops drawing them. `check:tagline`
+  pins the three.
+- The screens: college players from StatHead's devy board (2027 and 2028
+  classes, so in college in 2026); the rookie spot from the 2026 rookie
+  class (Jeremiyah Love, ARI; Carnell Tate, TEN); every NFL player's team
+  checked against the 2026 rosters; golf starters are real fullbacks,
+  blocking tight ends, return men and backup quarterbacks. The HC-draft
+  screen is retired; `positions-roster.png` (the roster builder with
+  every kind of spot) takes the chip.
+
 ### v0.651.2 — the screens open on the score, and show more of the lineup
 
 > - The front page's screens no longer start with the app's header bar: each opens on the score card, the sheet, or the list, and the frame runs longer so four or five starters show.
