@@ -184,12 +184,16 @@ function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'rig
   // running score should be how far away from the target your team is with
   // + or - and the actual total smaller in parentheses").
   const pts = mode === 'proj' ? side.projected : side.live;
-  const off = aim ? pts - aim.target : 0;
+  // THE ZERO PENALTY (v0.648.0): the distance shown includes every no-show's
+  // penalty, pushed in the direction the team is already off.
+  const dist = aim ? (mode === 'proj' ? aim.projDist : aim.dist) : 0;
+  const zeros = aim ? (mode === 'proj' ? aim.projZeros : aim.zeros) : 0;
+  const off = aim ? (pts - aim.target > 0 ? dist : -dist) : 0;
   const big = mode === 'hidden' ? '—'
     : aim ? `${off > 0 ? '+' : off < 0 ? '−' : ''}${Math.abs(off).toFixed(1)}`
     : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
   const sub = mode === 'hidden' ? 'sealed until kickoff'
-    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''})`
+    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''}${zeros ? ` · ${zeros} penalt${zeros === 1 ? 'y' : 'ies'}` : ''})`
     : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
   return (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
@@ -1784,9 +1788,13 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       points larger?"). A per-player score is at most 5 mono
                       chars ("21.40"), so the bump costs each name cell 2px —
                       nothing v0.323.1's name-width work misses. */}
-                  <Mono size={12.5} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ width: 42, textAlign: 'right' }}>
-                    {scoreOf(row.home)}
-                  </Mono>
+                  <View style={{ width: 42, alignItems: 'flex-end' }}>
+                    <Mono size={12.5} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ textAlign: 'right' }}>
+                      {scoreOf(row.home)}
+                    </Mono>
+                    {/* THE ZERO PENALTY (v0.648.0): a no-show costs the radius. */}
+                    {!!row.penalty?.home && <Mono size={6.5} tone="opp" weight="700" numberOfLines={1}>{`PENALTY −${row.penalty.points}`}</Mono>}
+                  </View>
                   {/* …and the centre column is FIXED at the pill's own width,
                       so a long spot name ("Rookie BB", "FLEX (RB/WR/TE)") can
                       never widen it and shove the scores around. */}
@@ -1800,9 +1808,12 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       </Mono>
                     )}
                   </View>
-                  <Mono size={12.5} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42 }}>
-                    {scoreOf(row.away)}
-                  </Mono>
+                  <View style={{ width: 42, alignItems: 'flex-start' }}>
+                    <Mono size={12.5} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'}>
+                      {scoreOf(row.away)}
+                    </Mono>
+                    {!!row.penalty?.away && <Mono size={6.5} tone="opp" weight="700" numberOfLines={1}>{`PENALTY −${row.penalty.points}`}</Mono>}
+                  </View>
                   <BoardCell e={row.away} align="right" onGame={gameOpener(row.away)}
                     empty={awayWhy ? offNote(awayWhy, true) : undefined}
                     onName={row.away ? () => openPlayerCard({ slug: row.away!.slug, name: row.away!.name, pos: row.away!.pos, team: row.away!.team ?? '', week: matchup?.week, userId }) : undefined} />

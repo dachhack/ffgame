@@ -71,14 +71,21 @@ week is small and concrete.
    the wrong rosters.
 
 ### Hard guardrails
-- **Any zero scores nothing** (founder: "we want any zero to count for the
-  did not play rule"). A spot whose player posts 0.0 is a MISS no matter
-  what the target was and no matter why — inactive, a healthy scratch, a
-  receiver who drew no targets — or the 5 target is solved by starting an
-  injured player. (Same philosophy as golf: a zero is an absence, not a low
-  score.) An unfilled spot is a miss. A spot carrying the **zero-fill rule**
-  (0200) banks its fill first, and the dart is thrown with the fill — that
-  rule is the commissioner's own and says a blank is worth those points.
+- **Any zero scores nothing, and costs** (founder: "we want any zero to
+  count for the did not play rule"; then, with an IR back at 0.0, "needs to
+  have a PENALTY with the penalty value +/-10"). A spot whose player posts
+  0.0 is a MISS no matter what the target was and no matter why — inactive,
+  a healthy scratch, a receiver who drew no targets — and since v0.648.0 it
+  is a **penalty**: each no-show pushes the team `radius` (10) further from
+  its target. In TOTAL that is 10 more distance on the one dart; in SLOTS it
+  is 10 off the team's score, floored at 0. The row says 🚫 PENALTY −10; the
+  headline distance includes it; the subline counts them. An unfilled spot
+  is a no-show too. A spot carrying the **zero-fill rule** (0200) banks its
+  fill first and is not a zero — that rule is the commissioner's own and
+  says a blank is worth those points. On the board a starter is a no-show
+  once his game is done at zero, and before kickoff when he projects to
+  nothing (ruled out, IR, bye) — so an IR starter wears the tag all week and
+  a man still to play does not.
 - **Golf and bullseye are mutually exclusive.** Lowest ring score winning
   would reward the worst aim; each setter refuses while the other is on.
 - **Drip is untouched.** Nothing in this feature can reach a league whose

@@ -16,7 +16,7 @@ import type { Pos } from '../types';
 import type { ClassicSlotDef } from './classic';
 import type { Roof } from '../data/stadiums';
 import { leagueIsGolf } from './golf';
-import { leagueBullseye, bullseyeCardFor, ringScore, type Dart } from './bullseye';
+import { leagueBullseye, bullseyeCardFor, ringScore, ringFromDist, bullseyePenalty, isZeroScore, type Dart } from './bullseye';
 
 /** One player as the board needs them — the caller resolves identity, we do
  *  the arithmetic. `live` is points ALREADY scored; `proj` is the full-game
@@ -61,6 +61,10 @@ export interface BoardEntry {
  *  spot with no zero-fill). Absent when the league does not play it or in
  *  the TOTAL variant, where no spot aims alone. */
 export interface SlotAim { target: number; awayTarget: number; home: Dart | null; away: Dart | null }
+/** THE ZERO PENALTY on a row (v0.648.0): which side's starter is (live) or
+ *  will be (projected) a no-show, and what it costs. Set under bullseye in
+ *  both variants. */
+export interface SlotPenalty { home: boolean; away: boolean; points: number }
 export interface BoardSlotRow {
   slot: string;
   /** The label the manager sees: a custom spot label, else FLEX/QB/… */
@@ -70,6 +74,7 @@ export interface BoardSlotRow {
   home: BoardEntry | null;
   away: BoardEntry | null;
   aim?: SlotAim;
+  penalty?: SlotPenalty;
 }
 
 export interface BoardSide {
@@ -107,7 +112,13 @@ export interface BoardSide {
   record?: { wins: number; losses: number; ties: number; rank?: number | null } | null;
   /** BULLSEYE (v0.643.0): the side's RING totals — the headline when the
    *  league plays it. `live`/`projected` above stay the raw points. */
-  aim?: { variant: 'slots' | 'total'; target: number; live: number; projected: number; dist: number };
+  aim?: {
+    variant: 'slots' | 'total'; target: number; live: number; projected: number;
+    /** Distance from the target, penalties included — live and projected. */
+    dist: number; projDist: number;
+    /** No-shows counted live (settled) and projected, and what each costs. */
+    zeros: number; projZeros: number; penalty: number;
+  };
 }
 
 export interface MatchupBoard {
@@ -294,22 +305,49 @@ export function buildMatchupBoard(input: {
     const n = Math.max(1, slots.length);
     const dart = (pts: number, target: number | undefined, radius: number): Dart | null =>
       target == null ? null : { target, dist: r2(Math.abs(pts - target)), ring: ringScore(pts, target, radius) };
+    const penalty = bullseyePenalty(cfg.radius);
+    // THE ZERO PENALTY, settled the way the zero-fill is: an empty spot (no
+    // fill) is a no-show from the first whistle; a filled spot is a no-show
+    // once his game is DONE at zero, and before kickoff when he projects to
+    // nothing (ruled out, IR, bye) — so an IR starter wears PENALTY all week
+    // and a man still to play does not. A spot with a zero-fill is never one.
+    const zeroLive = (e: BoardEntry | null, slot: string): boolean => {
+      if ((zeroOf.get(slot) ?? null) != null) return false;
+      if (!e) return true;
+      if (e.state === 'done') return isZeroScore(e.live);
+      if (e.state === 'pre') return isZeroScore(projectEntry(e));
+      return false;
+    };
+    const zeroProj = (e: BoardEntry | null, slot: string): boolean => {
+      if ((zeroOf.get(slot) ?? null) != null) return false;
+      return !e || isZeroScore(projectEntry(e));
+    };
     const aimSide = (s: BoardSide, mine: (BoardEntry | null)[]): BoardSide => {
       const card = bullseyeCardFor(s.rosterId) ?? bull.card;
       const pts = mine.reduce((a, e, i) => a + fillLive(e, slotOrder[i]), 0);
       const proj = mine.reduce((a, e, i) => a + fillProj(e, slotOrder[i]), 0);
-      const dist = r2(Math.abs(pts - card.total));
+      const zeros = mine.filter((e, i) => zeroLive(e, slotOrder[i])).length;
+      const projZeros = mine.filter((e, i) => zeroProj(e, slotOrder[i])).length;
+      const dist = r2(Math.abs(pts - card.total) + penalty * zeros);
+      const projDist = r2(Math.abs(proj - card.total) + penalty * projZeros);
       if (cfg.variant === 'total') {
         const radius = cfg.radius * n;
-        return { ...s, aim: { variant: 'total', target: card.total, live: ringScore(pts, card.total, radius), projected: ringScore(proj, card.total, radius), dist } };
+        return { ...s, aim: { variant: 'total', target: card.total, live: ringFromDist(dist, radius), projected: ringFromDist(projDist, radius), dist, projDist, zeros, projZeros, penalty } };
       }
       const live = mine.reduce((a, e, i) => a + ringScore(fillLive(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0);
       const projected = mine.reduce((a, e, i) => a + ringScore(fillProj(e, slotOrder[i]), card.targets[slotOrder[i]], cfg.radius), 0);
-      return { ...s, aim: { variant: cfg.variant, target: card.total, live: r2(live), projected: r2(projected), dist } };
+      return { ...s, aim: { variant: cfg.variant, target: card.total, live: r2(Math.max(0, live - penalty * zeros)), projected: r2(Math.max(0, projected - penalty * projZeros)), dist, projDist, zeros, projZeros, penalty } };
     };
     const homeCard = bullseyeCardFor(home.rosterId) ?? bull.card;
     const awayCard = bullseyeCardFor(away.rosterId) ?? bull.card;
     for (const row of starters) {
+      // The penalty tag, both variants: live once the week is on, projected
+      // before — the same rule the side totals use.
+      row.penalty = {
+        home: locked ? zeroLive(row.home, row.slot) : zeroProj(row.home, row.slot),
+        away: locked ? zeroLive(row.away, row.slot) : zeroProj(row.away, row.slot),
+        points: penalty,
+      };
       const target = homeCard.targets[row.slot];
       const awayTarget = awayCard.targets[row.slot];
       if (target == null || awayTarget == null || cfg.variant === 'total') continue;
