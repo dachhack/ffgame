@@ -193,8 +193,11 @@ function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'rig
     : aim ? `${off > 0 ? '+' : off < 0 ? '−' : ''}${Math.abs(off).toFixed(1)}`
     : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
   const sub = mode === 'hidden' ? 'sealed until kickoff'
-    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''}${zeros ? ` · ${zeros} penalt${zeros === 1 ? 'y' : 'ies'}` : ''})`
+    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''})`
     : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
+  // The penalties on their own short line (v0.648.1, founder: the subline
+  // wrapped) — the total they cost, never a word that needs the width.
+  const penLine = aim && zeros > 0 ? `🚫 −${(zeros * aim.penalty).toFixed(0)} penalt${zeros === 1 ? 'y' : 'ies'}` : null;
   return (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
       <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
@@ -211,7 +214,8 @@ function TeamHead({ side, align, mode }: { side: BoardSide; align: 'left' | 'rig
         </Mono>
       )}
       <Display size={24} style={{ marginTop: 3 }}>{big}</Display>
-      <Mono size={aim ? 10.5 : 8.5} weight={aim ? '700' : '400'} tone={mode === 'hidden' ? 'faint' : 'dim'}>{sub}</Mono>
+      <Mono size={aim ? 10.5 : 8.5} weight={aim ? '700' : '400'} tone={mode === 'hidden' ? 'faint' : 'dim'} numberOfLines={1}>{sub}</Mono>
+      {!!penLine && mode !== 'hidden' && <Mono size={9} tone="opp" weight="700" numberOfLines={1}>{penLine}</Mono>}
       {/* THE TARGET (v0.646.0, founder: "make the top 'aim x' into Target x
           and make the font larger and bold. We need that to be clear"). */}
       {!!aim && mode !== 'hidden' && <Mono size={12} tone="warn" weight="700" style={{ marginTop: 2 }}>{`🎯 Target ${aim.target}`}</Mono>}
@@ -1793,7 +1797,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                       {scoreOf(row.home)}
                     </Mono>
                     {/* THE ZERO PENALTY (v0.648.0): a no-show costs the radius. */}
-                    {!!row.penalty?.home && <Mono size={6.5} tone="opp" weight="700" numberOfLines={1}>{`PENALTY −${row.penalty.points}`}</Mono>}
+                    {!!row.penalty?.home && <Mono size={8} tone="opp" weight="700" numberOfLines={1}>{`🚫 −${row.penalty.points}`}</Mono>}
                   </View>
                   {/* …and the centre column is FIXED at the pill's own width,
                       so a long spot name ("Rookie BB", "FLEX (RB/WR/TE)") can
@@ -1812,7 +1816,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
                     <Mono size={12.5} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'}>
                       {scoreOf(row.away)}
                     </Mono>
-                    {!!row.penalty?.away && <Mono size={6.5} tone="opp" weight="700" numberOfLines={1}>{`PENALTY −${row.penalty.points}`}</Mono>}
+                    {!!row.penalty?.away && <Mono size={8} tone="opp" weight="700" numberOfLines={1}>{`🚫 −${row.penalty.points}`}</Mono>}
                   </View>
                   <BoardCell e={row.away} align="right" onGame={gameOpener(row.away)}
                     empty={awayWhy ? offNote(awayWhy, true) : undefined}

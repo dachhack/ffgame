@@ -323,8 +323,10 @@ function TeamHead({ side, align, accent, mode }: {
     : aim ? `${off > 0 ? '+' : off < 0 ? '−' : ''}${Math.abs(off).toFixed(1)}`
     : mode === 'proj' ? side.projected.toFixed(1) : side.live.toFixed(2);
   const sub = mode === 'hidden' ? 'sealed until kickoff'
-    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''}${zeros ? ` · ${zeros} penalt${zeros === 1 ? 'y' : 'ies'}` : ''})`
+    : aim ? `(${pts.toFixed(1)}${mode === 'proj' ? ' proj' : ''})`
     : mode === 'proj' ? 'projected' : side.projected.toFixed(1);
+  // The penalties on their own short line (v0.648.1): what they cost.
+  const penLine = aim && zeros > 0 ? `🚫 −${(zeros * aim.penalty).toFixed(0)} penalt${zeros === 1 ? 'y' : 'ies'}` : null;
   return (
     <div style={{ textAlign: align, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: align === 'right' ? 'row-reverse' : 'row' }}>
@@ -339,7 +341,8 @@ function TeamHead({ side, align, accent, mode }: {
         </div>
       )}
       <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4, color: mode === 'hidden' ? 'var(--faint)' : 'var(--text)' }}>{big}</div>
-      <div className="mono" style={{ fontSize: aim ? 11 : 9.5, fontWeight: aim ? 700 : 400, color: mode === 'hidden' ? 'var(--faint)' : aim ? 'var(--dim)' : accent }}>{sub}</div>
+      <div className="mono" style={{ fontSize: aim ? 11 : 9.5, fontWeight: aim ? 700 : 400, color: mode === 'hidden' ? 'var(--faint)' : aim ? 'var(--dim)' : accent, whiteSpace: 'nowrap' }}>{sub}</div>
+      {penLine && mode !== 'hidden' && <div className="mono" style={{ fontSize: 10, fontWeight: 800, color: 'var(--opp, var(--warn))', whiteSpace: 'nowrap' }}>{penLine}</div>}
       {/* THE TARGET (v0.646.0, founder: "make the top 'aim x' into Target x
           and make the font larger and bold. We need that to be clear"). */}
       {aim && mode !== 'hidden' && (
