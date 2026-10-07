@@ -18,6 +18,7 @@ import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf } from '.
 import { autoLineup, liveTeamOf } from './engine.js';
 import { modeOfSettings } from './resolve.js';
 import { seatAgentsFor } from './agents.js';
+import { tacoDue, tacoLine } from './taco.js';
 import { wantsComboDrip, aiLiveBuffs, aiBattlePlan, AI_STACKS, metricGapFills } from '../../packages/core/src/data/aiLineup.ts';
 import { slugMeta, normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { setCollegeMeta } from '../../packages/core/src/data/college.ts';
@@ -437,8 +438,16 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
     }
 
     const { data: mems } = await db().from('league_membership')
-      .select('sleeper_roster_id,app_user_id,controller').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
+      .select('sleeper_roster_id,app_user_id,controller,team_name,wire_locked,taco_set_week').eq('league_id', leagueId).in('sleeper_roster_id', rosterIds);
     const userOf = new Map((mems ?? []).filter((x) => x.app_user_id).map((x) => [x.sleeper_roster_id, x.app_user_id]));
+    // THE TACO LOCKER (v0.647.0): a human seat the commissioner has locked
+    // (0320's wire_locked) has its lineup SET FOR IT once a week — from
+    // Thursday 9 AM Eastern (taco.js) — the way an AI seat's is: every
+    // unlocked spot re-planned at the AI's values, a man whose game has
+    // started left standing. Keyed by seat with the last week it was set.
+    const tacoOf = new Map((mems ?? []).filter((x) => x.wire_locked && x.app_user_id).map((x) => [x.sleeper_roster_id, x.taco_set_week ?? null]));
+    const teamOf = new Map((mems ?? []).map((x) => [x.sleeper_roster_id, x.team_name || `Team ${x.sleeper_roster_id}`]));
+    const tacoSet = [];   // seats set this tick → stamped + announced after the write
     // A SEAT ON 🤖 AUTO-PILOT IS RE-PLANNED LIKE AN AGENT (v0.426.0). Founder:
     // "This AI team has AJ Brown in despite him on IR. Can the AI teams set
     // ideal lineups based on projections and injury status?" A human seat
@@ -487,7 +496,10 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
         const roster = rosterOf.get(rosterId);
         if (!roster?.length) continue;
         const live = m.status === 'live';
-        if (uid && !aiOf.has(rosterId)) {
+        // The locker's Thursday set routes a human seat down the AGENT path
+        // for this one tick, writing under the manager's own uid.
+        const tacoNow = !!uid && !aiOf.has(rosterId) && tacoOf.has(rosterId) && tacoDue(nowMs, week, tacoOf.get(rosterId));
+        if (uid && !aiOf.has(rosterId) && !tacoNow) {
           // A human's seat is filled at lock and then left to the human: the
           // per-player seal already lets them late-swap, and a fill landing
           // mid-week would be a decision made for them.
@@ -506,8 +518,9 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
         }
         // An auto-pilot seat writes under its own manager's uid; an unclaimed
         // seat under its agent's.
-        const agent = (uid && aiOf.has(rosterId)) ? uid : agentOf(rosterId);
+        const agent = tacoNow ? uid : (uid && aiOf.has(rosterId)) ? uid : agentOf(rosterId);
         if (!agent) continue;
+        if (tacoNow) tacoSet.push({ rosterId, team: teamOf.get(rosterId) });
         // An AGENT seat is a DILIGENT manager, not a Tuesday snapshot: its
         // unlocked rows are the worker's own prior writes, never a decision,
         // so they are re-planned at the current values every tick — a player
@@ -563,6 +576,18 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
         .upsert(agentPayload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
       if (error) throw error;
       slotted += agentPayload.length;
+    }
+    // THE TACO LOCKER: stamp the week (so this is once) and tell the league.
+    // Stamped even when the lineup was already the best — the set happened.
+    for (const t of tacoSet) {
+      const { error: e1 } = await db().from('league_membership').update({ taco_set_week: week })
+        .eq('league_id', leagueId).eq('sleeper_roster_id', t.rosterId);
+      if (e1) throw e1;
+      const { error: e2 } = await db().from('league_message').insert({
+        league_id: leagueId, author_id: null, kind: 'txn', body: tacoLine(t.team, week),
+        txn: { kind: 'taco_lineup', roster_id: t.rosterId, week }, mentions: [],
+      });
+      if (e2) throw e2;
     }
   }
   } finally {

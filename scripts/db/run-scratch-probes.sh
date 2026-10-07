@@ -162,6 +162,7 @@ $RUN -f scripts/db/ir-after-draft-probes.sql | grep -E "PROBE FAIL|ALL IR-AFTER-
 $RUN -f scripts/db/seat-cap-probes.sql | grep -E "PROBE FAIL|ALL SEAT-CAP PROBES" || { echo "SEAT-CAP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/golf-mode-probes.sql | grep -E "PROBE FAIL|ALL GOLF-MODE PROBES" || { echo "GOLF-MODE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/bullseye-probes.sql | grep -E "PROBE FAIL|ALL BULLSEYE PROBES" || { echo "BULLSEYE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/taco-locker-probes.sql | grep -E "PROBE FAIL|ALL TACO-LOCKER PROBES" || { echo "TACO-LOCKER PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/rename-spot-probes.sql | grep -E "PROBE FAIL|ALL RENAME-SPOT PROBES" || { echo "RENAME-SPOT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/market-probes.sql | grep -E "PROBE FAIL|ALL MARKET PROBES" || { echo "MARKET PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/manual-sync-probes.sql | grep -E "PROBE FAIL|ALL MANUAL-SYNC PROBES" || { echo "MANUAL-SYNC PROBES FAILED"; exit 1; }

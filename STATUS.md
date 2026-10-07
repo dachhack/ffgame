@@ -22,6 +22,45 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.647.0 — the Taco Locker
+
+> - A commissioner can put a team in the 🌮 Taco Locker: it can't trade or drop players, and every Thursday at 9 AM Eastern its best lineup is set for it the way an AI team's is — a player whose game has started stays put. The league hears when a team goes in, comes out, and each Thursday the lineup is set.
+
+Founder: "Let's add a Taco Locker feature. A commish can lock a team from
+making trades or dropping players. We also leverage the AI team rules to
+auto-set the best lineup for that team on Thursday AM est." Spec:
+`docs/taco-locker.md`.
+
+- **The lock already existed** — 0320's per-team lock
+  (`league_membership.wire_locked`), asked by every drop, add, claim and
+  trade through `team_lock_reason` / `wire_block_reason` /
+  `_trade_lock_reason`. It had a plain "lock a team" button and no name.
+- **0451**: `team_lock_reason` reads "🌮 Taco Locker: the commissioner has
+  locked this team's trades and drops" (the old words inside it, so every
+  refusal that matched 'locked this team' still does); `commish_lock_team`
+  posts a house card by team name when the state changes (in / out), never
+  on a repeat tap; `league_membership.taco_set_week` — the last board week
+  the worker set the lineup.
+- **The clock** (`server/src/taco.js`, pure): `tacoDue(now, week, setWeek)`
+  — from Thursday 09:00 ET through Monday, once per board week (the stamp),
+  never Tuesday or Wednesday (waivers run Wednesday; a lineup set before
+  them is stale). A worker that was down at nine sets it on its first tick
+  back.
+- **The set** (`server/src/lock.js`): `autoSlotClassicLineups` reads
+  `wire_locked` / `taco_set_week` / `team_name` with the seats; a locked
+  human seat that is due takes the AGENT branch for that tick (aiValueOf,
+  every unlocked spot re-planned, kicked-off players standing, written
+  under the manager's own uid — the board reads them as theirs), then the
+  week is stamped and the card posted (`tacoLine`). Classic leagues (where
+  the worker sets lineups); a drip league's locked team keeps the lock.
+- **Both desks**: the LOCKS panel's team row is now 🌮 TACO LOCKER with the
+  rule spelled out; 🌮 on a team inside; the league-wide wire lock stays.
+- Pinned: `scripts/db/taco-locker-probes.sql` (in the scratch runner) and
+  `server/test/taco.mjs`; commish-desk and drop-lock suites green.
+- Not confirmed against a live league from here: the Thursday set wants one
+  Thursday morning with a locked team — the card in the league chat and
+  the seat's `taco_set_week` are the evidence.
+
 ### v0.646.1 — the bullseye headline is your distance from the target
 
 > - On a bullseye matchup each team's big number is now how far it sits from its target, signed (+3.2 over, −12.5 under), with the actual total smaller in parentheses beneath it and 🎯 Target under that.

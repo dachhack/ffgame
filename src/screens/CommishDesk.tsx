@@ -133,14 +133,17 @@ export function LocksPanel({ leagueId, members }: { leagueId: string; members: A
         </button>
         {note(msg)}
       </div>
-      <div style={{ ...small, marginTop: 6 }}>The league-wide lock shuts every add, drop and claim, including the worker's. Your own force-moves on the ROSTERS tab still work. A locked team also cannot offer or accept a trade.</div>
+      <div style={{ ...small, marginTop: 6 }}>The league-wide lock shuts every add, drop and claim, including the worker's. Your own force-moves on the ROSTERS tab still work.</div>
+      {/* THE TACO LOCKER (v0.647.0): 0320's per-team lock, named. */}
+      <div style={{ ...subhead, marginTop: 12 }}>🌮 TACO LOCKER</div>
+      <div style={{ ...small, marginTop: 4 }}>A team in the Taco Locker can&apos;t trade or drop players (adds and claims that need a drop are refused too), and every Thursday at 9 AM Eastern its best lineup is set for it, the way an AI team&apos;s is — a player whose game has started stays put. The league hears when a team goes in or comes out.</div>
       <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
         {members.map((m) => {
           const on = locked.includes(m.roster_id);
           return (
             <button key={m.roster_id} onClick={() => void toggleTeam(m.roster_id)} disabled={busy} className="mono"
-              style={{ ...btn(on), fontSize: 11.5, padding: '4px 9px' }} title={on ? 'Unlock this team' : 'Lock this team'}>
-              {on ? '🔒 ' : ''}{m.team ?? `Roster ${m.roster_id}`}
+              style={{ ...btn(on), fontSize: 11.5, padding: '4px 9px' }} title={on ? 'Let this team out of the Taco Locker' : 'Put this team in the Taco Locker'}>
+              {on ? '🌮 ' : ''}{m.team ?? `Roster ${m.roster_id}`}
             </button>
           );
         })}
