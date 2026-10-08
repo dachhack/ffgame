@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.654.2 — Shotgun Wedding on the front page
+
+> - The front page's Competitive modes card gains a Shotgun Wedding chip, with its line and a screen of the wedding card.
+
+Founder: "Oh and add it to the images and chips on the site."
+
+- `leagueTagline.ts`: `FORMAT_NOTES` gains Shotgun Wedding after Bullseye
+  (💍, "a fair, like-for-like 2-for-2 … unless it's called off or they agree
+  on new vows"), so the demo page's strip lists it too; `LANDING_FEATURES`
+  puts the chip fifth on Competitive modes. `check:tagline` pins the order
+  and the line.
+- `Landing.tsx` `FUNNEL_SHOTS`: `mode-shotgun.png`, chip Shotgun Wedding.
+- The screen: the real web `ShotgunWeddingCard`, rendered at 390 px (2×) in
+  the default theme against the fixture league's fictional teams, with
+  players from the v0.654.1 Kickoff League preview — your wedding with new
+  vows on the table and all three buttons, then two of the league's others.
+  Mark-free by construction (no logos or headshots on the card). The README's
+  shooting list has the row.
+
 ### v0.654.1 — Shotgun Wedding picks real trades
 
 > - Shotgun Wedding's CPU now trades like for like: the same positions each way, each player matched to one within about a point a game.
