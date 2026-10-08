@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SportSettings } from './SportSettings';
 import type { GameModeInfo } from '@drip/core/data/liveApi';
+import { VETO_RULES, DEADLINE_RULES, type VetoRule, type DeadlineRule } from '@drip/core/data/shotgunWedding';
 import { SportLineup } from './SportLineup';
 import { draftState } from '@drip/core/data/liveApi';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
@@ -449,6 +450,8 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
   // league can't have it (keeper, dynasty, guillotine, vampire).
   const [shotgun, setShotgun] = useState<boolean | null>(null);
   const [shotgunWhy, setShotgunWhy] = useState<string | null>(null);
+  const [shotgunVeto, setShotgunVeto] = useState<VetoRule>('winner');
+  const [shotgunDue, setShotgunDue] = useState<DeadlineRule>('tue20');
   const [bullDeal, setBullDeal] = useState<'shared' | 'team'>('shared');
   // A SPORT LEAGUE (0426/0428): its lineup is the sport's standard shape and
   // its scoring page is SportSettings, not the football catalog.
@@ -470,14 +473,18 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       else setNote(r.error ?? 'failed');
     } finally { setBusy(false); }
   };
-  const saveShotgun = async (on: boolean) => {
+  const saveShotgun = async (on: boolean, veto?: VetoRule, due?: DeadlineRule) => {
     if (busy) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueShotgun(leagueId, on);
+      const r = await setLeagueShotgun(leagueId, on, veto ?? null, due ?? null);
       if (r.ok) {
         setShotgun(r.shotgun_wedding === true);
-        setNote(on ? '✓ shotgun wedding on — the first 2-for-2s land Tuesday morning'
+        if (r.veto) setShotgunVeto(r.veto);
+        if (r.deadline) setShotgunDue(r.deadline);
+        setNote(veto ? `✓ ${VETO_RULES.find((x) => x.id === veto)?.info ?? 'saved'} From next Tuesday.`
+          : due ? `✓ due ${DEADLINE_RULES.find((x) => x.id === due)?.label.toLowerCase() ?? due} ET, from next Tuesday`
+          : on ? '✓ shotgun wedding on — the first 2-for-2s land Tuesday morning'
           : `✓ shotgun wedding off${r.annulled ? ` — ${r.annulled} pending wedding${r.annulled === 1 ? '' : 's'} annulled` : ''}`);
       } else setNote(friendlyError(r.error ?? 'that didn’t work'));
     } catch (x) { setNote(friendlyError(x)); }
@@ -628,7 +635,10 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
     setBpDraft(Object.fromEntries(Object.entries(bp).map(([pos, row]) => [pos, Object.fromEntries(Object.entries(row ?? {}).map(([k, v]) => [k, String(v)]))])));
   };
   useEffect(() => {
-    shotgunState(leagueId).then((r) => { if (r.ok) { setShotgun(r.on === true); setShotgunWhy(r.why_not ?? null); } }).catch(() => {});
+    shotgunState(leagueId).then((r) => { if (r.ok) {
+      setShotgun(r.on === true); setShotgunWhy(r.why_not ?? null);
+      setShotgunVeto(r.veto_rule ?? 'winner'); setShotgunDue(r.deadline_rule ?? 'tue20');
+    } }).catch(() => {});
     leagueGameMode(leagueId).then((r) => { if (r.ok) { setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); setBullDeal(r.bullseye_deal === 'team' ? 'team' : 'shared'); scInit(r.scoring ?? {}); setSport(r.sport ?? 'nfl'); setSportBlock(r.sport_settings ?? null); setGmInfo(r);
       const legacy = classicSlots(r.roster && Object.keys(r.roster).length ? r.roster : null);
       setSpots(r.slots?.length
@@ -827,7 +837,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div style={{ flex: '1 1 220px', minWidth: 0 }}>
             <div className="mono" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>💍 SHOTGUN WEDDING</div>
             <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3, lineHeight: 1.5 }}>
-              Every Tuesday morning the CPU hands each matchup&apos;s two teams a fair 2-for-2 trade. It goes through at 8 PM ET unless the winner calls it off, or the two agree on new vows instead. The four players can&apos;t be dropped, traded or moved to IR until then. Redraft head-to-head leagues only; stops at the trade deadline.
+              Every Tuesday morning the CPU hands each matchup&apos;s two teams a fair 2-for-2 trade. It goes through at the deadline unless the team holding the veto calls it off, or the two agree on new vows instead. The four players can&apos;t be dropped, traded or moved to IR until then. Redraft head-to-head leagues only; stops at the trade deadline.
               {shotgunWhy && !shotgun && <div style={{ color: 'var(--warn)', marginTop: 4 }}>{shotgunWhy}.</div>}
             </div>
           </div>
@@ -836,6 +846,30 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             <button onClick={() => void saveShotgun(true)} disabled={busy || shotgun === null || (!!shotgunWhy && !shotgun)} className="mono" style={pill(shotgun === true)}>💍 ON</button>
           </div>
         </div>
+        {shotgun && (<>
+          {/* 0454's house rules: who may call it off, and when it is due. Read
+              when a wedding is filed, so a change starts next Tuesday. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+            <div className="mono" style={{ flex: '1 1 220px', minWidth: 0, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5 }}>
+              <b>Who can call it off</b>: {VETO_RULES.find((x) => x.id === shotgunVeto)?.info}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              {VETO_RULES.map((x) => (
+                <button key={x.id} onClick={() => void saveShotgun(true, x.id)} disabled={busy} className="mono" style={pill(shotgunVeto === x.id)}>{x.label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+            <div className="mono" style={{ flex: '1 1 220px', minWidth: 0, fontSize: 11, color: 'var(--faint)', lineHeight: 1.5 }}>
+              <b>Deadline</b>: {DEADLINE_RULES.find((x) => x.id === shotgunDue)?.info}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              {DEADLINE_RULES.map((x) => (
+                <button key={x.id} onClick={() => void saveShotgun(true, undefined, x.id)} disabled={busy} className="mono" style={pill(shotgunDue === x.id)}>{x.label}</button>
+              ))}
+            </div>
+          </div>
+        </>)}
         <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 8, lineHeight: 1.5 }}>
           Receptions, bonuses and every other value live under ⚖ SCORING — start from a preset there, then tune anything.
         </div>

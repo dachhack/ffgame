@@ -22,6 +22,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.654.0 — Shotgun Wedding: the house rules
+
+> - Commissioners now choose who can call off a Shotgun Wedding: the team that won, the team that lost, or nobody.
+> - They also choose the deadline: Tuesday 8 PM, Wednesday 8 PM or Thursday noon Eastern. Changes start the following Tuesday.
+
+Founder: "I'm debating whether the winning or losing team should get the
+right to decline. Or there should be a right to decline at all? Maybe make
+it a commish choice along with adjusting the deadline? A later deadline runs
+into waivers, but it still technically possible" — then "Let's build those
+options."
+
+- **SQL 0454.** `settings_json.shotgun_veto` (winner | loser | none) and
+  `shotgun_deadline` (tue20 | wed20 | thu12), set through
+  `set_league_shotgun(league, on, veto, deadline)` (the two-argument form is
+  replaced). Read at filing: the row keeps `veto_seat` and `veto_rule`, so
+  the card and `shotgun_decline` follow the rule the wedding was announced
+  under. The deadline is pulled forward to an hour before the next week's
+  first kickoff if it would land later. A rule change is announced in chat.
+- **Waivers.** A later deadline runs past the Wednesday run; a claim that
+  would drop one of the four is refused there by `drop_lock_reason`, as any
+  locked drop. The "on" card warns about it.
+- **Screens.** Two pill rows under 💍 SHOTGUN WEDDING in commissioner
+  settings on both hosts; the card's words follow the row's veto (core
+  `weddingStatusLine`).
+- **Preview.** `planLeagueWeddings` is shared by the worker and a new
+  read-only ops mode, `shotgun-preview`; `ops/run/035` runs it for the
+  Kickoff League. The worker now installs the live projection level itself.
+
 ### v0.653.0 — Shotgun Wedding
 
 > - New commissioner setting for redraft head-to-head leagues: 💍 Shotgun Wedding. Every Tuesday morning the CPU hands each matchup's two teams a fair 2-for-2 trade.

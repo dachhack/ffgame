@@ -1,6 +1,6 @@
 # Shotgun Wedding — a forced, fair trade between every week's opponents
 
-> **Status: BUILT, v0.653.0** (migration `0453_shotgun_wedding.sql`,
+> **Status: BUILT, v0.653.0; house rules v0.654.0** (migrations `0453_shotgun_wedding.sql`, `0454_shotgun_wedding_house_rules.sql`,
 > `server/src/shotgun.js`, core `engine/shotgunWedding.ts`). Founder: "a
 > fantasy mode like vampire where after each weekly matchup early AM Tuesday
 > the CPU creates a fair, 4 total player trade from opposing teams. The trade
@@ -18,6 +18,24 @@
 | **Tuesday 5 AM** | The worker files one wedding per matchup: a 2-for-2 between the two opponents. A chat card names all four players, the deadline and who may call it off. Any open trade offer naming one of the four is cancelled. |
 | Tuesday, all day | The four players are locked. The winner may **call it off**. Either team may **propose new vows**, and if the other says yes, that trade happens at once and replaces the original. |
 | **Tuesday 8 PM** | Whatever is still pending goes through. If a player moved anyway (a commissioner's force-move), it fails cleanly and nobody trades. |
+
+**House rules (v0.654.0, migration 0454).** The commissioner picks two things,
+read when each wedding is filed, so a change starts the following Tuesday:
+
+| Setting | Options | Default |
+|---|---|---|
+| Who can call it off (`shotgun_veto`) | **Winner** (winning earns the veto) · **Loser** (a mercy rule) · **Nobody** (only new vows both sides agree to change it) | Winner |
+| Deadline (`shotgun_deadline`) | **Tue 8 PM ET** · **Wed 8 PM ET** · **Thu noon ET** | Tue 8 PM |
+
+- A deadline after the Wednesday waiver run works: a claim that would drop
+  one of the four is refused at the run, like any locked drop. The "on" card
+  says so when a later deadline is set.
+- Whatever the setting, the deadline never lands inside the hour before the
+  next week's first kickoff (it is pulled forward to that hour).
+- The wedding row keeps its own `veto_seat` and `veto_rule`, so the card and
+  the decline follow the rule it was announced under.
+- `ops/run` mode `shotgun-preview` prints what the CPU would file for a
+  league, read-only, seats by number.
 
 - **A tie has no winner**, so nobody can call it off. The two can still agree on new vows.
 - **Golf leagues**: the winner is the low score (`golf_beats`), the same rule the standings use. Bullseye leagues read the same way.

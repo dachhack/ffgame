@@ -2154,13 +2154,18 @@ export const setLeagueBullseye = (leagueId: string, variant: 'slots' | 'total' |
 /** SHOTGUN WEDDING (0453, docs/shotgun-wedding.md): the commissioner's switch
  *  — classic, redraft, head-to-head only; turning it off annuls the week's
  *  pending weddings. */
-export const setLeagueShotgun = (leagueId: string, on: boolean) =>
-  tracked(rpc<{ ok: boolean; error?: string; shotgun_wedding?: boolean; annulled?: number }>('set_league_shotgun',
-    { p_league_id: leagueId, p_on: on }), Ev.commishAction, { tool: 'shotgun', on });
+export const setLeagueShotgun = (leagueId: string, on: boolean,
+                                 veto?: import('./shotgunWedding').VetoRule | null,
+                                 deadline?: import('./shotgunWedding').DeadlineRule | null) =>
+  tracked(rpc<{ ok: boolean; error?: string; shotgun_wedding?: boolean; annulled?: number;
+                veto?: import('./shotgunWedding').VetoRule; deadline?: import('./shotgunWedding').DeadlineRule }>('set_league_shotgun',
+    { p_league_id: leagueId, p_on: on, p_veto: veto ?? null, p_deadline: deadline ?? null }),
+    Ev.commishAction, { tool: 'shotgun', on, veto: veto ?? '', deadline: deadline ?? '' });
 /** The latest week's weddings (yours first), whether the mode is on, and
  *  whether this league may have it (`why_not` when not). */
 export const shotgunState = (leagueId: string, week?: number | null) =>
   rpc<{ ok: boolean; error?: string; on?: boolean; eligible?: boolean; why_not?: string | null; week?: number | null;
+        veto_rule?: import('./shotgunWedding').VetoRule; deadline_rule?: import('./shotgunWedding').DeadlineRule;
         weddings?: import('./shotgunWedding').Wedding[] }>('shotgun_state', { p_league_id: leagueId, p_week: week ?? null });
 /** The winner calls it off. */
 export const shotgunDecline = (weddingId: string) =>
