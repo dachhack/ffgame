@@ -47,6 +47,7 @@ import { Overlay } from '../ui/Overlay';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 
+import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
 import { TradeCenter } from '../ui/TradeCenter';
 import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -1339,6 +1340,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
       )}
 
       {/* trades — propose/answer for managers, rulings inline for the commish */}
+      {tab === 'trades' && <ShotgunWeddingCard leagueId={leagueId} onChanged={() => void refresh()} />}
       {tab === 'trades' && (
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}

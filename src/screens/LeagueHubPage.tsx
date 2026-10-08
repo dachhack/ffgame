@@ -23,6 +23,7 @@ import {
   leagueWeekScoreboard, leagueStandings, leagueWriteApi,
   type Enrollment, type LiveMatchup, type TeamInfo, type VampireState, type StandingsRow,
 } from '@drip/core/data/liveApi';
+import { ShotgunWeddingCard } from './ShotgunWeddingCard';
 import { VampirePanel } from './VampirePanel';
 import { leagueGameMode as gameModeRpc, bullseyeWeekBoard, bullseyeGlobalBoard, defaultOpenWeek as openWeekRpc } from '@drip/core/data/liveApi';
 import { GuillotinePanel } from './GuillotinePanel';
@@ -550,6 +551,9 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           Matchups, rankings, activity — the app's twin, and Sleeper's
           convention. What was here was the menu below, which meant the hub
           opened on a list of doors rather than on the league. */}
+      {/* 💍 Tuesday's weddings sit above the matchups (v0.653.0): the one
+          thing on the page with a deadline today. Renders nothing elsewhere. */}
+      {native && <div style={{ marginTop: 14 }}><ShotgunWeddingCard leagueId={e.league_id} /></div>}
       <HubMatchups leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} wide={wide} />
       <HubStandings leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} onFull={onResults} />
       <HubDartsBoard leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} />

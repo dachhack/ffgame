@@ -2151,6 +2151,26 @@ export const setLeagueBullseye = (leagueId: string, variant: 'slots' | 'total' |
   tracked(rpc<{ ok: boolean; error?: string; bullseye?: 'slots' | 'total' | null; radius?: number | null; deal?: 'shared' | 'team' | null }>('set_league_bullseye',
     { p_league_id: leagueId, p_variant: variant, p_radius: radius ?? null, p_deal: deal ?? null }),
     Ev.commishAction, { tool: 'bullseye', variant: variant ?? 'off' });
+/** SHOTGUN WEDDING (0453, docs/shotgun-wedding.md): the commissioner's switch
+ *  — classic, redraft, head-to-head only; turning it off annuls the week's
+ *  pending weddings. */
+export const setLeagueShotgun = (leagueId: string, on: boolean) =>
+  tracked(rpc<{ ok: boolean; error?: string; shotgun_wedding?: boolean; annulled?: number }>('set_league_shotgun',
+    { p_league_id: leagueId, p_on: on }), Ev.commishAction, { tool: 'shotgun', on });
+/** The latest week's weddings (yours first), whether the mode is on, and
+ *  whether this league may have it (`why_not` when not). */
+export const shotgunState = (leagueId: string, week?: number | null) =>
+  rpc<{ ok: boolean; error?: string; on?: boolean; eligible?: boolean; why_not?: string | null; week?: number | null;
+        weddings?: import('./shotgunWedding').Wedding[] }>('shotgun_state', { p_league_id: leagueId, p_week: week ?? null });
+/** The winner calls it off. */
+export const shotgunDecline = (weddingId: string) =>
+  rpc<{ ok: boolean; error?: string }>('shotgun_decline', { p_wedding_id: weddingId });
+/** New vows: what each side would send instead (one to three each way). */
+export const shotgunCounter = (weddingId: string, homeGives: string[], awayGives: string[]) =>
+  rpc<{ ok: boolean; error?: string }>('shotgun_counter', { p_wedding_id: weddingId, p_home_gives: homeGives, p_away_gives: awayGives });
+/** Say yes to the other side's new vows — the trade happens at once. */
+export const shotgunAcceptCounter = (weddingId: string) =>
+  rpc<{ ok: boolean; error?: string; trade_id?: string }>('shotgun_accept_counter', { p_wedding_id: weddingId });
 /** The week's published card: [{slot, target}] with the TOTAL row last;
  *  empty until the worker deals it (the boards then deal the same card from
  *  the same seed — engine dealBullseyeCard). */

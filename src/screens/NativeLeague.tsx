@@ -28,6 +28,7 @@ import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { installSportMarketFor } from '@drip/core/sports/market';
 import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
 import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
+import { ShotgunWeddingCard } from './ShotgunWeddingCard';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
@@ -4069,6 +4070,7 @@ export function TeamManage({ leagueId, onDraft, focus }: {
       </div>{/* /wire + order row */}
       </>)}
 
+      {tab === 'trades' && <ShotgunWeddingCard leagueId={leagueId} onChanged={refresh} />}
       {tab === 'trades' && (
         <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order} initialPartner={tradeSeed}
           rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}

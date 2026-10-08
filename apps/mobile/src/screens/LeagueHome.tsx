@@ -4,6 +4,7 @@
 // commissioner's tools are each one tile away. The tab strip stays — the hub
 // is the 🏠 LEAGUE tab, and the strip is still the fast lane between rooms.
 import { Ev, track } from '@drip/core/analytics';
+import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, leagueWeekScoreboard, defaultOpenWeek, leagueWriteApi, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
@@ -228,6 +229,8 @@ export function LeagueHome(props: {
       {/* ── RANKINGS ──────────────────────────────────────────────────────
           The table, inline. It used to be a tile that opened a sheet, which
           is one tap to learn where you are in your own league. */}
+      {/* 💍 Tuesday's weddings (v0.653.0) — renders nothing elsewhere. */}
+      {native && <ShotgunWeddingCard leagueId={leagueId} />}
       <Section title="Standings" />
       <GuillotineCard leagueId={leagueId} myRoster={rosterId} />
       <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />

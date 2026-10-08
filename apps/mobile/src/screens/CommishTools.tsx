@@ -24,7 +24,7 @@ import {
   leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, type LeagueSeenRow,
   leagueGameMode, type GameModeInfo, setLeagueGameMode, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter,
   setLeagueGolf,
-  setLeagueBullseye,
+  setLeagueBullseye, setLeagueShotgun, shotgunState,
   setTaxiRules, setIrRules, setOutRules,
   leagueKdst, setKdstMode, type LeagueKdst, type KdstMode,
   leagueFaabWallets, commishGrantFaab, rosterRules, type FaabWallets, type WaiverMode,
@@ -1861,6 +1861,9 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   const [golf, setGolf] = useState<boolean | null>(null);
   // BULLSEYE (v0.643.0): undefined until the mode load lands.
   const [bullseye, setBullseye] = useState<'slots' | 'total' | null | undefined>(undefined);
+  // SHOTGUN WEDDING (v0.653.0, docs/shotgun-wedding.md).
+  const [shotgun, setShotgun] = useState<boolean | null>(null);
+  const [shotgunWhy, setShotgunWhy] = useState<string | null>(null);
   const [bullDeal, setBullDeal] = useState<'shared' | 'team'>('shared');
   // A DAILY SPORT (v0.625.0): classic only, its own lineup builder, no golf.
   const [sport, setSport] = useState<Sport>('nfl');
@@ -1873,6 +1876,18 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       const r = await setLeagueGolf(leagueId, on);
       if (r.ok) { commit(); setGolf(r.golf === true); setNote(on ? '✓ golf mode on — lowest wins' : '✓ golf mode off'); }
       else { warn(); setNote(r.error ?? 'failed'); }
+    } finally { setBusy(false); }
+  };
+  const saveShotgun = async (on: boolean) => {
+    if (busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await setLeagueShotgun(leagueId, on);
+      if (r.ok) {
+        commit(); setShotgun(r.shotgun_wedding === true);
+        setNote(on ? '✓ shotgun wedding on — the first 2-for-2s land Tuesday morning'
+          : `✓ shotgun wedding off${r.annulled ? ` — ${r.annulled} pending annulled` : ''}`);
+      } else { warn(); setNote(r.error ?? 'failed'); }
     } finally { setBusy(false); }
   };
   // BULLSEYE (v0.643.0, docs/bullseye.md): slots, total or off.
@@ -2050,6 +2065,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   };
   useEffect(() => {
     draftStateOf(leagueId).then((d) => setDrafted(!!d.status && d.status !== 'pending')).catch(() => {});
+    shotgunState(leagueId).then((r) => { if (r.ok) { setShotgun(r.on === true); setShotgunWhy(r.why_not ?? null); } }).catch(() => {});
     leagueGameMode(leagueId).then((r) => { if (r.ok) {
       setSport(r.sport ?? 'nfl'); setGmInfo(r);
       setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); setBullDeal(r.bullseye_deal === 'team' ? 'team' : 'shared'); scInit(r.scoring ?? {});
@@ -2270,6 +2286,19 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               </View>
             </View>
           )}
+        </View>
+      )}
+      {/* SHOTGUN WEDDING (v0.653.0): Tuesday's forced 2-for-2s. Redraft
+          head-to-head classic only — the reason shows when a league can't. */}
+      {mode === 'classic' && sport === 'nfl' && (
+        <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, gap: 8 }}>
+          <LabelInfo label="💍 SHOTGUN WEDDING"
+            info={'Every Tuesday morning the CPU hands each matchup’s two teams a fair 2-for-2 trade.\n\nIt goes through at 8 PM ET unless the team that won calls it off, or the two agree on new vows instead. The four players can’t be dropped, traded or moved to IR until then.\n\nRedraft head-to-head leagues only. Weddings stop at the trade deadline.'} />
+          {!!shotgunWhy && !shotgun && <Mono size={10} tone="warn">{shotgunWhy}.</Mono>}
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <Pill on={shotgun === false} label="OFF" onPress={() => void saveShotgun(false)} />
+            {(!shotgunWhy || shotgun) && <Pill on={shotgun === true} label="💍 ON" onPress={() => void saveShotgun(true)} />}
+          </View>
         </View>
       )}
       {/* K/DST FILL (v0.225.0) — a setup decision about what the league

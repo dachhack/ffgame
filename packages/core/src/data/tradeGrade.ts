@@ -80,7 +80,7 @@ export interface GradeResult {
 /** Replacement level per position: the projection of the best player who
  *  would still be unrostered once every team has filled its starting spots.
  *  Falls back to a flat league-average when the pool is too thin to say. */
-function replacementByPos(
+export function replacementByPos(
   pool: GradePlayer[], teams: number, slots: ClassicSlotDef[],
 ): Map<string, number> {
   const out = new Map<string, number>();
@@ -207,6 +207,11 @@ function pickValue(pick: GradePick, ctx: PickCtx): number {
   return Math.round(ctx.replacementStarter * share * 10) / 10;
 }
 
+/** "Even" is a BAND, not a point — see gradeTrade. Exported so Shotgun
+ *  Wedding (engine/shotgunWedding) calls a trade fair by the same rule the
+ *  trade grade prints "Close to even" under. */
+export const evenBand = (a: number, b: number) => Math.max(12, (a + b) * 0.12);
+
 export function gradeTrade(opts: {
   /** What the seat being graded SENDS. */
   send: GradeSide;
@@ -275,7 +280,7 @@ export function gradeTrade(opts: {
   // a few points, so a grade that flips from "wins" to "loses" over three
   // points of a 300-point season is pretending to a precision it does not
   // have. Twelve season points is about two thirds of a point a week.
-  const band = Math.max(12, (out + inV) * 0.12);
+  const band = evenBand(out, inV);
   const verdict: GradeResult['verdict'] = Math.abs(delta) <= band ? 'even' : delta > 0 ? 'for' : 'against';
   const money = [
     faab ? `${faab > 0 ? '+' : ''}$${faab} FAAB` : '',
