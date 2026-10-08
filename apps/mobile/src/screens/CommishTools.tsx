@@ -69,6 +69,7 @@ import { useTheme, MONO, fs } from '../theme.native';
 import { DOW_LABELS, slotLabel, launchRulesText } from '@drip/core/data/devyShares';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
+import { VETO_RULES, DEADLINE_RULES, type VetoRule, type DeadlineRule } from '@drip/core/data/shotgunWedding';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { InfoChip, LabelInfo } from '../ui/InfoChip';
@@ -1864,6 +1865,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   // SHOTGUN WEDDING (v0.653.0, docs/shotgun-wedding.md).
   const [shotgun, setShotgun] = useState<boolean | null>(null);
   const [shotgunWhy, setShotgunWhy] = useState<string | null>(null);
+  const [shotgunVeto, setShotgunVeto] = useState<VetoRule>('winner');
+  const [shotgunDue, setShotgunDue] = useState<DeadlineRule>('tue20');
   const [bullDeal, setBullDeal] = useState<'shared' | 'team'>('shared');
   // A DAILY SPORT (v0.625.0): classic only, its own lineup builder, no golf.
   const [sport, setSport] = useState<Sport>('nfl');
@@ -1878,14 +1881,18 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       else { warn(); setNote(r.error ?? 'failed'); }
     } finally { setBusy(false); }
   };
-  const saveShotgun = async (on: boolean) => {
+  const saveShotgun = async (on: boolean, veto?: VetoRule, due?: DeadlineRule) => {
     if (busy) return;
     setBusy(true); setNote(null);
     try {
-      const r = await setLeagueShotgun(leagueId, on);
+      const r = await setLeagueShotgun(leagueId, on, veto ?? null, due ?? null);
       if (r.ok) {
         commit(); setShotgun(r.shotgun_wedding === true);
-        setNote(on ? '✓ shotgun wedding on — the first 2-for-2s land Tuesday morning'
+        if (r.veto) setShotgunVeto(r.veto);
+        if (r.deadline) setShotgunDue(r.deadline);
+        setNote(veto ? `✓ ${VETO_RULES.find((x) => x.id === veto)?.info ?? 'saved'} From next Tuesday.`
+          : due ? `✓ due ${DEADLINE_RULES.find((x) => x.id === due)?.label.toLowerCase() ?? due} ET, from next Tuesday`
+          : on ? '✓ shotgun wedding on — the first 2-for-2s land Tuesday morning'
           : `✓ shotgun wedding off${r.annulled ? ` — ${r.annulled} pending annulled` : ''}`);
       } else { warn(); setNote(r.error ?? 'failed'); }
     } finally { setBusy(false); }
@@ -2065,7 +2072,10 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
   };
   useEffect(() => {
     draftStateOf(leagueId).then((d) => setDrafted(!!d.status && d.status !== 'pending')).catch(() => {});
-    shotgunState(leagueId).then((r) => { if (r.ok) { setShotgun(r.on === true); setShotgunWhy(r.why_not ?? null); } }).catch(() => {});
+    shotgunState(leagueId).then((r) => { if (r.ok) {
+      setShotgun(r.on === true); setShotgunWhy(r.why_not ?? null);
+      setShotgunVeto(r.veto_rule ?? 'winner'); setShotgunDue(r.deadline_rule ?? 'tue20');
+    } }).catch(() => {});
     leagueGameMode(leagueId).then((r) => { if (r.ok) {
       setSport(r.sport ?? 'nfl'); setGmInfo(r);
       setMode(r.mode ?? 'drip'); setPpr(Number(r.ppr ?? 1)); setClassicOk(r.classic_ok === true); setGolf(r.golf === true); setBullseye(r.bullseye ?? null); setBullDeal(r.bullseye_deal === 'team' ? 'team' : 'shared'); scInit(r.scoring ?? {});
@@ -2293,12 +2303,23 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
       {mode === 'classic' && sport === 'nfl' && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, gap: 8 }}>
           <LabelInfo label="💍 SHOTGUN WEDDING"
-            info={'Every Tuesday morning the CPU hands each matchup’s two teams a fair 2-for-2 trade.\n\nIt goes through at 8 PM ET unless the team that won calls it off, or the two agree on new vows instead. The four players can’t be dropped, traded or moved to IR until then.\n\nRedraft head-to-head leagues only. Weddings stop at the trade deadline.'} />
+            info={'Every Tuesday morning the CPU hands each matchup’s two teams a fair 2-for-2 trade.\n\nIt goes through at the deadline unless the team holding the veto calls it off, or the two agree on new vows instead. The commissioner picks who holds the veto (winner, loser or nobody) and the deadline (Tue 8 PM, Wed 8 PM or Thu noon ET). The four players can’t be dropped, traded or moved to IR until then.\n\nRedraft head-to-head leagues only. Weddings stop at the trade deadline.'} />
           {!!shotgunWhy && !shotgun && <Mono size={10} tone="warn">{shotgunWhy}.</Mono>}
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
             <Pill on={shotgun === false} label="OFF" onPress={() => void saveShotgun(false)} />
             {(!shotgunWhy || shotgun) && <Pill on={shotgun === true} label="💍 ON" onPress={() => void saveShotgun(true)} />}
           </View>
+          {!!shotgun && (<>
+            {/* 0454's house rules — each on its own row so nothing squeezes. */}
+            <LabelInfo label="WHO CAN CALL IT OFF" info={VETO_RULES.map((x) => `${x.label}: ${x.info}`).join('\n\n') + '\n\nA change starts next Tuesday.'} />
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              {VETO_RULES.map((x) => <Pill key={x.id} on={shotgunVeto === x.id} label={x.label} onPress={() => void saveShotgun(true, x.id)} />)}
+            </View>
+            <LabelInfo label="DEADLINE" info={DEADLINE_RULES.map((x) => `${x.label}: ${x.info}`).join('\n\n') + '\n\nA change starts next Tuesday.'} />
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              {DEADLINE_RULES.map((x) => <Pill key={x.id} on={shotgunDue === x.id} label={x.label} onPress={() => void saveShotgun(true, undefined, x.id)} />)}
+            </View>
+          </>)}
         </View>
       )}
       {/* K/DST FILL (v0.225.0) — a setup decision about what the league

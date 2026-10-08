@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import { weddingPlan } from '../packages/core/src/engine/shotgunWedding.ts';
 import { evenBand } from '../packages/core/src/data/tradeGrade.ts';
 import { leagueSlotDefs } from '../packages/core/src/engine/classic.ts';
+import { weddingStatusLine, weddingDeadlineLabel, VETO_RULES, DEADLINE_RULES } from '../packages/core/src/data/shotgunWedding.ts';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -72,10 +73,37 @@ const away = [P('a-qb', 'QB', 45), P('a-rb1', 'RB', 80), P('a-rb2', 'RB', 50), P
   const sql = readFileSync(new URL('../supabase/migrations/0453_shotgun_wedding.sql', import.meta.url), 'utf8');
   ok('the worker files through shotgun_propose', /rpc\('shotgun_propose'/.test(js));
   ok('the worker carries out the deadline through shotgun_sweep', /rpc\('shotgun_sweep'/.test(js));
-  ok('the worker seeds by league, week and matchup', /seed: `\$\{lg\.id\}\|\$\{week\}\|/.test(js));
+  ok('the worker seeds by league, week and matchup', /seed: `\$\{lg\.id\}\|\$\{(week|wk)\}\|/.test(js));
   ok('the SQL deadline is 8 PM Eastern', /time '20:00'\) at time zone 'America\/New_York'/.test(sql));
   ok('the SQL asks golf_beats who won, so a golf league\'s low score holds the veto', /golf_beats\(p_league_id, mu\.home_final, mu\.away_final\)/.test(sql));
   ok('drop_lock_reason asks the wedding first', /coalesce\(_wedding_lock\(p_league_id, p_slug\), case/.test(sql));
+}
+
+// ── THE HOUSE RULES' WORDS (0454) ─────────────────────────────────────────
+{
+  const base = {
+    id: 'w', week: 6, status: 'pending', deadline: '2026-10-14T00:00:00Z', note: null,
+    home: { roster: 1, team: 'Home FC', score: 120, gives: [] }, away: { roster: 2, team: 'Away FC', score: 100, gives: [] },
+    winner: 1, counter: null, my_seat: null, can_decline: false, can_counter: false, can_accept: false, rosters: null,
+  };
+  const now = Date.parse('2026-10-13T14:00:00Z');
+  ok('the deadline reads in Eastern time', weddingDeadlineLabel('2026-10-14T00:00:00Z') === '8 PM ET Tue', weddingDeadlineLabel('2026-10-14T00:00:00Z'));
+  ok('noon Thursday reads as 12 PM', weddingDeadlineLabel('2026-10-15T16:00:00Z') === '12 PM ET Thu', weddingDeadlineLabel('2026-10-15T16:00:00Z'));
+  const w = weddingStatusLine({ ...base, veto: 1, veto_rule: 'winner' }, now);
+  ok('"winner": names the winner, who won', w === 'Goes through at 8 PM ET Tue unless Home FC, who won 120–100, calls it off.', w);
+  const l = weddingStatusLine({ ...base, veto: 2, veto_rule: 'loser' }, now);
+  ok('"loser": names the loser, who lost', l === 'Goes through at 8 PM ET Tue unless Away FC, who lost 120–100, calls it off.', l);
+  const n = weddingStatusLine({ ...base, veto: null, veto_rule: 'none' }, now);
+  ok('"none": nobody can call it off', /nobody can call this one off/.test(n), n);
+  const t = weddingStatusLine({ ...base, winner: null, veto: null, veto_rule: 'winner', home: { ...base.home, score: 90 }, away: { ...base.away, score: 90 } }, now);
+  ok('a tie under "winner": nobody can', /it was a tie \(90–90\), so nobody can call it off/.test(t), t);
+  const d = weddingStatusLine({ ...base, status: 'declined', veto: 2, veto_rule: 'loser' }, now);
+  ok('a decline names whoever held the veto', d.startsWith('💔 Away FC called it off'), d);
+  ok('three veto rules and three deadlines, as the SQL knows them',
+    VETO_RULES.map((x) => x.id).join() === 'winner,loser,none' && DEADLINE_RULES.map((x) => x.id).join() === 'tue20,wed20,thu12');
+  const sql54 = readFileSync(new URL('../supabase/migrations/0454_shotgun_wedding_house_rules.sql', import.meta.url), 'utf8');
+  ok('0454 accepts exactly those', /v not in \('winner', 'loser', 'none'\)/.test(sql54) && /d not in \('tue20', 'wed20', 'thu12'\)/.test(sql54));
+  ok('0454 clamps the deadline to an hour before the next kickoff', /dl := next_kick - interval '1 hour'/.test(sql54));
 }
 
 if (fails) { console.log(`\n${fails} SHOTGUN WEDDING ASSERTION(S) FAILED`); process.exit(1); }

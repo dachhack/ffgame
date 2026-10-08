@@ -795,6 +795,10 @@ async function main() {
         argv.push('seal-audit', need('week'));
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
+      } else if (req.mode === 'shotgun-preview') {
+        // v0.654.0: read-only — the 2-for-2 the CPU would hand each matchup.
+        argv.push('shotgun-preview', need('league'));
+        if (req.week != null) argv.push(String(req.week));
       } else if (req.mode === 'offboard-sweep') {
         // v0.612.0: one pass of the daily offboarding sweep; `dry` reports only.
         argv.push('offboard-sweep');
@@ -818,7 +822,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | offboard-sweep`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | offboard-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -888,6 +892,13 @@ async function main() {
       console.log(`college-sweep ${season}: ${r.rows} players from ${r.schools} schools, ${r.stats ?? 0} stat lines`
         + (r.failed ? `, ${r.failed} rosters failed (no retirement)` : `, ${r.retired} retired`) + (r.error ? ` — ${r.error}` : ''));
       if (r.error) process.exitCode = 1;
+      break;
+    }
+    case 'shotgun-preview': {
+      // 💍 READ-ONLY (v0.654.0): what Shotgun Wedding would file for a league.
+      //   node src/cli.js shotgun-preview <league-uuid> [week]
+      const { shotgunPreview } = await import('./shotgun.js');
+      console.log(await shotgunPreview(args[0], args[1] ?? null));
       break;
     }
     case 'seal-audit': {

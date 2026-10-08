@@ -9,7 +9,10 @@
 --   • new vows: either side offers, only the other says yes, and yes trades
 --     at once and replaces the original;
 --   • the deadline marries what's left; a wedding whose players moved fails
---     cleanly; switching the mode off annuls what's pending.
+--     cleanly; switching the mode off annuls what's pending;
+--   • 0454's house rules: the veto goes to the winner, the loser or nobody;
+--     the deadline is Tue 8 PM, Wed 8 PM or Thu noon, never inside the hour
+--     before the next kickoff; a rule change is announced.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -192,6 +195,55 @@ begin
   perform sw_true((r ->> 'annulled')::int = 1, 'sw8a off annuls the pending wedding');
   perform sw_true(sw_last_card(lid) like '💍 Shotgun Wedding is off. This week''s weddings are annulled%', 'sw8b the league hears it');
   perform sw_true(not exists (select 1 from shotgun_wedding where league_id = lid and status = 'pending'), 'sw8c nothing pending');
+
+  -- ── sw10. the house rules (0454): who may call it off, and when it's due ──
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status, home_final, away_final, lock_at) values
+    (lid, 5, a, b, 'final', 100, 90, now() - interval '5 days'),
+    (lid, 6, a, b, 'scheduled', null, null, now() + interval '10 hours'),
+    (lid, 7, a, b, 'final', 95, 85, now() - interval '1 day');
+  perform sw_as('02');
+  perform sw_refused(set_league_shotgun(lid, true, 'loser', 'wed20'), 'commissioner only', 'sw10 a member cannot set the house rules');
+  perform sw_as('01');
+  perform sw_refused(set_league_shotgun(lid, true, 'both', null), 'winner, loser or none', 'sw10a an unknown veto rule is refused');
+  perform sw_refused(set_league_shotgun(lid, true, null, 'fri20'), 'tue20, wed20 or thu12', 'sw10b an unknown deadline is refused');
+  r := set_league_shotgun(lid, true, 'loser', 'wed20');
+  perform sw_ok(r, 'sw10c on again: the loser holds the veto, Wednesday 8 PM');
+  perform sw_true(r ->> 'veto' = 'loser' and r ->> 'deadline' = 'wed20', 'sw10d the setter reads the rules back');
+  perform sw_true(sw_last_card(lid) like '💍 Shotgun Wedding is on.%8 PM ET Wednesday%the team that lost can call it off%Waivers run first%', 'sw10e the on card states both rules and warns about waivers — got ' || sw_last_card(lid));
+  perform sw_true((shotgun_state(lid) ->> 'veto_rule') = 'loser' and (shotgun_state(lid) ->> 'deadline_rule') = 'wed20', 'sw10f the reader has them');
+  perform sw_worker();
+  r := shotgun_propose(lid, 5, a, b, (select jsonb_agg(slug) from (select slug from native_roster where league_id = lid and roster_id = a order by slug limit 2) z),
+                                     (select jsonb_agg(slug) from (select slug from native_roster where league_id = lid and roster_id = b order by slug limit 2) z));
+  perform sw_ok(r, 'sw10g week 5 filed with no deadline given — the setting decides');
+  w1 := (r ->> 'wedding_id')::uuid;
+  perform sw_true((r ->> 'veto')::int = b and (r ->> 'winner')::int = a, 'sw10h A won, so under "loser" B holds the veto');
+  perform sw_true((select deadline from shotgun_wedding where id = w1)
+                  = (select min(lock_at) from matchup where league_id = lid and week = 6) - interval '1 hour',
+                  'sw10i Wednesday 8 PM is past next week''s kickoff here, so it lands an hour before it');
+  perform sw_true(sw_last_card(lid) like '%unless SW-B, who lost, calls it off.', 'sw10j the card names the loser — got ' || sw_last_card(lid));
+  perform sw_as('01');
+  perform sw_refused(shotgun_decline(w1), 'only the team that lost', 'sw10k the winner cannot call it off under "loser"');
+  perform sw_true(not (shotgun_state(lid) -> 'weddings' -> 0 ->> 'can_decline')::boolean, 'sw10l …and the reader says so');
+  perform sw_as('02');
+  perform sw_ok(shotgun_decline(w1), 'sw10m the loser can');
+  perform sw_as('01');
+  perform sw_ok(set_league_shotgun(lid, true, 'none', null), 'sw10n nobody holds a veto now');
+  perform sw_true(sw_last_card(lid) like '💍 Shotgun Wedding house rules, from next Tuesday: Nobody can call it off%', 'sw10o a rule change is announced — got ' || sw_last_card(lid));
+  perform sw_worker();
+  r := shotgun_propose(lid, 7, a, b, (select jsonb_agg(slug) from (select slug from native_roster where league_id = lid and roster_id = a order by slug limit 2) z),
+                                     (select jsonb_agg(slug) from (select slug from native_roster where league_id = lid and roster_id = b order by slug limit 2) z));
+  perform sw_ok(r, 'sw10p week 7 filed under "none"'); w2 := (r ->> 'wedding_id')::uuid;
+  perform sw_true(r -> 'veto' = 'null'::jsonb and r ->> 'veto_rule' = 'none', 'sw10q no seat holds the veto');
+  perform sw_true(sw_last_card(lid) like '%nobody can call this one off.', 'sw10r the card says so');
+  perform sw_as('01');
+  perform sw_refused(shotgun_decline(w2), 'nobody can call off', 'sw10s the winner cannot');
+  perform sw_as('02');
+  perform sw_refused(shotgun_decline(w2), 'nobody can call off', 'sw10t nor the loser');
+  perform sw_ok(shotgun_counter(w2, (select home_gives from shotgun_wedding where id = w2) -> 0 || '[]'::jsonb,
+                                    (select away_gives from shotgun_wedding where id = w2) -> 0 || '[]'::jsonb), 'sw10u new vows still work');
+  perform sw_true(_shotgun_deadline_at('tue20', '2026-10-13 10:00-04') = '2026-10-13 20:00-04'
+              and _shotgun_deadline_at('wed20', '2026-10-13 10:00-04') = '2026-10-14 20:00-04'
+              and _shotgun_deadline_at('thu12', '2026-10-13 10:00-04') = '2026-10-15 12:00-04', 'sw10v the three deadlines, from a Tuesday morning');
 
   -- ── sw9. strangers ──
   perform set_config('app.uid', '00000000-0000-0000-0000-000000006399', false);
