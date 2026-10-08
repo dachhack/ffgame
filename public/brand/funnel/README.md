@@ -27,6 +27,7 @@ app header) and keep the thing you're showing in the upper half.
 | `mode-guillotine.png` | Competitive modes | The chop report: one finished week on the block, who fell |
 | `mode-golf.png` | Competitive modes | A golf matchup board: LOW WINS, real low-usage starters projected a point or two |
 | `mode-bullseye.png` | Competitive modes | A bullseye matchup board: the target per spot and the distance from it |
+| `mode-shotgun.png` | Competitive modes | The 💍 Shotgun Wedding card: your like-for-like 2-for-2, the deadline, CALL IT OFF / PROPOSE NEW VOWS / SAY YES, and the league's other weddings |
 | `positions-roster.png` | Positions | The roster builder with a spread of spot kinds: superflex, rookie-only, one-team, best ball, zero-fill, IDP, returner, head coach |
 | `positions-scoped.png` | Positions | A lineup with Vets 7+, NFC Only and Rookie SF spots, on 2026 rosters |
 | `scoring-bestball-mix.png` | Scoring options | A matchup board with one best-ball spot (FLEX, AUTO) among hand-set ones |

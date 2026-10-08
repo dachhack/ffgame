@@ -126,7 +126,7 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   ok('the classic game line is never pitched hidden picks or effects', classic && !DRIP_WORDS.test(classic.line), classic?.line);
   ok('the menu opens on WHICH GAME — the create screen\'s first question', LEAGUE_MENU[0].heading === 'WHICH GAME' && LEAGUE_MENU[0].notes === GAME_NOTES);
   const names = LEAGUE_MENU.flatMap((g) => g.notes.map((n) => n.name));
-  for (const must of ['Guillotine', 'Vampire', 'Golf', 'Bullseye', 'Dynasty', 'Contract', 'Auction', 'Best ball', 'IDP']) {
+  for (const must of ['Guillotine', 'Vampire', 'Golf', 'Bullseye', 'Shotgun Wedding', 'Dynasty', 'Contract', 'Auction', 'Best ball', 'IDP']) {
     ok(`the menu names ${must}`, names.includes(must));
   }
   ok('every menu line is one sentence a manager can read, not a paragraph', LEAGUE_MENU.every((g) => g.notes.every((n) => n.line.length > 30 && n.line.length < 220)));
@@ -160,8 +160,10 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   ok('Bullseye is a format, beside golf', !!bullseye && FORMAT_NOTES.findIndex((n) => n.name === 'Golf') < FORMAT_NOTES.findIndex((n) => n.name === 'Bullseye'));
   ok('…its line says target and closest, and never "rings"', bullseye && /target/i.test(bullseye.line) && /closest/i.test(bullseye.line) && !/ring/i.test(bullseye.line), bullseye?.line);
   const modes = LANDING_FEATURES.find((g) => g.heading === 'Competitive modes');
-  ok('the competitive-modes card names Vampire, Guillotine, Golf and Bullseye, in that order',
-    modes && modes.notes.map((n) => n.name).join(',') === 'Vampire,Guillotine,Golf,Bullseye', modes?.notes.map((n) => n.name));
+  ok('the competitive-modes card names Vampire, Guillotine, Golf, Bullseye and Shotgun Wedding, in that order',
+    modes && modes.notes.map((n) => n.name).join(',') === 'Vampire,Guillotine,Golf,Bullseye,Shotgun Wedding', modes?.notes.map((n) => n.name));
+  const sw = FORMAT_NOTES.find((n) => n.name === 'Shotgun Wedding');
+  ok('Shotgun Wedding\'s line says 2-for-2, like for like, and new vows', sw && /2-for-2/.test(sw.line) && /like-for-like/.test(sw.line) && /new vows/.test(sw.line), sw?.line);
   const matchup = LANDING_FEATURES.find((g) => g.heading === 'Matchup style');
   ok('the matchup card speaks the funnel\'s lines, Classic first', matchup && matchup.notes[0]?.name === 'Classic' && matchup.notes[1]?.line === drip?.line, matchup?.notes.map((n) => n.name));
   ok('the five cards are still the five the founder named',

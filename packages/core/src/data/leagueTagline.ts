@@ -151,6 +151,8 @@ export const FORMAT_NOTES: FormatNote[] = [
   // v0.650.0 — the landing's competitive modes gain Bullseye (docs/bullseye.md).
   // "Rings" is never shown to a player, so the line says target and dart.
   { name: 'Bullseye', icon: '🎯', line: 'The CPU deals a target number for every spot each week. Start the player who\u2019ll land closest — over is as bad as under, and a dead-on hit pays double.' },
+  // v0.654.2 — Shotgun Wedding (docs/shotgun-wedding.md) joins the modes.
+  { name: 'Shotgun Wedding', icon: '💍', line: 'Every Tuesday the CPU hands each matchup\u2019s two teams a fair, like-for-like 2-for-2 trade. It goes through at the deadline unless it\u2019s called off or they agree on new vows.' },
 ];
 
 /** What CARRIES from one season to the next. */
@@ -255,6 +257,7 @@ export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote
   ] },
   { heading: 'Competitive modes', sub: 'How the season ends differently.', notes: [
     note(FORMAT_NOTES, 'Vampire'), note(FORMAT_NOTES, 'Guillotine'), note(FORMAT_NOTES, 'Golf'), note(FORMAT_NOTES, 'Bullseye'),
+    note(FORMAT_NOTES, 'Shotgun Wedding'),
   ] },
   { heading: 'Positions', sub: 'Every spot a lineup can have, on or off per league.', notes: [
     // v0.652.0: one chip for the lot (founder: "All positions can just be one

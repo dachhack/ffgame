@@ -52,6 +52,7 @@ export const FUNNEL_SHOTS: Record<string, Shot[]> = {
     { file: 'mode-guillotine.png', label: 'Guillotine · the chop report', chip: 'Guillotine' },
     { file: 'mode-golf.png', label: 'Golf · low wins', chip: 'Golf' },
     { file: 'mode-bullseye.png', label: 'Bullseye · aim at the number', chip: 'Bullseye' },
+    { file: 'mode-shotgun.png', label: 'Shotgun Wedding · Tuesday\u2019s trade', chip: 'Shotgun Wedding' },
   ],
   'Positions': [
     { file: 'positions-roster.png', label: 'The roster builder', chip: 'Every position' },
