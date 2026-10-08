@@ -18,7 +18,6 @@ import { etClock } from './taco.js';
 import { injuryStatusMap } from './injuries.js';
 import { leagueSlotDefs } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projectedPoints } from '../../packages/core/src/engine/projScoring.ts';
-import { replacementByPos } from '../../packages/core/src/data/tradeGrade.ts';
 import { weddingPlan } from '../../packages/core/src/engine/shotgunWedding.ts';
 import { isPreseasonWeek as isPracticeWeek } from '../../packages/core/src/data/nflSlate.ts';
 import { modeOfSettings } from './resolve.js';
@@ -28,7 +27,8 @@ import { installTeamOverrides } from './poll/teamOverrides.js';
 /** The hour (Eastern) weddings are filed from, and the hour they stop. */
 export const WEDDING_HOUR_ET = 5;
 export const WEDDING_LAST_HOUR_ET = 18;
-const SEASON_WEEKS = 17;
+/** Injury statuses that keep a player out of a wedding. */
+const RULED_OUT = new Set(['O', 'OUT', 'IR', 'PUP', 'SUS', 'NFI']);
 /** A week whose first kickoff is older than this is not "last week". */
 const FRESH_MS = 9 * 24 * 3600 * 1000;
 
@@ -92,19 +92,23 @@ export async function planLeagueWeddings(lg, { week = null, nowMs = Date.now(), 
     const { data: pool } = await db().from('league_pool').select('slug,full_name,pos,team,sleeper_id').eq('league_id', lg.id).range(0, 2999);
     const meta = new Map((pool ?? []).map((p) => [p.slug, p]));
     const { data: ros } = await db().from('native_roster').select('roster_id,slug,spot').eq('league_id', lg.id);
-    const teams = new Set((ros ?? []).map((r) => r.roster_id)).size || 10;
-    // The trade grader's replacement line, read off this league's pool.
-    const repl = replacementByPos((pool ?? []).filter((p) => p.pos)
-      .map((p) => ({ slug: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeper_id ?? null })), teams, slots);
+    // Games left, for rest-of-season points (proj_board, the worker's own
+    // projection table). A player it doesn't know reads null, not zero.
+    const slugs = [...new Set((ros ?? []).map((r) => r.slug))];
+    const gamesLeft = new Map();
+    for (let i = 0; i < slugs.length; i += 300) {
+      const { data: pb } = await db().from('proj_board').select('slug,games_left').in('slug', slugs.slice(i, i + 300));
+      for (const r of pb ?? []) if (r.slug && Number.isFinite(Number(r.games_left))) gamesLeft.set(r.slug, Number(r.games_left));
+    }
     const playersOf = (rid) => (ros ?? [])
       .filter((r) => r.roster_id === rid && (r.spot ?? 'active') === 'active')
       .map((r) => meta.get(r.slug)).filter((p) => p && p.pos)
       .map((p) => {
-        const pts = statuses.get(p.slug) === 'IR' ? 0
-          : projectedPoints({ id: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeper_id ?? null }) * SEASON_WEEKS;
-        const points = Number.isFinite(pts) ? pts : 0;
+        const raw = projectedPoints({ id: p.slug, pos: p.pos, team: p.team, sleeperId: p.sleeper_id ?? null });
+        const ppg = Number.isFinite(raw) ? raw : 0;
+        const gl = gamesLeft.get(p.slug);
         return { id: p.slug, name: p.full_name, pos: p.pos, team: p.team, sleeperId: p.sleeper_id ?? null,
-          points, value: Math.max(0, points - (repl.get(p.pos) ?? 0)) };
+          ppg, ros: gl == null ? null : ppg * gl, out: RULED_OUT.has(statuses.get(p.slug) ?? '') };
       });
     const plans = todo.map((m) => {
       const home = playersOf(m.home_roster_id); const away = playersOf(m.away_roster_id);
@@ -137,7 +141,7 @@ export async function sweepShotgun(log = () => {}, nowMs = Date.now()) {
     const { data: done } = await db().from('shotgun_wedding').select('home_roster').eq('league_id', lg.id).eq('week', wk);
     const { week, plans } = await planLeagueWeddings(lg, { week: wk, nowMs, skip: new Set((done ?? []).map((d) => d.home_roster)), log });
     for (const { m, plan } of plans) {
-      if (!plan) { log('shotgun', lg.id, 'week', week, m.home_roster_id, 'v', m.away_roster_id, '— no fair 2-for-2'); continue; }
+      if (!plan) { log('shotgun', lg.id, 'week', week, m.home_roster_id, 'v', m.away_roster_id, '— no like-for-like trade passes; no wedding'); continue; }
       const { data: r, error } = await db().rpc('shotgun_propose', {
         p_league_id: lg.id, p_week: week, p_home: m.home_roster_id, p_away: m.away_roster_id,
         p_home_gives: plan.homeGives, p_away_gives: plan.awayGives,
@@ -151,7 +155,7 @@ export async function sweepShotgun(log = () => {}, nowMs = Date.now()) {
       }
       out.proposed += 1;
       log('shotgun', lg.id, 'week', week, m.home_roster_id, plan.homeGives.join('+'), '⇄', m.away_roster_id, plan.awayGives.join('+'),
-        `(${plan.homeValue} v ${plan.awayValue} ${plan.scale})`);
+        `(${plan.homePpg} v ${plan.awayPpg} ppg, worst pair ${plan.worstPair})`);
     }
   }
   return out;
@@ -172,15 +176,16 @@ export async function shotgunPreview(leagueId, week = null) {
     `mode=${s.game_mode ?? 'drip'} continuity=${s.continuity ?? '(default)'} format=${s.format ?? 'standard'} shotgun=${s.shotgun_wedding === true ? 'on' : 'off'}`,
   ];
   if (wk == null) { lines.push('no fully-final, fresh regular week to marry for'); return lines.join('\n'); }
-  const tag = (p) => `${p.name} (${p.pos}${p.team ? ', ' + p.team : ''}) ${Math.round(p.value)} over repl / ${Math.round(p.points)} pts`;
+  const r1 = (n) => Math.round(n * 10) / 10;
+  const tag = (p) => `${p.name} (${p.pos}${p.team ? ', ' + p.team : ''}) ${r1(p.ppg)} ppg${p.ros != null ? ` / ${Math.round(p.ros)} ROS` : ''}`;
   for (const { m, plan, home, away } of plans) {
     const won = m.home_final > m.away_final ? `seat ${m.home_roster_id} won` : m.away_final > m.home_final ? `seat ${m.away_roster_id} won` : 'tie';
     lines.push('', `── seat ${m.home_roster_id} (${m.home_final}) v seat ${m.away_roster_id} (${m.away_final}) · ${won} (high score; golf leagues flip it)`);
-    if (!plan) { lines.push('   no fair 2-for-2'); continue; }
+    if (!plan) { lines.push('   no like-for-like trade passes every rule — no wedding this week'); continue; }
     const by = (list, id) => list.find((p) => p.id === id);
     lines.push(`   seat ${m.home_roster_id} sends: ${plan.homeGives.map((id) => tag(by(home, id))).join('; ')}`);
     lines.push(`   seat ${m.away_roster_id} sends: ${plan.awayGives.map((id) => tag(by(away, id))).join('; ')}`);
-    lines.push(`   ${plan.scale === 'value' ? 'value over replacement' : 'raw points (thin roster)'}: ${plan.homeValue} v ${plan.awayValue}`);
+    lines.push(`   ${plan.homePpg} v ${plan.awayPpg} ppg · widest pair gap ${plan.worstPair} ppg (band ${plan.band})`);
   }
   return lines.join('\n');
 }

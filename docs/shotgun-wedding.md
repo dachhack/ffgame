@@ -42,15 +42,20 @@ read when each wedding is filed, so a change starts the following Tuesday:
 - **Playoff weeks, practice weeks and anything after the trade deadline** get no wedding.
 - A worker that was down Tuesday morning files on its first tick back. After 6 PM it files nothing for that week: a wedding needs time to talk.
 
-## 2. What "fair" means
+## 2. What "fair" means (rebuilt v0.654.1)
 
-The CPU's pick is core's `weddingPlan`. It is pure: two active rosters in, one 2-for-2 out.
+The CPU's pick is core's `weddingPlan`. It is pure: two active rosters in, one 2-for-2 out, or none.
 
-- Each player is valued in **season points over replacement** in the league's own scoring. That is the trade grader's number (`data/tradeGrade`), so a wedding the CPU calls fair is one the app's trade grade prints as "Close to even".
-- The two sides must sit inside the grader's **even band**: 12 points or 12% of the deal, whichever is wider (`evenBand`).
-- Every player in it is worth something over replacement. Only when a side has fewer than two such players does it fall back to raw season points for both sides.
-- It never leaves a team unable to fill a starting spot it could fill before. Nobody's only quarterback gets traded.
-- Among the fair pairs it draws from the **weightiest quarter**, with a seed of league, week and matchup. The same inputs always give the same wedding; different weeks don't repeat the same shape.
+v0.653.0 matched the two sides' *totals* of value over replacement. The first preview on a real league produced a star plus a throw-in for two mid-tier players, two starting quarterbacks for a tight end and a running back, and each team's best players dragged in. Founder: "Those are really bad trades." The rules now:
+
+1. **Like for like.** Both sides send the same positions (RB+WR for RB+WR), and each player is paired with one of his own position. Skill positions only; a quarterback only when both teams roster a spare; never a kicker or a defense.
+2. **Fair player by player.** Each pair is within 1 point per game in the league's scoring, widened to 1.5 only when nothing fits at 1.
+3. **Not the stars.** Each team's top two players by points per game are off the table.
+4. **Starter-level only.** A player must start for his team, or sit within a point a game of its weakest skill starter.
+5. **Both lineups hold.** Neither team's best lineup may lose more than a point a game, nor stop fielding a spot.
+6. **Healthy.** Nobody ruled out (O, IR, PUP, suspended) is forced to move.
+
+Among the trades that pass, the closest matches win; one of the closest four is drawn with a seed of league, week and matchup, so a re-run files the same wedding. **If nothing passes, that matchup gets no wedding that week**: an empty week beats a bad trade. Values are projected points per game (the worker's live projection level); the preview also prints rest-of-season points (per game × games left).
 
 ## 3. The lock
 
@@ -71,7 +76,7 @@ Until the wedding settles, the four players cannot move:
 ## 5. Pinned
 
 - `scripts/db/shotgun-wedding-probes.sql`: the switch and its refusals, filing rules, golf-aware winner, tie, cancelled offers, every lock path, decline rights, new vows, the deadline, a failed wedding, annul on off.
-- `scripts/check-shotgun-wedding.mjs` (in `check:parity`): fairness against the grader's band, shape, the lineup rail, seed stability, the thin-roster fallback, no wedding rather than an unfair one.
+- `scripts/check-shotgun-wedding.mjs` (in `check:parity`): every rule in §2, seed stability, the ruled-out filter, the v0.653.0 star-for-depth case refused, quarterbacks only for quarterbacks.
 - `server/test/shotgun.mjs`: the Tuesday window and the week picker.
 
 ## 6. Not yet
