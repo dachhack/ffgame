@@ -22,6 +22,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.652.2 — the demo button only with Drip lit; the devy market fits a phone; the screens reframed
+
+> - On the front page the demo button appears only when the Drip chip is lit.
+> - The devy market's INVEST table now shows player names on a phone: the owners chip moves into the line under the name and the number columns tighten.
+> - The screens: the mixed-college board opens on two NFL spots and the two college spots; the scoped board shows Vets 7+, NFC Only and Rookie SF; the best-ball board has a single best-ball spot; the roster builder shows a spread of spot kinds (superflex, a rookie-only spot, a one-team spot, best ball, a zero-fill, IDP, a returner, a head coach); the scoped-bonuses screen opens on the rules, not the explainer.
+
+Founder: "Let's get the mixed image to show two NFL spots and two College.
+The devy image is kinda squished and we don't have player names. For roster
+spots, let's show a variety of what you can assign. For scoped positions,
+lets do 'Vets 7+', 'NFC Only', 'Rookie SF'. Single spot best ball doesn't
+actually show a single spot bestball spot. Scoped bonuses, we don't need the
+walls of text. Demo button should only show on when you select the drip
+chip."
+
+- `Landing.tsx`: the matchup card's button renders only while the Drip
+  chip's line is open.
+- `DevyShares.tsx` (a real phone-width bug, found by the screenshot): the
+  INVEST grid's fixed columns added up to a 390px screen and the name's
+  `1fr` collapsed to nothing. Under 430px the OWN column goes, its 👥 chip
+  rides the subline (still a tap), the other columns tighten, and a long
+  name wraps instead of clipping.
+- The screens re-shot as above; `Vets 7+` is Davante Adams (LA) against
+  Mike Evans (SF), both 12-year men on the 2026 rosters.
+
 ### v0.652.1 — the demo button under the line; the demo page is just the demo
 
 > - On the front page the "Click here for a demo" button sits under the matchup chips' line instead of on top of the picture.

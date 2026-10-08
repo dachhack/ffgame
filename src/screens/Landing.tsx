@@ -230,10 +230,14 @@ export function Landing() {
                     {/* The demo door (v0.652.1, founder: "after the paragraph,
                         not on the image"): the button sits under the chips'
                         line, and the picture is just the picture. */}
-                    <button onClick={toDemo} className="mono" title="Play a week of Drip — free, no sign-in"
-                      style={{ ...cta, alignSelf: 'flex-start', padding: '11px 18px' }}>
-                      ▶ {FUNNEL.demo.toUpperCase()}
-                    </button>
+                    {/* v0.652.2, founder: "Demo button should only show when you select
+                        the drip chip." */}
+                    {openNote === `${g.heading}|Drip` && (
+                      <button onClick={toDemo} className="mono" title="Play a week of Drip — free, no sign-in"
+                        style={{ ...cta, alignSelf: 'flex-start', padding: '11px 18px' }}>
+                        ▶ {FUNNEL.demo.toUpperCase()}
+                      </button>
+                    )}
                     <Rail shots={shots} ratio="16 / 9" width="100%" base={base} index={idx} onIndex={pickShot} onTap={toDemo} />
                   </>
                 ) : (
