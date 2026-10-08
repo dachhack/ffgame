@@ -274,10 +274,12 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       ticking.current = true;
       // A failing tick must be VISIBLE — swallowing it freezes the room at 0:00
       // with nothing to go on. The 3s poll clears the banner on recovery.
+      // rpc() THROWS on a failed call (a statement timeout among them), so
+      // the catch shows it too — it used to swallow exactly that case (0455).
       draftTick(leagueId).then((r) => {
         if (r.error) setErr(friendlyError(r.error));
         if ((r.autopicks ?? 0) + (r.lots_awarded ?? 0) > 0) void refresh();
-      }).catch(() => {})
+      }).catch((x) => setErr(friendlyError(x)))
         .finally(() => { ticking.current = false; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
