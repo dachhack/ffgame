@@ -1,0 +1,202 @@
+-- 0453 probes: SHOTGUN WEDDING.
+--   • the commissioner's switch: classic + redraft + head-to-head only, one
+--     chat card on, one off, a member cannot flip it;
+--   • the worker files a 2-for-2 for a FINAL matchup; the winner is golf-aware;
+--     a tie has no winner; open offers naming the four are cancelled;
+--   • the four can't move: no drop, no add-with-drop, no IR, no trade offer —
+--     each refusal says 💍; the commissioner's force-move still works;
+--   • the winner (only) may call it off; a tie can't be;
+--   • new vows: either side offers, only the other says yes, and yes trades
+--     at once and replaces the original;
+--   • the deadline marries what's left; a wedding whose players moved fails
+--     cleanly; switching the mode off annuls what's pending.
+\set QUIET on
+\pset pager off
+\set ON_ERROR_STOP on
+create or replace function sw_true(b boolean, msg text) returns void language plpgsql as $$
+begin if b is not true then raise exception 'PROBE FAIL %', msg; end if; end $$;
+create or replace function sw_ok(r jsonb, msg text) returns void language plpgsql as $$
+begin if coalesce((r ->> 'ok')::boolean, false) is not true then raise exception 'PROBE FAIL % — got %', msg, r; end if; end $$;
+create or replace function sw_refused(r jsonb, needle text, msg text) returns void language plpgsql as $$
+begin if coalesce((r ->> 'ok')::boolean, true) or coalesce(r ->> 'error', '') not ilike '%' || needle || '%' then
+  raise exception 'PROBE FAIL % — got %', msg, r; end if; end $$;
+create or replace function sw_as(u text) returns void language plpgsql as $$
+begin perform set_config('app.uid', '00000000-0000-0000-0000-0000000063' || u, false); perform set_config('app.email', 'sw' || u || '@test.dev', false); end $$;
+create or replace function sw_worker() returns void language plpgsql as $$
+begin perform set_config('app.uid', '', false); perform set_config('app.email', '', false); end $$;
+create or replace function sw_last_card(lid uuid) returns text language sql as $$
+  select body from league_message where league_id = lid and txn ->> 'kind' = 'wedding' order by id desc limit 1;
+$$;
+-- Run a statement that must RAISE (a row guard); returns the message.
+create or replace function sw_raises(stmt text) returns text language plpgsql as $$
+begin execute stmt; return null; exception when others then return sqlerrm; end $$;
+
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000006301', 'sw01@test.dev'), ('00000000-0000-0000-0000-000000006302', 'sw02@test.dev'), ('00000000-0000-0000-0000-000000006303', 'sw03@test.dev'), ('00000000-0000-0000-0000-000000006304', 'sw04@test.dev') on conflict (id) do nothing;
+insert into app_user (id, email) values ('00000000-0000-0000-0000-000000006301', 'sw01@test.dev'), ('00000000-0000-0000-0000-000000006302', 'sw02@test.dev'), ('00000000-0000-0000-0000-000000006303', 'sw03@test.dev'), ('00000000-0000-0000-0000-000000006304', 'sw04@test.dev') on conflict (id) do nothing;
+update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": true}'::jsonb where id::text like '00000000-0000-0000-0000-00000000630_';
+
+do $$
+declare r jsonb; lid uuid; code text; a int; b int; c int; d int; w1 uuid; w2 uuid; w3 uuid; w4 uuid; tid uuid; msg text; n int;
+begin
+  perform sw_as('01');
+  r := create_native_league('ShotgunWedding', '2026', 4, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
+  perform sw_ok(r, 'sw0 league'); lid := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  perform sw_as('02'); perform sw_ok(native_join(code, 'SW-B'), 'sw0 B joins');
+  perform sw_as('03'); perform sw_ok(native_join(code, 'SW-C'), 'sw0 C joins');
+  perform sw_as('04'); perform sw_ok(native_join(code, 'SW-D'), 'sw0 D joins');
+  perform sw_as('01');
+  update league_membership set team_name = 'SW-A' where league_id = lid and app_user_id = '00000000-0000-0000-0000-000000006301';
+  perform seed_league_pool(lid, (
+    select jsonb_agg(jsonb_build_object('slug', 'sw-' || g, 'full', 'Groom ' || g, 'pos', case when g % 2 = 0 then 'WR' else 'RB' end, 'team', 'SWH', 'exp', 0))
+    from generate_series(1, 40) g));
+  select sleeper_roster_id into a from league_membership where league_id = lid and app_user_id = '00000000-0000-0000-0000-000000006301';
+  select sleeper_roster_id into b from league_membership where league_id = lid and app_user_id = '00000000-0000-0000-0000-000000006302';
+  select sleeper_roster_id into c from league_membership where league_id = lid and app_user_id = '00000000-0000-0000-0000-000000006303';
+  select sleeper_roster_id into d from league_membership where league_id = lid and app_user_id = '00000000-0000-0000-0000-000000006304';
+  update draft set status = 'complete' where league_id = lid;
+  insert into native_roster (league_id, roster_id, slug, acquired) select lid, a, 'sw-' || g, 'draft' from generate_series(1, 4) g;
+  insert into native_roster (league_id, roster_id, slug, acquired) select lid, b, 'sw-' || g, 'draft' from generate_series(5, 8) g union all select lid, b, 'sw-' || g, 'draft' from generate_series(17, 20) g;
+  insert into native_roster (league_id, roster_id, slug, acquired) select lid, c, 'sw-' || g, 'draft' from generate_series(9, 12) g;
+  insert into native_roster (league_id, roster_id, slug, acquired) select lid, d, 'sw-' || g, 'draft' from generate_series(13, 16) g;
+  perform sw_ok(set_transaction_rules(lid, p_waiver_mode => 'rolling', p_fa_mode => 'open'), 'sw0 rolling, FA open');
+  delete from matchup where league_id = lid;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status, home_final, away_final) values
+    (lid, 1, a, b, 'final', 120, 100), (lid, 1, c, d, 'final', 90, 90),
+    (lid, 2, a, b, 'final', 80, 110), (lid, 3, a, b, 'final', 70, 60), (lid, 4, a, b, 'scheduled', null, null);
+
+  -- ── sw0. the switch ──
+  perform sw_as('02');
+  perform sw_refused(set_league_shotgun(lid, true), 'commissioner only', 'sw0a a member cannot turn it on');
+  perform sw_as('01');
+  update league set settings_json = settings_json || '{"continuity": "keeper", "keeper_count": 2}' where id = lid;
+  perform sw_refused(set_league_shotgun(lid, true), 'redraft', 'sw0b a keeper league is refused');
+  update league set settings_json = (settings_json - 'continuity' - 'keeper_count') where id = lid;
+  perform sw_refused(shotgun_propose(lid, 1, a, b, '["sw-1","sw-2"]', '["sw-5","sw-6"]', now() + interval '6 hours'), 'off', 'sw0c nothing is filed while it is off');
+  perform sw_ok(set_league_shotgun(lid, true), 'sw0d the commissioner turns it on');
+  perform sw_true(league_shotgun(lid), 'sw0e it reads on');
+  perform sw_true(sw_last_card(lid) like '💍 Shotgun Wedding is on.%', 'sw0f the league hears it');
+
+  -- an open offer that will be caught up in the wedding
+  perform sw_as('02');
+  r := propose_trade(lid, b, a, '["sw-5"]'::jsonb, '["sw-3"]'::jsonb, null, null, null);
+  perform sw_ok(r, 'sw0g B offers A a 1-for-1 naming sw-5');
+  tid := (r ->> 'trade_id')::uuid;
+  if tid is null then select id into tid from trade_proposal where league_id = lid and status = 'pending' order by created_at desc limit 1; end if;
+
+  -- ── sw1. the worker files ──
+  perform sw_worker();
+  perform sw_refused(shotgun_propose(lid, 4, a, b, '["sw-1","sw-2"]', '["sw-5","sw-6"]', now() + interval '6 hours'), 'not final', 'sw1a not before the matchup is final');
+  perform sw_refused(shotgun_propose(lid, 1, a, b, '["sw-1","sw-2","sw-3"]', '["sw-5","sw-6"]', now() + interval '6 hours'), 'two players each way', 'sw1b two each way, no more');
+  perform sw_refused(shotgun_propose(lid, 1, a, b, '["sw-1","sw-9"]', '["sw-5","sw-6"]', now() + interval '6 hours'), 'not on the home', 'sw1c only players on the roster');
+  perform sw_refused(shotgun_propose(lid, 1, a, b, '["sw-1","sw-2"]', '["sw-5","sw-6"]', now() + interval '30 minutes'), 'too late', 'sw1d a wedding needs a window');
+  r := shotgun_propose(lid, 1, a, b, '["sw-1","sw-2"]', '["sw-5","sw-6"]', now() + interval '6 hours');
+  perform sw_ok(r, 'sw1 A and B are handed a wedding'); w1 := (r ->> 'wedding_id')::uuid;
+  perform sw_true((r ->> 'winner')::int = a, 'sw1e A won 120-100, so A holds the veto');
+  perform sw_true((r ->> 'cancelled')::int = 1, 'sw1f the open offer naming sw-5 is cancelled');
+  perform sw_true((select status from trade_proposal where id = tid) = 'cancelled', 'sw1g …and reads cancelled');
+  perform sw_true(sw_last_card(lid) like '💍 Shotgun Wedding — SW-A sends Groom 1, Groom 2; SW-B sends Groom 5, Groom 6.%unless SW-A, who won, calls it off.%cancelled.', 'sw1h the card names both sides and the winner');
+  perform sw_refused(shotgun_propose(lid, 1, a, b, '["sw-3","sw-4"]', '["sw-7","sw-8"]', now() + interval '6 hours'), 'already married', 'sw1i one wedding per matchup per week');
+  r := shotgun_propose(lid, 1, c, d, '["sw-9","sw-10"]', '["sw-13","sw-14"]', now() + interval '6 hours');
+  perform sw_ok(r, 'sw1j C and D (a tie) are handed one too'); w2 := (r ->> 'wedding_id')::uuid;
+  perform sw_true(r -> 'winner' = 'null'::jsonb, 'sw1k a tie has no winner');
+  perform sw_true(sw_last_card(lid) like '%it was a tie, so nobody can call it off.', 'sw1l …and the card says so');
+
+  -- ── sw2. the four can't move ──
+  perform sw_as('02');
+  perform sw_refused(drop_player(lid, b, 'sw-5'), '💍', 'sw2 B cannot drop a wedded player');
+  perform sw_refused(add_free_agent(lid, b, 'sw-30', 'sw-6'), 'Shotgun Wedding', 'sw2a nor add with him as the drop');
+  -- set_roster_spot asks IR eligibility first (a healthy player is refused
+  -- for that); the row guard is what stops an eligible one, so ask the row.
+  msg := sw_raises(format('update native_roster set spot = %L where league_id = %L and slug = %L', 'ir', lid, 'sw-5'));
+  perform sw_true(msg like '💍 Groom 5 is in a Shotgun Wedding%', 'sw2b nor move him to IR — got ' || coalesce(msg, 'no error'));
+  msg := sw_raises(format('delete from native_roster where league_id = %L and slug = %L', lid, 'sw-6'));
+  perform sw_true(msg like '💍 Groom 6%', 'sw2b2 nor take him off the roster by any other road — got ' || coalesce(msg, 'no error'));
+  msg := sw_raises(format('select propose_trade(%L, %s, %s, %L::jsonb, %L::jsonb, null, null, null)', lid, b, c, '["sw-6"]', '["sw-11"]'));
+  perform sw_true(msg like '💍 Groom 6%', 'sw2c nor offer him in a trade — got ' || coalesce(msg, 'no error'));
+  perform sw_ok(drop_player(lid, b, 'sw-8'), 'sw2d an unwedded player drops fine');
+
+  -- ── sw3. calling it off ──
+  perform sw_refused(shotgun_decline(w1), 'only the team that won', 'sw3 the loser cannot call it off');
+  perform sw_as('03');
+  perform sw_refused(shotgun_decline(w2), 'tie', 'sw3a a tie cannot be called off');
+
+  -- ── sw4. new vows ──
+  perform sw_as('03');
+  perform sw_refused(shotgun_counter(w1, '["sw-1"]', '["sw-5"]'), 'only the two teams', 'sw4 an outsider cannot talk terms');
+  perform sw_as('02');
+  perform sw_refused(shotgun_counter(w1, '["sw-1","sw-2"]', '["sw-5","sw-6"]'), 'original', 'sw4a the original is not new vows');
+  perform sw_refused(shotgun_counter(w1, '[]', '["sw-5"]'), 'one to three', 'sw4b one to three each way');
+  perform sw_ok(shotgun_counter(w1, '["sw-1"]', '["sw-7"]'), 'sw4c B proposes Groom 1 for Groom 7');
+  perform sw_true(sw_last_card(lid) like '💍 SW-B proposed new vows to SW-A: SW-A sends Groom 1; SW-B sends Groom 7.%', 'sw4d the league hears the offer');
+  perform sw_refused(shotgun_accept_counter(w1), 'only SW-A', 'sw4e B cannot say yes to its own vows');
+  perform sw_as('01');
+  r := shotgun_state(lid);
+  perform sw_true((r ->> 'week')::int = 1 and jsonb_array_length(r -> 'weddings') = 2, 'sw4f the reader has both of week 1''s weddings');
+  perform sw_true((r -> 'weddings' -> 0 ->> 'id')::uuid = w1 and (r -> 'weddings' -> 0 ->> 'can_decline')::boolean
+                  and (r -> 'weddings' -> 0 ->> 'can_accept')::boolean, 'sw4g …A''s own first, which A may call off or accept');
+  perform sw_true(jsonb_array_length(r -> 'weddings' -> 0 -> 'rosters' -> 'home') = 4, 'sw4h …with both rosters for composing vows');
+  perform sw_true(r -> 'weddings' -> 1 -> 'rosters' = 'null'::jsonb, 'sw4i …and no rosters for a wedding that isn''t A''s');
+  r := shotgun_accept_counter(w1);
+  perform sw_ok(r, 'sw4j A says yes');
+  perform sw_true((select roster_id from native_roster where league_id = lid and slug = 'sw-1') = b
+              and (select roster_id from native_roster where league_id = lid and slug = 'sw-7') = a, 'sw4k the new vows traded at once');
+  perform sw_true((select roster_id from native_roster where league_id = lid and slug = 'sw-2') = a, 'sw4l …and the original did not');
+  perform sw_true((select status from shotgun_wedding where id = w1) = 'renegotiated', 'sw4m the wedding reads renegotiated');
+  perform sw_true((select status || note from trade_proposal where id = (r ->> 'trade_id')::uuid) = 'executed💍 Shotgun Wedding', 'sw4n it is an executed trade on the books');
+  perform sw_as('02');
+  perform sw_ok(drop_player(lid, b, 'sw-6'), 'sw4o the lock lifts with the agreement');
+
+  -- ── sw5. the deadline ──
+  update shotgun_wedding set deadline = now() - interval '1 minute' where id = w2;
+  perform sw_worker();
+  r := shotgun_sweep();
+  perform sw_true((r ->> 'married')::int = 1, 'sw5 the sweep marries the tie''s wedding');
+  perform sw_true((select roster_id from native_roster where league_id = lid and slug = 'sw-9') = d
+              and (select roster_id from native_roster where league_id = lid and slug = 'sw-13') = c, 'sw5a the original traded');
+  perform sw_true(sw_last_card(lid) like '💍 Just married — SW-C and SW-D%', 'sw5b the league hears it');
+  perform sw_true((shotgun_sweep() ->> 'married')::int = 0, 'sw5c a second sweep does nothing');
+
+  -- ── sw6. the winner calls it off ──
+  r := shotgun_propose(lid, 2, a, b, '["sw-2","sw-3"]', '["sw-5","sw-1"]', now() + interval '6 hours');
+  perform sw_ok(r, 'sw6 week 2: B won 110-80'); w3 := (r ->> 'wedding_id')::uuid;
+  perform sw_true((r ->> 'winner')::int = b, 'sw6a B holds the veto now');
+  perform sw_as('01');
+  perform sw_refused(shotgun_decline(w3), 'only the team that won', 'sw6b A lost, so A cannot');
+  perform sw_as('02');
+  perform sw_ok(shotgun_decline(w3), 'sw6c B calls it off');
+  perform sw_true(sw_last_card(lid) = '💔 SW-B called off the wedding with SW-A. Everyone keeps their players.', 'sw6d in those words');
+  perform sw_refused(shotgun_decline(w3), 'already settled', 'sw6e once is enough');
+  perform sw_ok(drop_player(lid, b, 'sw-5'), 'sw6f the lock lifts');
+
+  -- ── sw7. a wedding whose players moved fails cleanly; the commish can move them ──
+  perform sw_worker();
+  r := shotgun_propose(lid, 3, a, b, '["sw-2","sw-3"]', '["sw-17","sw-18"]', now() + interval '6 hours');
+  perform sw_ok(r, 'sw7 week 3''s wedding'); w4 := (r ->> 'wedding_id')::uuid;
+  perform sw_as('01');
+  perform sw_ok(commish_move_player(lid, 'sw-2', c), 'sw7a the commissioner can still force-move a wedded player');
+  update shotgun_wedding set deadline = now() - interval '1 minute' where id = w4;
+  perform sw_worker();
+  r := shotgun_sweep();
+  perform sw_true((r ->> 'failed')::int = 1, 'sw7b the deadline finds a player gone — failed, not half-done');
+  perform sw_true((select status from shotgun_wedding where id = w4) = 'failed'
+              and (select note from shotgun_wedding where id = w4) like '%moved%', 'sw7c …with the reason');
+  perform sw_true((select roster_id from native_roster where league_id = lid and slug = 'sw-3') = a, 'sw7d nobody else moved');
+
+  -- ── sw8. off annuls ──
+  update matchup set status = 'final', home_final = 50, away_final = 40 where league_id = lid and week = 4;
+  r := shotgun_propose(lid, 4, a, b, (select jsonb_agg(slug) from (select slug from native_roster where league_id = lid and roster_id = a order by slug limit 2) z),
+                                     (select jsonb_agg(slug) from (select slug from native_roster where league_id = lid and roster_id = b order by slug limit 2) z), now() + interval '6 hours');
+  perform sw_ok(r, 'sw8 week 4''s wedding');
+  perform sw_as('01');
+  r := set_league_shotgun(lid, false);
+  perform sw_true((r ->> 'annulled')::int = 1, 'sw8a off annuls the pending wedding');
+  perform sw_true(sw_last_card(lid) like '💍 Shotgun Wedding is off. This week''s weddings are annulled%', 'sw8b the league hears it');
+  perform sw_true(not exists (select 1 from shotgun_wedding where league_id = lid and status = 'pending'), 'sw8c nothing pending');
+
+  -- ── sw9. strangers ──
+  perform set_config('app.uid', '00000000-0000-0000-0000-000000006399', false);
+  perform sw_refused(shotgun_state(lid), 'forbidden', 'sw9 an outsider cannot read it');
+  raise notice 'shotgun-wedding probes done';
+end $$;
+
+select 'ALL SHOTGUN-WEDDING PROBES PASSED' as result;

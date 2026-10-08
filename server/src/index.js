@@ -49,6 +49,7 @@ import { sweepNative } from './native.js';
 import { sweepSim } from './simsweep.js';
 import { sweepSeatWire } from './seatWire.js';
 import { sweepVampireBites } from './vampireBite.js';
+import { sweepShotgun } from './shotgun.js';
 import { sweepPots } from './pot.js';
 import { sweepPush } from './push.js';
 import { trueupTick } from './poll/trueup.js';
@@ -1040,6 +1041,13 @@ async function tick() {
       log('progression:', nat.generated, 'brackets built,', nat.advanced, 'rounds advanced,', nat.eliminated, 'guillotine cuts');
     }
   } catch (e) { log('native sweep error', e.message); }
+
+  // SHOTGUN WEDDING (0453): Tuesday's 2-for-2s, and the 8 PM deadline. Both
+  // halves are idempotent and self-throttled (docs/shotgun-wedding.md).
+  try {
+    const sg = await sweepShotgun(log);
+    if (sg.proposed || sg.married || sg.failed) log('shotgun:', sg.proposed, 'proposed,', sg.married, 'married,', sg.failed, 'failed');
+  } catch (e) { log('shotgun sweep error', e.message); }
 
   // Board-driven dress rehearsals (0251): advance any running sim_run — drip
   // the due baked plays, resolve, finalize when the feed is spent. A quiet

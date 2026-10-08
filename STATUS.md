@@ -22,6 +22,36 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.653.0 — Shotgun Wedding
+
+> - New commissioner setting for redraft head-to-head leagues: 💍 Shotgun Wedding. Every Tuesday morning the CPU hands each matchup's two teams a fair 2-for-2 trade.
+> - It goes through at 8 PM ET unless the team that won calls it off, or the two agree on new vows instead. The four players can't be dropped, traded or moved to IR until then.
+
+Founder: "a fantasy mode like vampire where after each weekly matchup early
+AM Tuesday the CPU creates a fair, 4 total player trade from opposing teams…"
+then "Shotgun wedding. Let's build it for redraft classic only."
+docs/shotgun-wedding.md has the whole of it.
+
+- **SQL 0453.** `shotgun_wedding` table; the worker files with
+  `shotgun_propose` and settles with `shotgun_sweep`; members use
+  `shotgun_decline` (winner only, golf-aware via `golf_beats`; a tie has no
+  veto), `shotgun_counter` and `shotgun_accept_counter`; `shotgun_state`
+  reads it; `set_league_shotgun` is the switch (classic + redraft + format
+  standard + NFL). Trades execute through `execute_trade`.
+- **The lock.** `drop_lock_reason` asks `_wedding_lock` first (drops, adds,
+  claims, the waiver run); triggers refuse trade offers naming a wedded
+  player and any other row move (IR, taxi, out). Commissioner force-moves
+  pass. Open offers naming the four are cancelled when the wedding is filed.
+- **Fair.** Core `weddingPlan`: value over replacement from the trade
+  grader (`replacementByPos`, `evenBand` now exported), inside its "close to
+  even" band, never stripping a team of a startable spot, seeded draw from
+  the weightiest quarter.
+- **Worker.** `server/src/shotgun.js` in `tick()`: Tuesday 5 AM–6 PM ET
+  files; the deadline sweep runs every minute.
+- **Screens.** `ShotgunWeddingCard` on both hosts, trades tab and league
+  home; the switch under Bullseye in commissioner settings on both.
+- Unconfirmed live: the first real Tuesday is the test.
+
 ### v0.652.2 — the demo button only with Drip lit; the devy market fits a phone; the screens reframed
 
 > - On the front page the demo button appears only when the Drip chip is lit.
