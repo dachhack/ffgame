@@ -9,7 +9,7 @@ import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomColleg
 import { allotDevyShares, devyMarket, devySharesState, devyLaunchState, placeDevyLaunchOrder, setLeagueDevyLaunch, commishDevyLaunchNow, friendlyError, type DevyLaunchState, type DevyLaunchPlayer, type DevyLaunchCfg, setLeagueDevyMode, setLeagueDevyStartCash, setLeagueDevyOpen, type DevyMarketRow, type DevySharePlayer, type DevySharesState } from '@drip/core/data/liveApi';
 import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from '../app/playerCard';
-import { ModalBackdrop } from '../app/ui';
+import { ModalBackdrop, useIsMobile } from '../app/ui';
 import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, stakesOf, DEEP_SEARCH_MIN, MARKET_PAGE, MARKET_FIRST_FETCH, marketNext, marketFooter, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, slotLabel, DOW_LABELS, tradePreview, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 
 const chip = (on: boolean): React.CSSProperties => ({
@@ -21,6 +21,7 @@ const small: React.CSSProperties = { fontSize: 11.5, color: 'var(--dim)' };
 
 export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRoster: number | null }) {
   const [st, setSt] = useState<DevySharesState | null>(null);
+  const tight = useIsMobile(430); // the phone-width table, see COLS below; a hook, so it sits above the early return
   // v0.577.0: the DEVY tab opens on the market.
   const [view, setView] = useState<'mine' | 'league' | 'add'>('add');
   const [filter, setFilter] = useState<MarketFilter>('ALL');
@@ -169,17 +170,24 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
   /** INVEST (v0.576.0 → v0.579.0): price, the TO MAX bar, YOUR shares, an
    *  owners chip (who holds him, in a pop-up) and BUY, which opens the
    *  purchase sheet. */
-  const COLS = '24px minmax(0,1fr) 54px 64px 36px 44px 52px';
+  // A PHONE GETS THE NAME BACK (v0.652.2). The fixed columns added up to the
+  // whole width of a 390px screen and the name's 1fr collapsed to nothing —
+  // a market of positions and prices with nobody in it. Under 430px the
+  // owners chip moves into the subline (still a tap) and the rest tighten.
+  const COLS = tight ? '20px minmax(0,1fr) 40px 48px 28px 42px' : '24px minmax(0,1fr) 54px 64px 36px 44px 52px';
+  const GAP = tight ? 6 : 8;
   const investRow = (l: MarketLine) => {
     const r = l.row;
     const pct = (x: number) => `${Math.round(x * 100)}%`;
     return (
-      <div key={r.slug} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, alignItems: 'center', borderBottom: '1px solid var(--bd)', padding: '5px 0' }}>
+      <div key={r.slug} style={{ display: 'grid', gridTemplateColumns: COLS, gap: GAP, alignItems: 'center', borderBottom: '1px solid var(--bd)', padding: '5px 0' }}>
         <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{r.pos}</span>
         <span style={{ minWidth: 0, overflow: 'hidden' }}>
-          <span role="button" title="Player card" style={{ display: 'block', fontWeight: 700, color: 'var(--text)', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          <span role="button" title="Player card" style={{ display: 'block', fontWeight: 700, color: 'var(--text)', cursor: 'pointer', whiteSpace: tight ? 'normal' : 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: tight ? 1.15 : undefined }}
             onClick={() => openPlayerCard({ slug: r.slug, name: r.name, pos: r.pos, team: r.school ?? '', leagueId })}>{l.right?.mine ? '★ ' : ''}{r.name} <span style={{ ...small, fontWeight: 400 }}>ⓘ</span></span>
-          <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{marketSubline(r)}</span>
+          <span className="mono" style={{ display: 'block', fontSize: 9.5, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {tight && l.owners.length > 0 && <button style={{ ...chip(false), padding: '0 4px', fontSize: 9, marginRight: 4 }} onClick={() => setOpenOwners(r.slug)} title="Who holds shares in him">👥{l.owners.length}</button>}
+            {marketSubline(r)}</span>
         </span>
         <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', textAlign: 'right' }}>{fmtPts(l.price)}</span>
         <span title={l.lead >= 1 ? 'A stake is maxed — his right is owned' : `The leading stake is ${pct(l.lead)} of the way to maxing`}>
@@ -190,8 +198,8 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
           <span className="mono" style={{ display: 'block', textAlign: 'center', fontSize: 9, color: l.lead >= 1 ? (l.leadMine ? 'var(--you)' : 'var(--opp)') : 'var(--faint)' }}>{l.lead >= 1 ? 'OWNED' : pct(l.lead)}</span>
         </span>
         <span className="mono" style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: l.mine ? 'var(--you)' : 'var(--faint)' }}>{l.mine || '—'}</span>
-        <button style={{ ...chip(false), padding: '2px 0' }} disabled={!l.owners.length} onClick={() => setOpenOwners(r.slug)} title="Who holds shares in him">
-          {l.owners.length ? `👥${l.owners.length}` : '—'}</button>
+        {!tight && <button style={{ ...chip(false), padding: '2px 0' }} disabled={!l.owners.length} onClick={() => setOpenOwners(r.slug)} title="Who holds shares in him">
+          {l.owners.length ? `👥${l.owners.length}` : '—'}</button>}
         {myRoster != null
           ? <button style={{ ...chip(true), padding: '3px 0', fontWeight: 800 }} disabled={locked} onClick={() => setTrade({ slug: r.slug, mode: 'buy', n: 1 })}>BUY</button>
           : <span />}
@@ -277,8 +285,8 @@ export function DevySharesPanel({ leagueId, myRoster }: { leagueId: string; myRo
         </>) : (<>
         {deep && deep.length === 0 && <div style={small}>No college QB, RB, WR or TE matches that.</div>}
         {addList.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 8, padding: '4px 0', borderBottom: '1px solid var(--bd)' }}>
-            <span />{head('PLAYER', 'name', 'left')}{head('PRICE', 'price', 'right')}{head('TO MAX', 'lead')}{head('YOU', 'mine')}{head('OWN', 'owners')}<span />
+          <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: GAP, padding: '4px 0', borderBottom: '1px solid var(--bd)' }}>
+            <span />{head('PLAYER', 'name', 'left')}{head('PRICE', 'price', 'right')}{head('TO MAX', 'lead')}{head('YOU', 'mine')}{!tight && head('OWN', 'owners')}<span />
           </div>
         )}
         {market && addList.length === 0 && !(deep && deep.length === 0) && <div style={small}>Nobody matches that filter.</div>}
