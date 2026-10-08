@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.654.1 — Shotgun Wedding picks real trades
+
+> - Shotgun Wedding's CPU now trades like for like: the same positions each way, each player matched to one within about a point a game.
+> - It leaves each team's two best players alone, only moves starter-level players, never leaves a lineup weaker by more than a point a game, and skips a week rather than forcing a bad trade.
+
+Founder, reading the first live preview: "Those are really bad trades." The
+v0.653.0 planner matched the TOTALS of value over replacement, which let a
+star plus a throw-in balance two mid-tier players and priced two starting
+quarterbacks like a tight end and a running back in an 8-team, 1-QB league.
+
+- **Core `weddingPlan`, rebuilt** (docs/shotgun-wedding.md §2): like for like
+  (skill positions; QB only for QB when both teams have a spare), each pair
+  within 1 ppg (1.5 when nothing fits), each team's top two off the table,
+  starter-level only, both lineups within 1 ppg, nobody ruled out. No pass →
+  no wedding for that matchup. Seeded draw from the closest four.
+- **Worker.** Per-game values from the live projection level; games left
+  from `proj_board` for rest-of-season points; O/IR/PUP/SUS flagged out.
+- **Preview.** `ops/run/036` re-runs the Kickoff League preview.
+- SQL unchanged.
+
 ### v0.654.0 — Shotgun Wedding: the house rules
 
 > - Commissioners now choose who can call off a Shotgun Wedding: the team that won, the team that lost, or nobody.

@@ -2,17 +2,16 @@
 //
 // Founder: "the CPU creates a fair, 4 total player trade from opposing teams."
 // What is worth a red check rather than a careful reading:
-//   • FAIR means the trade grader's own "close to even" — a wedding the app
-//     then grades as lopsided is the CPU contradicting itself in public;
-//   • two each way, nobody worth nothing, never strip a team of a spot it
-//     could field;
+//   • the v0.654.1 rules (engine/shotgunWedding.ts): like for like, fair
+//     player by player, not the stars, starter-level only, both lineups
+//     hold, healthy — rebuilt after the founder read the first live preview:
+//     "Those are really bad trades";
 //   • the same inputs give the same wedding (a worker re-run files nothing
 //     different), and a different seed can give a different one.
 // Run: npx tsx scripts/check-shotgun-wedding.mjs
 import { readFileSync } from 'node:fs';
-import { weddingPlan } from '../packages/core/src/engine/shotgunWedding.ts';
-import { evenBand } from '../packages/core/src/data/tradeGrade.ts';
-import { leagueSlotDefs } from '../packages/core/src/engine/classic.ts';
+import { weddingPlan, weddingCandidates } from '../packages/core/src/engine/shotgunWedding.ts';
+import { leagueSlotDefs, optimalLineup } from '../packages/core/src/engine/classic.ts';
 import { weddingStatusLine, weddingDeadlineLabel, VETO_RULES, DEADLINE_RULES } from '../packages/core/src/data/shotgunWedding.ts';
 
 let fails = 0;
@@ -20,30 +19,41 @@ const ok = (name, cond, got) => {
   if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); }
   else console.log(`ok   ${name}`);
 };
-const P = (id, pos, value, points = value + 100) => ({ id, pos, value, points });
+const P = (id, pos, ppg, extra = {}) => ({ id, pos, ppg, ros: ppg * 12, ...extra });
 const slots = leagueSlotDefs({ roster: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 } });
-const valueOf = (all) => (id) => all.find((p) => p.id === id)?.value ?? 0;
+const byId = (list) => (id) => list.find((p) => p.id === id);
+const STAR = new Set(['h-qb', 'h-wr1', 'a-qb', 'a-rb1']);
 
-const home = [P('h-qb', 'QB', 40), P('h-rb1', 'RB', 90), P('h-rb2', 'RB', 60), P('h-rb3', 'RB', 25), P('h-wr1', 'WR', 85),
-  P('h-wr2', 'WR', 55), P('h-wr3', 'WR', 20), P('h-te', 'TE', 30), P('h-bench', 'WR', 0)];
-const away = [P('a-qb', 'QB', 45), P('a-rb1', 'RB', 80), P('a-rb2', 'RB', 50), P('a-rb3', 'RB', 30), P('a-wr1', 'WR', 95),
-  P('a-wr2', 'WR', 65), P('a-wr3', 'WR', 15), P('a-te', 'TE', 35), P('a-bench', 'RB', 0)];
+const home = [P('h-qb', 'QB', 20), P('h-rb1', 'RB', 18), P('h-rb2', 'RB', 13), P('h-rb3', 'RB', 11), P('h-rb4', 'RB', 4),
+  P('h-wr1', 'WR', 19), P('h-wr2', 'WR', 14), P('h-wr3', 'WR', 12), P('h-wr4', 'WR', 3), P('h-te', 'TE', 10), P('h-te2', 'TE', 5),
+  P('h-k', 'K', 9), P('h-def', 'DEF', 8)];
+const away = [P('a-qb', 'QB', 21), P('a-rb1', 'RB', 18.5), P('a-rb2', 'RB', 12.6), P('a-rb3', 'RB', 10.4), P('a-rb4', 'RB', 3.5),
+  P('a-wr1', 'WR', 16), P('a-wr2', 'WR', 14.5), P('a-wr3', 'WR', 11.5), P('a-wr4', 'WR', 2), P('a-te', 'TE', 9.5), P('a-te2', 'TE', 4),
+  P('a-k', 'K', 8), P('a-def', 'DEF', 7)];
+const lineupPpg = (roster) => {
+  const spots = optimalLineup(slots, roster, (p) => p.ppg).spots;
+  return spots.reduce((n, r) => n + (r.player ? r.player.ppg : 0), 0);
+};
+const after = (roster, gone, got) => roster.filter((p) => !gone.includes(p.id)).concat(got);
 
-// ── THE SHAPE AND THE FAIRNESS ─────────────────────────────────────────────
+// ── THE RULES ──────────────────────────────────────────────────────────────
 {
   const w = weddingPlan({ slots, home, away, seed: 'L|1|1v2' });
   ok('a plan comes back', !!w, w);
-  ok('two each way', w?.homeGives.length === 2 && w?.awayGives.length === 2, w);
-  ok('home gives home players, away gives away players',
-    w?.homeGives.every((s) => s.startsWith('h-')) && w?.awayGives.every((s) => s.startsWith('a-')), w);
-  const hv = w.homeGives.map(valueOf(home)).reduce((a, b) => a + b, 0);
-  const av = w.awayGives.map(valueOf(away)).reduce((a, b) => a + b, 0);
-  ok('the two sides sit inside the trade grader\'s even band', Math.abs(hv - av) <= evenBand(hv, av), { hv, av });
-  ok('…and the plan reports them', w.homeValue === hv && w.awayValue === av && w.scale === 'value', w);
-  ok('nobody worth nothing is in it', ![...w.homeGives, ...w.awayGives].some((s) => s.endsWith('bench')), w);
-  ok('neither quarterback moves — each team has only one', !w.homeGives.includes('h-qb') && !w.awayGives.includes('a-qb'), w);
-  ok('…nor either tight end', !w.homeGives.includes('h-te') && !w.awayGives.includes('a-te'), w);
-  ok('it is a weighty pair, not two scrubs', hv + av >= 150, { hv, av });
+  const hs = w.homeGives.map(byId(home)); const as = w.awayGives.map(byId(away));
+  ok('two each way, each from its own roster', hs.every(Boolean) && as.every(Boolean), w);
+  ok('LIKE FOR LIKE: both sides send the same positions',
+    hs.map((p) => p.pos).sort().join() === as.map((p) => p.pos).sort().join(), { hs, as });
+  const sortP = (xs) => [...xs].sort((x, y) => x.pos.localeCompare(y.pos) || y.ppg - x.ppg);
+  const gaps = sortP(hs).map((p, i) => Math.abs(p.ppg - sortP(as)[i].ppg));
+  ok('FAIR PLAYER BY PLAYER: every paired gap inside the band', gaps.every((g) => g <= w.band + 1e-9) && w.worstPair === Math.round(Math.max(...gaps) * 10) / 10, { gaps, w });
+  ok('NOT THE STARS: neither team\'s top two', ![...w.homeGives, ...w.awayGives].some((id) => STAR.has(id)), w);
+  ok('no quarterback when nobody has a spare, never a kicker or defense', [...hs, ...as].every((p) => ['RB', 'WR', 'TE'].includes(p.pos)), w);
+  ok('STARTER-LEVEL: no deep bench', ![...w.homeGives, ...w.awayGives].some((id) => /rb4|wr4|te2/.test(id)), w);
+  const hDrop = lineupPpg(home) - lineupPpg(after(home, w.homeGives, as));
+  const aDrop = lineupPpg(away) - lineupPpg(after(away, w.awayGives, hs));
+  ok('BOTH LINEUPS HOLD: neither loses more than a point a game', hDrop <= 1 + 1e-9 && aDrop <= 1 + 1e-9, { hDrop, aDrop });
+  ok('the plan reports what each side sends', w.homePpg === Math.round((hs[0].ppg + hs[1].ppg) * 10) / 10, w);
 }
 
 // ── THE SEED ───────────────────────────────────────────────────────────────
@@ -51,20 +61,29 @@ const away = [P('a-qb', 'QB', 45), P('a-rb1', 'RB', 80), P('a-rb2', 'RB', 50), P
   const a = weddingPlan({ slots, home, away, seed: 'L|3|1v2' });
   const b = weddingPlan({ slots, home, away, seed: 'L|3|1v2' });
   ok('the same seed gives the same wedding', JSON.stringify(a) === JSON.stringify(b));
-  const shapes = new Set(Array.from({ length: 12 }, (_, i) => JSON.stringify(weddingPlan({ slots, home, away, seed: `L|${i}|1v2` }))));
+  const shapes = new Set(Array.from({ length: 16 }, (_, i) => JSON.stringify(weddingPlan({ slots, home, away, seed: `L|${i}|1v2` }))));
   ok('different weeks do not all get the same wedding', shapes.size > 1, shapes.size);
 }
 
-// ── THIN ROSTERS AND NO DEAL ───────────────────────────────────────────────
+// ── WHAT IT REFUSES ────────────────────────────────────────────────────────
 {
-  const thin = [P('t-qb', 'QB', 30), P('t-rb1', 'RB', 0, 120), P('t-rb2', 'RB', 0, 110), P('t-wr1', 'WR', 0, 115), P('t-wr2', 'WR', 0, 100), P('t-te', 'TE', 0, 80), P('t-flex', 'WR', 0, 90)];
-  const w = weddingPlan({ slots, home: thin, away, seed: 'L|1|thin' });
-  ok('a roster with one player over replacement falls back to raw points for both sides', w?.scale === 'points', w);
-  ok('…still two each way', w?.homeGives.length === 2 && w?.awayGives.length === 2, w);
-  const lopsided = [P('x1', 'RB', 400), P('x2', 'WR', 380), P('x-qb', 'QB', 300), P('x-te', 'TE', 250), P('x-rb', 'RB', 200), P('x-wr', 'WR', 200), P('x-wr2', 'WR', 190)];
-  const scrubs = [P('y1', 'RB', 1, 1), P('y2', 'WR', 1, 1), P('y-qb', 'QB', 1, 1), P('y-te', 'TE', 1, 1), P('y-rb', 'RB', 1, 1), P('y-wr', 'WR', 1, 1), P('y-wr2', 'WR', 1, 1)];
-  ok('no fair pair → no wedding, rather than an unfair one', weddingPlan({ slots, home: lopsided, away: scrubs, seed: 's' }) === null);
-  ok('fewer than two players → no wedding', weddingPlan({ slots, home: [P('only', 'RB', 50)], away, seed: 's' }) === null);
+  const hurt = away.map((p) => (p.id === 'a-wr2' ? { ...p, out: true } : p));
+  const plans = Array.from({ length: 16 }, (_, i) => weddingPlan({ slots, home, away: hurt, seed: `L|${i}|hurt` })).filter(Boolean);
+  ok('a player ruled out is never forced to move', plans.length > 0 && plans.every((w) => !w.awayGives.includes('a-wr2')), plans.length);
+  // The v0.653.0 failure: a star plus a throw-in "balances" two mid players
+  // on totals. With every pair matched by position and points, it can't.
+  const starTeam = [P('s-qb', 'QB', 20), P('s-wr1', 'WR', 22), P('s-wr2', 'WR', 21), P('s-wr3', 'WR', 15), P('s-rb1', 'RB', 16), P('s-rb2', 'RB', 15.5), P('s-rb3', 'RB', 2), P('s-te', 'TE', 9)];
+  const midTeam = [P('m-qb', 'QB', 19), P('m-wr1', 'WR', 23), P('m-wr2', 'WR', 22.5), P('m-wr3', 'WR', 9), P('m-rb1', 'RB', 9.5), P('m-rb2', 'RB', 8), P('m-rb3', 'RB', 7), P('m-te', 'TE', 4)];
+  ok('no like-for-like pair inside a point and a half → no wedding, rather than a lopsided one',
+    weddingPlan({ slots, home: starTeam, away: midTeam, seed: 's' }) === null);
+  const twoQb = [...home, P('h-qb2', 'QB', 15.5)]; const twoQbA = [...away, P('a-qb2', 'QB', 15)];
+  const qbPlans = Array.from({ length: 24 }, (_, i) => weddingPlan({ slots, home: twoQb, away: twoQbA, seed: `L|${i}|qb` })).filter(Boolean);
+  ok('a quarterback can move when both teams roster a spare — and only for a quarterback',
+    qbPlans.every((w) => !(w.homeGives.includes('h-qb2') !== w.awayGives.includes('a-qb2'))), qbPlans.map((w) => [w.homeGives, w.awayGives]));
+  ok('fewer than two candidates → no wedding', weddingPlan({ slots, home: [P('only', 'RB', 12)], away, seed: 's' }) === null);
+  const cands = weddingCandidates(slots, home, false).map((p) => p.id).sort();
+  ok('the candidates: starters and near-starters, minus the stars, minus QB/K/DEF',
+    JSON.stringify(cands) === JSON.stringify(['h-rb1', 'h-rb2', 'h-rb3', 'h-te', 'h-wr2', 'h-wr3'].sort()), cands);
 }
 
 // ── THE WORKER AND THE SQL SAY THE SAME THINGS ─────────────────────────────
