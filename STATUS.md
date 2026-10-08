@@ -22,6 +22,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.654.3 — an all-autodraft room drafts in seconds again
+
+> - A draft with every seat on autodraft no longer waits out each pick's clock: the autopicks are fast again, and if the room ever can't advance the draft it now says why instead of sitting at 0:00.
+
+Founder, from "Test Wedding" (8 seats, all on auto): "Draft is pausing when
+everything is on auto", then "Something up with the draft controls" — pick 8
+at 0:00, and six minutes later only pick 11.
+
+- Cause (reproduced on a local database with every migration applied, fresh
+  8-team 15-round classic draft): the room's `draft_tick` call took 8.5 s for
+  its 25 picks, over the 8-second limit a signed-in call gets, so every pick in
+  it rolled back. 7.2 of the 9 seconds were `_college_rule_ok`, reached through
+  the 6-argument `_autopick_spot_fits` 137,000 times. That wrapper is SECURITY
+  DEFINER with a SET, so it could never inline, and it asked the college rule
+  even with none set. 0449 (v0.645.1) brought this on for every league without
+  a roster-builder spec, since the autopick now aims at the default lineup.
+- `0455`: the wrapper is plain inlinable SQL and asks the college rule only for
+  a spot that has one. 8.5 s → 0.17 s per 25-pick call; all 120 picks identical
+  before and after. `draft_tick` (0380's body) also stops after 3 s of work,
+  so a slow pick shortens a batch instead of losing it (the old function under
+  the new budget: 8 picks kept in 3.2 s instead of 25 lost).
+- Web `DraftRoom` and mobile `Draft`: the client-driven tick's `.catch(() => {})`
+  swallowed exactly this failure (`rpc()` throws, so a timeout never reached
+  `r.error`). It now shows the error.
+- Not confirmed against the live league from this session (no database
+  access). The local reproduction matches what the founder saw: picks landing
+  only when the worker swept or a FORCE PICK went in.
+
 ### v0.654.2 — Shotgun Wedding on the front page
 
 > - The front page's Competitive modes card gains a Shotgun Wedding chip, with its line and a screen of the wedding card.
