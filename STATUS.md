@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.655.2 — Settings says which update is running, and checks on demand
+
+> - Settings now has an App update panel: which version is running, whether it came built into the install or as an update (and when that update was published), and a Check for update button that downloads and restarts, saying what happened at each step.
+
+Founder, after v0.655.0 and v0.655.1 hadn't reached the phone (the header
+still read v0.654.5): "It's not working."
+
+- **Server side checked.** Both updates published to the production
+  channel for Android runtime `3d455539…`, the same runtime that delivered
+  v0.654.5 to the same phone; their bundles built cleanly and their app diff
+  has nothing that runs at startup.
+- **Why it was invisible.** `src/updates.ts` swallows check errors by
+  design, and nothing on screen said which update was running, so a failed
+  check, a check that never ran and a rolled-back update all looked the same.
+- **`ui/AppUpdatePanel.tsx`** in Settings: the running `APP_VERSION`, built
+  in vs `Updates.updateId` and `createdAt`, channel and runtime, a warning on
+  `Updates.isEmergencyLaunch` with its reason, and ↻ CHECK FOR UPDATE
+  (`checkForUpdateAsync` → `fetchUpdateAsync` → `reloadAsync`) with each step
+  and any error in words.
+
 ### v0.655.1 — an open seat can be 🤖, and a claimed one is yours
 
 > - In the app's SEATS sheet, commissioners can now set an unclaimed seat to 🤖 AI-run, the same toggle claimed seats already had (the website's seat list already offered it).
