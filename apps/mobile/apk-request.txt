@@ -1,0 +1,4 @@
+# Changing this file and merging builds and publishes the Android APK even when
+# the native app hasn't changed (.github/workflows/release-apk.yml, the gate).
+# One line per request: the date, who asked, and why.
+2026-10-09 founder: "Merge and cut apps" after v0.655.2 (JS-only since the last APK).
