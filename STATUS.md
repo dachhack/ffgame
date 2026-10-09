@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.5 — the FAQ, rewritten
+
+> - The FAQ is rewritten: plainer answers, the full league platform first and Drip as one game in it, and a note on who builds Drip Fantasy.
+
+Founder: "a complete revision removing AI tells and focusing more on the
+complete product as a classic fantasy platform with drip as one feature",
+plus the founder's links (oberonanalytics.ai, LinkedIn). Sections are now
+Basics / Playing / Account & data / Apps & help. Stale answers fixed: no
+pilot cap or waiting list, iPhone is on TestFlight (IOS_TESTFLIGHT_URL), Yahoo
+is connected, the landing no longer has the mascot or PLAY A WEEK cards, and
+the demo is the real engine (the "deterministic simulation" answer is gone).
+The inactive-account rule (30 days, then 14) is stated as a data answer.
+The founder entry says only what the front page already says; no name or
+credentials until the founder supplies them.
+
 ### v0.656.4 — front door, Shotgun Wedding trade box, roster builder columns
 
 > - The welcome page has a centered title and buttons, and plainer feature descriptions.
