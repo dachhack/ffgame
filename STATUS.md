@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.654.4 — an update ready, one tap away
+
+> - When the app has downloaded an update, a strip under the header says so: tap it to restart into the new version.
+
+Founder: "Do we need a refresh button in the app?"
+
+- `apps/mobile/src/ui/OtaReady.tsx`: `useOtaReady` (expo-updates'
+  `useUpdates().isUpdatePending`, so the launch check's download counts as
+  well as `updates.ts`'s foreground ones) and `OtaReadyStrip`, styled like
+  the What's new banner. A tap calls `applyOtaUpdate` (`updates.ts`,
+  `Updates.reloadAsync`). Before this a downloaded update waited for five
+  minutes away or a cold start.
+- `App.tsx`: while an update is waiting, the strip takes the What's new
+  banner's place. The restart may be all that banner was about, and it beats
+  downloading an APK.
+- Ships over the air: no native change. The APK gate from #1169 skips it
+  once a published manifest.json carries a fingerprint; #1169's own merge
+  builds the APK that stamps the first one.
+
 ### v0.654.3 — an all-autodraft room drafts in seconds again
 
 > - A draft with every seat on autodraft no longer waits out each pick's clock: the autopicks are fast again, and if the room ever can't advance the draft it now says why instead of sitting at 0:00.

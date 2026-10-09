@@ -22,6 +22,7 @@ import { THEMES, ThemeCtx, loadTheme, saveTheme, isLight, MONO, alpha, type Them
 import { ScrollChromeCtx, ScrollShiftCtx, useScrollChromeDriver } from './src/ui/scrollChrome';
 import { SettingsModal } from './src/ui/SettingsModal';
 import { useUpdateCheck, WhatsNewBanner, WhatsNewSheet } from './src/ui/WhatsNew';
+import { OtaReadyStrip, useOtaReady } from './src/ui/OtaReady';
 import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
@@ -97,6 +98,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // "You are N versions behind" (v0.393.0): checked at launch and on foreground.
   const update = useUpdateCheck();
+  const otaReady = useOtaReady();
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false); // ▦ fields off the leagues page (v0.390.0)
   // Whether to OFFER the admin entry. The RPCs behind it are the real gate —
@@ -625,7 +627,11 @@ export function App() {
       <ThemeCtx.Provider value={theme}>
         <StatusBar style={isLight(themeName) ? 'dark' : 'light'} />
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }} edges={['top', 'left', 'right']}>
-          <WhatsNewBanner st={update} onOpen={() => setWhatsNewOpen(true)} />
+          {/* A waiting over-the-air update first (v0.654.4): it may be all the
+              "versions behind" banner is about, and a restart beats a download. */}
+          {otaReady
+            ? <OtaReadyStrip ready />
+            : <WhatsNewBanner st={update} onOpen={() => setWhatsNewOpen(true)} />}
           <ErrorBoundary>{body()}</ErrorBoundary>
           <WhatsNewSheet visible={whatsNewOpen} st={update} onClose={() => setWhatsNewOpen(false)} />
           <PlayerCardHost />
