@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.655.1 — an open seat can be 🤖, and a claimed one is yours
+
+> - In the app's SEATS sheet, commissioners can now set an unclaimed seat to 🤖 AI-run, the same toggle claimed seats already had (the website's seat list already offered it).
+> - Whoever claims a 🤖 seat now takes it over themselves instead of arriving with the AI still running their team.
+
+Founder: "Can we allow commish to set unclaimed seats as AI controlled?"
+(with the SEATS sheet: open seats offered only ASSIGN).
+
+- **Already there.** `set_team_controller` (0022) has always accepted an open
+  seat, and the web's 👥 SEATS tab shows 🤖 on every row. An open seat also
+  already runs on its seat agent (`server/src/agents.js`): lineups, the wire,
+  autodraft. So 🤖 on an open seat adds the full AI treatment on top: the
+  drip fill even under an "empty" lineup policy, the AI persona, and the 🤖
+  label.
+- **App.** `CommishTools` `CommishTeams`: the 🤖/👤 chip on open-seat rows,
+  and "open seat · 🤖 AI-run" under the name.
+- **SQL 0457.** None of the claim paths reset `controller`, so a person who
+  claimed a 🤖 seat arrived on auto-pilot (lineups re-planned, coin spent,
+  autodraft). A `before update of app_user_id` trigger on
+  `league_membership` now makes a seat 👤 when it goes from nobody to
+  somebody. The person can hand it back to the AI themselves.
+- `scripts/db/ai-open-seat-probes.sql` (in the scratch runner).
+
 ### v0.655.0 — Shotgun Wedding: the commissioner's hand
 
 > - Commissioners can now rewrite any pending Shotgun Wedding's trade, or call one off for the teams, whatever the veto rule. The league hears either in chat.

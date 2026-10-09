@@ -1408,11 +1408,21 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
                 {m.vampire ? '🧛 ' : ''}{m.team ?? `Roster ${m.roster_id}`}{self ? '  (you)' : ''}
               </Text>
               <Mono size={8.5} tone={openSeat ? 'warn' : 'faint'}>
-                {m.enrolled ? (m.email ?? m.sleeper ?? 'seated') : m.claim_email ? `held for ${m.claim_email}` : 'open seat'}
+                {m.enrolled ? (m.email ?? m.sleeper ?? 'seated') : m.claim_email ? `held for ${m.claim_email}` : m.controller === 'ai' ? 'open seat · 🤖 AI-run' : 'open seat'}
               </Mono>
             </View>
             {openSeat && (
               <>
+                {/* v0.655.1 (founder: "Can we allow commish to set unclaimed
+                    seats as AI controlled?"): the same 🤖/👤 toggle the seated
+                    rows carry. An open seat already runs on its seat agent;
+                    🤖 makes it a full AI team (the drip fill under an "empty"
+                    lineup policy, the AI's persona, the 🤖 label), and 0457
+                    hands it back to human control the moment someone claims it. */}
+                <Chip label={m.controller === 'ai' ? '🤖' : '👤'} on={m.controller === 'ai'}
+                  a11y={m.controller === 'ai' ? 'AI-run seat — tap for an open seat' : 'open seat — tap to make it AI-run'}
+                  onPress={() => { tap(); void act(() => setTeamController(leagueId, m.roster_id, m.controller === 'ai' ? 'human' : 'ai'),
+                    () => setNote(`✓ ${m.team ?? `roster ${m.roster_id}`} → ${m.controller === 'ai' ? 'an open seat' : 'AI-run until someone claims it'}`)); }} />
                 <Chip label="ASSIGN" onPress={() => { tap(); setAssignFor(m); setEmailDraft(''); }} />
                 {myRoster == null && <Chip label="＋ ME" on onPress={() => { tap(); void act(() => commishClaimRoster(leagueId, m.roster_id), () => setNote('✓ the seat is yours')); }} />}
               </>
