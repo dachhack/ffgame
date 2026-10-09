@@ -19,6 +19,10 @@
 //     next time the app comes back after being away RELOAD_AFTER_MS or more —
 //     a moment the player is re-orienting anyway, never mid-tap. A quick
 //     app-switch doesn't reload them out from under a half-set lineup.
+//   • and the player can take it at once (v0.654.4): while a downloaded
+//     update waits, ui/OtaReady.tsx shows a strip that applies it on a tap —
+//     for the moment someone hears "it's fixed, update the app" and would
+//     otherwise need two cold starts to get there.
 //
 // A dev build (Updates.isEnabled false — Metro serves the JS) skips all of it.
 import { AppState, type AppStateStatus } from 'react-native';
@@ -57,6 +61,12 @@ function onChange(s: AppStateStatus): void {
     return;
   }
   void checkAndFetch();
+}
+
+/** Apply the downloaded update now — the restart strip's tap (v0.654.4).
+ *  Failing that, it still applies at the next cold start. */
+export function applyOtaUpdate(): void {
+  Updates.reloadAsync().catch(() => { /* applies at the next cold start instead */ });
 }
 
 /** Wire the foreground check. Called once from index.ts; safe to call again. */
