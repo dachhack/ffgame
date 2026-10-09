@@ -4351,6 +4351,13 @@ export interface DraftState {
   stash_slots?: number;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
+/** Change the number of teams before the draft (0458): grow adds open seats;
+ *  shrink removes empty seats, moving a claimed seat above the new size into a
+ *  freed lower number. Refused once the draft starts. */
+export const commishSetLeagueSize = (leagueId: string, teams: number) =>
+  tracked(rpc<{ ok: boolean; error?: string; teams?: number; added?: number; removed?: number[];
+                moved?: { from: number; to: number; team: string }[]; playoff_teams?: number }>('commish_set_league_size',
+    { p_league_id: leagueId, p_teams: teams }), Ev.commishAction, { tool: 'league_size', teams });
 /** Replace a seat's private draft queue with an ordered slug list. */
 export const setDraftQueue = (leagueId: string, rosterId: number, slugs: string[]) =>
   rpc<{ ok: boolean; error?: string; queued?: number }>('set_draft_queue', { p_league_id: leagueId, p_roster_id: rosterId, p_slugs: slugs });

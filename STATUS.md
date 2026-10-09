@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.0 — the league can change size before the draft
+
+> - Commissioners can now change the number of teams until the draft starts: on the website's SEATS list and the app's SEATS sheet.
+> - Growing adds open seats. Shrinking removes empty seats only; a claimed seat above the new size moves down to a free number, keeping its people and name.
+
+Founder: "Did we add a way for commish to change league size after it's
+created?" (no) — then "Build the pre-draft version."
+
+- **SQL 0458** `commish_set_league_size(league, teams)`: commissioner, 2–32,
+  refused once the draft starts.
+  - Grow: "Team N" open seats, appended to a set draft order, given the
+    same future picks every seat holds.
+  - Shrink: empty seats (nobody, no invite, no co-manager, no players) above
+    the new size go; a claimed seat above it moves into the highest empty
+    number at or below it, renumbered in membership, co-managers, seat
+    agents, pick assets, the draft order, lottery shares and vampire seats;
+    "Team 9" becomes "Team 3" only if still so named. Refused, naming the
+    seat, when a move would meet rostered players or an open trade, or when
+    too few seats are empty.
+  - After: `settings_json.teams`; a playoff field larger than the league
+    shrinks to 8/6/4/2; a drawn schedule is redrawn for the same weeks; a
+    chat card.
+- **Screens.** Web `AdminPage` `LeagueSizeBox` beside the waiting room; app
+  `CommishTeams` LEAGUE SIZE −/+ and MAKE IT N. Both hide after the draft.
+- `scripts/db/league-size-probes.sql` (scratch runner).
+
 ### v0.655.3 — "cut apps" can always build an APK
 
 > - A fresh Android APK of the current app is built and published, carrying everything through the Settings update panel.
