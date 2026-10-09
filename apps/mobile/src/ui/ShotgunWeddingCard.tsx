@@ -5,7 +5,7 @@
 // Renders nothing unless the league has the mode on and a week with
 // weddings. Your own wedding first, with CALL IT OFF (whoever holds the
 // veto), PROPOSE NEW VOWS (either team, one to three players each way) and
-// SAY YES to the other side's vows; everyone else's one line each — except
+// SAY YES to the other side's vows; everyone else's a smaller box each, except
 // for the commissioner (0456), who sees every pending wedding in full with
 // ✎ REWRITE (change the trade outright) and CALL OFF, whatever the veto rule.
 import { useEffect, useState } from 'react';
@@ -14,11 +14,44 @@ import {
   shotgunState, shotgunDecline, shotgunCounter, shotgunAcceptCounter, shotgunCommishEdit, shotgunCommishDecline, friendlyError,
 } from '@drip/core/data/liveApi';
 import {
-  weddingStatusLine, weddingCounterLine, weddingSends, weddingPlayerTag, type Wedding,
+  weddingStatusShort, weddingPlayerTag, type Wedding, type WeddingPlayer, type WeddingSide,
 } from '@drip/core/data/shotgunWedding';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono } from './prims';
+
+// THE TRADE BOX (v0.656.4, founder: "get rid of the walls of text"): the two
+// sides side by side, a player to a row. Twin of the web's TradeBox.
+function Side({ side, gives, you, get, small }: { side: WeddingSide; gives: WeddingPlayer[]; you: boolean; get: boolean; small?: boolean }) {
+  const t = useTheme();
+  const fs = small ? 11.5 : 12.5;
+  return (
+    <View style={{ flex: 1, minWidth: 0, paddingHorizontal: small ? 8 : 10, paddingVertical: small ? 7 : 9, borderRadius: 7, borderWidth: 1,
+      borderColor: you ? alpha(t.you, 45) : t.bd, backgroundColor: you ? alpha(t.you, 8) : t.bg }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+        <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs, fontWeight: '700', color: t.text }}>{side.team}</Text>
+        {side.score != null && <Mono size={9.5} tone="faint">{side.score}</Mono>}
+      </View>
+      <Mono size={8.5} weight="700" track={0.1} tone={you ? 'you' : 'faint'} style={{ marginTop: 2 }}>{you ? 'YOU SEND' : get ? 'YOU GET' : 'SENDS'}</Mono>
+      {gives.length ? gives.map((p) => (
+        <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+          {!!p.pos && <Mono size={9} weight="700" tone="dim" style={{ width: 22 }}>{p.pos}</Mono>}
+          <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs, color: t.text }}>{p.name}</Text>
+        </View>
+      )) : <Text style={{ fontSize: 11.5, color: t.faint, marginTop: 4 }}>Nobody</Text>}
+    </View>
+  );
+}
+function TradeBox({ w, home, away, small }: { w: Wedding; home: WeddingPlayer[]; away: WeddingPlayer[]; small?: boolean }) {
+  const t = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 6, marginTop: small ? 6 : 10 }}>
+      <Side side={w.home} gives={home} you={w.my_seat === w.home.roster} get={w.my_seat === w.away.roster} small={small} />
+      <Text style={{ alignSelf: 'center', color: t.faint, fontSize: 14 }}>⇄</Text>
+      <Side side={w.away} gives={away} you={w.my_seat === w.away.roster} get={w.my_seat === w.home.roster} small={small} />
+    </View>
+  );
+}
 
 export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; onChanged?: () => void }) {
   const t = useTheme();
@@ -72,12 +105,9 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
         const boss = w.can_commish === true;
         if (!mine && !boss) {
           return (
-            <View key={w.id} style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: t.bd }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: t.text }}>{w.home.team} ⇄ {w.away.team}</Text>
-              <Text style={{ fontSize: 11.5, color: t.dim, marginTop: 2 }}>
-                {weddingSends(w.home.team, w.home.gives)}; {weddingSends(w.away.team, w.away.gives)}.
-              </Text>
-              <Mono size={9.5} tone="faint" style={{ marginTop: 2 }}>{weddingStatusLine(w)}</Mono>
+            <View key={w.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: t.bd }}>
+              <TradeBox w={w} home={w.home.gives} away={w.away.gives} small />
+              <Mono size={9.5} tone="faint" style={{ marginTop: 5 }}>{weddingStatusShort(w)}</Mono>
             </View>
           );
         }
@@ -93,19 +123,17 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
           setComposing({ id: w.id, mode }); setNote(null);
           setPickH(w.home.gives.map((p) => p.slug)); setPickA(w.away.gives.map((p) => p.slug));
         };
-        const counter = weddingCounterLine(w);
+        const counterFrom = w.counter ? (w.counter.from === w.home.roster ? w.home.team : w.counter.from === w.away.roster ? w.away.team : 'one side') : null;
         return (
           <View key={w.id} style={{ marginTop: 10, ...(mine ? {} : { paddingTop: 10, borderTopWidth: 1, borderTopColor: t.bd }) }}>
-            {!mine && <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>{w.home.team.toUpperCase()} ⇄ {w.away.team.toUpperCase()}</Mono>}
-            <Text style={{ fontSize: mine ? 14 : 13, fontWeight: '700', color: t.text, lineHeight: 20 }}>{weddingSends(w.home.team, w.home.gives)}</Text>
-            <Text style={{ fontSize: mine ? 14 : 13, fontWeight: '700', color: t.text, lineHeight: 20 }}>{weddingSends(w.away.team, w.away.gives)}</Text>
-            <Mono size={10} tone="dim" style={{ marginTop: 6 }}>{weddingStatusLine(w)}</Mono>
-            {w.status === 'pending' && mine && (
-              <Mono size={9.5} tone="faint" style={{ marginTop: 3 }}>🔒 These players can’t be dropped, traded or moved to IR until it’s settled.</Mono>
-            )}
-            {!!counter && w.status === 'pending' && (
-              <View style={{ marginTop: 8, padding: 8, borderRadius: 8, backgroundColor: alpha(t.warn, 8) }}>
-                <Mono size={10} tone="warn">{counter}</Mono>
+            <TradeBox w={w} home={w.home.gives} away={w.away.gives} />
+            <Mono size={10} tone="dim" style={{ marginTop: 7 }}>
+              {weddingStatusShort(w)}{w.status === 'pending' && mine ? '  🔒 Players locked.' : ''}
+            </Mono>
+            {!!w.counter && w.status === 'pending' && (
+              <View style={{ marginTop: 10, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: alpha(t.warn, 45), backgroundColor: alpha(t.warn, 6) }}>
+                <Mono size={9} weight="700" track={0.1} tone="warn">NEW VOWS FROM {counterFrom!.toUpperCase()}</Mono>
+                <TradeBox w={w} home={w.counter.home_gives} away={w.counter.away_gives} small />
               </View>
             )}
             {w.status === 'pending' && (

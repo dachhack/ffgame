@@ -147,10 +147,10 @@ export const FORMAT_NOTES: FormatNote[] = [
   { name: 'Head-to-head', icon: '🤝', line: 'One opponent a week, a record, a playoff bracket. The shape everybody knows.' },
   { name: 'Guillotine', icon: '🪓', line: 'The lowest score each week is eliminated and their whole roster hits the wire. Last team standing takes it.' },
   { name: 'Vampire', icon: '🧛', line: 'Vampires skip the draft and live off the pool. Win the week and they bite: one of yours for one of theirs.' },
-  { name: 'Golf', icon: '⛳', line: 'The lowest weekly total wins. Every scoring value stays exactly the same — only the target moves.' },
+  { name: 'Golf', icon: '⛳', line: 'The lowest weekly total wins. Scoring works the same as always, you just want less of it.' },
   // v0.650.0 — the landing's competitive modes gain Bullseye (docs/bullseye.md).
   // "Rings" is never shown to a player, so the line says target and dart.
-  { name: 'Bullseye', icon: '🎯', line: 'The CPU deals a target number for every spot each week. Start the player who\u2019ll land closest — over is as bad as under, and a dead-on hit pays double.' },
+  { name: 'Bullseye', icon: '🎯', line: 'Each week the CPU sets a target number for every spot. Start the player who\u2019ll land closest. Going over counts the same as going under, and an exact hit pays double.' },
   // v0.654.2 — Shotgun Wedding (docs/shotgun-wedding.md) joins the modes.
   { name: 'Shotgun Wedding', icon: '💍', line: 'Every Tuesday the CPU hands each matchup\u2019s two teams a fair, like-for-like 2-for-2 trade. It goes through at the deadline unless it\u2019s called off or they agree on new vows.' },
 ];
@@ -160,7 +160,7 @@ export const CONTINUITY_NOTES: FormatNote[] = [
   { name: 'Redraft', icon: '🔁', line: 'Everyone starts empty every year. The draft is the whole season\u2019s roster decision.' },
   { name: 'Keeper', icon: '🔒', line: 'Hold a set number of players through the offseason and give up the picks they cost.' },
   { name: 'Dynasty', icon: '👑', line: 'Keep the lot. Rookie drafts each spring, and future picks you can trade years ahead.' },
-  { name: 'Contract', icon: '📝', line: 'Every player carries a salary and a term under a cap. Auction bids ARE the salaries — extend, tag or let them walk.' },
+  { name: 'Contract', icon: '📝', line: 'Every player has a salary and a contract length under a cap. Auction bids set the salaries, and you can extend, tag or release players.' },
 ];
 
 /** How the roster gets FILLED. */
@@ -222,8 +222,8 @@ export const FUNNEL = {
   welcome: 'Welcome to the cutting edge of fantasy football!',
   pitch: 'Drip is a 100% free, bespoke fantasy platform where development is at warp speed with help from AI, one unemployed fantasy-obsessed data scientist, and YOU.',
   more: 'Find out more',
-  dreamers: 'Welcome dreamers.',
-  dreamersLine: 'If you\u2019ve ever imagined a league that doesn\u2019t fit an existing platform, this is the place for you!',
+  innovators: 'Welcome innovators.',
+  innovatorsLine: 'If you\u2019ve ever imagined a league that doesn\u2019t fit an existing platform, this is the place for you!',
   cta: 'Count me in!',
   signIn: 'Sign in',
   demo: 'Click here for a demo',
@@ -249,28 +249,28 @@ export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote
   { heading: 'League types', sub: 'What carries from one season to the next.', notes: [
     // v0.652.0: the three plain shapes are one chip (founder: "Redraft/Keeper/
     // Dynasty can all be one chip"); the college shapes (v0.651.0) keep theirs.
-    { name: 'Redraft · Keeper · Dynasty', icon: '🔁', line: 'Start fresh every year, hold a few through the offseason, or keep the lot — rookie drafts each spring and future picks you can trade years ahead.' },
+    { name: 'Redraft · Keeper · Dynasty', icon: '🔁', line: 'Start fresh every year, keep a few players through the offseason, or keep your whole roster with rookie drafts each spring and future picks you can trade.' },
     note(CONTINUITY_NOTES, 'Contract'),
-    { name: 'Full college', icon: '🏟️', line: 'No NFL players at all: every spot takes college players and the season runs Saturday by Saturday, on the college calendar.' },
-    { name: 'Mixed college', icon: '🔀', line: 'College-only starting spots beside your NFL lineup — college and NFL players score in the same week.' },
-    { name: 'Devy', icon: '🎓', line: 'College players on your roster before they’re drafted — as devy spots or as shares bought in a devy market, priced off StatHead’s rankings.' },
+    { name: 'Full college', icon: '🏟️', line: 'No NFL players. Every spot takes college players, and the season follows the college Saturday schedule.' },
+    { name: 'Mixed college', icon: '🔀', line: 'College-only starting spots next to your NFL lineup. College and NFL players score in the same week.' },
+    { name: 'Devy', icon: '🎓', line: 'Roster college players before they’re drafted, either in devy spots or as shares in a devy market priced off StatHead’s rankings.' },
   ] },
   { heading: 'Competitive modes', sub: 'How the season ends differently.', notes: [
     note(FORMAT_NOTES, 'Vampire'), note(FORMAT_NOTES, 'Guillotine'), note(FORMAT_NOTES, 'Golf'), note(FORMAT_NOTES, 'Bullseye'),
     note(FORMAT_NOTES, 'Shotgun Wedding'),
   ] },
-  { heading: 'Positions', sub: 'Every spot a lineup can have, on or off per league.', notes: [
+  { heading: 'Positions', sub: 'Every lineup spot, on or off per league.', notes: [
     // v0.652.0: one chip for the lot (founder: "All positions can just be one
     // chip that shows the roster builder"); the scoped spot keeps its own.
-    { name: 'Every position', icon: '🏈', line: 'QB, RB, WR, TE, flex and superflex; kickers and defenses; DL, LB and DB for IDP; returners, fullbacks, punters and head coaches — each spot on or off, shaped in the roster builder.' },
-    { name: 'Scoped positions', icon: '🎯', line: 'A spot limited to a team, a tenure (rookies, years 2–3, vets) or a position group — "one rookie WR", "a Cowboy every week".' },
+    { name: 'Every position', icon: '🏈', line: 'QB, RB, WR, TE, flex and superflex, plus K, D/ST, IDP (DL, LB, DB), returners, fullbacks, punters and head coaches. Turn each one on or off in the roster builder.' },
+    { name: 'Scoped positions', icon: '🎯', line: 'A spot limited to a team, a tenure (rookies, years 2–3, vets) or a position group, like "one rookie WR" or "a Cowboy every week".' },
   ] },
-  { heading: 'Scoring options', sub: 'Knob by knob, or by the rule.', notes: [
-    { name: 'Single-spot best ball', icon: '🤖', line: 'Flag any one spot (or all of them) as best ball: it starts the top scorer you didn’t field by hand, after the fact.' },
-    { name: 'Scoped bonuses', icon: '✨', line: 'Bonus points or multipliers that apply only to players matching a filter — a team, a position, a tenure — stacked as many as you like.' },
+  { heading: 'Scoring options', sub: 'Tune every stat, or set rules for certain players.', notes: [
+    { name: 'Single-spot best ball', icon: '🤖', line: 'Mark any spot (or all of them) as best ball, and it starts your highest scorer after the games instead of whoever you picked.' },
+    { name: 'Scoped bonuses', icon: '✨', line: 'Bonus points or multipliers for players who match a filter, like a team, a position or a tenure. Stack as many as you want.' },
     // v0.652.0: the "Others" chip is gone (founder) — the knobs live under ⚖ SCORING.
   ] },
-  { heading: 'Matchup style', sub: 'The game your week is played in.', notes: [
+  { heading: 'Matchup style', sub: 'How you play each week.', notes: [
     note(FUNNEL_GAMES, 'Classic'), note(FUNNEL_GAMES, 'Drip'),
   ] },
 ];

@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.4 — front door, Shotgun Wedding trade box, roster builder columns
+
+> - The welcome page has a centered title and buttons, and plainer feature descriptions.
+> - Shotgun Wedding trades now show as a two-sided trade box, a player to a row, instead of sentences.
+> - The roster builder's columns line up from row to row.
+
+Founder asks, one change:
+- Landing: the title sits centered above the image and pitch, "Count me in! /
+  Sign in" centered under both; "Welcome dreamers." is now "Welcome
+  innovators." (FUNNEL.dreamers → FUNNEL.innovators). The feature-chip lines
+  and card subtitles lost their AI tells (em-dash asides, "keep the lot",
+  "knob by knob"); the founder's own pitch lines are untouched.
+- Shotgun Wedding (web and app twins): TradeBox draws each side's team, score
+  and players (YOU SEND / YOU GET on your own wedding); a counter shows as its
+  own small box under NEW VOWS FROM …; core `weddingStatusShort` replaces the
+  long status sentence on pending weddings (settled ones keep
+  `weddingStatusLine`). The lock note is one short "🔒 Players locked."
+  with the full rule in its tooltip on web.
+- Roster builder (web): PosMultiSelect is a fixed 150px and ellipses long
+  sets, so name / BB / ⛳ / 🔎 line up; the mixed-league level toggle is a
+  fixed width too. The app's builder already pinned its controls right.
+- No iPhone build needed (check:ios-runtime matches the TestFlight build).
+
 ### v0.656.3 — a check that says when a change needs an iPhone build
 
 > - Behind the scenes: every change to the app is now checked for whether it needs a new iPhone build, so one is only made when it's truly necessary.
