@@ -25,6 +25,7 @@ import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTe
 import { registerForPush, registeredPushToken } from './push';
 import { tap } from './feedback';
 import { Overlay } from './Overlay';
+import { AppUpdatePanel } from './AppUpdatePanel';
 import { allWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues, type WidgetLeague } from '@drip/core/data/widgetFeed';
 import { refreshMatchupWidgets } from '../widget/widgetTask';
 import { refreshExtraWidgets } from '../widget/extraTasks';
@@ -248,6 +249,10 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                   hint={behind > 0 ? `${behind} behind — update` : version} strong={behind > 0} />
               )}
               <ActionRow icon="⎋" label="Sign out" onPress={() => { onClose(); onSignOut(); }} />
+            </View>
+            {/* v0.655.2: which code is running, and a check that says what happened. */}
+            <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4 }}>
+              <AppUpdatePanel />
             </View>
           </>
         )}
