@@ -26,7 +26,7 @@ import { PROJ_2026 } from '../data/proj2026';
 import { slugMeta, normTeam, liveTeamFor } from '../data/slugMeta';
 import { LIVE_SEASON } from '../data/realPbp';
 import { projFor } from '../data/poolSort';
-import { injuryFor, type InjuryStatus } from '../data/injuries';
+import { injuryFor, injuryNow, hasLiveInjuries, type InjuryStatus } from '../data/injuries';
 import { depthFor, depthForTeam } from '../data/playerDepth';
 
 export interface ProjectedRow {
@@ -107,7 +107,14 @@ export function projectedStarters(team: string, week?: number | null): Projected
       ...c, team: T,
       proj: (() => { const p = projFor(c.slug, c.pos); return typeof p === 'number' && Number.isFinite(p) ? p : null; })(),
       depth: depthFor(c.slug),
-      injury: week != null ? injuryFor(week, c.slug) : null,
+      // THE LIVE REPORT, NEVER THE BAKE (v0.654.5). Founder, on the fields
+      // widget: "RBs for TB are off" — Bucky Irving gone, Sean Tucker and a
+      // practice-squad Williams starting. injuryFor falls back to the baked
+      // 2025 report when no live one is installed for the week, and the 2025
+      // report had Irving OUT in week 5. This sheet is always the live season
+      // (LIVE_SEASON, above), so last year's tags are never its answer: the
+      // week's live report, else the current one, else no tag at all.
+      injury: week == null ? null : hasLiveInjuries(week) ? injuryFor(week, c.slug) : injuryNow(c.slug),
     }))
     // A man needs SOMETHING said about him — a projection or a rank. Without
     // either he is a name we cannot place, and a sheet of those is a roster.

@@ -16,7 +16,7 @@ import React from 'react';
 import { requestWidgetUpdate, type WidgetTaskHandlerProps } from 'react-native-android-widget';
 import { getSession, friendlyError } from '@drip/core/data/liveApi';
 import { widgetSnapshot, recallSnapshot, recallLeagues, allWidgetLeagues, shownWidgetLeagues, cacheGet, cacheSet, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { alertsSummary, fieldGames, minesByTeam, loadFieldsWeek, loadSportFields, applyFieldsPick } from '@drip/core/data/widgetExtras';
+import { alertsSummary, fieldGames, minesByTeam, loadFieldsWeek, loadSportFields, applyFieldsPick, loadPregameInputs } from '@drip/core/data/widgetExtras';
 import { fieldsPick } from '@drip/core/data/fieldsPick';
 import type { FieldsLevel } from '@drip/core/data/fieldsWeek';
 import { AlertsWidget, FieldsWidget, ALERTS_WIDGET_NAME, FIELDS_WIDGET_NAME, FIELDS_CLICK, type AlertsState, type FieldsState } from './ExtraWidgets';
@@ -120,6 +120,8 @@ async function fieldsState(widgetId: number): Promise<FieldsState> {
   try {
     const at = nflOn ? await loadFieldsWeek(readNum(PREF_OFFSET(widgetId)), Date.now(), level) : null;
     if (!at) return { kind: 'empty', level, sportGames };
+    // The pregame sheet's live inputs (v0.654.5): NFL data, so NFL only.
+    if (level === 'nfl') await loadPregameInputs(at.week);
     const star = starOf(widgetId);
     const mine = minesByTeam(rememberedSnaps()?.snaps ?? [], { week: at.week, leagueId: star.id });
     const games = applyFieldsPick(fieldGames(at.week, mine), pick);

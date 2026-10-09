@@ -1369,6 +1369,15 @@ const totalOf = (a) => a.spots.reduce((s, r) => s + (r.player ? byVal(r.player) 
     clearLiveInjuries();
   }
 
+  // v0.654.5: with NO live report, last season's baked tags never take a man
+  // off the live sheet. The fields widget, which loaded no report, dropped
+  // Bucky Irving from TB's week 5 because the 2025 report had him OUT then.
+  {
+    clearLiveInjuries();
+    ok('a baked 2025 OUT does not reach the live sheet (TB week 5, Irving)',
+      projectedStarters('TB', 5).some((r) => r.slug === 'bucky-irving' && r.injury == null));
+  }
+
   const teamsToCheck = ['KC', 'SEA', 'LA', 'NO', 'BUF'];
   ok('every projected row belongs to the team it is listed under',
     teamsToCheck.every((t) => projectedStarters(t)
