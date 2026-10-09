@@ -94,6 +94,7 @@
     "check:livedrip": "tsx scripts/check-live-drip.mjs",
     "check:bullseye": "tsx scripts/check-bullseye.mjs",
     "check:shotgun": "tsx scripts/check-shotgun-wedding.mjs",
+    "check:ios-runtime": "node scripts/check-ios-runtime.mjs",
     "check:golf": "tsx scripts/check-golf.mjs",
     "check:projscoring": "tsx scripts/check-proj-scoring.mjs",
     "check:cadence": "tsx scripts/check-sync-cadence.mjs",

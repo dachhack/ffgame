@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.3 — a check that says when a change needs an iPhone build
+
+> - Behind the scenes: every change to the app is now checked for whether it needs a new iPhone build, so one is only made when it's truly necessary.
+
+Founder: "Can you let me know when the changes we make require an iPhone
+rebuild. Looks like that has to go through and approval process so I'd
+rather not do that unless necessary."
+
+- `apps/mobile/ios-build-runtime.txt`: the iOS runtime of the newest
+  TestFlight build (build 5, `2f593a89…`).
+- `npm run check:ios-runtime` (`scripts/check-ios-runtime.mjs`): today's iOS
+  fingerprint vs that build and `ios-legacy-runtimes.txt`; ✓ no build needed,
+  or ⚠ iPHONE BUILD NEEDED with the two ways out (build, or bridge an
+  Android-only config change). Verified: green on main; a one-character edit
+  to the widget label in app.json turns it red.
+- `.github/workflows/ios-runtime.yml` ("iPhone build needed?"): the same
+  check on every PR and push touching the app or the lockfile.
+- `CLAUDE.md`: sessions run it before merging app changes and tell the
+  founder in plain words when a build is needed; requesting a build records
+  its runtime in the same change.
+
 ### v0.656.2 — older iPhones get updates again; an iPhone build on request
 
 > - iPhones on a build from before October 5 receive the app's updates again, starting with this one, so they catch up to the current version without reinstalling.
