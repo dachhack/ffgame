@@ -2173,6 +2173,15 @@ export const shotgunDecline = (weddingId: string) =>
 /** New vows: what each side would send instead (one to three each way). */
 export const shotgunCounter = (weddingId: string, homeGives: string[], awayGives: string[]) =>
   rpc<{ ok: boolean; error?: string }>('shotgun_counter', { p_wedding_id: weddingId, p_home_gives: homeGives, p_away_gives: awayGives });
+/** The commissioner rewrites a pending wedding's trade (0456): one to three
+ *  players each way; the lock follows, and any new vows on the table clear. */
+export const shotgunCommishEdit = (weddingId: string, homeGives: string[], awayGives: string[]) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('shotgun_commish_edit', { p_wedding_id: weddingId, p_home_gives: homeGives, p_away_gives: awayGives }),
+    Ev.commishAction, { tool: 'shotgun_edit' });
+/** The commissioner calls a wedding off for the teams, whatever the veto rule. */
+export const shotgunCommishDecline = (weddingId: string) =>
+  tracked(rpc<{ ok: boolean; error?: string }>('shotgun_commish_decline', { p_wedding_id: weddingId }),
+    Ev.commishAction, { tool: 'shotgun_decline' });
 /** Say yes to the other side's new vows — the trade happens at once. */
 export const shotgunAcceptCounter = (weddingId: string) =>
   rpc<{ ok: boolean; error?: string; trade_id?: string }>('shotgun_accept_counter', { p_wedding_id: weddingId });

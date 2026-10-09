@@ -32,7 +32,9 @@ export interface Wedding {
   counter: { from: number; at: string; home_gives: WeddingPlayer[]; away_gives: WeddingPlayer[] } | null;
   my_seat: number | null;
   can_decline: boolean; can_counter: boolean; can_accept: boolean;
-  /** Both active rosters, for composing new vows — only on your own, pending wedding. */
+  /** The commissioner's hand (0456): may rewrite the vows or call it off. */
+  can_commish?: boolean;
+  /** Both active rosters, for composing — on your own pending wedding, or any pending one for the commissioner. */
   rosters: { home: WeddingPlayer[]; away: WeddingPlayer[] } | null;
 }
 

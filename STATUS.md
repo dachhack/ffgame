@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.655.0 — Shotgun Wedding: the commissioner's hand
+
+> - Commissioners can now rewrite any pending Shotgun Wedding's trade, or call one off for the teams, whatever the veto rule. The league hears either in chat.
+
+Founder: "Let's let commissioner edit and decline for teams vows."
+
+- **SQL 0456.** `shotgun_commish_edit(wedding, home_gives, away_gives)`:
+  one to three players each way from the active rosters; the lock follows
+  the row (old players freed, new ones locked); stale new vows cleared; open
+  offers naming the new players cancelled; deadline and veto unchanged.
+  `shotgun_commish_decline(wedding)`: calls it off under any veto rule, ties
+  included; note "called off by the commissioner". `shotgun_state` marks
+  `can_commish` and hands the commissioner both rosters on every pending
+  wedding.
+- **Cards, both hosts.** The commissioner sees every pending wedding in full
+  with ✎ REWRITE (COMMISH), a composer labelled by team, and CALL OFF
+  (COMMISH) where the team veto doesn't already give them CALL IT OFF.
+- Probes sw11*; docs §1.
+
 ### v0.654.5 — the fields widget's projected starters are this season's
 
 > - The fields widget's pregame projections list the right starters: a player who was hurt this week last season no longer drops off, and players who changed teams show up with their new team.
