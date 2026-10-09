@@ -16,7 +16,7 @@
 // the fields read is the All fields sheet's (AllFieldsSheet.tsx) without the
 // plays table: a widget shows the drive, not the box score.
 import type { WidgetSnapshot, WidgetCard } from './widgetFeed';
-import { liveSlate, slateWeeks, weekGameFeeds, loadCollegeLogos, loadCollegeWeekDates, sportGamesBetween } from './liveApi';
+import { liveSlate, slateWeeks, weekGameFeeds, loadCollegeLogos, loadCollegeWeekDates, sportGamesBetween, loadDepthChart, loadLiveInjuries, loadTeamOverrides } from './liveApi';
 import { fieldsPick, fieldsPickAllows, sportFieldGames, FIELDS_PENDING, type FieldsPick, type SportFieldGame } from './fieldsPick';
 import { currentSeason, addDays } from '../sports/league';
 import { sportToday } from '../sports/slate';
@@ -339,6 +339,19 @@ export async function loadFieldsWeek(offset = 0, nowMs: number = Date.now(), lev
   setRuntimeSlate(week, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
   setLiveGameFeed(week, feedRowsToWeek(feeds));
   return { week, current, hasPrev: i > 0, hasNext: i < order.length - 1 };
+}
+
+/** What the pregame sheet stands on, read fresh (v0.654.5): the depth chart,
+ *  the week's injury report and the players who changed teams. The widget
+ *  runs headless, so — like the college logos above — it can't count on a
+ *  screen having loaded them, and without them projectedStarters falls back
+ *  to projection order over the baked 2025 teams. Founder: "RBs for TB are
+ *  off": Kenny Gainwell still filed under Pittsburgh, no chart to name Bucky
+ *  Irving the starter. Only when a game is still to come (the sheet is a
+ *  pregame one), and every loader degrades to the old answer on failure. */
+export async function loadPregameInputs(week: number): Promise<void> {
+  if (!weekBoxGames(week).some((g) => g.state === 'pre')) return;
+  await Promise.all([loadDepthChart(), loadLiveInjuries(week), loadTeamOverrides()]);
 }
 
 // ── FIELDS ACROSS THE SPORTS (v0.631.0) ──────────────────────────────────────

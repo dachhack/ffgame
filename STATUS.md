@@ -22,6 +22,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.654.5 — the fields widget's projected starters are this season's
+
+> - The fields widget's pregame projections list the right starters: a player who was hurt this week last season no longer drops off, and players who changed teams show up with their new team.
+
+Founder, on the fields widget before TB @ DAL: "projections in the widget are
+weird. RBs for TB are off" — Sean Tucker 6.9 and Josh Williams 1.4, with no
+Bucky Irving (depth chart RB1) or Kenny Gainwell (RB2).
+
+- Reproduced exactly from the bakes alone. `projectedStarters('TB', 5)`
+  gave Tucker 6.9 and Josh Williams 1.4. Two causes:
+  - `injuryFor` falls back to the baked **2025** report when no live one is
+    installed, and the 2025 report had Irving OUT in week 5. The widget
+    runs headless and had loaded no report, so last season's tag took him
+    off. The sheet is always the live season, so it now reads the week's
+    live report, else the current one, else no tag (`projectedBox.ts`).
+  - The headless task loaded no depth chart and no team moves, so the sheet
+    ranked by projection over the baked 2025 teams (Gainwell still a
+    Steeler). `loadPregameInputs` (`widgetExtras.ts`) reads the depth chart,
+    the week's injury report and the team overrides before the sheet is
+    built. The widget calls it only when a game is still to come.
+- With the live inputs installed (simulated), TB's RBs read Irving, then
+  Gainwell, the real chart. If Irving is Out: Gainwell, then Tucker.
+- `check:draft-spots` gains the regression: with no live report, a baked
+  2025 OUT does not reach the live sheet. It fails on the old code.
+- Not addressed: the numbers are the baked season projection per game
+  (Irving 15.4, Gainwell 2.4 from his Pittsburgh role), not this week's live
+  projection (11.5 / 7.3). The widget speaks for no league, so it has no
+  league week projection to read.
+
 ### v0.654.4 — an update ready, one tap away
 
 > - When the app has downloaded an update, a strip under the header says so: tap it to restart into the new version.
