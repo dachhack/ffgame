@@ -1,0 +1,57 @@
+name: Build the iPhone app (TestFlight)
+
+# AN iPHONE BUILD, ASKED FOR IN A COMMIT (v0.656.2). iOS builds were only ever
+# made by hand (`eas build --platform ios --auto-submit` from a laptop), so an
+# iPhone could fall off the over-the-air updates for weeks when a change moved
+# its runtime (Oct 4: the Android widget's description text) and nobody built.
+# The integration that merges this repo can't dispatch a workflow (403), so the
+# request is a file: add a line to apps/mobile/ios-build-request.txt and merge.
+#
+# It queues the build on EAS and returns (--no-wait); EAS builds it, bumps the
+# build number (eas.json autoIncrement), and --auto-submit sends it to App
+# Store Connect for TestFlight. Credentials are the ones EAS already holds for
+# this app (the hand builds made them). Needs EXPO_TOKEN, as eas-update.yml.
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/mobile/ios-build-request.txt']
+  workflow_dispatch:
+
+concurrency:
+  group: release-ios
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Token present?
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then echo "::error::EXPO_TOKEN is not set."; exit 1; fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: iOS native fingerprint (the runtime this build will carry)
+        working-directory: apps/mobile
+        run: |
+          h=$(npx expo-updates fingerprint:generate --platform ios | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).hash))")
+          echo "iOS runtime: $h"
+          echo "- iOS runtime of this build: \`$h\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Queue the build and the TestFlight submission on EAS
+        working-directory: apps/mobile
+        run: |
+          npx -y eas-cli@latest build \
+            --platform ios \
+            --profile production \
+            --auto-submit \
+            --non-interactive \
+            --no-wait | tee /tmp/eas-build.log
+          url=$(grep -oE 'https://expo.dev/[^ ]+/builds/[0-9a-f-]+' /tmp/eas-build.log | head -1 || true)
+          echo "- queued on EAS: ${url:-see the log}" >> "$GITHUB_STEP_SUMMARY"
