@@ -82,3 +82,24 @@ jobs:
             --message "$msg" \
             --non-interactive
           echo "Published: $msg" >> "$GITHUB_STEP_SUMMARY"
+
+      # OLDER IPHONE BUILDS (v0.656.2). iOS builds are made by hand, so an
+      # iPhone can sit on a build whose runtime a config-only change moved
+      # (Oct 4: the Android widget's description) while its native code is
+      # today's. Each runtime in apps/mobile/ios-legacy-runtimes.txt gets the
+      # same update, iOS only, through app.config.js's IOS_RUNTIME_OVERRIDE.
+      - name: Republish to older iPhone builds
+        if: steps.token.outputs.ok == 'true'
+        working-directory: apps/mobile
+        run: |
+          msg=$(git log -1 --pretty=%s | cut -c1-180)
+          for rt in $(grep -oE '^[0-9a-f]{40}' ios-legacy-runtimes.txt); do
+            echo "── iOS runtime $rt"
+            IOS_RUNTIME_OVERRIDE="$rt" npx -y eas-cli@latest update \
+              --channel production \
+              --environment production \
+              --platform ios \
+              --message "$msg (iOS runtime ${rt:0:8})" \
+              --non-interactive
+            echo "- also published for iOS runtime \`$rt\`" >> "$GITHUB_STEP_SUMMARY"
+          done

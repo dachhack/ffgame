@@ -1,0 +1,10 @@
+# iOS runtimes that still get every over-the-air update (v0.656.2).
+#
+# An update only reaches builds whose runtime (a fingerprint of the native app)
+# matches. List a runtime here ONLY when the iPhone builds carrying it run the
+# same native code as today's app — i.e. the fingerprint moved for a reason that
+# isn't native on iOS. .github/workflows/eas-update.yml republishes each update,
+# iOS only, to every hash below. Remove a line once nobody runs that build.
+#
+# hash                                       why it's safe
+ed8fbb368ad26d098d923d2a34456690f36d5c40   # until Oct 4 2026; moved only by the Android Fields widget's description text (#1128)

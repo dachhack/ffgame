@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.2 — older iPhones get updates again; an iPhone build on request
+
+> - iPhones on a build from before October 5 receive the app's updates again, starting with this one, so they catch up to the current version without reinstalling.
+
+Founder: "go ahead with the iPhone update fix." A friend's iPhone sat on
+v0.629.1: the last update published before an `app.json` edit that is native
+only on Android (the Fields widget's description, #1128) moved the iOS
+runtime fingerprint from `ed8fbb36…` to `2f593a89…`; iOS builds are made by
+hand, so no iPhone build carried the new runtime and every update since went
+past those phones.
+
+- **`apps/mobile/ios-legacy-runtimes.txt`** lists iOS runtimes whose builds
+  run today's native code; `ed8fbb36…` is the first (nothing native has
+  changed since: app.json's only edit was that text, no package or plugin
+  changes).
+- **`eas-update.yml`**: after the normal publish, each listed runtime gets the
+  same update, iOS only, via **`app.config.js`'s `IOS_RUNTIME_OVERRIDE`**
+  (sets `ios.runtimeVersion` for that publish only). Checked locally: the
+  override applies only with the variable, and the iOS and Android
+  fingerprints with and without the edit are identical to the published
+  `2f593a89…` / `3d455539…`, so no current build is stranded.
+- **`release-ios.yml`**: a push that changes `apps/mobile/ios-build-request.txt`
+  queues `eas build --platform ios --profile production --auto-submit` on EAS
+  (TestFlight). No build is requested by this change.
+- README: the iOS request file, the APK request file, and the app.json
+  warning.
+
 ### v0.656.1 — an iPhone's "versions behind" opens TestFlight
 
 > - On an iPhone, the "versions behind" banner's What's new sheet now opens TestFlight instead of downloading the Android app, which an iPhone can't install.

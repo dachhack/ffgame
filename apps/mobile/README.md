@@ -220,8 +220,19 @@ excluded, so per-build counters don't split it), and an update only reaches
 builds with the same fingerprint. A merge that changes native code — a new
 native package, an Expo upgrade, plugins or permissions in `app.json` — needs
 a new build: the APK rebuilds itself on merge; for iOS run
-`eas build --profile production --platform ios --auto-submit`. The OTA job's
-summary prints both fingerprints.
+`eas build --profile production --platform ios --auto-submit`, or add a line
+to `apps/mobile/ios-build-request.txt` and merge (`release-ios.yml` queues the
+same build on EAS and submits it to TestFlight). An APK can be forced the same
+way through `apps/mobile/apk-request.txt`. The OTA job's summary prints both
+fingerprints.
+
+**Watch `app.json`.** The fingerprint covers the whole expo config, so even an
+Android-only edit (Oct 4: the Fields widget's description text) moves the iOS
+runtime too, and iPhones on older builds stop getting updates until an iOS
+build ships. When such a change is native on neither side for iOS, add the old
+iOS runtime to `apps/mobile/ios-legacy-runtimes.txt`: every update is then also
+published, iOS only, for that runtime (`IOS_RUNTIME_OVERRIDE` in
+`app.config.js`).
 
 By hand (same thing CI does): `eas update --channel production
 --environment production --message "…"`. Dev builds (`npm run ios`) ignore

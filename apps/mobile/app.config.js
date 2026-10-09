@@ -84,9 +84,20 @@ module.exports = ({ config }) => {
   const gsPath = path.join(__dirname, 'google-services.json');
   const android = { ...config.android, versionCode: androidVersionCode(config.version) };
   if (fs.existsSync(gsPath)) android.googleServicesFile = './google-services.json';
+  // AN OLDER IPHONE BUILD, STILL REACHABLE (v0.656.2). runtimeVersion is a
+  // fingerprint of the whole expo config, so a change that is native only on
+  // Android (the Fields widget's description, Oct 4) moved the iOS runtime as
+  // well, and every iPhone built before it stopped receiving updates while
+  // running the very same native code. The OTA workflow republishes each
+  // update to the iOS runtimes listed in ios-legacy-runtimes.txt by setting
+  // this variable for an iOS-only publish; nothing else sets it, and a build
+  // never does.
+  const iosRuntime = process.env.IOS_RUNTIME_OVERRIDE;
+  const ios = iosRuntime ? { ...config.ios, runtimeVersion: iosRuntime } : config.ios;
   return {
     ...config,
     extra,
     android,
+    ...(ios ? { ios } : {}),
   };
 };
