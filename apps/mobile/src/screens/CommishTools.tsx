@@ -38,7 +38,7 @@ import {
   leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict, leagueIsCollegeCalendar,
   isAdmin, setLeaguePositionAccess, setLeagueCalendar,
 } from '@drip/core/data/liveApi';
-import { draftState as draftStateOf, leagueGameMode as gameModeOf, setDevyRounds } from '@drip/core/data/liveApi';
+import { draftState as draftStateOf, leagueGameMode as gameModeOf, setDevyRounds, commishSetLeagueSize } from '@drip/core/data/liveApi';
 import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomCollege, CUSTOM_COLLEGE_LEVELS, type CustomCollegeRow } from '@drip/core/data/liveApi';
 import { inviteMessage } from '@drip/core/data/invite';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
@@ -1343,8 +1343,14 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
   const [artFor, setArtFor] = useState<AdminMember | null>(null);     // avatar target
   const [seatPickFor, setSeatPickFor] = useState<LeagueJoiner | null>(null); // waitlist → seat
 
+  // LEAGUE SIZE (v0.656.0, 0458): the team count, until the draft starts.
+  const [sizePending, setSizePending] = useState(false);
+  const [sizeDraft, setSizeDraft] = useState<number | null>(null);
+  useEffect(() => {
+    draftStateOf(leagueId).then((d) => setSizePending(!d.status || d.status === 'pending')).catch(() => setSizePending(false));
+  }, [leagueId]);
   const loadSeats = () => Promise.all([
-    adminLeagueMembers(leagueId).then(setSeats),
+    adminLeagueMembers(leagueId).then((s) => { setSeats(s); setSizeDraft(Array.isArray(s) ? s.length : null); }),
     teamManagers(leagueId).then(setMgrs).catch(() => {}),
     adminLeagueJoiners(leagueId).then((j) => setJoiners(Array.isArray(j) ? j : [])).catch(() => {}),
   ]).catch((e) => setNote(friendlyError(e)));
@@ -1398,6 +1404,32 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
     <Card>
       <Mono size={9} tone="faint" track={0.12}>TEAMS — ASSIGN, UNASSIGN, KICK</Mono>
       {!!note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 5 }}>{note}</Mono>}
+      {/* v0.656.0 (founder: "Build the pre-draft version"): grow adds open
+          seats; shrink removes empty ones, moving a claimed seat above the new
+          size into a free number. Gone once the draft starts. */}
+      {sizePending && seats != null && sizeDraft != null && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <Mono size={9} tone="faint" track={0.1}>LEAGUE SIZE</Mono>
+          <Chip label="−" disabled={sizeDraft <= 2} onPress={() => { tap(); setSizeDraft((v) => Math.max(2, (v ?? 2) - 1)); }} />
+          <Text style={{ fontSize: fs(14), fontWeight: '700', color: t.text, minWidth: 22, textAlign: 'center' }}>{sizeDraft}</Text>
+          <Chip label="+" disabled={sizeDraft >= 32} onPress={() => { tap(); setSizeDraft((v) => Math.min(32, (v ?? 2) + 1)); }} />
+          <Mono size={9} tone="dim">teams</Mono>
+          {sizeDraft !== seats.length && (
+            <Chip label={`MAKE IT ${sizeDraft}`} on onPress={() => {
+              tap();
+              const want = sizeDraft;
+              void act(async () => {
+                const r = await commishSetLeagueSize(leagueId, want);
+                if (r.ok) {
+                  const moved = (r.moved ?? []).map((m) => `${m.team} is now seat ${m.to}`).join(', ');
+                  setTimeout(() => setNote(`✓ ${r.teams} teams${r.added ? ` — ${r.added} open seat${r.added > 1 ? 's' : ''} added` : ''}${r.removed?.length ? ` — ${r.removed.length} empty removed` : ''}${moved ? ` (${moved})` : ''}`), 0);
+                }
+                return r;
+              }, () => {});
+            }} />
+          )}
+        </View>
+      )}
       {seats === null ? <ActivityIndicator color={t.you} style={{ marginTop: 8 }} /> : seats.map((m) => {
         const openSeat = !m.enrolled && !m.claim_email;
         const self = m.roster_id === myRoster;

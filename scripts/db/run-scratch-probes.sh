@@ -165,6 +165,7 @@ $RUN -f scripts/db/bullseye-probes.sql | grep -E "PROBE FAIL|ALL BULLSEYE PROBES
 $RUN -f scripts/db/taco-locker-probes.sql | grep -E "PROBE FAIL|ALL TACO-LOCKER PROBES" || { echo "TACO-LOCKER PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/shotgun-wedding-probes.sql | grep -E "PROBE FAIL|ALL SHOTGUN-WEDDING PROBES" || { echo "SHOTGUN-WEDDING PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/ai-open-seat-probes.sql | grep -E "PROBE FAIL|ALL AI-OPEN-SEAT PROBES" || { echo "AI-OPEN-SEAT PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/league-size-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-SIZE PROBES" || { echo "LEAGUE-SIZE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/rename-spot-probes.sql | grep -E "PROBE FAIL|ALL RENAME-SPOT PROBES" || { echo "RENAME-SPOT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/market-probes.sql | grep -E "PROBE FAIL|ALL MARKET PROBES" || { echo "MARKET PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/manual-sync-probes.sql | grep -E "PROBE FAIL|ALL MANUAL-SYNC PROBES" || { echo "MANUAL-SYNC PROBES FAILED"; exit 1; }

@@ -48,6 +48,7 @@ import { WINDOWS, defaultMetric } from '@drip/core/data/metrics';
 import { NFL_CODES } from '@drip/core/data/kdst';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
+import { draftState, commishSetLeagueSize } from '@drip/core/data/liveApi';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier, markFreeState, adminSetGlobalMarkFree, syncMarkFree, setMyMarkFree } from '@drip/core/data/liveApi';
 import { personalMarkFree } from '@drip/core/data/markFree';
 import { POWERUPS } from '@drip/core/data/powerups';
@@ -1946,6 +1947,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
                 SEATS because that is where "is there room" is already being
                 answered, and it only means anything once nj === 0. */}
             <WaitlistDoor l={l} seatsOpen={nj} joiners={joiners.length} />
+            <LeagueSizeBox l={l} seats={members.length} onChanged={() => { void loadMembers(); reload(); }} />
             {/* Drift is advisory — refresh never unseats anyone, so say what to do. */}
             {!!nd && (
               <div className="mono" style={{ ...mono, fontSize: 12, color: 'var(--warn)', marginBottom: 6, lineHeight: 1.5 }}>
@@ -2435,6 +2437,55 @@ function CodeRequestRow({ r, leagues, onToggle, reloadLeagues, reload }: { r: Co
  *   • it does NOT evict. Anyone already queued stays, and stays assignable;
  *     the RPC returns that count so this can say so instead of implying the
  *     list was cleared. */
+/** LEAGUE SIZE (v0.656.0, 0458). Founder: "Build the pre-draft version." The
+ *  team count, changeable until the draft starts: grow adds open seats;
+ *  shrink removes empty ones, moving a claimed seat above the new size into a
+ *  freed lower number. Renders nothing once the draft has started. */
+function LeagueSizeBox({ l, seats, onChanged }: { l: AdminLeague; seats: number; onChanged: () => void }) {
+  const [pending, setPending] = useState<boolean | null>(null);
+  const [n, setN] = useState(seats);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => { setN(seats); }, [seats]);
+  useEffect(() => {
+    if (l.provider !== 'native') return;
+    draftState(l.league_id).then((d) => setPending(!d.status || d.status === 'pending')).catch(() => setPending(null));
+  }, [l.league_id, l.provider]);
+  if (l.provider !== 'native' || !pending) return null;
+  const save = async () => {
+    if (busy || n === seats) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishSetLeagueSize(l.league_id, n);
+      if (!r.ok) { setNote(friendlyError(r.error ?? 'could not change that')); return; }
+      const moved = (r.moved ?? []).map((m) => `${m.team} is now seat ${m.to}`).join(', ');
+      setNote(`✓ ${r.teams} teams${r.added ? ` — ${r.added} open seat${r.added > 1 ? 's' : ''} added` : ''}${r.removed?.length ? ` — ${r.removed.length} empty seat${r.removed.length > 1 ? 's' : ''} removed` : ''}${moved ? ` (${moved})` : ''}.`);
+      onChanged();
+    } catch (e) { setNote(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginBottom: 8, padding: '8px 10px', border: '1px solid var(--bd)', borderRadius: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>LEAGUE SIZE</span>
+        <button onClick={() => setN((v) => Math.max(2, v - 1))} disabled={busy || n <= 2} className="mono" style={btn(false)}>−</button>
+        <span className="mono" style={{ ...mono, fontSize: 13, fontWeight: 700, color: 'var(--text)', minWidth: 22, textAlign: 'center' }}>{n}</span>
+        <button onClick={() => setN((v) => Math.min(32, v + 1))} disabled={busy || n >= 32} className="mono" style={btn(false)}>+</button>
+        <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--dim)' }}>teams</span>
+        {n !== seats && (
+          <button onClick={() => void save()} disabled={busy} className="mono" style={{ ...btn(true), opacity: busy ? 0.5 : 1 }}>
+            {busy ? 'saving…' : `make it ${n}`}
+          </button>
+        )}
+      </div>
+      <div className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
+        Changeable until the draft starts. Growing adds open seats. Shrinking removes empty seats only; a claimed seat above the new size moves down to a free number.
+      </div>
+      {note && <div className="mono" style={{ ...mono, fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 5, lineHeight: 1.5 }}>{note}</div>}
+    </div>
+  );
+}
+
 function WaitlistDoor({ l, seatsOpen, joiners }: { l: AdminLeague; seatsOpen: number; joiners: number }) {
   // The flag is not on AdminLeague, so this owns its own state: unknown until
   // the first toggle, and rendered from the league row when it is present.
