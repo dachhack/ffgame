@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.1 — an iPhone's "versions behind" opens TestFlight
+
+> - On an iPhone, the "versions behind" banner's What's new sheet now opens TestFlight instead of downloading the Android app, which an iPhone can't install.
+
+A friend of the founder's, on iOS, behind on v0.629.1: "I click, it has me
+download and save a zip file, I open the file and then it just comes back up
+as normal." The sheet's one button was the APK zip on every platform.
+
+- `apps/mobile/src/ui/WhatsNew.tsx`: on iOS the button is OPEN TESTFLIGHT
+  (`IOS_TESTFLIGHT_URL`) and the line says to tap Update there; Android keeps
+  the zip.
+- **Why that phone was behind at all** (not fixed here): it runs the last
+  update published before Oct 5, when the Android widget's description text
+  in app.json moved the iOS runtime fingerprint (`ed8fbb36…` → `2f593a89…`).
+  iOS builds are made by hand, so no iPhone build carries the new runtime
+  until one is built; updates since then, this one included, are published
+  only for the new runtime. A TestFlight build (`eas build --profile
+  production --platform ios --auto-submit`) or republishing to the old iOS
+  runtime brings those phones back.
+
 ### v0.656.0 — the league can change size before the draft
 
 > - Commissioners can now change the number of teams until the draft starts: on the website's SEATS list and the app's SEATS sheet.
