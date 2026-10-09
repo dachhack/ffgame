@@ -1,0 +1,4 @@
+# Changing this file and merging queues an iPhone build on EAS and submits it to
+# TestFlight (.github/workflows/release-ios.yml). One line per request: the
+# date, who asked, and why.
+2026-10-09 founder: "request an iOS build" — the first build on the current iOS runtime (2f593a89), after iPhones on ed8fbb36 fell off updates.
