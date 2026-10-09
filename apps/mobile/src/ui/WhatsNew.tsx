@@ -11,11 +11,11 @@
 // changelog (STATUS.md, generated at web build). Web-only entries count for
 // the list but not for the number — they are not a reason to reinstall.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { tap } from './feedback';
 import { openLink } from './openLink';
 import { APP_VERSION } from '@drip/core/version';
-import { APK_MANIFEST_URL, APK_ZIP_URL, CHANGELOG_PAGE_URL, CHANGELOG_URL, entriesBehind, versionsBehind, type ApkManifest, type Changelog, type ChangelogEntry } from '@drip/core/data/changelog';
+import { APK_MANIFEST_URL, APK_ZIP_URL, IOS_TESTFLIGHT_URL, CHANGELOG_PAGE_URL, CHANGELOG_URL, entriesBehind, versionsBehind, type ApkManifest, type Changelog, type ChangelogEntry } from '@drip/core/data/changelog';
 import { useTheme, MONO } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
@@ -97,7 +97,17 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
               Android package stalls at 100%. Founder, after testing both: "zip
               downloaded fine, make it the default for android." Unzip and tap
               the APK inside. */}
-          {behind > 0 && (
+          {/* v0.656.1: AN iPHONE GETS TESTFLIGHT, NOT THE ZIP. Founder's friend
+              on iOS: "I click, it has me download and save a zip file, I open
+              the file and then it just comes back up as normal." An iPhone
+              can't install an APK; its builds come through TestFlight. */}
+          {behind > 0 && Platform.OS === 'ios' && (
+            <Pressable onPress={() => { tap(); void openLink(IOS_TESTFLIGHT_URL); }}
+              style={({ pressed }) => ({ flex: 1, alignItems: 'center', backgroundColor: t.you, borderRadius: 8, paddingVertical: 11, opacity: pressed ? 0.55 : 1 })}>
+              <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.onAccent }}>OPEN TESTFLIGHT ↗</Text>
+            </Pressable>
+          )}
+          {behind > 0 && Platform.OS !== 'ios' && (
             <Pressable onPress={() => { tap(); void openLink(APK_ZIP_URL); }}
               style={({ pressed }) => ({ flex: 1, alignItems: 'center', backgroundColor: t.you, borderRadius: 8, paddingVertical: 11, opacity: pressed ? 0.55 : 1 })}>
               <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.onAccent }}>⬇ GET V{st.latest?.toUpperCase()} (ZIP)</Text>
@@ -112,7 +122,9 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 14 }}>
         {behind > 0 && (
           <Mono size={9.5} tone="dim">
-            {behind} {behind === 1 ? 'update' : 'updates'} for the app since this build. Installing the new APK keeps your sign-in and settings.
+            {behind} {behind === 1 ? 'update' : 'updates'} for the app since this build. {Platform.OS === 'ios'
+              ? 'Open TestFlight and tap Update on Drip Fantasy — your sign-in and settings stay.'
+              : 'Installing the new APK keeps your sign-in and settings.'}
           </Mono>
         )}
         {st.entries.length === 0 && (
