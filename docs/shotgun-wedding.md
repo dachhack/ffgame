@@ -37,6 +37,22 @@ read when each wedding is filed, so a change starts the following Tuesday:
 - `ops/run` mode `shotgun-preview` prints what the CPU would file for a
   league, read-only, seats by number.
 
+**The commissioner's hand (v0.655.0, migration 0456).** On any pending
+wedding the commissioner can:
+
+- **✎ Rewrite** the trade that goes through at the deadline: one to three
+  players each way from the two active rosters (`shotgun_commish_edit`). The
+  lock follows the row, so players taken out are free at once and new ones
+  are locked; new vows on the table are cleared (they answered the old
+  terms); open offers naming the new players are cancelled. The deadline and
+  the veto stay as announced.
+- **Call it off** for the teams (`shotgun_commish_decline`), whatever the veto
+  rule — "nobody" and ties included. The row reads declined, "called off by
+  the commissioner".
+
+Both post a chat card. The card shows the commissioner every pending wedding
+in full with ✎ REWRITE (COMMISH) and CALL OFF (COMMISH).
+
 - **A tie has no winner**, so nobody can call it off. The two can still agree on new vows.
 - **Golf leagues**: the winner is the low score (`golf_beats`), the same rule the standings use. Bullseye leagues read the same way.
 - **Playoff weeks, practice weeks and anything after the trade deadline** get no wedding.

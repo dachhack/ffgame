@@ -12,7 +12,9 @@
 --     cleanly; switching the mode off annuls what's pending;
 --   • 0454's house rules: the veto goes to the winner, the loser or nobody;
 --     the deadline is Tue 8 PM, Wed 8 PM or Thu noon, never inside the hour
---     before the next kickoff; a rule change is announced.
+--     before the next kickoff; a rule change is announced;
+--   • 0456's commissioner's hand: rewrite any pending wedding's vows (the
+--     lock follows), or call it off whatever the veto rule says.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -138,7 +140,12 @@ begin
   perform sw_true((r -> 'weddings' -> 0 ->> 'id')::uuid = w1 and (r -> 'weddings' -> 0 ->> 'can_decline')::boolean
                   and (r -> 'weddings' -> 0 ->> 'can_accept')::boolean, 'sw4g …A''s own first, which A may call off or accept');
   perform sw_true(jsonb_array_length(r -> 'weddings' -> 0 -> 'rosters' -> 'home') = 4, 'sw4h …with both rosters for composing vows');
-  perform sw_true(r -> 'weddings' -> 1 -> 'rosters' = 'null'::jsonb, 'sw4i …and no rosters for a wedding that isn''t A''s');
+  -- (A is also the commissioner, so since 0456 it sees both rosters on every
+  -- pending wedding; a plain member sees none on a wedding that isn't theirs.)
+  perform sw_as('03');
+  perform sw_true((select x -> 'rosters' from jsonb_array_elements(shotgun_state(lid) -> 'weddings') x
+                    where (x ->> 'id')::uuid = w1) = 'null'::jsonb, 'sw4i …and no rosters for a member on a wedding that isn''t theirs');
+  perform sw_as('01');
   r := shotgun_accept_counter(w1);
   perform sw_ok(r, 'sw4j A says yes');
   perform sw_true((select roster_id from native_roster where league_id = lid and slug = 'sw-1') = b
@@ -244,6 +251,40 @@ begin
   perform sw_true(_shotgun_deadline_at('tue20', '2026-10-13 10:00-04') = '2026-10-13 20:00-04'
               and _shotgun_deadline_at('wed20', '2026-10-13 10:00-04') = '2026-10-14 20:00-04'
               and _shotgun_deadline_at('thu12', '2026-10-13 10:00-04') = '2026-10-15 12:00-04', 'sw10v the three deadlines, from a Tuesday morning');
+
+  -- ── sw11. the commissioner's hand (0456): rewrite the vows, call it off ──
+  -- w2 (week 7, "nobody can call it off") is still pending with B's new vows on the table.
+  declare
+    old_b text := (select away_gives ->> 0 from shotgun_wedding where id = w2);
+    new_a text := (select slug from native_roster where league_id = lid and roster_id = a and spot = 'active'
+                     and not ((select home_gives from shotgun_wedding where id = w2) ? slug) order by slug limit 1);
+    new_b text := (select slug from native_roster where league_id = lid and roster_id = b and spot = 'active'
+                     and not ((select away_gives from shotgun_wedding where id = w2) ? slug) order by slug limit 1);
+  begin
+    perform sw_as('02');
+    perform sw_refused(shotgun_commish_edit(w2, jsonb_build_array(new_a), jsonb_build_array(new_b)), 'commissioner only', 'sw11 a member cannot rewrite the vows');
+    perform sw_refused(shotgun_commish_decline(w2), 'commissioner only', 'sw11a nor call it off for the teams');
+    perform sw_true(not coalesce((shotgun_state(lid) -> 'weddings' -> 0 ->> 'can_commish')::boolean, false), 'sw11b the reader gives a member no commissioner''s hand');
+    perform sw_as('01');
+    r := shotgun_state(lid);
+    perform sw_true((r -> 'weddings' -> 0 ->> 'can_commish')::boolean and jsonb_array_length(r -> 'weddings' -> 0 -> 'rosters' -> 'away') > 0,
+      'sw11c the commissioner''s reader marks it and hands over both rosters');
+    perform sw_refused(shotgun_commish_edit(w2, (select home_gives from shotgun_wedding where id = w2), (select away_gives from shotgun_wedding where id = w2)),
+      'already on the table', 'sw11d rewriting it to itself is refused');
+    perform sw_refused(shotgun_commish_edit(w2, '[]', jsonb_build_array(new_b)), 'one to three', 'sw11e one to three each way');
+    perform sw_ok(shotgun_commish_edit(w2, jsonb_build_array(new_a), jsonb_build_array(new_b)), 'sw11f the commissioner rewrites the vows');
+    perform sw_true((select home_gives = jsonb_build_array(new_a) and away_gives = jsonb_build_array(new_b) and counter_from is null
+                       from shotgun_wedding where id = w2), 'sw11g the row carries the new trade, and the stale new vows are cleared');
+    perform sw_true(sw_last_card(lid) like '💍 The commissioner rewrote the vows between SW-A and SW-B:%It still goes through at%', 'sw11h the league hears it — got ' || sw_last_card(lid));
+    perform sw_as('02');
+    perform sw_refused(drop_player(lid, b, new_b), '💍', 'sw11i the newly named player is locked');
+    perform sw_ok(drop_player(lid, b, old_b), 'sw11j the player taken out is free at once');
+    perform sw_as('01');
+    perform sw_ok(shotgun_commish_decline(w2), 'sw11k the commissioner calls it off, even under "nobody"');
+    perform sw_true((select status = 'declined' and note = 'called off by the commissioner' from shotgun_wedding where id = w2), 'sw11l it reads declined, by the commissioner');
+    perform sw_true(sw_last_card(lid) = '💔 The commissioner called off the wedding between SW-A and SW-B. Everyone keeps their players.', 'sw11m in those words');
+    perform sw_refused(shotgun_commish_decline(w2), 'already settled', 'sw11n once is enough');
+  end;
 
   -- ── sw9. strangers ──
   perform set_config('app.uid', '00000000-0000-0000-0000-000000006399', false);
