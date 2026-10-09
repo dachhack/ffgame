@@ -1,7 +1,7 @@
 // THE FRONT DOOR (v0.614.0; the funnel's revision, v0.650.0).
 //
 // Founder's revamp of the signed-out web flow, revised: the welcome and the
-// dreamers line, "Count me in! | Sign in" with no small print under it, then
+// innovators line, "Count me in! | Sign in" with no small print under it, then
 // the five feature groups — the chips stay — each with a rail of phone
 // screens under them that the chips pick (v0.651.0; it turned on its own
 // before), and the matchup card doubling as the door to
@@ -160,20 +160,24 @@ export function Landing() {
           page its intrinsic width and a sideways scroll on a phone. */}
       <main style={{ flex: 1, width: '100%', minWidth: 0, maxWidth: 640, margin: '0 auto', padding: '8px 16px 40px', boxSizing: 'border-box' }}>
         {/* ── WELCOME ─────────────────────────────────────────────────── */}
-        <section style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', padding: '18px 0 8px' }}>
-          <img src={`${base}brand/hero-mark.png`} alt="" style={{ height: narrow ? 150 : 210, width: 'auto', flex: 'none', margin: '0 auto' }} />
-          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <h1 className="grotesk" style={{ fontSize: 'clamp(24px, 4.6vw, 36px)', fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, margin: 0, color: 'var(--text)' }}>{FUNNEL.welcome}</h1>
-            <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.55, margin: '12px 0 0', maxWidth: '58ch' }}>
-              {FUNNEL.pitch}{' '}
-              <button onClick={() => setFaq(true)} className="mono" style={{ ...linkBtn, color: 'var(--you)', padding: 0, fontSize: 11 }}>({FUNNEL.more})</button>
-            </p>
-            <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginTop: 18, letterSpacing: '-0.01em' }}>{FUNNEL.dreamers}</div>
-            <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.55, margin: '6px 0 0', maxWidth: '58ch' }}>{FUNNEL.dreamersLine}</p>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 18 }}>
-              <button onClick={countMeIn} className="mono" style={cta}>{FUNNEL.cta}</button>
-              <button onClick={() => navigate({ name: 'live' })} className="mono" style={ghost}>{FUNNEL.signIn}</button>
+        {/* v0.656.4, founder: the title centered over the image and the
+            pitch, and the two buttons centered under both. */}
+        <section style={{ padding: '18px 0 8px' }}>
+          <h1 className="grotesk" style={{ fontSize: 'clamp(24px, 4.6vw, 36px)', fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, margin: '0 0 18px', color: 'var(--text)', textAlign: 'center' }}>{FUNNEL.welcome}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+            <img src={`${base}brand/hero-mark.png`} alt="" style={{ height: narrow ? 150 : 210, width: 'auto', flex: 'none', margin: '0 auto' }} />
+            <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+              <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.55, margin: 0, maxWidth: '58ch' }}>
+                {FUNNEL.pitch}{' '}
+                <button onClick={() => setFaq(true)} className="mono" style={{ ...linkBtn, color: 'var(--you)', padding: 0, fontSize: 11 }}>({FUNNEL.more})</button>
+              </p>
+              <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginTop: 18, letterSpacing: '-0.01em' }}>{FUNNEL.innovators}</div>
+              <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.55, margin: '6px 0 0', maxWidth: '58ch' }}>{FUNNEL.innovatorsLine}</p>
             </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', marginTop: 22 }}>
+            <button onClick={countMeIn} className="mono" style={cta}>{FUNNEL.cta}</button>
+            <button onClick={() => navigate({ name: 'live' })} className="mono" style={ghost}>{FUNNEL.signIn}</button>
           </div>
         </section>
 

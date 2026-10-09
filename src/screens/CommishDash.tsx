@@ -72,12 +72,18 @@ function PosMultiSelect({ options, value, onChange, disabled, chip }: {
   const ordered = options.filter((p) => value.includes(p)).concat(value.filter((p) => !options.includes(p)));
   const toggle = (p: string) => onChange(value.includes(p) ? ordered.filter((q) => q !== p) : options.filter((q) => q === p || value.includes(q)));
   return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+    // ONE WIDTH FOR EVERY ROW (v0.656.4, founder: "have all the form columns
+    // align in the roster builder"): the button no longer grows with its
+    // text, so the name, BB, ⛳ and 🔎 columns line up down the list. A long
+    // set ellipses; the tooltip and the open list carry all of it.
+    <div ref={ref} style={{ position: 'relative', flex: '0 0 150px', width: 150 }}>
       <button type="button" disabled={disabled} onClick={() => setOpen((o) => !o)} className="mono"
-        title="the positions this spot accepts — click to change"
+        title={`${ordered.length ? ordered.join(' · ') : 'no positions yet'} — click to change`}
         style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', borderRadius: RADIUS, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap',
-          color: ordered.length ? 'var(--text)' : 'var(--warn)', background: 'var(--bg)', border: `1px solid ${open ? 'var(--you)' : 'var(--bd)'}`, minWidth: 90, textAlign: 'left' }}>
-        {ordered.length ? ordered.join(' · ') : 'pick positions'} <span style={{ color: 'var(--faint)' }}>▾</span>
+          color: ordered.length ? 'var(--text)' : 'var(--warn)', background: 'var(--bg)', border: `1px solid ${open ? 'var(--you)' : 'var(--bd)'}`, width: '100%', boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', gap: 4, textAlign: 'left' }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ordered.length ? ordered.join(' · ') : 'pick positions'}</span>
+        <span style={{ color: 'var(--faint)', flex: 'none' }}>▾</span>
       </button>
       {open && (
         <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 30, background: 'var(--surface)', border: '1px solid var(--bd)',
@@ -953,13 +959,13 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   className="mono" style={{ fontFamily: 'inherit', fontSize: 11, padding: '3px 6px', background: 'var(--bg)', color: sp.label ? 'var(--text)' : 'var(--faint)', border: `1px solid ${sp.label ? 'var(--bd)' : 'transparent'}`, borderRadius: RADIUS, flex: 1, minWidth: 90, textAlign: 'right' }} />
                 <button disabled={busy} title="Best ball: this spot fills itself with the top scorer"
                   onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, bb: !x.bb })); setSpotsDirty(true); }}
-                  className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 11 }}>🎯 BB</button>
+                  className="mono" style={{ ...pill(!!sp.bb), padding: '3px 8px', fontSize: 11, flex: 'none' }}>🎯 BB</button>
                 {/* LEVEL (0372): in a mixed league a spot takes either, NFL
                     players only, or college players only. Cycles ANY → NFL → CFB. */}
                 {mixed && (
                   <button disabled={busy} title="Who may stand here in a mixed league: anyone, NFL players only, or college players only"
                     onClick={() => { setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, level: !x.level ? 'nfl' : x.level === 'nfl' ? 'college' : undefined })); setSpotsDirty(true); }}
-                    className="mono" style={{ ...pill(!!sp.level), padding: '3px 8px', fontSize: 11 }}>{sp.level === 'college' ? '🎓 CFB' : sp.level === 'nfl' ? '🏈 NFL' : 'ANY'}</button>
+                    className="mono" style={{ ...pill(!!sp.level), padding: '3px 8px', fontSize: 11, width: 66, flex: 'none' }}>{sp.level === 'college' ? '🎓 CFB' : sp.level === 'nfl' ? '🏈 NFL' : 'ANY'}</button>
                 )}
                 {/* THE ZERO-FILL RULE (v0.303.0): what this spot banks when it
                     is empty, or when whoever stands in it scores nothing. On
@@ -968,7 +974,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                     by what the spot banks — a bye is worth the fill. */}
                 <span title={sp.bb ? 'ZERO-FILL: points this spot banks if its player scores nothing. The fill ranks by what the spot banks, so a bye is worth this number.'
                   : 'ZERO-FILL: points this spot banks if it is empty, or if its player scores nothing. Blank = off.'}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flex: 'none' }}>
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>⛳</span>
                   <input value={sp.zero} disabled={busy} inputMode="numeric" placeholder="—" maxLength={3}
                     onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3); setSpots((cur) => cur!.map((x, j) => j !== i ? x : { ...x, zero: v })); setSpotsDirty(true); }}

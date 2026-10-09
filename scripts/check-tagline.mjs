@@ -136,14 +136,14 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
 }
 
 // ── THE FUNNEL (v0.650.0) ───────────────────────────────────────────────────
-// Founder's revision of the front door: the welcome, the dreamers line, two
+// Founder's revision of the front door: the welcome, the innovators line, two
 // buttons and nothing under them — "No sub text about limits or anything" —
 // and Bullseye on the competitive-modes card. The demo page keeps SITE_PITCH
 // and the create screen keeps GAME_NOTES, so the funnel's words are its own.
 {
   ok('the funnel opens on the welcome', /cutting edge of fantasy football/i.test(FUNNEL.welcome), FUNNEL.welcome);
   ok('the pitch says free, bespoke, and names who builds it', /100% free/.test(FUNNEL.pitch) && /bespoke/.test(FUNNEL.pitch) && /AI/.test(FUNNEL.pitch) && /YOU/.test(FUNNEL.pitch), FUNNEL.pitch);
-  ok('the dreamers line is there', /^Welcome dreamers\./.test(FUNNEL.dreamers) && /doesn.t fit an existing platform/i.test(FUNNEL.dreamersLine), FUNNEL.dreamersLine);
+  ok('the innovators line is there', /^Welcome innovators\./.test(FUNNEL.innovators) && /doesn.t fit an existing platform/i.test(FUNNEL.innovatorsLine), FUNNEL.innovatorsLine);
   ok('the two buttons are Count me in! and Sign in', FUNNEL.cta === 'Count me in!' && FUNNEL.signIn === 'Sign in', FUNNEL);
   // Nothing in the funnel's copy promises a spot count, a cap or a waiting
   // list — that line is gone from under the buttons.

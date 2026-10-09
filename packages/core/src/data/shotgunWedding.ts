@@ -84,3 +84,14 @@ export function weddingCounterLine(w: Wedding): string | null {
   const from = teamOf(w, w.counter.from) ?? 'One side';
   return `New vows from ${from}: ${weddingSends(w.home.team, w.counter.home_gives)}; ${weddingSends(w.away.team, w.counter.away_gives)}.`;
 }
+
+/** The trade box's one short line under a pending wedding (v0.656.4): the
+ *  scores sit in the box, so this says only when it goes through and who can
+ *  stop it. Settled weddings keep weddingStatusLine. */
+export function weddingStatusShort(w: Wedding, nowMs: number = Date.now()): string {
+  if (w.status !== 'pending') return weddingStatusLine(w, nowMs);
+  const at = weddingDeadlineLabel(w.deadline);
+  if (Date.parse(w.deadline) <= nowMs) return 'Deadline passed. It goes through on the next sweep.';
+  const vetoTeam = w.veto_rule === 'none' ? null : teamOf(w, w.veto ?? null);
+  return vetoTeam ? `Goes through ${at}. ${vetoTeam} can call it off.` : `Goes through ${at}. Nobody can call it off.`;
+}

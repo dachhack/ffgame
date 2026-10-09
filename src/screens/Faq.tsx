@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { APK_URL, APK_ZIP_URL } from '@drip/core/data/changelog';
+import { APK_URL, APK_ZIP_URL, IOS_TESTFLIGHT_URL } from '@drip/core/data/changelog';
 
 // Plain-language FAQ. The Rulebook (src/screens/Rulebook.tsx) is the deep scoring
 // reference rendered from live data; this page answers the "what is this / is it
@@ -43,183 +43,143 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
       : <b style={{ color: 'var(--you)' }}>{label}</b>;
   const mailLink = <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'var(--you)', fontWeight: 700, textDecoration: 'none' }}>{SUPPORT_EMAIL}</a>;
 
+  const ext = (href: string, label: string) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--you)', fontWeight: 700, textDecoration: 'none' }}>{label}</a>;
+
+  // THE v0.656.5 REVISION (founder: "a complete revision removing AI tells and
+  // focusing more on the complete product as a classic fantasy platform with
+  // drip as one feature"): the league comes first and Drip is one game in it.
+  // The founder's bio is the founder's approved text (v0.656.5); keep it to
+  // what a public resume says.
   const SECTIONS: Section[] = [
     {
-      id: '01', title: 'GETTING STARTED',
+      id: '01', title: 'THE BASICS',
       items: [
         {
           q: 'What is Drip Fantasy?',
-          a: <>A place to run the fantasy football league you actually want — including the ones the big apps won't host.
-            <b> Guillotine</b>, <b>vampire</b>, <b>golf</b>, <b>contract</b> and <b>dynasty</b> leagues, auction drafts, best ball, IDP,
-            scoring you tune knob by knob — every one is a switch a commissioner has, and every league is scored <b>live</b> on real NFL
-            play-by-play. Pick <b>classic</b> scoring, or our own <b>Drip mode</b>: sealed picks, hidden scoring metrics and live effects.</>,
+          a: <>A free fantasy football platform. You can run a normal head-to-head league here: draft, set lineups, make trades
+            and waiver claims, and watch scores update live on real NFL play-by-play. You can also run the leagues other sites
+            don't support, like guillotine, vampire, golf, devy or a league with its own scoring rules. <b>Drip</b> is one game
+            you can pick for a league. It adds sealed picks and live effects on top of fantasy football. Most leagues here play classic.</>,
         },
         {
-          q: 'What kinds of leagues can I run here?',
-          a: <>Mix and match. <b>Which game:</b> Drip or classic. <b>How the season ends:</b> head-to-head, guillotine (lowest score each
-            week is eliminated, their roster hits the wire) or vampire (vampires skip the draft and steal a player each win). <b>What
-            carries over:</b> redraft, keeper, dynasty with rookie drafts and tradeable future picks, or contract leagues where auction
-            bids become salaries under a cap. <b>How the roster fills:</b> snake, linear or auction, live or slow. <b>How it scores:</b>
-            standard to full PPR and the forty-odd knobs beneath it, best ball, golf, IDP, kickers and defenses. If your league has a
-            rule we don't have a switch for yet, tell us — that's exactly the kind of league we want to host.</>,
+          q: 'What kinds of leagues can I run?',
+          a: <>The commissioner sets each part separately.
+            <br /><b>Season:</b> redraft, keeper, dynasty with rookie drafts and tradeable future picks, or contract leagues with salaries under a cap.
+            <br /><b>Draft:</b> snake, linear or auction, live or slow.
+            <br /><b>Format:</b> head-to-head, guillotine, vampire, golf, Bullseye or Shotgun Wedding.
+            <br /><b>Roster:</b> any mix of positions, including superflex, IDP, kickers, defenses and college players, plus spots limited to a team or to rookies.
+            <br /><b>Scoring:</b> standard through full PPR, around forty per-stat settings, best ball (one spot or all of them) and bonuses for players matching a filter.
+            <br />If your league has a rule we can't set up yet, email {mailLink} and we'll try to add it.</>,
         },
         {
-          q: 'Is this a real game or just a demo?',
-          a: <>Both exist. What you're looking at logged-out is the <b>Drip Test League</b> — a fully playable demo that runs entirely
-            in your browser on real 2025 NFL data, there to show how a week plays out. The <b>live game is real and running now</b>:
-            pilot leagues are playing the <b>2026 season</b> head-to-head on live NFL data as the games happen (see “Can I play with
-            my own league?” below to get in).</>,
+          q: 'Can I bring my existing league?',
+          a: <>Yes. Leagues on <b>Sleeper</b>, <b>ESPN</b>, <b>Yahoo</b>, <b>MyFantasyLeague</b> and <b>Fleaflicker</b> can be
+            connected. You can also start a new league here and draft in the app, with no other site involved. If your league
+            is somewhere else, use <b>Ask us to set up a league</b> at the bottom of the front page.</>,
         },
         {
-          q: 'Do I need an account to try it?',
-          a: <>No. On the landing page, dress the mascot however you like, then tap <b>▶ PLAY A WEEK</b> on the <i>Drip Battle</i> or
-            <i>Classic Fantasy</i> card and a full demo week of that game opens right there, no sign-up. If you want to see the demo
-            re-skinned over your own league, type your <b>Sleeper username</b> under the board — that's it. An account is only needed
-            at the very end, when you hit GO to create a real league.</>,
+          q: 'Is it free?',
+          a: <>Yes, and the plan is to keep it that way. Drip-coin and power-ups are game currency, not real money. Live NFL data
+            does cost money, so if the site grows a lot we may need a paid option to cover it. The core game will stay free.</>,
         },
         {
-          q: 'How do I actually play a week?',
-          a: <>Open a matchup and you'll move through three phases: <b>SETUP</b> (build a lineup across the 5 windows and seal a hidden
-            metric on each slot), <b>LIVE</b> (each window's picks reveal at that window's kickoff and effects fire on the real game
-            clock — your later windows stay editable, so Sunday can answer what Thursday revealed), and <b>FINAL</b>
-            (the week's result across all slots). The {rulebookLink('Rulebook')} walks through the full flow.</>,
-        },
-        {
-          q: 'Can I play solo, or do I need leaguemates?',
-          a: <>You can play the demo entirely solo — pick any team and any week and a full slate resolves against a built-in opponent,
-            so you can learn the flow without waiting on anyone. The live, head-to-head version is where you face your real
-            leaguemates with sealed picks.</>,
+          q: 'Who builds this?',
+          a: <><b>Matt Porritt, PhD.</b> Matt has spent 20 years building and leading data science and analytics teams, most
+            recently as Senior Director of Data Analytics at Cox Enterprises. Before that Matt set up data and analytics at a
+            live-event ticketing start-up and built churn and next-best-action models for Cox Communications' customer base.
+            Matt holds a PhD in applied behavior analysis from Western Michigan University, with a concentration in
+            experimental design.
+            <br /><br />In 2026 Matt built {ext('https://stathead.app', 'stathead.app')}, an open NFL analytics platform that
+            supplies Drip Fantasy's stats, and then built Drip Fantasy itself, with AI as a coding partner. Most new features
+            start as a request from someone playing. Matt's analytics consulting is at{' '}
+            {ext('https://oberonanalytics.ai', 'oberonanalytics.ai')}, and you can connect on{' '}
+            {ext('https://www.linkedin.com/in/makeitraininsights/', 'LinkedIn')}. Ideas and bug reports go straight to Matt at {mailLink}.</>,
         },
       ],
     },
     {
-      id: '02', title: 'YOUR DATA & PRIVACY',
+      id: '02', title: 'PLAYING',
       items: [
         {
-          q: 'Do you need my Sleeper password?',
-          a: <>Never. We only ask for your <b>Sleeper username</b>, which we use to read your public league info through Sleeper's
-            public API. We never ask for, see, or store a password.</>,
+          q: 'How does a classic league work here?',
+          a: <>The way you'd expect. Set a lineup, and each spot locks when its player's game kicks off, so you can still swap
+            your Sunday players after Thursday night. Points come in live while games are on. Waivers, free agents, trades,
+            injured reserve and league chat all work as they do elsewhere. The commissioner controls the settings.</>,
         },
         {
-          q: 'Is my data shared or sold?',
-          a: <>No — and here's exactly what we do with it. Your Sleeper username is only used to read your league's <b>public</b> info
-            through Sleeper's read-only API. We collect <b>anonymous usage analytics</b> (which screens get used, so we can improve the
-            game). If you ask to join the live pilot, we store the email and handle you give us <b>solely to reach you about it</b>. We
-            don't sell your data or hand it to advertisers — if you ever want yours removed, email {mailLink}.</>,
+          q: 'How live is the scoring?',
+          a: <>While NFL games are on, we read the real play-by-play continuously and update every matchup within moments of each
+            play. Injury designations refresh hourly in the run-up to each slate.</>,
         },
         {
-          q: 'Is the NFL data real?',
-          a: <>Yes — in two different ways. The <b>demo</b> replays genuine 2025 NFL data (nflverse / Sleeper sources via Stathead):
-            real season box scores seed every simulated game. <b>Live 2026 leagues run on live 2026 data</b> — real play-by-play
-            polled continuously while games are on, so your banks tick, nukes land and streaks go hot within moments of the real
-            play happening, plus live injury reports in the run-up to kickoff. The data is real; the <i>league</i> wrapped around
-            the demo is sanitized.</>,
+          q: 'What is Drip?',
+          a: <>A different game you can choose for a league. Each starter goes into a kickoff window with a <b>hidden scoring
+            metric</b> that neither side sees until kickoff. Metrics score points and can also hit the opponent's player in the
+            same spot: a nuke wipes their banked points, an erase cancels recent scoring, a hot streak doubles your rate. You can
+            win by outscoring the other team or by shutting them down. The {rulebookLink('Rulebook')} has every metric.</>,
         },
         {
-          q: 'What NFL season and weeks does the demo cover?',
-          a: <>The real 2025 NFL regular season — 14 weeks. The demo opens on <b>Week 2</b>: week 1 is already in the books, and
-            Week 2 is the live one you set a lineup for and watch resolve. Every stat, score and schedule entry is genuine 2025 data.
-            Live pilot leagues aren't a replay — they play the <b>2026 season</b> week by week as it actually happens.</>,
-        },
-        {
-          q: 'Whose league is the demo based on?',
-          a: <>Nobody's, really. The “Drip Test League” is a fabricated 10-team dynasty re-skin over a real 2025 season. The team names,
-            manager handles, avatars and league name are all made up, so the demo never exposes a real person's private league.</>,
-        },
-        {
-          q: 'Why does a matchup play out the same way every time?',
-          a: <>The demo's live scoring is a <b>deterministic simulation</b>: each player's real season averages set a weekly baseline,
-            seeded variance adds boom/bust texture, and the metric effects resolve over a generated play-by-play timeline. Because it's
-            seeded, a given matchup always plays out identically — which is what lets the whole thing run as a backend-free static site.</>,
-        },
-      ],
-    },
-    {
-      id: '03', title: 'HOW THE GAME WORKS',
-      items: [
-        {
-          q: 'What is Drip mode, and how is it different from regular fantasy?',
-          a: <>Drip is our own game, and it's optional — a classic league here plays fantasy the way you already know it. In Drip mode there are two big twists. First, your picks are <b>hidden</b> until kickoff — you and your opponent both seal a player <i>and</i> a
-            secret metric per slot. Second, metrics don't just score points, they <b>attack</b> the slot across from them: a nuke zeros
-            a banked score, an erase cancels recent accumulation, a hot streak doubles your drip rate. You can win by scoring big
-            <b> or</b> by shutting your opponent down.</>,
-        },
-        {
-          q: 'What is a “metric” and why is it hidden?',
-          a: <>A metric is the secret rule you attach to each player that decides <b>how</b> their real NFL game becomes points — and what
-            effect it fires at your opponent. Hiding it until kickoff is the core of the game: your opponent sets their lineup without
-            knowing whether you're racing for points or loading up denial. See the full {rulebookLink('metric catalog')}.</>,
-        },
-        {
-          q: 'How does scoring and “drip” work?',
-          a: <>Drip metrics don't score yards directly — each productive touch raises a <b>rate</b> (points per minute) that accrues while
-            your team has the ball, on the real game clock. Catches can erase it, a target pauses it, and a touchdown wipes the bank.
-            Three straight productive touches with no opponent score go <b>hot</b> and double the rate. The {rulebookLink('Rulebook')} has
-            the exact numbers.</>,
-        },
-        {
-          q: 'How live is “live” in a 2026 league?',
-          a: <>Genuinely live. While NFL games are on, we poll real play-by-play continuously and resolve every matchup on each new
-            play — banks tick, nukes wipe and hot streaks ignite moments after the real play happens, and updates push straight to
-            your screen. Each window locks at its own kickoff, so your Sunday picks stay editable while Thursday plays out. Injury
-            designations refresh hourly in the run-up to each slate so you're never sealing a lineup blind.</>,
+          q: 'How does Drip scoring work?',
+          a: <>Drip metrics don't count yards directly. Each productive touch raises a <b>rate</b> (points per minute) that builds
+            while your team has the ball, on the real game clock. Three productive touches in a row with no opponent score go
+            <b> hot</b> and double the rate. The {rulebookLink('Rulebook')} has the exact numbers.</>,
         },
         {
           q: 'What are power-ups and drip-coin?',
-          a: <>You earn <b>drip-coin</b> each week and spend it on <b>power-ups</b> — consumables like an Extra Slot, a live Metric Swap, a
-            Spy peek, or Double-or-Nothing. Some arm before kickoff, others fire mid-game. The {rulebookLink('Rulebook')} lists the full
-            shop. (In the demo you start with a coin grant so you can try them freely.)</>,
+          a: <>In Drip leagues you earn <b>drip-coin</b> each week and spend it on <b>power-ups</b>, like an extra slot, a mid-game
+            metric swap or a peek at the other lineup. Some arm before kickoff and some fire during the game. The
+            full list is in the {rulebookLink('Rulebook')}.</>,
+        },
+        {
+          q: 'Can I try it before signing up?',
+          a: <>Yes. The <b>demo</b> link at the top of the front page plays a full week of Drip in your browser on real 2025 NFL
+            plays, with no account. The teams and managers in it are made up.</>,
         },
       ],
     },
     {
-      id: '04', title: 'LEAGUES, APPS & ACCESS',
+      id: '03', title: 'ACCOUNT & DATA',
       items: [
         {
-          q: 'Can I play with my own league and friends?',
-          a: <>Yes, two ways. <b>Create a league here</b> — pick the game, the format, the scoring and the draft, invite your friends, and
-            draft in the app; no other platform needed. Or <b>bring an existing league</b> from Sleeper, ESPN, Yahoo, MFL or Fleaflicker
-            and play it live here. The <b>2026 season</b> is running now as a limited <b>pilot</b>, so use <b>request an invite</b> (on the
-            landing page, or the floating request button) and we'll set you up.</>,
+          q: 'Do you need my Sleeper password?',
+          a: <>No. For Sleeper we only need your username, which reads your league's public info. We never ask for or store a
+            Sleeper password.</>,
         },
         {
-          q: 'What if my league isn’t on Sleeper?',
-          a: <>You're covered — alongside Sleeper we support <b>ESPN</b>, <b>MyFantasyLeague (MFL)</b> and <b>Fleaflicker</b>, with
-            <b> Yahoo</b> landing next. And you don't need any of them: a league <b>created here</b> drafts and runs entirely in the app.
-            If your league is on a platform we haven't connected yet, use <b>request an invite</b> and we'll let you know the moment it's
-            ready.</>,
+          q: 'Is my data shared or sold?',
+          a: <>No. We keep your email and handle to run your account, and anonymous usage stats to see which screens get used. We
+            don't sell data or share it with advertisers. To have yours removed, email {mailLink}.</>,
         },
         {
-          q: 'Is there a waitlist for the live pilot?',
-          a: <>Anyone can sign up: start a fresh league, add Drip to a Sleeper league you're in, or join a friend's with their invite code.
-            The pilot holds 1,000 accounts while we tune it. When it's full, <b>request an invite</b> leaves your email and we'll let you know when a spot opens —
-            accounts that go quiet for a month are told, then retired two weeks later, which is how spots come back.</>,
+          q: 'What happens if I stop playing?',
+          a: <>If an account goes unused for 30 days we email you. If we don't hear back, it's removed 14 days after that. Your
+            personal details are deleted. Leagues you played in keep their results, with your team shown by name.</>,
         },
         {
-          q: 'Is there a mobile app?',
-          a: <>Android: yes — a playtest build you install directly, always the newest: <a href={APK_ZIP_URL} style={{ color: 'var(--you)' }}>download it</a>,
-            unzip it with any file manager, and tap the APK inside (Android asks once to allow installs from your browser). It arrives as a zip
-            because a browser handed a file served as an Android package can leave the download stuck at 100% or call it <b>Failed</b> with every
-            byte already there; the zip is the same signed build and simply downloads. If you would rather skip the unzip, the
-            {' '}<a href={APK_URL} style={{ color: 'var(--you)' }}>direct .apk</a> is still there. iOS: not yet — the site works in Safari, and the
-            game engine is shared so the same play loop ships there when it's built. What changed in each version is at <b>⚙ → What's new</b>.</>,
+          q: 'Is the NFL data real?',
+          a: <>Yes. Live leagues use real 2026 play-by-play as it happens. The demo replays real 2025 games.</>,
+        },
+      ],
+    },
+    {
+      id: '04', title: 'APPS & HELP',
+      items: [
+        {
+          q: 'Is there a phone app?',
+          a: <><b>iPhone:</b> the app is in beta on TestFlight. {ext(IOS_TESTFLIGHT_URL, 'Join the beta')}, install
+            Apple's TestFlight app if asked, then install Drip Fantasy from there.
+            <br /><b>Android:</b> {ext(APK_ZIP_URL, 'download the app')}, unzip it, and tap the file inside. Android will ask once
+            to allow installs from your browser. If you'd rather skip the unzip, here's the {ext(APK_URL, 'direct .apk')}.
+            <br />Everything also works in a phone browser. What changed in each version is under <b>⚙ → What's new</b>.</>,
         },
         {
-          q: 'Is it free? Will it ever cost money?',
-          a: <>It's free, and we want to keep it that way. The demo is completely free, and the drip-coin and power-ups inside it are
-            in-game currency, not real money. We're committed to keeping Drip Fantasy <b>free as much as possible</b>. The one honest
-            caveat: live, real-time NFL data feeds get expensive at scale, so if a lot of people start playing, we may need some kind of
-            paid option to cover that cost. Keeping the core game free is the goal.</>,
+          q: 'I have an invite code. Where does it go?',
+          a: <>Open the invite link your commissioner sent and the code fills itself in after you sign in. If you only have the
+            code, sign in and add a league from <b>My Leagues</b>.</>,
         },
         {
-          q: 'I have an invite code — where do I enter it?',
-          a: <>On the splash screen choose <b>Already invited? Sign in</b> to start the live pilot. If your commissioner sent you a share
-            link with a code, opening that link pre-fills it for you after you sign in with your email.</>,
-        },
-        {
-          q: 'I found a bug or have a question — how do I reach you?',
-          a: <>Email us at {mailLink} — that reaches the team directly and we read every message. If your question is specifically about
-            getting your league into the live pilot, the <b>request an invite</b> button is the fastest path.</>,
+          q: 'I found a bug or have an idea. How do I reach you?',
+          a: <>Email {mailLink}. Every message gets read.</>,
         },
       ],
     },
@@ -228,13 +188,13 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'var(--bg)', overflowY: 'auto' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--bg)', borderBottom: '1px solid var(--bd)', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>◆ DRIP FANTASY — FAQ</span>
+        <span className="grotesk" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>◆ DRIP FANTASY · FAQ</span>
         <button onClick={onClose} className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 5, padding: '6px 12px', cursor: 'pointer' }}>✕ close</button>
       </div>
 
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '18px 16px 60px' }}>
         <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text)', margin: '0 0 16px' }}>
-          New here? Start with these. For the exact scoring rules, metric catalog and power-up shop, see the {rulebookLink('Rulebook →')}.
+          New here? Start with these. For exact scoring rules, see the {rulebookLink('Rulebook →')}.
         </p>
 
         {SECTIONS.map((s) => (
@@ -245,7 +205,7 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         ))}
 
         <p style={{ fontSize: 11, lineHeight: 1.6, color: 'var(--dim)', textAlign: 'center', marginTop: 4 }}>
-          Still have a question? Email {mailLink} — we read every message.
+          Still have a question? Email {mailLink}.
         </p>
       </div>
     </div>
