@@ -39,7 +39,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ONLY WHEN THE NATIVE APP CHANGED (v0.654.4). Founder: "skip the APK when
+  # only JS changes." An installed APK takes every JavaScript-only merge over
+  # the air (eas-update.yml) — the same production channel, matched on the
+  # native fingerprint — so rebuilding the APK for one was nine minutes of
+  # gradle that changed nothing on anyone's phone. The published manifest.json
+  # now carries the fingerprint of the APK it describes; a push whose android
+  # fingerprint matches it stops here. A native change (a new native package,
+  # an Expo upgrade, app.json, a config plugin) gets a new fingerprint and
+  # builds as before. Run by hand (workflow_dispatch), it always builds. A
+  # manifest that can't be read, or predates the field, builds too — so a
+  # failed or cancelled native build is retried by the next merge, not lost.
+  #
+  # The "versions behind" banner is unaffected in the way that matters: it
+  # compares the JS the phone is running (which OTA moves forward) with the
+  # manifest's version, so a skipped build just means no nudge to download
+  # an APK that would bring nothing new.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      build: ${{ steps.cmp.outputs.build }}
+      fingerprint: ${{ steps.fp.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Android native fingerprint
+        id: fp
+        working-directory: apps/mobile
+        run: |
+          h=$(npx expo-updates fingerprint:generate --platform android | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).hash))")
+          echo "android fingerprint: $h"
+          echo "hash=$h" >> "$GITHUB_OUTPUT"
+      - name: Same as the published APK?
+        id: cmp
+        env:
+          HASH: ${{ steps.fp.outputs.hash }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "run by hand — building"; echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          pub=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/manifest.json?t=$(date +%s)" \
+                | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).fingerprint||'')}catch{console.log('')}})" || true)
+          echo "published APK fingerprint: ${pub:-none}"
+          if [ -n "$HASH" ] && [ "$pub" = "$HASH" ]; then
+            echo "::notice::Native app unchanged (fingerprint $HASH) — no APK; installed builds take this merge over the air."
+            echo "- APK skipped: native fingerprint \`$HASH\` matches the published build; this merge reaches phones over the air." >> "$GITHUB_STEP_SUMMARY"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   apk:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -182,8 +239,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/out"
           cp "$apk" "$RUNNER_TEMP/out/drip-fantasy.apk"
           # The app reads this to learn the newest build it could be (core's
-          # changelog.ts, APK_MANIFEST_URL) — version, code, and when.
-          printf '{"version":"%s","versionCode":%s,"built":"%s"}\n' "${{ steps.ver.outputs.app }}" "$ANDROID_VERSION_CODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUNNER_TEMP/out/manifest.json"
+          # changelog.ts, APK_MANIFEST_URL) — version, code, and when. The
+          # fingerprint is for the gate above: the native app this APK runs.
+          printf '{"version":"%s","versionCode":%s,"built":"%s","fingerprint":"%s"}\n' "${{ steps.ver.outputs.app }}" "$ANDROID_VERSION_CODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${{ needs.gate.outputs.fingerprint }}" > "$RUNNER_TEMP/out/manifest.json"
           cat "$RUNNER_TEMP/out/manifest.json"
           ls -la "$RUNNER_TEMP/out"
 
