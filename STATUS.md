@@ -34,8 +34,8 @@ pilot cap or waiting list, iPhone is on TestFlight (IOS_TESTFLIGHT_URL), Yahoo
 is connected, the landing no longer has the mascot or PLAY A WEEK cards, and
 the demo is the real engine (the "deterministic simulation" answer is gone).
 The inactive-account rule (30 days, then 14) is stated as a data answer.
-The founder entry says only what the front page already says; no name or
-credentials until the founder supplies them.
+The "Who builds this?" bio is the founder-approved text: name, PhD, the Cox
+and ticketing start-up roles, stathead.app, and the founder's links.
 
 ### v0.656.4 — front door, Shotgun Wedding trade box, roster builder columns
 

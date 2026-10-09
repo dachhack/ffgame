@@ -48,8 +48,8 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
   // THE v0.656.5 REVISION (founder: "a complete revision removing AI tells and
   // focusing more on the complete product as a classic fantasy platform with
   // drip as one feature"): the league comes first and Drip is one game in it.
-  // The founder's links are the founder's; nothing here says more about the
-  // founder than the founder has said on the front page.
+  // The founder's bio is the founder's approved text (v0.656.5); keep it to
+  // what a public resume says.
   const SECTIONS: Section[] = [
     {
       id: '01', title: 'THE BASICS',
@@ -84,10 +84,16 @@ export function Faq({ onClose, onOpenRulebook }: { onClose: () => void; onOpenRu
         },
         {
           q: 'Who builds this?',
-          a: <>One person: a data scientist who's obsessed with fantasy football and builds Drip Fantasy with help from AI and
-            from the people who play it. Most new features start as a request in a league chat. The founder's analytics work is at{' '}
+          a: <><b>Matt Porritt, PhD.</b> Matt has spent 20 years building and leading data science and analytics teams, most
+            recently as Senior Director of Data Analytics at Cox Enterprises. Before that Matt set up data and analytics at a
+            live-event ticketing start-up and built churn and next-best-action models for Cox Communications' customer base.
+            Matt holds a PhD in applied behavior analysis from Western Michigan University, with a concentration in
+            experimental design.
+            <br /><br />In 2026 Matt built {ext('https://stathead.app', 'stathead.app')}, an open NFL analytics platform that
+            supplies Drip Fantasy's stats, and then built Drip Fantasy itself, with AI as a coding partner. Most new features
+            start as a request from someone playing. Matt's analytics consulting is at{' '}
             {ext('https://oberonanalytics.ai', 'oberonanalytics.ai')}, and you can connect on{' '}
-            {ext('https://www.linkedin.com/in/makeitraininsights/', 'LinkedIn')}. Ideas and bug reports go straight to the founder at {mailLink}.</>,
+            {ext('https://www.linkedin.com/in/makeitraininsights/', 'LinkedIn')}. Ideas and bug reports go straight to Matt at {mailLink}.</>,
         },
       ],
     },
