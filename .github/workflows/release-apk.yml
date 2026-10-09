@@ -63,6 +63,7 @@ jobs:
       fingerprint: ${{ steps.fp.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the push's "before" SHA, for the request check
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -79,9 +80,19 @@ jobs:
         id: cmp
         env:
           HASH: ${{ steps.fp.outputs.hash }}
+          BEFORE: ${{ github.event.before }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             echo "run by hand — building"; echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # A BUILD REQUESTED IN A COMMIT (v0.655.3). The integration that
+          # merges this repo can't dispatch a workflow (403), so "cut apps"
+          # after a JS-only merge had no way through the fingerprint gate. A
+          # push that changes apps/mobile/apk-request.txt builds regardless —
+          # the request is the commit, like ops/run.
+          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
+             && git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -qx 'apps/mobile/apk-request.txt'; then
+            echo "apk-request.txt changed — building"; echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           pub=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/manifest.json?t=$(date +%s)" \
                 | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).fingerprint||'')}catch{console.log('')}})" || true)

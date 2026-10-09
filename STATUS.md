@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.655.3 — "cut apps" can always build an APK
+
+> - A fresh Android APK of the current app is built and published, carrying everything through the Settings update panel.
+
+Founder: "Merge and cut apps." Everything was merged; the APK gate (#1169)
+skips JS-only merges, and this integration's `workflow_dispatch` returns 403,
+so there was no way to ask for a build.
+
+- `.github/workflows/release-apk.yml` gate: a push that changes
+  `apps/mobile/apk-request.txt` builds regardless of the fingerprint (the
+  request is the commit, like `ops/run`). The checkout fetches history so
+  the push's before-SHA can be compared.
+- `apps/mobile/apk-request.txt`: one line per request; this one is the
+  first.
+
 ### v0.655.2 — Settings says which update is running, and checks on demand
 
 > - Settings now has an App update panel: which version is running, whether it came built into the install or as an update (and when that update was published), and a Check for update button that downloads and restarts, saying what happened at each step.
