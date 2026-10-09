@@ -226,6 +226,11 @@ same build on EAS and submits it to TestFlight). An APK can be forced the same
 way through `apps/mobile/apk-request.txt`. The OTA job's summary prints both
 fingerprints.
 
+**Does a change need an iPhone build?** `npm run check:ios-runtime` (and the
+PR check "iPhone build needed?") compares the iOS fingerprint with the newest
+TestFlight build recorded in `apps/mobile/ios-build-runtime.txt`. Green means
+the change reaches iPhones over the air.
+
 **Watch `app.json`.** The fingerprint covers the whole expo config, so even an
 Android-only edit (Oct 4: the Fields widget's description text) moves the iOS
 runtime too, and iPhones on older builds stop getting updates until an iOS

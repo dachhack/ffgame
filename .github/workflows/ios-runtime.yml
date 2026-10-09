@@ -1,0 +1,42 @@
+name: iPhone build needed?
+
+# Founder: "Can you let me know when the changes we make require an iPhone
+# rebuild. Looks like that has to go through and approval process so I'd
+# rather not do that unless necessary." (v0.656.3)
+#
+# Green: the change reaches iPhones over the air. Red: it moves the iOS native
+# fingerprint, so iPhones on the newest TestFlight build won't get it until a
+# new iPhone build ships (or the move is bridged — scripts/check-ios-runtime.mjs
+# says which). Only runs when something that can move the fingerprint changed.
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Compare the iOS fingerprint with the newest iPhone build
+        run: |
+          set +e
+          node scripts/check-ios-runtime.mjs | tee /tmp/ios-runtime.txt
+          code=${PIPESTATUS[0]}
+          { echo '```'; cat /tmp/ios-runtime.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" != "0" ]; then echo "::error::iPhone build needed — see the summary"; fi
+          exit $code

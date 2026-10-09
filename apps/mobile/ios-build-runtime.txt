@@ -1,0 +1,11 @@
+# The iOS runtime of the newest iPhone build on TestFlight (v0.656.3).
+#
+# An over-the-air update reaches an iPhone only when the app's iOS fingerprint
+# matches the build's. iPhone builds go through Apple's review, so the founder
+# wants to know whenever a change needs one: `npm run check:ios-runtime`
+# compares today's fingerprint with this line (and with ios-legacy-runtimes.txt)
+# and says so. When an iOS build is requested (ios-build-request.txt), update
+# this line in the same change.
+#
+# hash                                       build
+2f593a898c1685152580642adcbe07569a15f70d   # build 5, 2026-10-09 (the first build from ios-build-request.txt)

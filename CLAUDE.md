@@ -25,3 +25,23 @@ When you fix one:
    `<!-- chat-report: What was wrong: … How it was fixed: … -->`, written for
    league members, not engineers. Never put "@computer" in a fix note: the
    relay skips notes that contain it.
+
+## iPhone builds: say when one is needed
+
+iPhone builds go through Apple's review, so the founder wants to know whenever
+a change needs one, and would rather avoid it. Updates reach iPhones over the
+air only while the app's iOS native fingerprint matches the newest TestFlight
+build (`apps/mobile/ios-build-runtime.txt`).
+
+- Any change under `apps/mobile/` (above all `app.json`, `app.config.js`,
+  plugins, `package.json`) or to `package-lock.json`: run
+  `npm run check:ios-runtime` before merging. The PR check "iPhone build
+  needed?" runs the same script.
+- If it says **iPHONE BUILD NEEDED**, tell the founder in plain words before
+  merging, and why. If the change isn't native on iOS (an Android-only
+  `app.json` edit, like the Oct 4 widget text), bridge it instead of building:
+  list the current build's runtime in `apps/mobile/ios-legacy-runtimes.txt`.
+- When an iPhone build is requested (`apps/mobile/ios-build-request.txt`),
+  record its runtime in `ios-build-runtime.txt` in the same change.
+- Plain JavaScript and SQL changes never need one; don't mention it then.
+
