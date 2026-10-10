@@ -22,6 +22,63 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.658.0 — the dev room: an invite-only chat for ideas and bugs
+
+> - A new invite-only Dev room: a group chat outside any league where invited testers suggest changes and report bugs. Tag a message 💡 idea or 🐞 bug and it's logged straight to the public issue list (without your name), with a link back on the message.
+
+Founder: "Can I have a special dev group chat and invite users into the chat
+where they can log changes and suggestions for the game?" — then chose a new
+room (not a league borrowed as one) and "auto-file every tag".
+
+Migration 0459: `dev_room`, `dev_room_member`, `dev_room_invite`,
+`dev_room_message`, RPC-only (RLS on, no policies, the 0147 pattern). Only an
+admin makes a room or an invite code (one-person or reusable, revocable);
+joining by code is the only way in; an admin removes members, anyone leaves,
+the last admin can't. A message's tag is set when posted or later by its
+author/an admin, until it is filed. Worker: `server/src/devRoom.js` (in the
+push sweep) claims each tagged, unfiled line (`filing_at`), opens the issue
+with labels `dev-room` + `idea`/`bug`, writes `issue_number` back, and pushes
+the author a receipt; a refused issue releases the claim for the next sweep.
+The issue (devRoomIssue.js, pinned by check:devroom) names nobody and breaks
+every @mention with a zero-width joiner, so a tester's text can't ping anyone
+or reach the @computer route. Web: a DEV ROOM card on the leagues home for
+members/admins, the room at view 'devroom', and `?live=1&room=CODE` links
+joined after sign-in. Phone: ⚙ → Dev room (where a tester types the code), a
+banner on Your leagues, SHARE for invite messages. Verified the migration and
+every RPC gate against a scratch Postgres; the screens were not exercised
+signed in.
+
+### v0.657.0 — set your lineup from My Team, any week, with projections
+
+> - In a classic league, My Team now shows your lineup for any week: use the arrows to change weeks, tap a position (QB, RB, BN…) to swap who plays there, and every player shows his projection for that week next to your projected total.
+
+Founder, with Sleeper's team screen beside ours: "Can we add weeks to my team
+so you can change your line up on that screen as well as the matchup. Also
+include projections." The Team tab drew a read-only FIT (assignSpots). For a
+classic league's own seat it now draws the matchup board's own lineup editor,
+one side of it — `ClassicBoard variant="team"` on both hosts: the same
+loads, `canEdit`, `applyMove`/`pickInto`, auto-slot and `slateAwareProj`
+pricing, so the two screens cannot disagree about who starts, what is locked
+or what he projects. The spot pill is the button (Sleeper's way); the bench's
+BN pill opens the where-can-he-go sheet. Both pickers are now one shared
+`pickerSheets` element. A bye week says so; no schedule or a failed read falls
+back to the old fit. Drip leagues, a rival's roster and browse-as keep the
+fit: drip sets its lineup per window with a stat on each pick, which stays on
+the board. IR/taxi/OUT stay the Team tab's own sections.
+
+### v0.656.9 — a new matchup widget shows up straight away
+
+> - A matchup widget added to the home screen shows a loading card at once, instead of an invisible box until the app is opened.
+
+Founder, adding the matchup widget on Android: an invisible box until the app
+was opened. The widget's first frame is the remembered picture, which lasts a
+day and is only written by a read that landed; a widget added fresh had none,
+and the library's placeholder layout is transparent, so nothing showed until
+the cold headless read finished inside Android's 30-second task. Every wake
+with no remembered picture now draws a "Loading your matchup…" card first, and
+a read that runs past 22 s draws the tap-to-retry error card instead of
+nothing. Not confirmed on a device: the read timing was not observed.
+
 ### v0.656.8 — no NFL filters on an all-college player pool
 
 > - When every player in the pool is a college player, the waiver list drops the NFL tenure and NFL team filters, and the draft room drops ROOKIES.

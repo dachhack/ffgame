@@ -30,6 +30,7 @@ import { sportLeagueMarket,
   devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
 import { teamBook, fmtPts, stakesOf } from '@drip/core/data/devyShares';
+import { ClassicBoard } from '../ui/ClassicBoard';
 import { DevyMarketTab } from '../ui/DevyShares';
 import { isCollegeSlug, teamLabel, collegeStartsHere } from '@drip/core/data/college';
 import { txnLimitSummary } from '@drip/core/data/txnLimits';
@@ -300,8 +301,11 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
   );
 }
 
-export function Team({ leagueId, onBack, onDraft, tradePartner }: {
+export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, lineupRosterId }: {
   leagueId: string; onBack: () => void; onDraft: () => void;
+  /** Who writes the lineup and for which seat (v0.657.0) — the matchup
+   *  board's own pair, so a co-managed seat writes as its owner (0125). */
+  lineupUserId?: string; lineupRosterId?: number | null;
   /** Deep link from 👥 Teams & rosters (v0.356.3): land on TRADES with the
    *  propose sheet already pointed at this seat. */
   tradePartner?: number | null;
@@ -514,6 +518,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
   // since 0164; the card just took its controls off for a rival's roster.
   // For the commissioner they stay on, and the pickers offer THAT roster.
   const canStash = viewingMine || !!team?.is_commish;
+  // The weekly lineup replaces the fit only where it can be edited: a classic
+  // league, my own seat, a seat to write for (v0.657.0).
+  const lineupHere = gm?.mode === 'classic' && viewingMine && !!lineupUserId && lineupRosterId != null;
   // 0440: a mixed league with devy spots — college players may be active or
   // shelved, so the DV chips open the picker like the taxi squad's do.
   const mixedDevy = (gm?.shape?.devy ?? 0) > 0 && collegeStartsHere(gm);
@@ -820,6 +827,26 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
     return out;
   })();
 
+  // The read-only FIT (assignSpots): a drip league's roster view, a rival's,
+  // and the classic lineup's stand-in when there is no week to draw.
+  const fitStarters = shown.length > 0 && slotDefs.length > 0 ? (<>
+    <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 10 }}>STARTING SPOTS</Mono>
+    {bySpot.starters.map((row, i) => (
+      <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} inj={row.player ? injTags[row.player.slug] : null} />
+    ))}
+  </>) : null;
+  const fitBench = (bySpot.bench.length > 0 || !!gm?.shape?.bench) ? (<>
+    <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>
+      BENCH ({bySpot.bench.length}{gm?.shape?.bench ? `/${gm.shape.bench}` : ''})
+    </Mono>
+    {bySpot.bench.map((p) => (
+      <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} />
+    ))}
+    {Array.from({ length: Math.max(0, (gm?.shape?.bench ?? 0) - bySpot.bench.length) }, (_, i) => (
+      <RosterRow key={`bn-empty-${i}`} badge="BN" p={null} busy={busy} t={t} emptyLabel="Open" />
+    ))}
+  </>) : null;
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} {...chromeScroll} contentContainerStyle={{ padding: 12, paddingBottom: 104, gap: 10 }}>
       {/* No screen title, no back link (v0.356.2, founder) — the room bar
@@ -932,28 +959,28 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
             the FIT, not the lineup: drip sets its lineup per window on the
             board and classic sets one per week, so calling this "your
             lineup" would be the one thing this screen must not say. */}
-        {shown.length > 0 && slotDefs.length > 0 && (<>
-          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 10 }}>STARTING SPOTS</Mono>
-          {bySpot.starters.map((row, i) => (
-            <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} inj={row.player ? injTags[row.player.slug] : null} />
-          ))}
-        </>)}
+        {/* ── THE LINEUP, for a classic league's own seat (v0.657.0) ──────
+            Founder, with Sleeper's team page beside ours: weeks, lineup
+            changes and projections here as well as on the matchup. Classic
+            sets one lineup a week, so the matchup board's own editor can sit
+            here — the same saves, the same projections, the same locks. Drip
+            sets its lineup per window with a stat on each pick, which stays
+            on the board; it keeps the FIT below, as does a rival's roster. */}
+        {lineupHere && shown.length > 0 && slotDefs.length > 0 && (
+          <ClassicBoard variant="team"
+            // A move to IR/taxi/OUT below changes who can start: redraw.
+            key={shown.map((p) => `${p.slug}:${p.spot}`).join('|')}
+            userId={lineupUserId!} leagueId={leagueId} rosterId={lineupRosterId!}
+            fallback={<>{fitStarters}{fitBench}</>} />
+        )}
+        {!lineupHere && fitStarters}
 
         {/* ── BENCH ───────────────────────────────────────────────────────── */}
         {/* Every bench spot, open ones too (v0.530.0, founder: "have bench
             still show (x/x) and show all spots. If bench spots are open,
-            just have the spot with no player name. Could say 'open'"). */}
-        {(bySpot.bench.length > 0 || !!gm?.shape?.bench) && (<>
-          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>
-            BENCH ({bySpot.bench.length}{gm?.shape?.bench ? `/${gm.shape.bench}` : ''})
-          </Mono>
-          {bySpot.bench.map((p) => (
-            <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} />
-          ))}
-          {Array.from({ length: Math.max(0, (gm?.shape?.bench ?? 0) - bySpot.bench.length) }, (_, i) => (
-            <RosterRow key={`bn-empty-${i}`} badge="BN" p={null} busy={busy} t={t} emptyLabel="Open" />
-          ))}
-        </>)}
+            just have the spot with no player name. Could say 'open'").
+            The lineup above draws its own bench. */}
+        {!lineupHere && fitBench}
 
         {/* ── INJURED RESERVE ─────────────────────────────────────────────
             The empty places are shown too, up to the league's IR limit —

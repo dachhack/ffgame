@@ -14,6 +14,7 @@ import { PlayerCardHost, setCardLeague } from './app/playerCard';
 import { UpdateBanner } from './app/UpdateBanner';
 import { DEMO_WEEK } from '@drip/core/config';
 import { readInviteParams } from '@drip/core/data/invite';
+import { readDevRoomParam } from '@drip/core/data/devRoom';
 import { readRecruitGame } from '@drip/core/data/leagueTagline';
 
 // Route screens are code-split: only the active screen's chunk loads, keeping the
@@ -150,6 +151,8 @@ export function App() {
       // A DFS league invite link (?dfs=CODE) → stash; LiveOnboard auto-joins
       // after sign-in (0094 — the link IS the access; no card in the chooser).
       stash('dripDfsCode', invited?.dfs);
+      // A dev-room invite (?room=CODE, v0.658.0) → LiveOnboard joins after sign-in.
+      stash('dripDevRoomCode', readDevRoomParam((k) => p.get(k)) ?? undefined);
       const finish = () => {
         navigate({ name: 'live' });
         // Consume the params so a later refresh doesn't teleport back into Live (the

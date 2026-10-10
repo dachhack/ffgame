@@ -26,6 +26,7 @@ import { OtaReadyStrip, useOtaReady } from './src/ui/OtaReady';
 import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
+import { DevRoomScreen } from './src/screens/DevRoom';
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin, loadCollegeWeekDates, loadCollegeLogos, syncMarkFree } from '@drip/core/data/liveApi';
 import { onMarkFree } from '@drip/core/data/markFree';
@@ -118,7 +119,9 @@ export function App() {
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
-  const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board'>('picks');
+  const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board' | 'devroom'>('picks');
+  // THE DEV ROOM (v0.658.0): which room the screen opens on (null = the list).
+  const [devRoomId, setDevRoomId] = useState<string | null>(null);
   // Which door opened the board: 🔎 FIND A LEAGUE browses, ＋ ADD A LEAGUE
   // opens the create card. One screen, two entrances (see Recruit).
   const [boardEntry, setBoardEntry] = useState<'root' | 'browse' | 'create'>('root');
@@ -496,6 +499,8 @@ export function App() {
         <ScrollShiftCtx.Provider value={chromeDrv.shift}>
         {view === 'admin' ? (
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
+        ) : view === 'devroom' ? (
+          <View style={{ flex: 1 }}><DevRoomScreen roomId={devRoomId} onBack={() => { setDevRoomId(null); setView('picks'); }} /></View>
         ) : view === 'board' ? (
           <View style={{ flex: 1 }}>
             <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)} initial={boardEntry}
@@ -519,7 +524,7 @@ export function App() {
             }}
             onDeleted={() => { setOpen(null); setView('home'); }} /></View>
         ) : view === 'team' && open?.native ? (
-          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} lineupUserId={open.pickUserId ?? session.user.id} lineupRosterId={open.rosterId ?? null} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
         ) : view === 'team' && open && open.rosterId != null ? (
           // External league (v0.356.5): the read-only team page — the roster
           // the platform sync carries, no waivers or trades.
@@ -583,6 +588,7 @@ export function App() {
             userId={session.user.id}
             onBoard={(entry) => { setBoardEntry(entry ?? 'root'); setView('board'); }}
             onAdd={() => { setBoardEntry('create'); setView('board'); }}
+            onDevRoom={(id) => { setDevRoomId(id); setView('devroom'); }}
             onOpen={(leagueId, rosterId, name, native, commish, pickUserId, landing) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports
@@ -648,6 +654,7 @@ export function App() {
             onCardSize={(s) => { saveCardSize(s); setCardSize(s); }}
             isAdmin={admin}
             onAdmin={() => setView('admin')}
+            onDevRoom={() => { setDevRoomId(null); setView('devroom'); }}
             onSignOut={() => { void signOut(); }}
             onWhatsNew={() => setWhatsNewOpen(true)}
             behind={update.behind}

@@ -4,6 +4,7 @@
 // this app had one screen — it picked `myRoster()`, the FIRST enrolled
 // membership, which is arbitrary the moment you're in more than one league, and
 // it gave you no way to reach the others.
+import { DevRoomBanner } from './DevRoom';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { crestInitial } from '@drip/core/data/crest';
@@ -56,7 +57,7 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
   );
 }
 
-export function Leagues({ userId, onOpen, onBoard, onAdd }: {
+export function Leagues({ userId, onOpen, onBoard, onAdd, onDevRoom }: {
   userId: string;
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
@@ -71,6 +72,8 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
       on it scrolled to the top would leave the founder's own question ("where
       do I make one?") one more scroll away. */
   onAdd: () => void;
+  /** The dev room's door (v0.658.0), shown to its members and to an admin. */
+  onDevRoom?: (roomId: string | null) => void;
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<Enrollment[] | null>(null);
@@ -201,6 +204,9 @@ export function Leagues({ userId, onOpen, onBoard, onAdd }: {
         <Display size={22}>Your leagues</Display>
         <Mono size={9.5} tone="faint">Pull down to refresh.</Mono>
       </View>
+
+      {/* 🛠 THE DEV ROOM (v0.658.0): only its members and an admin see it. */}
+      {onDevRoom && <DevRoomBanner key={refreshing ? 'r' : 'n'} onOpen={onDevRoom} />}
 
       {/* cross-league chat inbox (0154 polish): every league with unread chat,
           one tap from anywhere to the conversation it belongs to. */}

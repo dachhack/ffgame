@@ -87,6 +87,18 @@ const el = (state: WidgetState, info: WidgetInfo) => {
   return (state.kind === 'ok' && state.busy) || state.kind === 'loading' ? inert(pic) : pic;
 };
 
+/** Android ends a widget task at 30 seconds, and a read still going then
+ *  draws nothing at all. Give up a little before that and draw the error
+ *  card, which is itself the retry, rather than leave the loading card up. */
+const READ_DEADLINE_MS = 22_000;
+function withinTask(read: Promise<WidgetState>): Promise<WidgetState> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<WidgetState>((res) => {
+    timer = setTimeout(() => res({ kind: 'error', message: 'It took too long to answer.' }), READ_DEADLINE_MS);
+  });
+  return Promise.race([read, late]).finally(() => clearTimeout(timer));
+}
+
 /** The standard wake: the remembered frame now, the fresh one when it lands.
  *
  *  A READ THAT FAILS (v0.433.1). Founder, on a home screen that said
@@ -101,8 +113,14 @@ async function paintThenFetch(info: WidgetInfo, render: (s: WidgetState) => void
   const now = rememberedState(info.widgetId);
   // A tap is answered visibly: the picture with ⟳ reading LOADING, inert.
   if (now) render(opts.tapped ? { ...now, busy: 'refresh' } : now);
-  else if (opts.tapped) render({ kind: 'loading', title: 'Reconnecting…', body: 'Reading the matchup.' });
-  const fresh = await widgetState(info.widgetId, opts);
+  // NOTHING REMEMBERED IS STILL A FRAME (v0.656.9). Founder, adding the
+  // matchup widget: an invisible box until the app was opened. The remembered
+  // picture lasts a day and is only written by a read that landed, so a
+  // widget added fresh had nothing to paint first, and Android's empty
+  // placeholder is transparent — every pixel waited on a cold read that had
+  // to finish inside the task's 30 seconds.
+  else render({ kind: 'loading', title: opts.tapped ? 'Reconnecting…' : 'Loading your matchup…', body: 'Reading the matchup.' });
+  const fresh = await withinTask(widgetState(info.widgetId, opts));
   // An error after a good remembered frame would replace a real score with
   // an apology; keep the picture, say the read failed, and let the chip (or
   // the next wake) try again.

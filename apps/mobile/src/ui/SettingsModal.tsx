@@ -67,7 +67,7 @@ const SKIN_OPTS: { id: CardSkin; name: string }[] = [
   { id: 'battalion', name: 'Battalion' },
 ];
 
-export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onAdmin, onSignOut, onWhatsNew, behind = 0, onClose }: {
+export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin, onTheme, onSkin, onCardSize, onAdmin, onDevRoom, onSignOut, onWhatsNew, behind = 0, onClose }: {
   visible: boolean;
   theme: ThemeName;
   skin: CardSkin;
@@ -83,6 +83,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   onSkin: (s: CardSkin) => void;
   onCardSize: (s: CardSize) => void;
   onAdmin: () => void;
+  /** The dev room (v0.658.0): invite-only, so this is where a tester types their code. */
+  onDevRoom?: () => void;
   onSignOut: () => void;
   onClose: () => void;
 }) {
@@ -244,6 +246,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                 second line — they only need to be findable, not described. */}
             <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 4, paddingTop: 2 }}>
               {isAdmin && <ActionRow icon="◆" label="Admin" onPress={() => { onClose(); onAdmin(); }} />}
+              {onDevRoom && <ActionRow icon="🛠" label="Dev room" hint="invite only" onPress={() => { onClose(); onDevRoom(); }} />}
               {onWhatsNew && (
                 <ActionRow icon="🆕" label="What's new" onPress={() => { onClose(); onWhatsNew(); }}
                   hint={behind > 0 ? `${behind} behind — update` : version} strong={behind > 0} />

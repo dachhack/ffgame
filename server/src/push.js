@@ -29,6 +29,7 @@ import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
 import { apnsSend, apnsCreds } from './apns.js';
 import { sweepComputer, relayFixes } from './computer.js';
+import { sweepDevRoom } from './devRoom.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
@@ -700,6 +701,8 @@ export async function sweepPush() {
   await sweepComputer().then(enqueue).catch((e) => log('computer sweep error', e.message));
   // …and a fixed ask's note back into the chat it came from (v0.562.0).
   await relayFixes().then(enqueue).catch((e) => log('computer relay error', e.message));
+  // The dev room (v0.658.0, 0459): every tagged idea or bug becomes an issue.
+  await sweepDevRoom().then(enqueue).catch((e) => log('dev-room sweep error', e.message));
   await detectMembers().catch((e) => log('members detector error', e.message));
   await detectTrades().catch((e) => log('trades detector error', e.message));
   await detectDraft().catch((e) => log('draft detector error', e.message));

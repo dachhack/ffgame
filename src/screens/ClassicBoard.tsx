@@ -479,8 +479,14 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action, empty }: {
   );
 }
 
-export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, switcher }: {
+export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, switcher, variant = 'match', fallback }: {
   userId: string; leagueId?: string; rosterId?: number; onBack: () => void;
+  /** 'team' (v0.657.0): only MY lineup, for the Team tab — week arrows, the
+   *  spots as buttons, a projection on every row. */
+  variant?: 'match' | 'team';
+  /** What the Team tab shows when there is no lineup to draw (no schedule
+   *  built, a failed read): its old read-only fit. */
+  fallback?: ReactNode;
   /** The room bar is on screen (v0.356.11) — its LEAGUE button is this
    *  board's way back, so the header's own "← LEAGUE" would be a second
    *  door in the same square inch. `onBack` still runs the swipe gesture. */
@@ -1566,7 +1572,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 12px',
     cursor: on ? 'pointer' : 'default', opacity: on ? 1 : 0.45,
   });
-  if (byeWeek != null) return (
+  if (byeWeek != null && variant !== 'team') return (
     <NoGameScreen week={byeWeek} bye onBack={onBack}>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} className="mono" style={weekBtn(canGo(-1))}>‹ {weekLabel(byeWeek - 1)}</button>
@@ -1578,6 +1584,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       </div>
     </NoGameScreen>
   );
+  if (variant === 'team' && (state === 'none' || state === 'error')) return <>{fallback ?? null}</>;
   if (state === 'none') return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>No matchup this week.</div>;
   if (state === 'error') return (
     <div style={{ padding: 24 }}>
@@ -1590,6 +1597,300 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // also knows about projections and empty spots) — the fallback grid below
   // still needs its own, so they're derived from the board when it exists.
   const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
+
+  // The two pickers, shared by the matchup board and the Team tab's lineup
+  // (v0.657.0): one way to change a spot, wherever the spot is drawn.
+  const pickerSheets = (
+    <>
+      {/* ── THE PICKER, as a card over the board ───────────────────────────
+          It used to render inline UNDER the whole board, which meant tapping a
+          spot near the top scrolled the answer off screen: you pressed a thing
+          and nothing appeared to happen. A spot is a question ("who goes
+          here?"), so the answer belongs over the question — dismissed by the
+          backdrop, ✕, or Escape, like the draft room's player card.
+
+          It lists ONLY what may legally go in this spot: the spot's own
+          position + filter rules (slotAllows), minus anyone already started,
+          minus anyone whose game has kicked off — because the database would
+          refuse all three and a picker that offers a refusal is a trap. */}
+      {pickerSlot && canEdit(pickerSlot) && (() => {
+        const d = slotDefs.find((x) => x.slot === pickerSlot);
+        const f = slotFilterLabel(d?.flt);
+        // EVERY eligible player on the roster, not just the bench (founder):
+        // "put my TE in the flex" was a two-step dance — empty the TE spot,
+        // then fill the flex — when it is one move. A player already starting
+        // shows where he stands, and choosing him moves him.
+        const spotOf = new Map<string, string>();
+        for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
+        const eligible = pool
+          .filter((p) => !stashed.has(p.slug))                       // taxi/IR can't start
+          .filter((p) => d && slotAllows(d, { id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
+          .filter((p) => !kickedOff(p.slug))
+          .filter((p) => spotOf.get(p.slug) !== pickerSlot)          // already here
+          // If he is starting somewhere his game has locked, he cannot leave —
+          // the DB would refuse the vacating write, so don't offer the move.
+          // …but a BEST-BALL spot never holds anyone (v0.424.1, founder: "I
+          // can't move him into my WR spot"): the fill parked him there and
+          // will simply pick someone else once he starts manually.
+          .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); })
+          // THE ROW CARRIES THE DECISION (v0.639.0) — the app's board has the
+          // member's words. Each candidate is the board's own entry for this
+          // spot (kickoff, opponent, venue marks, the spot-aware projection)
+          // plus the position matchup graded red to green (v0.639.1); best first.
+          .map((p) => ({ p, e: d ? entryFor(p.slug, d.pos, pickerSlot) : null, grade: matchupGrade(wk.rows[p.slug], p.pos, wk.dvp) }))
+          .sort((a, b) => (b.e?.proj ?? 0) - (a.e?.proj ?? 0) || a.p.full.localeCompare(b.p.full));
+        const anyGrade = eligible.some((x) => x.grade && (x.e?.proj ?? 0) > 0);
+        return (
+          <div onClick={() => setPickerSlot(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{d ? nameOf(d) : pickerSlot}</div>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>
+                    takes {d?.pos.join(' / ')}
+                    {f ? <span style={{ color: 'var(--you)' }}> · {f}</span> : null}
+                  </div>
+                </div>
+                <button onClick={() => setPickerSlot(null)} className="mono" aria-label="close"
+                  style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
+              </div>
+              {mine[pickerSlot] && (
+                <button onClick={() => { void assign(pickerSlot, null); }} className="mono"
+                  style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 10.5, padding: '8px 9px', marginBottom: 6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--dim)', cursor: 'pointer' }}>
+                  ✕ LEAVE THIS SPOT EMPTY
+                </button>
+              )}
+              {eligible.length === 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6, padding: '6px 2px' }}>
+                  Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
+                </div>
+              )}
+              {eligible.map(({ p, e, grade }) => {
+                const bye = e?.opponent === 'BYE';
+                const started = !!e && !bye && e.state !== 'pre';
+                const game = !e ? 'no game listed'
+                  : bye ? 'BYE'
+                  : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
+                  : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
+                const roof = e && !started && e.roof && e.roof !== 'open' ? e.roof : null;
+                const team = p.team || collegeNameFor(p.slug)?.school || '';
+                const g = grade && (e?.proj ?? 0) > 0 ? grade : null;
+                return (
+                <button key={p.slug} onClick={() => { void pickInto(pickerSlot, p.slug); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
+                  <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
+                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {shortName(p.full)}
+                      <InjuryNow slug={p.slug} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
+                      {spotOf.get(p.slug) && (
+                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginLeft: 6 }}>
+                          in {slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}
+                        </span>
+                      )}
+                    </span>
+                    <span className="mono" style={{ fontSize: 9, color: bye ? 'var(--warn, #c66)' : 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {team ? `${team} · ` : ''}{game}
+                      {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 4 }}>🏟</span>}
+                      {e && !started && e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
+                    </span>
+                  </span>
+                  <PosPill pos={p.pos as Pos} />
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: 64, flex: 'none' }}>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)' }}>{(e?.proj ?? 0).toFixed(1)}</span>
+                    {/* The grade as a pill (v0.639.1): the percent is the
+                        opponent's factor against his position, the colour
+                        its band — red / orange / yellow / yellow-green / green. */}
+                    {g && (
+                      <span className="mono" title={`${MATCHUP_BAND_WORD[g.band]} matchup — what ${e?.opponent ?? 'his opponent'} gives up to ${p.pos === 'DEF' ? 'DST' : p.pos}s vs the league average`}
+                        style={{ marginTop: 2, fontSize: 8, fontWeight: 700, color: MATCHUP_BAND_COLOR[g.band], border: `1px solid ${MATCHUP_BAND_COLOR[g.band]}`, borderRadius: 4, padding: '1px 4px', whiteSpace: 'nowrap' }}>
+                        {`${g.basis === 'def' ? (p.pos === 'DEF' ? 'DST' : p.pos) : 'wk'} ${matchupGradeLabel(g)}`}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                );
+              })}
+              {anyGrade && (
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5, padding: '8px 2px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                    {([1, 2, 3, 4, 5] as const).map((b) => (
+                      <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: MATCHUP_BAND_COLOR[b], display: 'inline-block' }} />{MATCHUP_BAND_WORD[b]}
+                      </span>
+                    ))}
+                  </div>
+                  Matchup: what the defense he faces gives up to his position, against the league average. “wk” is his whole week’s line against his usual, where the defense table has no entry.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── THE SPOT PICKER, for a bench player (v0.640.1) ─────────────────
+          The mirror of the picker above: he is fixed, the spot is the
+          question. One row per spot he may take, with who stands in it now
+          (he goes to the bench) or EMPTY, and his own projection IN that spot
+          on the right. */}
+      {benchPick && (() => {
+        const me = entryFor(benchPick);
+        const spots = spotsFor(benchPick);
+        return (
+          <div onClick={() => setBenchPick(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Start {me?.name ?? prettySlug(benchPick)}</div>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>
+                    {me ? `${me.pos}${me.team ? ` · ${me.team}` : ''} · ${me.opponent === 'BYE' ? 'BYE' : (`${me.kickoff ?? ''} ${me.opponent ?? ''}`.trim() || 'no game listed')} · ${me.proj.toFixed(1)}` : ''}
+                    <span style={{ color: 'var(--you)' }}> · pick a spot</span>
+                  </div>
+                </div>
+                <button onClick={() => setBenchPick(null)} className="mono" aria-label="close"
+                  style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
+              </div>
+              {spots.length === 0 && (
+                <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6, padding: '6px 2px' }}>
+                  No spot he can take is open right now — every one that fits him has {vocab.started}, is best ball, or already holds him.
+                </div>
+              )}
+              {spots.map(({ d, occupant }) => {
+                const oe = occupant ? entryFor(occupant, d.pos, d.slot) : null;
+                const here = entryFor(benchPick, d.pos, d.slot);
+                return (
+                  <button key={d.slot} onClick={() => { void pickInto(d.slot, benchPick); setBenchPick(null); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
+                    <SlotPill pos={d.pos} label={nameOf(d)} width={spotCol} />
+                    <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {oe ? (
+                        <>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {oe.name}<InjuryNow slug={occupant!} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
+                          </span>
+                          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {`${oe.proj.toFixed(1)} · ${oe.opponent === 'BYE' ? 'BYE' : (`${oe.kickoff ?? ''} ${oe.opponent ?? ''}`.trim() || 'no game listed')} → bench`}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ EMPTY</span>
+                      )}
+                    </span>
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--you)', width: 36, textAlign: 'right', flex: 'none' }}>{here ? here.proj.toFixed(1) : ''}</span>
+                  </button>
+                );
+              })}
+              {spots.length > 0 && (
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5, padding: '8px 2px 0' }}>
+                  The number on the right is his projection in that spot; the man he replaces goes to the bench.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+    </>
+  );
+
+  // ── THE TEAM TAB'S LINEUP (v0.657.0) ──────────────────────────────────────
+  // The mobile twin's note: the founder, with Sleeper's team screen beside
+  // ours, wanted weeks, lineup changes and projections on MY TEAM as well as
+  // the matchup. This is the same lineup the board edits, one side of it,
+  // written by the same applyMove/pickInto and priced by the same week-aware
+  // projection, so the two screens can never disagree about who starts.
+  if (variant === 'team') {
+    const side = board?.home;
+    const pre = !board?.starters.some((r) => r.home && r.home.state !== 'pre');
+    const lineOf = (e: import('@drip/core/engine/matchupBoard').BoardEntry): string => {
+      if (e.opponent === 'BYE') return 'BYE';
+      if (e.state !== 'pre') return `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`;
+      return `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed';
+    };
+    const pill = (pos: string[], label: string, on: boolean, onClick: () => void, auto = false) => (
+      <button onClick={on ? onClick : undefined} disabled={!on} title={on ? `change ${label}` : label} aria-label={on ? `change ${label}` : label}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: on ? 'pointer' : 'default', opacity: on ? 1 : 0.55, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <SlotPill pos={pos} label={label} width={64} />
+        {auto && <span className="mono" style={{ fontSize: 8, color: 'var(--you)' }}>🎯 AUTO</span>}
+      </button>
+    );
+    const row = (key: string, badge: React.ReactNode, e: import('@drip/core/engine/matchupBoard').BoardEntry | null, empty: React.ReactNode) => (
+      <div key={key} style={{ display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr) 60px', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: '1px solid var(--bd)' }}>
+        {badge}
+        {e ? (
+          <div style={{ minWidth: 0 }}>
+            <BoardCell e={e} align="left" face={34}
+              onName={() => openPlayerCard({ slug: e.slug, name: e.name, pos: e.pos, team: e.team ?? '', week: matchup?.week, userId })} />
+            <div className="mono" style={{ fontSize: 9.5, color: e.opponent === 'BYE' ? 'var(--warn, #c66)' : 'var(--faint)', marginTop: 2, marginLeft: 42, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lineOf(e)}</div>
+          </div>
+        ) : <div style={{ minWidth: 0 }}>{empty}</div>}
+        <div className="mono" style={{ textAlign: 'right' }}>
+          {e && (e.state === 'pre'
+            ? <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dim)' }}>{e.proj.toFixed(2)}</div>
+            : <>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{e.live.toFixed(2)}</div>
+                <div style={{ fontSize: 8.5, color: 'var(--faint)' }}>proj {e.proj.toFixed(1)}</div>
+              </>)}
+        </div>
+      </div>
+    );
+    const weekNav = (title: string) => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={() => goWeek(-1)} disabled={!canGo(-1)} aria-label="previous week" className="mono"
+          style={{ background: 'none', border: 'none', fontSize: 16, fontWeight: 700, color: canGo(-1) ? 'var(--you)' : 'var(--faint)', cursor: canGo(-1) ? 'pointer' : 'default' }}>‹</button>
+        <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--you)' }}>{title}</span>
+        <button onClick={() => goWeek(1)} disabled={!canGo(1)} aria-label="next week" className="mono"
+          style={{ background: 'none', border: 'none', fontSize: 16, fontWeight: 700, color: canGo(1) ? 'var(--you)' : 'var(--faint)', cursor: canGo(1) ? 'pointer' : 'default' }}>›</button>
+      </div>
+    );
+    const label = (txt: string, top = 0) => (
+      <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.12em', color: 'var(--faint)', marginTop: top }}>{txt}</div>
+    );
+    if (byeWeek != null) return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>{label('STARTERS')}{weekNav(weekTitle(byeWeek))}</div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6 }}>Your team is off in {weekTitle(byeWeek)} — no lineup to set.</div>
+      </div>
+    );
+    if (!board || !matchup || !side) return <>{fallback ?? null}</>;
+    return (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            {label('STARTERS')}
+            <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>
+              {illegalMine ? 'lineup frozen — roster isn’t legal' : `tap a spot to change it · each locks at its own ${vocab.start}`}
+            </div>
+          </div>
+          {weekNav(boardWeekTitle(matchup.week, slate.map((g) => g.kickoff)))}
+        </div>
+        <div className="mono" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6, padding: '4px 0' }}>
+          {!pre && <span style={{ fontSize: 13, fontWeight: 700 }}>{side.live.toFixed(2)}</span>}
+          <span style={{ fontSize: 10, color: 'var(--faint)' }}>{pre ? `projected ${side.projected.toFixed(2)}` : `proj ${side.projected.toFixed(1)}`}</span>
+        </div>
+        {board.starters.map((r) => {
+          const auto = bb.has(r.slot);
+          const settable = canEdit(r.slot) && !auto;
+          const d = slotDefs.find((x) => x.slot === r.slot);
+          const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
+          return row(`s-${r.slot}`, pill(r.pos, r.label, settable, () => setPickerSlot(r.slot), auto), r.home,
+            auto ? <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>🎯 BEST BALL</span>
+              : settable ? (
+                <button onClick={() => setPickerSlot(r.slot)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'inherit' }}>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>+ SET {r.label}</span>
+                  {!!accepts && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>takes {accepts}</div>}
+                </button>
+              ) : <span className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>Empty</span>);
+        })}
+        {board.bench.home.length > 0 && label(`BENCH (${board.bench.home.length})`, 14)}
+        {board.bench.home.map((e) => row(`b-${e.slug}`, pill([e.pos], 'BN', canBenchPick(e.slug), () => setBenchPick(e.slug)), e, null))}
+        {saveNote && <div className="mono" style={{ fontSize: 9.5, marginTop: 6, color: saveNote === 'saved' ? 'var(--faint)' : 'var(--warn, #c66)' }}>{saveNote === 'saved' ? (saving ? 'saving…' : '✓ lineup saved') : saveNote}</div>}
+        {pickerSheets}
+      </div>
+    );
+  }
 
   const PlayerCell = ({ slug, right }: { slug: string | null | undefined; right?: boolean }) => {
     if (!slug) return <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>—</span>;
@@ -2122,195 +2423,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       )}
       {saveNote && <div className="mono" style={{ fontSize: 9.5, color: saveNote === 'saved' ? 'var(--faint)' : 'var(--warn, #c66)' }}>{saveNote === 'saved' ? (saving ? 'saving…' : '✓ lineup saved') : saveNote}</div>}
 
-      {/* ── THE PICKER, as a card over the board ───────────────────────────
-          It used to render inline UNDER the whole board, which meant tapping a
-          spot near the top scrolled the answer off screen: you pressed a thing
-          and nothing appeared to happen. A spot is a question ("who goes
-          here?"), so the answer belongs over the question — dismissed by the
-          backdrop, ✕, or Escape, like the draft room's player card.
-
-          It lists ONLY what may legally go in this spot: the spot's own
-          position + filter rules (slotAllows), minus anyone already started,
-          minus anyone whose game has kicked off — because the database would
-          refuse all three and a picker that offers a refusal is a trap. */}
-      {pickerSlot && canEdit(pickerSlot) && (() => {
-        const d = slotDefs.find((x) => x.slot === pickerSlot);
-        const f = slotFilterLabel(d?.flt);
-        // EVERY eligible player on the roster, not just the bench (founder):
-        // "put my TE in the flex" was a two-step dance — empty the TE spot,
-        // then fill the flex — when it is one move. A player already starting
-        // shows where he stands, and choosing him moves him.
-        const spotOf = new Map<string, string>();
-        for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
-        const eligible = pool
-          .filter((p) => !stashed.has(p.slug))                       // taxi/IR can't start
-          .filter((p) => d && slotAllows(d, { id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
-          .filter((p) => !kickedOff(p.slug))
-          .filter((p) => spotOf.get(p.slug) !== pickerSlot)          // already here
-          // If he is starting somewhere his game has locked, he cannot leave —
-          // the DB would refuse the vacating write, so don't offer the move.
-          // …but a BEST-BALL spot never holds anyone (v0.424.1, founder: "I
-          // can't move him into my WR spot"): the fill parked him there and
-          // will simply pick someone else once he starts manually.
-          .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); })
-          // THE ROW CARRIES THE DECISION (v0.639.0) — the app's board has the
-          // member's words. Each candidate is the board's own entry for this
-          // spot (kickoff, opponent, venue marks, the spot-aware projection)
-          // plus the position matchup graded red to green (v0.639.1); best first.
-          .map((p) => ({ p, e: d ? entryFor(p.slug, d.pos, pickerSlot) : null, grade: matchupGrade(wk.rows[p.slug], p.pos, wk.dvp) }))
-          .sort((a, b) => (b.e?.proj ?? 0) - (a.e?.proj ?? 0) || a.p.full.localeCompare(b.p.full));
-        const anyGrade = eligible.some((x) => x.grade && (x.e?.proj ?? 0) > 0);
-        return (
-          <div onClick={() => setPickerSlot(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                <div>
-                  <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{d ? nameOf(d) : pickerSlot}</div>
-                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>
-                    takes {d?.pos.join(' / ')}
-                    {f ? <span style={{ color: 'var(--you)' }}> · {f}</span> : null}
-                  </div>
-                </div>
-                <button onClick={() => setPickerSlot(null)} className="mono" aria-label="close"
-                  style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
-              </div>
-              {mine[pickerSlot] && (
-                <button onClick={() => { void assign(pickerSlot, null); }} className="mono"
-                  style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: 10.5, padding: '8px 9px', marginBottom: 6, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, color: 'var(--dim)', cursor: 'pointer' }}>
-                  ✕ LEAVE THIS SPOT EMPTY
-                </button>
-              )}
-              {eligible.length === 0 && (
-                <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6, padding: '6px 2px' }}>
-                  Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
-                </div>
-              )}
-              {eligible.map(({ p, e, grade }) => {
-                const bye = e?.opponent === 'BYE';
-                const started = !!e && !bye && e.state !== 'pre';
-                const game = !e ? 'no game listed'
-                  : bye ? 'BYE'
-                  : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
-                  : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
-                const roof = e && !started && e.roof && e.roof !== 'open' ? e.roof : null;
-                const team = p.team || collegeNameFor(p.slug)?.school || '';
-                const g = grade && (e?.proj ?? 0) > 0 ? grade : null;
-                return (
-                <button key={p.slug} onClick={() => { void pickInto(pickerSlot, p.slug); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
-                  <PlayerImg playerId={p.slug} team={p.team} pos={p.pos as Pos} size={26} />
-                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {shortName(p.full)}
-                      <InjuryNow slug={p.slug} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
-                      {spotOf.get(p.slug) && (
-                        <span className="mono" style={{ fontSize: 8.5, color: 'var(--you)', marginLeft: 6 }}>
-                          in {slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}
-                        </span>
-                      )}
-                    </span>
-                    <span className="mono" style={{ fontSize: 9, color: bye ? 'var(--warn, #c66)' : 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {team ? `${team} · ` : ''}{game}
-                      {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 4 }}>🏟</span>}
-                      {e && !started && e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
-                    </span>
-                  </span>
-                  <PosPill pos={p.pos as Pos} />
-                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: 64, flex: 'none' }}>
-                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)' }}>{(e?.proj ?? 0).toFixed(1)}</span>
-                    {/* The grade as a pill (v0.639.1): the percent is the
-                        opponent's factor against his position, the colour
-                        its band — red / orange / yellow / yellow-green / green. */}
-                    {g && (
-                      <span className="mono" title={`${MATCHUP_BAND_WORD[g.band]} matchup — what ${e?.opponent ?? 'his opponent'} gives up to ${p.pos === 'DEF' ? 'DST' : p.pos}s vs the league average`}
-                        style={{ marginTop: 2, fontSize: 8, fontWeight: 700, color: MATCHUP_BAND_COLOR[g.band], border: `1px solid ${MATCHUP_BAND_COLOR[g.band]}`, borderRadius: 4, padding: '1px 4px', whiteSpace: 'nowrap' }}>
-                        {`${g.basis === 'def' ? (p.pos === 'DEF' ? 'DST' : p.pos) : 'wk'} ${matchupGradeLabel(g)}`}
-                      </span>
-                    )}
-                  </span>
-                </button>
-                );
-              })}
-              {anyGrade && (
-                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5, padding: '8px 2px 0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
-                    {([1, 2, 3, 4, 5] as const).map((b) => (
-                      <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: MATCHUP_BAND_COLOR[b], display: 'inline-block' }} />{MATCHUP_BAND_WORD[b]}
-                      </span>
-                    ))}
-                  </div>
-                  Matchup: what the defense he faces gives up to his position, against the league average. “wk” is his whole week’s line against his usual, where the defense table has no entry.
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── THE SPOT PICKER, for a bench player (v0.640.1) ─────────────────
-          The mirror of the picker above: he is fixed, the spot is the
-          question. One row per spot he may take, with who stands in it now
-          (he goes to the bench) or EMPTY, and his own projection IN that spot
-          on the right. */}
-      {benchPick && (() => {
-        const me = entryFor(benchPick);
-        const spots = spotsFor(benchPick);
-        return (
-          <div onClick={() => setBenchPick(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', padding: 14, boxShadow: '0 18px 50px rgba(0,0,0,0.55)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Start {me?.name ?? prettySlug(benchPick)}</div>
-                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>
-                    {me ? `${me.pos}${me.team ? ` · ${me.team}` : ''} · ${me.opponent === 'BYE' ? 'BYE' : (`${me.kickoff ?? ''} ${me.opponent ?? ''}`.trim() || 'no game listed')} · ${me.proj.toFixed(1)}` : ''}
-                    <span style={{ color: 'var(--you)' }}> · pick a spot</span>
-                  </div>
-                </div>
-                <button onClick={() => setBenchPick(null)} className="mono" aria-label="close"
-                  style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: 2 }}>✕</button>
-              </div>
-              {spots.length === 0 && (
-                <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.6, padding: '6px 2px' }}>
-                  No spot he can take is open right now — every one that fits him has {vocab.started}, is best ball, or already holds him.
-                </div>
-              )}
-              {spots.map(({ d, occupant }) => {
-                const oe = occupant ? entryFor(occupant, d.pos, d.slot) : null;
-                const here = entryFor(benchPick, d.pos, d.slot);
-                return (
-                  <button key={d.slot} onClick={() => { void pickInto(d.slot, benchPick); setBenchPick(null); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 9px', marginBottom: 2, background: 'none', border: '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: 'inherit' }}>
-                    <SlotPill pos={d.pos} label={nameOf(d)} width={spotCol} />
-                    <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      {oe ? (
-                        <>
-                          <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {oe.name}<InjuryNow slug={occupant!} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
-                          </span>
-                          <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {`${oe.proj.toFixed(1)} · ${oe.opponent === 'BYE' ? 'BYE' : (`${oe.kickoff ?? ''} ${oe.opponent ?? ''}`.trim() || 'no game listed')} → bench`}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="mono" style={{ fontSize: 10, color: 'var(--you)' }}>+ EMPTY</span>
-                      )}
-                    </span>
-                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--you)', width: 36, textAlign: 'right', flex: 'none' }}>{here ? here.proj.toFixed(1) : ''}</span>
-                  </button>
-                );
-              })}
-              {spots.length > 0 && (
-                <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5, padding: '8px 2px 0' }}>
-                  The number on the right is his projection in that spot; the man he replaces goes to the bench.
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {pickerSheets}
 
       {/* Bench, as chips — the FALLBACK's bench. The board draws its own with
           game lines, so this would otherwise be the same players twice. */}

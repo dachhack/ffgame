@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DevRoomBanner, DevRoomScreen } from './DevRoom';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag, Img, Crest } from '../app/ui';
 import { liveConfigured } from '@drip/core/data/liveConfig';
@@ -24,7 +25,7 @@ import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
 import { isPreseasonWeek, weekTitle } from '@drip/core/data/nflSlate';
 import { FieldBoard } from '../app/FieldView';
 import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
-import { slateWeeks, weekGameFeeds, weekLivePlays } from '@drip/core/data/liveApi';
+import { slateWeeks, weekGameFeeds, weekLivePlays, devRoomJoin } from '@drip/core/data/liveApi';
 import { APK_ZIP_URL, IOS_TESTFLIGHT_URL } from '@drip/core/data/changelog';
 import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -73,7 +74,7 @@ function GoogleG() {
  *  us while it is up (v0.356.11). 'admin' is not one: it needs no league. */
 const ROOM_VIEWS = ['leaguehome', 'team', 'draft'];
 
-type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper' | 'provider';
+type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper' | 'provider' | 'devroom';
 
 export function LiveOnboard() {
   const { navigate, route, viewAs, setViewAs } = useStore();
@@ -891,6 +892,20 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.user.id]);
 
+  // THE DEV ROOM (v0.658.0, 0459): an invite link (?room=CODE → dripDevRoomCode)
+  // joins once signed in and opens the room; a dead code opens the room list,
+  // where it can be typed again.
+  const [devRoomId, setDevRoomId] = useState<string | null>(null);
+  useEffect(() => {
+    let code: string | null = null;
+    try { code = localStorage.getItem('dripDevRoomCode'); localStorage.removeItem('dripDevRoomCode'); } catch { /* ignore */ }
+    if (!code) return;
+    devRoomJoin(code)
+      .then((r) => { setDevRoomId(r.ok ? r.room_id ?? null : null); setView('devroom'); })
+      .catch(() => { setDevRoomId(null); setView('devroom'); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.user.id]);
+
   const playSolo = async (mode: 'pod' | 'weekly') => {
     if (soloBusy) return;
     setSoloBusy(mode); setSoloErr(null);
@@ -977,7 +992,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
           desk is the older behaviour and the safer guess. */}
       {homeFor?.league?.provider && homeFor.league.provider !== 'native'
         ? <PlatformTeam leagueId={target.leagueId} rosterId={target.rosterId} userId={session.user.id} />
-        : <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')} />}
+        : <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')}
+            lineupUserId={homeFor?.pick_user_id ?? session.user.id} lineupRosterId={target.rosterId} />}
     </>
   );
   if (view === 'join') return (
@@ -1008,6 +1024,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // Leaving also clears `view` from the route. Without that the URL still says
   // admin while the screen says leagues, and the effect above would bounce you
   // back into the console on the next route change.
+  if (view === 'devroom') return <DevRoomScreen roomId={devRoomId} onBack={() => { setDevRoomId(null); setView('home'); }} />;
   if (view === 'admin') return <AdminPage onBack={() => { setView('home'); if (route.name === 'live' && route.view === 'admin') navigate({ name: 'live' }); }} />;
   // Only a first-load failure blanks the screen; a background refresh failure keeps
   // whatever we already showed. Retry rather than mislead an enrolled user.
@@ -1090,6 +1107,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
   return (
     <>
+    {!viewAs && <DevRoomBanner onOpen={(id) => { setDevRoomId(id); setView('devroom'); }} />}
     <LeagueHome
       enrollments={enrollments}
       commishLeagues={commishLeagues}
