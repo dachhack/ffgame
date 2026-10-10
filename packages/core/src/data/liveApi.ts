@@ -2240,6 +2240,12 @@ export const setLeagueRosterShape = (leagueId: string, bench: number, taxi: numb
 /** Move a rostered player between ACTIVE / TAXI / IR (0164). Owner or commish;
  *  IR needs a real injury designation; caps enforced server-side. */
 export type RosterSpot = 'active' | 'taxi' | 'ir' | 'out' | 'devy';
+/** 0461 (#1188): one move for a FULL stash place — `outSlug` (in IR, OUT,
+ *  taxi or devy) back to active and `inSlug` (active) into his place. Each
+ *  half is held to set_roster_spot's rules; a refusal undoes both. */
+export const swapRosterSpot = (leagueId: string, outSlug: string, inSlug: string) =>
+  rpc<{ ok: boolean; error?: string; spot?: string }>('swap_roster_spot',
+    { p_league_id: leagueId, p_out_slug: outSlug, p_in_slug: inSlug });
 export const setRosterSpot = (leagueId: string, slug: string, spot: RosterSpot) =>
   rpc<{ ok: boolean; error?: string; slug?: string; spot?: string }>('set_roster_spot',
     { p_league_id: leagueId, p_slug: slug, p_spot: spot });

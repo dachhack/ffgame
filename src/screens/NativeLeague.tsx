@@ -40,7 +40,7 @@ import {
   myEnrollments, type Enrollment,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot,
+  leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, seatFullError, cancelWaiverClaim, processWaivers, friendlyError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
@@ -3387,6 +3387,13 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
     setFillFor(null);
     run(() => setRosterSpot(leagueId, slug, spot));
   };
+  // A FULL spot takes a SWAP (0461, #1188): the occupant back to active and
+  // this player into his place, as one move — with a full roster there was
+  // no other way to do it short of a drop.
+  const swapIntoSpot = (outSlug: string, inSlug: string) => {
+    setFillFor(null);
+    run(() => swapRosterSpot(leagueId, outSlug, inSlug));
+  };
 
   /** WHICH POSITIONS THIS LEAGUE CAN ACTUALLY ROSTER (v0.302.0, founder: "no
    *  kickers if there is no kicker spot on the roster"). Null = no restriction
@@ -4190,7 +4197,7 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
             </div>
             {fillOcc && (
               <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginTop: 12 }}>
-                OR MOVE SOMEONE {fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : fillFor === 'devy' ? 'TO A DEVY SPOT' : 'TO THE TAXI SQUAD'}
+                OR {(gm?.shape?.[fillFor] ?? 0) > 0 && bySpot[fillFor].length >= (gm?.shape?.[fillFor] ?? 0) ? 'SWAP HIM FOR SOMEONE' : 'MOVE SOMEONE'} {fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : fillFor === 'devy' ? 'TO A DEVY SPOT' : 'TO THE TAXI SQUAD'}
               </div>
             )}
             {shown.filter((p) => p.spot === 'active').length === 0 && (
@@ -4202,8 +4209,9 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
               // greyed out", and the answer is printed right beside him.
               const cap = gm?.shape?.[fillFor] ?? 0;
               const full = cap > 0 && bySpot[fillFor].length >= cap;
-              const why = full
-                ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'The devy shelf' : 'The taxi squad'} is full (${cap}/${cap}) — move someone back to active first`
+              const swapOcc = full && fillOcc && bySpot[fillFor].some((x) => x.slug === fillOcc) ? fillOcc : null;
+              const why = full && !swapOcc
+                ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'The devy shelf' : 'The taxi squad'} is full (${cap}/${cap}) — pick a player in it to swap him out`
                 : stashBlock(p.slug, fillFor);
               return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--bd)', marginTop: 6, opacity: why ? 0.45 : 1, flexWrap: 'wrap' }}>
@@ -4214,8 +4222,8 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
                   <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)' }}>{injTags[p.slug]}</span>
                 )}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{teamLabel(p)}</span>
-                <button onClick={() => moveToSpot(p.slug, fillFor)} disabled={busy || !!why} title={why ?? ''} className="mono"
-                  style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: why ? 'var(--faint)' : 'var(--you)', cursor: why ? 'not-allowed' : 'pointer' }}>{fillFor === 'ir' ? '→IR' : fillFor === 'out' ? '→OUT' : fillFor === 'devy' ? '→DV' : '→TX'}</button>
+                <button onClick={() => (swapOcc ? swapIntoSpot(swapOcc, p.slug) : moveToSpot(p.slug, fillFor))} disabled={busy || !!why} title={why ?? ''} className="mono"
+                  style={{ ...ghostBtn, padding: '5px 10px', fontSize: 9.5, color: why ? 'var(--faint)' : 'var(--you)', cursor: why ? 'not-allowed' : 'pointer' }}>{swapOcc ? '⇄ SWAP' : fillFor === 'ir' ? '→IR' : fillFor === 'out' ? '→OUT' : fillFor === 'devy' ? '→DV' : '→TX'}</button>
                 {why && <span className="mono" style={{ flexBasis: '100%', fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.4 }}>{why}</span>}
               </div>
               );
