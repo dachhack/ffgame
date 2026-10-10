@@ -22,6 +22,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.659.0 — the commissioner decides who each team may take
+
+> - Commissioners can give any team its own rule for who it may draft and pick up: only certain positions (TE only), only certain NFL teams (NFC only, Bears only, a division), only rookies or veterans — or any mix. The draft room and waiver list show each team who it may take, and the league chat announces every change. Trades stay open.
+
+Founder: "commish scoped rules to allow only certain players to be selected in
+drafts and from waivers by certain managers. So like team 1 can only select
+TEs. Team 2 can only select NFC players. Team 3 can only select players from
+the bears." Chosen: positions + NFL teams/conference/division + experience;
+draft and waivers only, trades open; changeable at any time.
+
+Migration 0460: `seat_player_rule` (one row per ruled seat), `seat_rule_error`
+(college players held to the position part only; an unknown team or tenure is
+refused, the pool filter's no-guess rule; LA/LAR, WAS/WSH, JAX/JAC, LV/LVR
+spelled one way). Enforcement rides `pos_cap_error`, the question every
+acquisition already asks — human picks, queue, auction bid/nominate/proxies,
+FA adds, waiver claims when filed and when run, commish pick edits — and
+which no trade or keeper path asks. `native_exec_pick` checks the seat on the
+clock for every pick; autopick and the queue take the best eligible player,
+and when a rule has run dry an AUTO pick goes through (with a chat line)
+rather than stall the draft. A waiver loss names the rule instead of
+"position limit". The pick internals (native_exec_pick, autopick, queue and
+their renamed originals) are no longer directly callable by signed-in users —
+they were before, and could pick for whoever was on the clock; every real
+door is security definer. Commissioner: TEAM RULES on the lineup page (web
+console and phone tools), any mode. Managers: a banner and a filtered list in
+the draft room and the free-agent list ("show everyone" to browse).
+check:seatrules holds the client copy to the SQL and the scope. Migration and
+every gate tested on a scratch Postgres; screens not exercised signed in.
+
 ### v0.658.0 — the dev room: an invite-only chat for ideas and bugs
 
 > - A new invite-only Dev room: a group chat outside any league where invited testers suggest changes and report bugs. Tag a message 💡 idea or 🐞 bug and it's logged straight to the public issue list (without your name), with a link back on the message.

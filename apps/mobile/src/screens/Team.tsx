@@ -9,6 +9,7 @@
 // Everything the web TeamManage does lives here now — waivers/FAAB, trades
 // (ui/TradeCenter), the avatar grid (ui/AvatarGrid), and the commissioner's
 // whole kit. The old "web only for now" list is empty.
+import { useMySeatRule, seatRuleShows, SeatRuleBanner } from '../ui/seatRule';
 import { installSportMarketFor } from '@drip/core/sports/market';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -500,6 +501,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
     return m;
   }, [rosters]);
   const myRoster = team?.my_roster_id ?? null;
+  // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
+  const mySeatRule = useMySeatRule(leagueId, myRoster);
+  const [seatShowAll, setSeatShowAll] = useState(false);
   const mine = useMemo(() => rosters.filter((r) => r.roster_id === myRoster)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
@@ -652,9 +656,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && levelClassMatch(p, level, cls)
       && confMatch(p, conf)
-      && poolSearchMatch(p, needle));
+      && poolSearchMatch(p, needle)
+      && seatRuleShows(mySeatRule, seatShowAll, p, expMap[p.slug]));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls, conf]);
+  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls, conf, mySeatRule, seatShowAll]);
   const poolKinds = useMemo(() => {
     const college = pool.some((p) => /^c-\d+$/.test(p.slug));
     return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
@@ -1209,6 +1214,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
             every pickup signs a 1-yr deal against your cap — waiver wins at the bid, instant adds at the $1 street minimum
           </Mono>
         )}
+        <SeatRuleBanner rule={mySeatRule} showAll={seatShowAll} onToggle={() => setSeatShowAll((v) => !v)} />
         <TextInput value={q} onChangeText={setQ} placeholder="Search players, teams or schools…" placeholderTextColor={t.faint}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), color: t.text, backgroundColor: t.bg, marginVertical: 8 }} />
         {/* ONE LINE EACH (v0.656.7, founder: "we shouldn't have wrapping
