@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   leagueBoard, leaguePreview, joinFromBoard, postLeagueListing, closeLeagueListing, leagueListingState,
   type LeagueIdentity,
-  commishOverview, friendlyError,
+  commishOverview, friendlyError, bullseyeLeagueLine,
   type BoardListing, type BoardPreview, type AdminLeague,
 } from '@drip/core/data/liveApi';
 
@@ -152,7 +152,9 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
                 <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>
-                  {r.seats_open} open seat{r.seats_open === 1 ? '' : 's'} of {r.seats_total} · draft {r.draft_status} · {r.draft_mode}
+                  {r.bullseye
+                    ? <>{r.seats_open.toLocaleString('en-US')} open spot{r.seats_open === 1 ? '' : 's'} of {r.seats_total.toLocaleString('en-US')} · no draft — a $50k squad each week</>
+                    : <>{r.seats_open} open seat{r.seats_open === 1 ? '' : 's'} of {r.seats_total} · draft {r.draft_status} · {r.draft_mode}</>}
                   {r.mine && <span style={{ color: 'var(--you)' }}> · YOU’RE IN THIS ONE</span>}
                 </div>
               </div>
@@ -163,7 +165,9 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
                   </button>}
             </div>
             {/* the card tells the truth (0223): the league's type and the money */}
-            {r.identity && <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 7 }}>{identityLine(r.identity)}</div>}
+            {r.bullseye
+              ? <div className="mono" style={{ fontSize: 9, color: 'var(--you)', marginTop: 7 }}>{bullseyeLeagueLine(r.bullseye)}</div>
+              : r.identity && <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 7 }}>{identityLine(r.identity)}</div>}
             {r.dues && <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)', marginTop: 4 }}>💵 DUES: {r.dues}</div>}
             {r.blurb && <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 9, lineHeight: 1.5 }}>{r.blurb}</div>}
           </div>
@@ -215,7 +219,12 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
             {!preview && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>Loading the details…</div>}
             {preview?.ok && (
               <>
-                {preview.identity && <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 10 }}>{identityLine(preview.identity)}</div>}
+                {preview.bullseye
+                  ? <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', marginTop: 10, lineHeight: 1.6 }}>
+                      {bullseyeLeagueLine(preview.bullseye)}<br />
+                      <span style={{ color: 'var(--dim)' }}>Each week you build a $50,000 squad aimed at the week’s numbers; closest wins.{preview.bullseye.span === 'season' ? ' Season standings add up every week.' : ''}</span>
+                    </div>
+                  : preview.identity && <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 10 }}>{identityLine(preview.identity)}</div>}
                 {preview.dues && <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', marginTop: 5 }}>💵 DUES: {preview.dues}</div>}
                 {preview.contract_rules && (
                   <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.7, border: '1px solid var(--bd)', borderRadius: 6, padding: '7px 9px' }}>
@@ -227,14 +236,14 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
                     {' '}· tags +{preview.contract_rules.tag_raise_pct}% · extensions {preview.contract_rules.ext_discount_pct}% of market
                   </div>
                 )}
-                <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 12, lineHeight: 1.8 }}>
+                {!preview.bullseye && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 12, lineHeight: 1.8 }}>
                   {preview.seats_open} of {preview.seats_total} seats open<br />
                   {preview.draft && <>draft: {preview.draft.status} · {preview.draft.mode} · {preview.draft.rounds} rounds{preview.draft.budget ? ` · $${preview.draft.budget}` : ''}<br /></>}
                   {preview.game_mode === 'classic'
                     ? <>scoring: standard{preview.ppr === 1 ? ', full PPR' : preview.ppr === 0.5 ? ', half PPR' : preview.ppr === 0 ? ', non-PPR' : ''}{preview.bestball?.length ? ' · best-ball spots' : ''}<br /></>
                     : <>the drip game: live head-to-head, drips, nukes and power-ups<br /></>}
-                </div>
-                {preview.teams && (
+                </div>}
+                {preview.teams && !preview.bullseye && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>
                     {preview.teams.map((t) => (
                       <span key={t.roster_id} className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: t.taken ? 'var(--faint)' : 'var(--you)', border: '1px solid var(--bd)', borderRadius: 999, padding: '3px 8px', textDecoration: t.taken ? 'line-through' : 'none' }}>

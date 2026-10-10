@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   devRoomsMine, devRoomCreate, devRoomJoin, devRoomMessages, devRoomPost, devRoomTag, devRoomDelete,
-  devRoomMembers, devRoomRemove, devRoomInviteCreate, devRoomInvites, devRoomInviteRevoke, friendlyError,
+  devRoomMembers, devRoomRemove, devRoomInviteCreate, devRoomInvites, devRoomInviteRevoke, devRoomSetOpen, friendlyError,
   type DevRoom, type DevMessage, type DevMember, type DevInvite, type DevTag,
 } from '@drip/core/data/liveApi';
 import { devRoomLink, devRoomInviteMessage, cleanDevCode, issueUrl, TAG_LABEL } from '@drip/core/data/devRoom';
@@ -49,6 +49,86 @@ export function DevRoomBanner({ onOpen }: { onOpen: (roomId: string | null) => v
       {unread > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--bg)', background: 'var(--you)', borderRadius: 999, padding: '2px 8px' }}>{unread}</span>}
     </button>
   );
+}
+
+/** THE BAR (v0.661.0). Founder: "Let's have dev chat live as a bar at the
+ *  bottom of the my leagues page for people in dev." Pinned to the bottom of
+ *  the leagues page: the room's name, the newest line and the unread count;
+ *  tap it and the room opens in place, over the bottom of the page. Shown to
+ *  a member of any room (an open room counts everyone) and to an admin. */
+export function DevRoomBar({ onOpenFull }: { onOpenFull: (roomId: string | null) => void }) {
+  const [rooms, setRooms] = useState<DevRoom[] | null>(null);
+  const [canCreate, setCanCreate] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [last, setLast] = useState<DevMessage | null>(null);
+  const read = useCallback(() => devRoomsMine().then((r) => { if (r.ok) { setRooms(r.rooms ?? []); setCanCreate(!!r.can_create); } }).catch(() => {}), []);
+  useEffect(() => { void read(); const t = setInterval(() => { void read(); }, 30_000); return () => clearInterval(t); }, [read]);
+  const first = rooms?.[0]?.id ?? null;
+  useEffect(() => {
+    if (!first || open) return;
+    // The newest line, for the collapsed bar. (Reading the latest page marks
+    // the room read, so the preview waits for an unread count of zero or the
+    // bar opening — it never swallows "N new".)
+    if ((rooms?.[0]?.unread ?? 0) > 0) return;
+    devRoomMessages(first).then((r) => { if (r.ok) setLast(r.messages?.[0] ?? null); }).catch(() => {});
+  }, [first, open, rooms]);
+  if (!rooms || (!rooms.length && !canCreate)) return null;
+  const unread = rooms.reduce((n, r) => n + r.unread, 0);
+  if (!rooms.length) {
+    return (
+      <div style={{ position: 'sticky', bottom: 0, marginTop: 16, zIndex: 20 }}>
+        <button onClick={() => onOpenFull(null)} className="mono" style={{ ...card, width: '100%', cursor: 'pointer', textAlign: 'left', fontSize: 11 }}>
+          <span style={{ fontWeight: 700, color: 'var(--you)', letterSpacing: '0.08em' }}>🛠 DEV ROOM</span>
+          <span style={{ ...small, marginLeft: 8 }}>make one and invite testers</span>
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: 'sticky', bottom: 0, marginTop: 16, zIndex: 20 }}>
+      {open && (
+        <div style={{ ...card, borderRadius: '10px 10px 0 0', borderBottom: 'none', maxHeight: '70vh', overflowY: 'auto', display: 'grid', gap: 10, boxShadow: '0 -8px 24px rgba(0,0,0,0.25)' }}>
+          <DevRoomPanel rooms={rooms} />
+        </div>
+      )}
+      <div style={{ ...card, borderRadius: open ? '0 0 10px 10px' : 10, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', boxShadow: open ? 'none' : '0 -4px 16px rgba(0,0,0,0.18)' }}>
+        <button onClick={() => { setOpen((o) => !o); if (open) void read(); }} className="mono"
+          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', color: 'var(--text)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--you)', letterSpacing: '0.08em', flexShrink: 0 }}>🛠 {rooms.length === 1 ? rooms[0].name.toUpperCase() : 'DEV ROOM'}</span>
+          <span style={{ ...small, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {open ? 'tap to fold away' : unread > 0 ? `${unread} new` : last ? `${last.mine ? 'you' : last.author}: ${last.body}` : 'say what you’d change — 💡 or 🐞 logs it'}
+          </span>
+          {!open && unread > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--bg)', background: 'var(--you)', borderRadius: 999, padding: '2px 8px', flexShrink: 0 }}>{unread}</span>}
+          <span style={{ ...small, flexShrink: 0 }}>{open ? '▾' : '▴'}</span>
+        </button>
+        <button onClick={() => onOpenFull(rooms.length === 1 ? rooms[0].id : null)} className="mono" style={{ ...chip(false), padding: '3px 9px' }} title="Open the full room">⤢</button>
+      </div>
+    </div>
+  );
+}
+
+/** The room in place — the bar's panel and league chat's 🛠 DEV chip. More
+ *  than one room → a chip per room on top. */
+export function DevRoomPanel({ rooms }: { rooms: DevRoom[] }) {
+  const [roomId, setRoomId] = useState<string | null>(rooms[0]?.id ?? null);
+  if (!roomId) return <div className="mono" style={small}>You’re not in a dev room.</div>;
+  return (
+    <>
+      {rooms.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {rooms.map((r) => <button key={r.id} onClick={() => setRoomId(r.id)} className="mono" style={chip(r.id === roomId)}>{r.name}{r.unread ? ` · ${r.unread}` : ''}</button>)}
+        </div>
+      )}
+      <Room key={roomId} roomId={roomId} onLeft={() => setRoomId(null)} compact />
+    </>
+  );
+}
+
+/** Rooms I'm in (an open room joins me on this read) — for the chat chip. */
+export function useDevRooms(): DevRoom[] {
+  const [rooms, setRooms] = useState<DevRoom[]>([]);
+  useEffect(() => { let alive = true; devRoomsMine().then((r) => { if (alive && r.ok) setRooms(r.rooms ?? []); }).catch(() => {}); return () => { alive = false; }; }, []);
+  return rooms;
 }
 
 /** The room itself. `roomId` null opens the list (pick, join, or make one). */
@@ -115,7 +195,7 @@ function RoomList({ onPick }: { onPick: (id: string) => void }) {
   );
 }
 
-function Room({ roomId, onLeft }: { roomId: string; onLeft: () => void }) {
+function Room({ roomId, onLeft, compact }: { roomId: string; onLeft: () => void; compact?: boolean }) {
   const [tab, setTab] = useState<'chat' | 'people'>('chat');
   const [name, setName] = useState('');
   const [msgs, setMsgs] = useState<DevMessage[]>([]);
@@ -165,14 +245,14 @@ function Room({ roomId, onLeft }: { roomId: string; onLeft: () => void }) {
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 18, fontWeight: 700, flex: 1 }}>{name}</span>
+        <span style={{ fontSize: compact ? 14 : 18, fontWeight: 700, flex: 1 }}>{name}</span>
         <button onClick={() => setTab('chat')} className="mono" style={chip(tab === 'chat')}>CHAT</button>
         <button onClick={() => setTab('people')} className="mono" style={chip(tab === 'people')}>PEOPLE{admin ? ' & INVITES' : ''}</button>
       </div>
       {err && <div className="mono" style={{ fontSize: 11, color: 'var(--warn, #c66)' }}>{err}</div>}
       {tab === 'people' ? <People roomId={roomId} roomName={name} onLeft={onLeft} /> : (
         <>
-          <div style={{ ...card, display: 'grid', gap: 12, maxHeight: '62vh', overflowY: 'auto' }}>
+          <div style={{ ...card, display: 'grid', gap: 12, maxHeight: compact ? '38vh' : '62vh', overflowY: 'auto' }}>
             {!msgs.length && <div className="mono" style={small}>Nothing yet. Say what you’d change — tag it 💡 or 🐞 to log it.</div>}
             {msgs.map((m) => {
               const open = !m.issue && !m.filing;
@@ -206,7 +286,7 @@ function Room({ roomId, onLeft }: { roomId: string; onLeft: () => void }) {
             <div ref={end} />
           </div>
           <div style={{ ...card, display: 'grid', gap: 8 }}>
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={1000} rows={3}
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={1000} rows={compact ? 2 : 3}
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send(); }}
               placeholder="A suggestion, a bug, a thought…"
               style={{ fontSize: 13.5, padding: 10, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 6, resize: 'vertical', fontFamily: 'inherit' }} />
@@ -249,9 +329,27 @@ function People({ roomId, roomName, onLeft }: { roomId: string; roomName: string
   };
   const flash = (k: string, s: string) => { copy(s); setCopied(k); setTimeout(() => setCopied(null), 1500); };
   const me = members.find((m) => m.me);
+  // OPEN TO EVERYONE (0463). Founder: "Let me turn it on for platform
+  // registered users." Read from the rooms list, which carries the flag.
+  const [openAll, setOpenAll] = useState<boolean | null>(null);
+  useEffect(() => { devRoomsMine().then((r) => { if (r.ok) setOpenAll(!!r.rooms?.find((x) => x.id === roomId)?.open); }).catch(() => {}); }, [roomId]);
+  const setOpen = async (on: boolean) => {
+    if (on && !window.confirm('Open this room to every signed-in player? Everyone gets the dev bar and can post (tagged lines become public GitHub issues).')) return;
+    if (await act(devRoomSetOpen(roomId, on))) setOpenAll(on);
+  };
   return (
     <>
       {err && <div className="mono" style={{ fontSize: 11, color: 'var(--warn, #c66)' }}>{err}</div>}
+      {admin && openAll !== null && (
+        <div style={{ ...card, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', letterSpacing: '0.1em' }}>WHO’S IN</div>
+            <div style={{ fontSize: 12.5, color: 'var(--dim)', marginTop: 4 }}>{openAll ? 'Everyone signed in — anyone who leaves stays out until invited back.' : 'Invited people only.'}</div>
+          </div>
+          <button onClick={() => void setOpen(false)} className="mono" style={chip(!openAll)}>INVITE ONLY</button>
+          <button onClick={() => void setOpen(true)} className="mono" style={chip(openAll)}>EVERYONE</button>
+        </div>
+      )}
       {admin && (
         <div style={{ ...card, display: 'grid', gap: 8 }}>
           <div className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--faint)', letterSpacing: '0.1em' }}>INVITE PEOPLE</div>

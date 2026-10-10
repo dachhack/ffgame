@@ -109,3 +109,62 @@ breakers only and is known to the manager before they build their team."
 - The scorer writes no row, and scores no zero, for a player whose game hasn't
   kicked off yet, so `matchup_state` (which both sides of a matchup read)
   never names him early.
+
+## 9. Bullseye leagues (v0.661.0, 0463)
+
+Founder: "Let's have it follow more of the league setup pattern though. It's a
+league you can create as a commish with 32 max people. I (or people I delegate
+to) can create up to 50,000 people leagues. Commish then posts it to the board
+for finding. It appears in the listing of my leagues." And: "let's make sure we
+have all the league features with bullseye dfs leagues, matchup, league, chat,
+team, settings, commish settings". Chosen: the commish picks ONE WEEK or THE
+SEASON per league; anyone signed in may start one; the automatic weekly open
+contest is retired.
+
+- **Making one.** `create_bullseye_league(name, span, max, variant, radius,
+  team)`: kind `bullseye` with a commissioner, an invite code and
+  `settings_json { dfs_bullseye, bullseye, bullseye_radius, max_seats, span }`.
+  `span = 'week'` sets `contest_week` to the week about to be played;
+  `'season'` leaves it null. The creator takes seat 1.
+- **Size.** 2–32 for anyone. Up to 50,000 for an admin or an account with the
+  `bullseye_host` feature (`admin_set_feature(email, 'bullseye_host', true)`),
+  which is how the founder delegates. `set_bullseye_size` changes it, never
+  below the people already in.
+- **Getting in.** By code (`join_bullseye`, or the link `?bullseye=CODE`), or
+  from the league board. Seats are made as people join, so the board counts
+  open spots as `max_seats` less the seats taken (`_league_seats_open`), not
+  empty seat rows. `join_from_board` takes a Bullseye seat. A one-week league
+  leaves the board once its week kicks off.
+- **Weeks.** A season league takes a squad for any week from the one in play
+  on (`save_bullseye_entry`). Each saved squad is its own scoring row, as in §2.
+  The worker builds the salary board for any week a Bullseye league will play.
+- **Standings.** `bullseye_league_board(league, week)`: the week ranked by ring
+  total then tie-break; a season league also gets the season table, with the
+  final ring totals summed (a week without a squad scores nothing).
+  `bullseye_my_weeks` is MY TEAM's list.
+- **The rooms** (web `src/screens/BullseyeLeague.tsx`, phone
+  `apps/mobile/src/screens/BullseyeLeague.tsx`):
+  - MATCHUP: the squad screen, with week arrows.
+  - LEAGUE: who's in, the invite code, the week's standings and the season's.
+  - MY TEAM: my weeks, and my team's name.
+  - CHAT: league chat.
+  - SETTINGS: the rules, and leaving.
+  - COMMISH: the card (variant and radius), the size, the board post (blurb and
+    dues), renaming, and deleting.
+
+  On the phone they ride the app's room bar, with ⚙ SETTINGS by the name.
+- **The open contest, retired.** `_ensure_bullseye_contest` now only finds a
+  contest and never makes one. The week already running finishes as it is;
+  after it, `bullseye_contest` answers `retired` and the card is gone.
+
+## 10. The dev room for everyone (v0.661.0, 0463)
+
+- "Let me turn it on for platform registered users": a room admin flips a room
+  to EVERYONE (`dev_room_set_open`). Every signed-in account is then in it, and
+  is seated the first time it reads its rooms. Anyone who leaves or is removed
+  stays out (`dev_room_left`) until an invite brings them back.
+- "Dev chat live as a bar at the bottom of the my leagues page": `DevRoomBar`
+  on web and phone. Folded, it shows the newest line or the unread count. Tap it
+  and the room opens in place; ⤢ opens the full room.
+- "Accessible as a chip in league chats": 🛠 DEV beside LEAGUE / DIRECT, for
+  anyone in a room.

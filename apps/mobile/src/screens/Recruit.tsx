@@ -21,7 +21,7 @@ import {
   postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat, setupLeagueCollege, setLeagueDevyOpen,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
-  myEnrollments, type Enrollment,
+  myEnrollments, type Enrollment, bullseyeLeagueLine,
 } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
@@ -722,7 +722,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>{r.name}</Text>
               <Mono size={9} tone="faint" style={{ marginTop: 2 }}>
-                {r.season} · {r.draft_mode.toUpperCase()} draft {r.draft_status === 'pending' ? 'not started' : r.draft_status}
+                {r.bullseye ? `${r.season} · 🎯 no draft — a $50k squad each week` : `${r.season} · ${r.draft_mode.toUpperCase()} draft ${r.draft_status === 'pending' ? 'not started' : r.draft_status}`}
               </Mono>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
@@ -731,7 +731,9 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             </View>
           </View>
           {/* the card tells the truth (0223): what KIND of league, and the money */}
-          {!!r.identity && <Mono size={8.5} tone="dim" style={{ marginTop: 6 }}>{identityLine(r.identity)}</Mono>}
+          {r.bullseye
+            ? <Mono size={8.5} tone="you" style={{ marginTop: 6 }}>{bullseyeLeagueLine(r.bullseye)}</Mono>
+            : !!r.identity && <Mono size={8.5} tone="dim" style={{ marginTop: 6 }}>{identityLine(r.identity)}</Mono>}
           {!!r.dues && <Mono size={9} tone="warn" weight="700" style={{ marginTop: 3 }}>DUES: {r.dues}</Mono>}
           {!!r.blurb && <Mono size={10} style={{ marginTop: 8, lineHeight: 15 }}>{r.blurb}</Mono>}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
@@ -1321,7 +1323,9 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           {preview?.ok && (
             <>
               {/* the truth block first (0223): type, money, then the pitch */}
-              {!!preview.identity && (
+              {preview.bullseye ? (
+                <Mono size={9} tone="you" style={{ lineHeight: 14 }}>{`${bullseyeLeagueLine(preview.bullseye)}\nEach week you build a $50,000 squad aimed at the week’s numbers; closest wins.${preview.bullseye.span === 'season' ? ' Season standings add up every week.' : ''}`}</Mono>
+              ) : !!preview.identity && (
                 <Mono size={9} tone="dim" style={{ lineHeight: 14 }}>{identityLine(preview.identity)}</Mono>
               )}
               {!!preview.dues && <Mono size={10} tone="warn" weight="700">DUES: {preview.dues}</Mono>}
@@ -1351,7 +1355,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                   </Mono>
                 </View>
               )}
-              {preview.rules && (
+              {preview.rules && !preview.bullseye && (
                 <View>
                   <Mono size={8.5} weight="700" track={0.12} tone="faint">HOUSE RULES</Mono>
                   <Mono size={10} style={{ marginTop: 4, lineHeight: 15 }}>
@@ -1365,7 +1369,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                   </Mono>
                 </View>
               )}
-              {!!preview.teams?.length && (
+              {!!preview.teams?.length && !preview.bullseye && (
                 <View>
                   <Mono size={8.5} weight="700" track={0.12} tone="faint">SEATS</Mono>
                   {preview.teams.map((tm) => (

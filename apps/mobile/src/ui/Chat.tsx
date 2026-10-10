@@ -29,6 +29,7 @@ import { useKeyboardInset } from './keyboard';
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Mono } from './prims';
+import { DevRoomPanel, useDevRooms } from '../screens/DevRoom';
 import { weekTitle } from '@drip/core/data/nflSlate';
 
 const fmtWhen = (at: string): string => {
@@ -399,24 +400,31 @@ export function ChatScreen({ leagueId, initialDm }: {
   initialDm?: { peerId: string; peer: string } | null;
 }) {
   const t = useTheme();
-  const [tab, setTab] = useState<'league' | 'dm'>(initialDm ? 'dm' : 'league');
+  const [tab, setTab] = useState<'league' | 'dm' | 'dev'>(initialDm ? 'dm' : 'league');
   const [canModerate, setCanModerate] = useState(false);
+  // 🛠 DEV (v0.661.0, founder: "accessible as a chip in league chats for
+  // people in dev"): the dev room, for anyone in one.
+  const devRooms = useDevRooms();
+  const devUnread = devRooms.reduce((n, r) => n + r.unread, 0);
+  const { pad } = useComposerPad();
   useEffect(() => { leagueNote(leagueId).then((r) => setCanModerate(!!r.can_edit)).catch(() => {}); }, [leagueId]);
   return (
     <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 8 }}>
       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
-        {(['league', 'dm'] as const).map((id) => (
+        {(devRooms.length ? (['league', 'dm', 'dev'] as const) : (['league', 'dm'] as const)).map((id) => (
           <Pressable key={id} onPress={() => { tap(); setTab(id); }}
             style={{ borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: tab === id ? alpha(t.you, 14) : t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: tab === id ? t.you : t.bd }}>
             <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: tab === id ? t.you : t.dim }}>
-              {id === 'league' ? 'LEAGUE' : 'DIRECT'}
+              {id === 'league' ? 'LEAGUE' : id === 'dm' ? 'DIRECT' : `🛠 DEV${devUnread ? ` · ${devUnread}` : ''}`}
             </Text>
           </Pressable>
         ))}
       </View>
       {tab === 'league'
         ? <LeagueChat leagueId={leagueId} canModerate={canModerate} />
-        : <DmHome leagueId={leagueId} initialDm={initialDm} />}
+        : tab === 'dev'
+          ? <View style={{ flex: 1, marginHorizontal: -12, paddingBottom: pad - 10 }}><DevRoomPanel rooms={devRooms} /></View>
+          : <DmHome leagueId={leagueId} initialDm={initialDm} />}
     </View>
   );
 }

@@ -11,6 +11,7 @@
 // matchup wire and chat doesn't need to be faster than the scoreboard.
 // Opening a surface marks it read server-side (fetching the latest page IS
 // the read); the badge poll never marks anything.
+import { DevRoomPanel, useDevRooms } from '../screens/DevRoom';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
 import { catchUpOf, catchUpLabel, type CatchUp } from '@drip/core/data/chatCatchUp';
@@ -394,7 +395,10 @@ export function ChatButton({ leagueId, style, compact = false }: { leagueId: str
 }
 
 export function ChatPanel({ leagueId, onClose }: { leagueId: string; onClose: () => void }) {
-  const [tab, setTab] = useState<'league' | 'dm'>('league');
+  const [tab, setTab] = useState<'league' | 'dm' | 'dev'>('league');
+  // 🛠 DEV (v0.661.0, founder: "accessible as a chip in league chats for
+  // people in dev"): the dev room, for anyone in one.
+  const devRooms = useDevRooms();
   const [canModerate, setCanModerate] = useState(false);
   useEffect(() => { leagueNote(leagueId).then((r) => setCanModerate(!!r.can_edit)).catch(() => {}); }, [leagueId]);
   useEffect(() => { track(Ev.chatOpened, { dm: tab === 'dm' }); }, [tab]);
@@ -404,17 +408,19 @@ export function ChatPanel({ leagueId, onClose }: { leagueId: string; onClose: ()
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '12px 14px 10px', borderBottom: '1px solid var(--bd)' }}>
           <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>💬 Chat</div>
           <div style={{ flex: 1 }} />
-          {(['league', 'dm'] as const).map((t) => (
+          {(devRooms.length ? (['league', 'dm', 'dev'] as const) : (['league', 'dm'] as const)).map((t) => (
             <button key={t} onClick={() => setTab(t)} className="mono"
               style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer', borderRadius: 999, padding: '4px 10px', color: tab === t ? 'var(--on-accent)' : 'var(--dim)', background: tab === t ? 'var(--you)' : 'var(--bg)', border: `1px solid ${tab === t ? 'var(--you)' : 'var(--bd)'}` }}>
-              {t === 'league' ? 'LEAGUE' : 'DIRECT'}
+              {t === 'league' ? 'LEAGUE' : t === 'dm' ? 'DIRECT' : `🛠 DEV${devRooms.some((r) => r.unread) ? ` · ${devRooms.reduce((n, r) => n + r.unread, 0)}` : ''}`}
             </button>
           ))}
           <button onClick={onClose} className="mono" style={{ ...linkBtn, fontSize: 14, marginLeft: 2 }}>✕</button>
         </div>
         {tab === 'league'
           ? <LeagueChat leagueId={leagueId} canModerate={canModerate} />
-          : <DmHome leagueId={leagueId} />}
+          : tab === 'dev'
+            ? <div style={{ padding: 12, display: 'grid', gap: 10, overflowY: 'auto' }}><DevRoomPanel rooms={devRooms} /></div>
+            : <DmHome leagueId={leagueId} />}
       </div>
     </ModalBackdrop>
   );

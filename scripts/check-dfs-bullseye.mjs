@@ -104,5 +104,29 @@ const sql = read('supabase/migrations/0462_dfs_bullseye.sql');
 ok('sql: slot names match the engine', /array\['QB','RB1','RB2','WR1','WR2','WR3','TE','K','DEF'\]/.test(sql));
 ok('sql: the cap matches the engine', sql.includes('cap int := 50000') && DFS_CAP === 50000);
 
+// ── Bullseye leagues (v0.661.0, 0463) ──────────────────────────────────────
+const { bullseyeMaxSeats, bullseyeLeagueLine } = await import('../packages/core/src/data/liveApi.ts');
+const { readInviteParams } = await import('../packages/core/src/data/invite.ts');
+ok('size: 32 for anyone', bullseyeMaxSeats(false, {}) === 32);
+ok('size: 50,000 for an admin or a bullseye_host', bullseyeMaxSeats(true, {}) === 50000 && bullseyeMaxSeats(false, { bullseye_host: true }) === 50000);
+const line = bullseyeLeagueLine({ variant: 'total', radius: 10, span: 'season', week: null, max_seats: 50000, seats_taken: 1234 });
+ok('board line: variant, span, cap and size', line.includes('one team total') && line.includes('all season') && line.includes('$50k') && line.includes('1,234 of 50,000'), line);
+ok('invite link: ?bullseye=CODE is read', readInviteParams((k) => (k === 'bullseye' ? 'abcd1234' : null))?.bullseye === 'ABCD1234');
+const sql2 = read('supabase/migrations/0463_bullseye_leagues.sql');
+ok('sql: 32 for anyone, 50,000 for a host', /then 50000 else 32 end/.test(sql2) && sql2.includes("'bullseye_host'"));
+ok('sql: the board counts a Bullseye league\'s open spots, not empty seat rows', sql2.includes("'seats_open',  _league_seats_open(l.id)") && sql2.includes('_league_seats_open(l.id) > 0'));
+ok('sql: joining from the board takes a Bullseye seat', /if k = 'bullseye' then return _bullseye_take_seat/.test(sql2));
+ok('sql: the open contest is found, never made', !/insert into league[^;]*'BULL-'/.test(sql2));
+ok('sql: a season league takes a squad from the week in play on', sql2.includes("lg.contest_week is null and p_week < coalesce(_contest_week(lg.season), 1)"));
+ok('pods: no open contest made; season leagues get the board', !pods.includes('ensureBullseyeContest(') && pods.includes("(l.kind === 'bullseye' && l.contest_week == null)"));
+const web = read('src/screens/LiveOnboard.tsx');
+ok('web: a Bullseye league opens its own rooms', web.includes("e.league?.kind === 'bullseye'") && web.includes('<BullseyeLeaguePage'));
+const app = read('apps/mobile/App.tsx');
+ok('phone: a Bullseye league opens its own rooms on the room bar', app.includes("open?.kind === 'bullseye' && view !== 'chat'") && app.includes('<BullseyeLeagueRoom'));
+for (const f of ['src/screens/BullseyeLeague.tsx', 'apps/mobile/src/screens/BullseyeLeague.tsx']) {
+  const src = read(f);
+  ok(`${f}: matchup, league, team, settings and commish rooms`, ['TeamRoom', 'LeagueRoom', 'SettingsRoom', 'CommishRoom', 'BullseyeSquad'].every((k) => src.includes(k)));
+}
+
 if (fails) { console.log(`\n${fails} DFS-BULLSEYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DFS-BULLSEYE ASSERTIONS PASSED');

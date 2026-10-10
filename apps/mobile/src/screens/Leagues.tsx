@@ -5,7 +5,6 @@
 // membership, which is arbitrary the moment you're in more than one league, and
 // it gave you no way to reach the others.
 import { BullseyeContestBanner } from './BullseyeContest';
-import { DevRoomBanner } from './DevRoom';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { crestInitial } from '@drip/core/data/crest';
@@ -58,12 +57,14 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
   );
 }
 
-export function Leagues({ userId, onOpen, onBoard, onAdd, onDevRoom, onBullseye }: {
+export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseye, onBullseyeStart }: {
   userId: string;
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
    *  `commish` decides whether the ⚑ COMMISH tab renders at all. */
-  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat' | 'draft') => void;
+  onOpen: (leagueId: string, rosterId: number | null, name: string, native: boolean, commish: boolean, pickUserId?: string, landing?: 'home' | 'picks' | 'chat' | 'draft', kind?: string) => void;
+  /** 🎯 Start a Bullseye league, or join one by code (0463). */
+  onBullseyeStart?: () => void;
   /** Open the league board. 'browse' lands on the listings, 'root' on the
    *  board's own menu — the tile below wants the menu (it advertises all of
    *  it), the FIND chip wants the listings it names. */
@@ -208,8 +209,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onDevRoom, onBullseye 
         <Mono size={9.5} tone="faint">Pull down to refresh.</Mono>
       </View>
 
-      {/* 🛠 THE DEV ROOM (v0.658.0): only its members and an admin see it. */}
-      {onDevRoom && <DevRoomBanner key={refreshing ? 'r' : 'n'} onOpen={onDevRoom} />}
+      {/* 🛠 THE DEV ROOM moved to a bar along the bottom (v0.661.0) — App.tsx. */}
       {onBullseye && <BullseyeContestBanner key={refreshing ? 'br' : 'bn'} onOpen={onBullseye} />}
 
       {/* cross-league chat inbox (0154 polish): every league with unread chat,
@@ -219,7 +219,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onDevRoom, onBullseye 
       <HeroesVillains snaps={Object.values(glance)} />
 
       <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)} slate={slate}
-        onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat')} />
+        onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat', e.league?.kind)} />
 
       {/* THE CONTROL ROW, AT THE TOP — the web's arrangement (v0.292.3,
           founder: "put the find a league at the top by the all/commish
@@ -297,7 +297,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onDevRoom, onBullseye 
               // running, the hub when there is neither.
               const room = leagueLandingRoom(e);
               onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id,
-                room === 'matchup' ? 'picks' : room);
+                lg?.kind === 'bullseye' ? 'picks' : room === 'matchup' ? 'picks' : room, lg?.kind);
             }}
             android_ripple={{ color: alpha(t.you, 16) }}
             // THE SPINE HAS TO EARN ITS PLACE — the web card carries the same
@@ -438,7 +438,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onDevRoom, onBullseye 
           </Pressable>
           {shelfOpen && rows.filter((e) => e.archived).map((e) => (
             <Pressable key={`arch-${e.league_id}-${e.sleeper_roster_id}`}
-              onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id); }}
+              onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, undefined, e.league?.kind); }}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, padding: 11, marginTop: 6, opacity: 0.8 }}>
               <Crest url={e.league?.avatar_url} name={e.league?.name} size={30} />
               <View style={{ flex: 1, minWidth: 0 }}>
@@ -480,6 +480,28 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onDevRoom, onBullseye 
         </View>
         <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>→</Text>
       </Pressable>
+
+      {/* 🎯 BULLSEYE LEAGUES (0463): start one, or join one with its code. */}
+      {onBullseyeStart && (
+        <Pressable
+          onPress={() => { tap(); onBullseyeStart(); }}
+          android_ripple={{ color: alpha(t.you, 16) }}
+          style={({ pressed }) => ({
+            backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
+            borderStyle: 'dashed', borderRadius: 12, padding: 14,
+            flexDirection: 'row', alignItems: 'center', gap: 11, opacity: pressed ? 0.85 : 1,
+          })}
+        >
+          <View style={{ width: 42, height: 42, borderRadius: 8, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 18 }}>🎯</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>Bullseye league</Text>
+            <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>Start one · join with a code · a $50k squad aimed at the week’s numbers</Text>
+          </View>
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>→</Text>
+        </Pressable>
+      )}
 
       <View style={{ alignItems: 'center', marginTop: 8 }}>
         <LinkButton label="↻ refresh" onPress={refresh} />

@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.661.0 — Bullseye leagues: start one, post it, play it like any league; the dev room for everyone
+
+> - Bullseye is now a league you start: up to 32 people, one week or the whole season, posted to the league board or shared by code. It shows in My Leagues with a matchup, standings, your team, chat, settings and commissioner tools.
+> - The dev chat now sits as a bar at the bottom of My Leagues, and as a 🛠 DEV chip in league chat.
+
+- Founder: "a league you can create as a commish with 32 max people. I (or
+  people I delegate to) can create up to 50,000 people leagues. Commish then
+  posts it to the board". Chosen: one week or the season per league, anyone may
+  start one, and the automatic weekly open contest is retired (this week's
+  finishes). Migration 0463 adds `create_bullseye_league`, `join_bullseye`,
+  `bullseye_league`, `bullseye_league_board` (week + season),
+  `bullseye_my_weeks` and `set_bullseye_size`. The board, its preview and
+  `join_from_board` now handle Bullseye leagues. The `bullseye_host` feature
+  (admin_set_feature) gives the 50,000 cap. Spec: docs/dfs-bullseye.md §9–10.
+- "All the league features": web `BullseyeLeaguePage` and phone
+  `BullseyeLeagueRoom` cover matchup (with week arrows), league, my team, chat,
+  settings and commissioner settings (card, size, board post, rename, delete).
+- Dev room: an admin can open a room to EVERYONE (`dev_room_set_open`;
+  whoever leaves stays out until re-invited). `DevRoomBar` sits at the bottom of
+  My Leagues on web and phone, and 🛠 DEV is a chip in league chat.
+- Worker (pods.js): no open contest is made, and the salary board is built for
+  every week a season Bullseye league plays.
+
 ### v0.660.1 — The coin test that sat failing, fixed (and the test now fails loudly)
 
 > - Behind the scenes: a long-standing failing check on weekly coin earnings is fixed. Nothing changes in the app.

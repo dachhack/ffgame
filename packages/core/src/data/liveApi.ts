@@ -831,6 +831,47 @@ export const setBullseyeContest = (week: number, variant: DfsVariant, radius = 1
 export const setDfsBullseye = (leagueId: string, variant: DfsVariant | null, radius = 10) =>
   rpcOk<{ ok: boolean; error?: string }>('set_dfs_bullseye', { p_league: leagueId, p_variant: variant, p_radius: radius });
 
+// ── BULLSEYE LEAGUES (0463, docs/dfs-bullseye.md §9) ────────────────────────
+// A league a commissioner makes: one week or the season, 2–32 people (up to
+// 50,000 for an admin or a 'bullseye_host'), posted to the board, joined by
+// code. Each week every entrant builds a squad and is ranked on the card.
+export type BullseyeSpan = 'week' | 'season';
+export interface BullseyeInfo { variant: DfsVariant; radius: number; span: BullseyeSpan; week: number | null; max_seats: number; seats_taken: number }
+export interface BullseyeLeague {
+  ok: boolean; error?: string; league_id?: string; name?: string; season?: string; week?: number | null;
+  invite_code?: string | null; commish?: boolean; open_contest?: boolean; listed?: boolean;
+  bullseye?: BullseyeInfo; weeks?: number[]; entries?: number; first_lock?: string | null; started?: boolean;
+  me?: { roster_id: number; team: string | null; entered: boolean } | null;
+}
+export interface BullseyeSeasonRow { roster_id: number; team_name: string | null; me: boolean; total: number; weeks: number; best: number | null; rank: number }
+export interface BullseyeLeagueBoard {
+  ok: boolean; error?: string; week?: number | null; started?: boolean; entries?: number;
+  rows?: BullseyeBoardRow[]; me?: BullseyeBoardRow | null;
+  /** Season leagues only: ring totals summed over the stamped weeks. */
+  season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null } | null;
+}
+export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number }
+/** One line on what a Bullseye league is, for the board and its header. */
+export function bullseyeLeagueLine(b: BullseyeInfo): string {
+  const span = b.span === 'week' ? `week ${b.week ?? '?'} only` : 'all season';
+  return `🎯 BULLSEYE · ${b.variant === 'total' ? 'one team total' : 'slot targets'} · ${span} · $50k cap · ${b.seats_taken.toLocaleString('en-US')} of ${b.max_seats.toLocaleString('en-US')} in`;
+}
+/** The most people a Bullseye league can hold for this account. */
+export const bullseyeMaxSeats = (admin: boolean, features: Record<string, boolean>) => (admin || features.bullseye_host ? 50000 : 32);
+export const createBullseyeLeague = (o: { name: string; span: BullseyeSpan; max: number; variant: DfsVariant; radius?: number; teamName?: string | null }, season = '2026') =>
+  rpcOk<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; roster_id?: number; team?: string }>('create_bullseye_league', {
+    p_name: o.name, p_span: o.span, p_max: o.max, p_variant: o.variant, p_radius: o.radius ?? 10, p_team_name: o.teamName ?? null, p_season: season });
+export const joinBullseye = (code: string, teamName?: string | null) =>
+  rpcOk<{ ok: boolean; error?: string; league_id?: string; league?: string; roster_id?: number; team?: string; already?: boolean }>('join_bullseye', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
+export const bullseyeLeague = (leagueId: string) => rpcOk<BullseyeLeague>('bullseye_league', { p_league: leagueId });
+export const bullseyeLeagueBoard = (leagueId: string, week?: number | null, limit = 100) =>
+  rpcOk<BullseyeLeagueBoard>('bullseye_league_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit });
+export const bullseyeMyWeeks = (leagueId: string) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; team?: string | null; weeks?: BullseyeMyWeek[] }>('bullseye_my_weeks', { p_league: leagueId });
+/** Commissioner: how many people the league holds (2–32, or 50,000 for a host). */
+export const setBullseyeSize = (leagueId: string, max: number) =>
+  rpcOk<{ ok: boolean; error?: string; max_seats?: number }>('set_bullseye_size', { p_league: leagueId, p_max: max });
+
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */
@@ -3527,7 +3568,9 @@ export const chatMembers = (leagueId: string) =>
 // filed as a GitHub issue by the worker (server/src/devRoom.js), and its
 // number comes back on the message.
 export type DevTag = 'idea' | 'bug';
-export interface DevRoom { id: string; name: string; role: 'member' | 'admin'; members: number; unread: number }
+export interface DevRoom { id: string; name: string; role: 'member' | 'admin'; members: number; unread: number;
+  /** Open to every signed-in account (0463). */
+  open?: boolean }
 export interface DevMessage {
   id: number; body: string; at: string; tag: DevTag | null;
   /** The GitHub issue it was filed as; null until the worker files it. */
@@ -3564,6 +3607,9 @@ export const devRoomInvites = (roomId: string) =>
   rpc<Ok & { invites?: DevInvite[] }>('dev_room_invites', { p_room: roomId });
 export const devRoomInviteRevoke = (code: string) =>
   rpc<Ok>('dev_room_invite_revoke', { p_code: code });
+/** Admin (0463): open the room to every signed-in account, or close it again. */
+export const devRoomSetOpen = (roomId: string, open: boolean) =>
+  rpc<Ok & { open?: boolean }>('dev_room_set_open', { p_room: roomId, p_open: open });
 
 // ── App push notifications (0150): device token registry + per-device mutes ──
 export interface PushTokenRow { token: string; platform: string; prefs: Record<string, boolean>; last_seen_at: string; }
@@ -4848,6 +4894,8 @@ export interface BoardListing {
    *  platform prints it, it never collects it. */
   dues?: string | null;
   identity?: LeagueIdentity;
+  /** 0463: 'bullseye' for a Bullseye league, with its variant, span and size. */
+  kind?: string; bullseye?: BullseyeInfo | null;
   seats_total: number; seats_open: number;
   draft_status: string; draft_mode: string;
   /** The caller is already enrolled here / commissions it. */
@@ -4878,6 +4926,7 @@ export interface BoardPreview {
   /** 0223: what kind of league, the dues, and (contract leagues) the rulebook. */
   identity?: LeagueIdentity;
   dues?: string | null;
+  kind?: string; bullseye?: BullseyeInfo | null;
   contract_rules?: { salary_cap: number; years_max: number; dead_pct: number;
     retention: boolean; cap_trading: boolean; ir_relief: boolean;
     tag_raise_pct: number; ext_discount_pct: number; rfa: boolean } | null;

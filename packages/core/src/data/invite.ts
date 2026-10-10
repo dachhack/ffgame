@@ -91,6 +91,8 @@ export interface InviteParams {
   commish?: string;
   /** A DFS league code, stashed as `dripDfsCode`. */
   dfs?: string;
+  /** A Bullseye league code (?bullseye=CODE, 0463), stashed as `dripBullseyeCode`. */
+  bullseye?: string;
 }
 export function readInviteParams(
   get: (key: string) => string | null | undefined,
@@ -114,6 +116,8 @@ export function readInviteParams(
   if (ok(commish)) out.commish = commish.toUpperCase();
   const dfs = (get('dfs') ?? '').trim();
   if (ok(dfs)) out.dfs = dfs.toUpperCase();
+  const bull = (get('bullseye') ?? '').trim();
+  if (ok(bull)) out.bullseye = bull.toUpperCase();
   return Object.keys(out).length ? out : null;
 }
 
