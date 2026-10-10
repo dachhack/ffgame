@@ -3913,24 +3913,26 @@ export function TeamManage({ leagueId, onDraft, focus }: {
             rookies or veterans, and ROOKIES is the first band rather than a
             separate toggle so two controls can never disagree about who is
             one. The team list comes from the POOL, not a hardcoded 32. */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* One line (v0.656.7, founder: "we shouldn't have wrapping filter
+            rows"): the last wrapping row on the wire, now a strip like the rest. */}
+        <ChipStrip>
           {TENURE_BANDS.map((b) => (
-            <Chip key={b.id} on={tenure === b.id} onClick={() => setTenure(b.id)}>{b.short}</Chip>
+            <Chip small key={b.id} on={tenure === b.id} onClick={() => setTenure(b.id)}>{b.short}</Chip>
           ))}
           <select value={nflTeam} onChange={(e) => setNflTeam(e.target.value)} className="mono"
-            style={{ fontSize: 10, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 8px' }}>
+            style={{ fontSize: 10, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 8px', flexShrink: 0 }}>
             <option value="ALL">ALL NFL TEAMS</option>
             {poolTeams.map((tm) => <option key={tm} value={tm}>{tm}</option>)}
           </select>
           {/* 0341 — founder: "the option to see owned players and if they
               belong to you other teams (button right there to trade)." Off by
               default: the wire's first job is still who you can HAVE. */}
-          <Chip on={showOwned} onClick={() => setShowOwned(!showOwned)}>{showOwned ? 'OWNED ✓' : 'SHOW OWNED'}</Chip>
+          <Chip small on={showOwned} onClick={() => setShowOwned(!showOwned)}>{showOwned ? 'OWNED ✓' : 'SHOW OWNED'}</Chip>
           {(tenure !== 'any' || nflTeam !== 'ALL') && (
             <button onClick={() => { setTenure('any'); setNflTeam('ALL'); }} className="mono"
-              style={{ ...linkBtn, fontSize: 9.5, color: 'var(--you)' }}>✕ CLEAR</button>
+              style={{ ...linkBtn, fontSize: 9.5, color: 'var(--you)', flexShrink: 0, whiteSpace: 'nowrap' }}>✕ CLEAR</button>
           )}
-        </div>
+        </ChipStrip>
         <div style={{ maxHeight: 380, overflowY: 'auto' }}>
           {free.slice(0, 100).map((p) => {
             const left = waivedFor(p);

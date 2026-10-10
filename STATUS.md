@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.7 — the waiver filters stay on one line
+
+> - The waiver list's filters are single lines that scroll sideways, like the draft room's, so the players show sooner on a phone.
+
+Founder, with a phone screenshot of a devy league's WAIVERS tab: "we
+shouldn't have wrapping filter rows", in every kind of league. The app's
+waiver filters (apps/mobile Team.tsx: positions + stars, level/class/conf,
+sort, tenure) were four wrapping rows of full-size chips, two to three lines
+each before a single player showed. They are now ChipStrips of small chips,
+the draft room's v0.638.1 format, with the › cap where more sit off the
+edge. The web wire was already strips except its last row (tenure, team
+picker, SHOW OWNED), which is now one too. JavaScript only: no iPhone build.
+
 ### v0.656.6 — the roster builder fits a phone; the front page's pictures catch up
 
 > - The roster builder lines up on every row and fits a phone: positions on top, the name and switches underneath.

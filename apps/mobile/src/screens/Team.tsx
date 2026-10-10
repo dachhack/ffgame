@@ -1184,49 +1184,53 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         )}
         <TextInput value={q} onChangeText={setQ} placeholder="Search players, teams or schools…" placeholderTextColor={t.faint}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: fs(13), color: t.text, backgroundColor: t.bg, marginVertical: 8 }} />
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-          <Chip label="ALL" on={posSel.size === 0} onPress={() => { tap(); setPosSel(new Set()); }} />
+        {/* ONE LINE EACH (v0.656.7, founder: "we shouldn't have wrapping
+            filter rows"): the draft room's strips (v0.638.1) — small chips
+            that scroll sideways with a › where more sit off the edge — so
+            the filters stop pushing the players off a phone screen. */}
+        <ChipStrip style={{ marginBottom: 4 }}>
+          <Chip small label="ALL" on={posSel.size === 0} onPress={() => { tap(); setPosSel(new Set()); }} />
           {posChips.map((p) => (
-            <Chip key={p} label={p} on={posSel.has(p)}
+            <Chip small key={p} label={p} on={posSel.has(p)}
               onPress={() => { tap(); setPosSel((cur) => { const n = new Set(cur); if (n.has(p)) n.delete(p); else n.add(p); return n; }); }} />
           ))}
-          <Chip label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
-          <Chip label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
-        </View>
+          <Chip small label="★ FIRST" on={starMode === 'first'} onPress={() => { tap(); setStarMode(starMode === 'first' ? 'off' : 'first'); }} />
+          <Chip small label="★ ONLY" on={starMode === 'only'} onPress={() => { tap(); setStarMode(starMode === 'only' ? 'off' : 'only'); }} />
+        </ChipStrip>
         {poolKinds.college && (
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+          <ChipStrip style={{ marginTop: 6 }}>
             {poolKinds.both && LEVEL_FILTERS.map((o) => (
-              <Chip key={o.id} label={o.label} on={level === o.id} onPress={() => { tap(); setLevel(o.id); }} />
+              <Chip small key={o.id} label={o.label} on={level === o.id} onPress={() => { tap(); setLevel(o.id); }} />
             ))}
             <Mono size={8} tone="faint">CLASS</Mono>
             {CLASS_FILTERS.map((o) => (
-              <Chip key={o.id} label={o.label} on={cls.has(o.id)}
+              <Chip small key={o.id} label={o.label} on={cls.has(o.id)}
                 onPress={() => { tap(); setCls((cur) => { const n = new Set(cur); if (n.has(o.id)) n.delete(o.id); else n.add(o.id); return n; }); }} />
             ))}
             {/* CONFERENCE / DIVISION (0382) */}
             {confOpts.length > 0 && <Mono size={8} tone="faint">CONF</Mono>}
-            {confOpts.length > 0 && <Chip label="ALL" on={conf === 'all'} onPress={() => { tap(); setConf('all'); }} />}
+            {confOpts.length > 0 && <Chip small label="ALL" on={conf === 'all'} onPress={() => { tap(); setConf('all'); }} />}
             {confOpts.map((o) => (
-              <Chip key={o.value} label={o.label.toUpperCase()} on={conf === o.value} onPress={() => { tap(); setConf(conf === o.value ? 'all' : o.value); }} />
+              <Chip small key={o.value} label={o.label.toUpperCase()} on={conf === o.value} onPress={() => { tap(); setConf(conf === o.value ? 'all' : o.value); }} />
             ))}
-          </View>
+          </ChipStrip>
         )}
         {/* THE ORDER (v0.302.0). Rank is the pool's own, and what the draft
             clock follows, so it stays the default. */}
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+        <ChipStrip style={{ marginTop: 6 }}>
           <Mono size={8} tone="faint">SORT</Mono>
           {POOL_SORTS.map((o) => (
-            <Chip key={o.id} label={o.label} on={sortBy === o.id} onPress={() => { tap(); setSortBy(o.id); }} />
+            <Chip small key={o.id} label={o.label} on={sortBy === o.id} onPress={() => { tap(); setSortBy(o.id); }} />
           ))}
-        </View>
+        </ChipStrip>
         {/* Tenure BANDS rather than a number box — nobody searches for
             "exactly 6 accrued seasons" — with ROOKIES as the first band so it
             and the tenure filter can never disagree about who is one. */}
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        <ChipStrip style={{ marginTop: 6 }}>
           {TENURE_BANDS.map((b) => (
-            <Chip key={b.id} label={b.short} on={tenure === b.id} onPress={() => { tap(); setTenure(b.id); }} />
+            <Chip small key={b.id} label={b.short} on={tenure === b.id} onPress={() => { tap(); setTenure(b.id); }} />
           ))}
-        </View>
+        </ChipStrip>
         {/* The team strip scrolls: 32 codes wrapped would fill a phone screen
             before a single player showed. */}
         <ChipStrip style={{ marginTop: 6 }}>
