@@ -26,7 +26,8 @@ import { OtaReadyStrip, useOtaReady } from './src/ui/OtaReady';
 import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
-import { DevRoomScreen } from './src/screens/DevRoom';
+import { DevRoomScreen, DevRoomBar } from './src/screens/DevRoom';
+import { BullseyeStart, BullseyeLeagueRoom } from './src/screens/BullseyeLeague';
 import { BullseyeSquad, BullseyeGate } from './src/screens/BullseyeContest';
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin, loadCollegeWeekDates, loadCollegeLogos, syncMarkFree } from '@drip/core/data/liveApi';
@@ -79,6 +80,8 @@ interface OpenLeague {
    *  Commissioner tile. Display only; every RPC behind those tools re-checks
    *  commissionership server-side. */
   commish?: boolean;
+  /** league.kind — 'bullseye' opens the Bullseye league's own rooms (0463). */
+  kind?: string;
 }
 
 /** Has this league drafted? Remembered for the app session so reopening a
@@ -120,7 +123,7 @@ export function App() {
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
-  const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board' | 'devroom' | 'bullseye'>('picks');
+  const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board' | 'devroom' | 'bullseye' | 'bstart' | 'bsettings'>('picks');
   // THE DEV ROOM (v0.658.0): which room the screen opens on (null = the list).
   const [devRoomId, setDevRoomId] = useState<string | null>(null);
   // THE WEEKLY BULLSEYE (0462): the open contest's squad screen.
@@ -471,7 +474,7 @@ export function App() {
                 second gear asks you to guess which is which, and a grey
                 hairline against a grey header is not a control, it is a
                 decoration. It carries the accent and its own word now. */}
-            <Pressable hitSlop={10} onPress={() => { tap(); setLeagueSheet(true); }}
+            <Pressable hitSlop={10} onPress={() => { tap(); if (open.kind === 'bullseye') setView('bsettings'); else setLeagueSheet(true); }}
               accessibilityRole="button" accessibilityLabel="League settings and info"
               style={{
                 borderWidth: 1, borderColor: theme.you, borderRadius: 999,
@@ -517,6 +520,17 @@ export function App() {
                 setView('commishtools');
               }} />
           </View>
+        ) : view === 'bstart' ? (
+          <View style={{ flex: 1 }}><BullseyeStart onBack={() => setView('picks')}
+            onOpen={(leagueId, name, rosterId) => { setLeaguesEpoch((n) => n + 1); setOpen({ leagueId, rosterId, name, native: false, kind: 'bullseye' }); setView('picks'); }} /></View>
+        ) : open?.kind === 'bullseye' && view !== 'chat' ? (
+          // A BULLSEYE LEAGUE (0463): its own rooms on the same room bar —
+          // MATCHUP, LEAGUE, MY TEAM, CHAT (below) — and ⚙ SETTINGS / ⚑.
+          <View style={{ flex: 1 }}><BullseyeLeagueRoom key={`bull-${open.leagueId}`} leagueId={open.leagueId}
+            room={view === 'home' ? 'league' : view === 'team' ? 'team' : view === 'bsettings' ? 'settings' : view === 'commishtools' ? 'commish' : open.rosterId != null ? 'matchup' : 'league'}
+            onRoom={(r) => setView(r === 'league' ? 'home' : r === 'team' ? 'team' : r === 'settings' ? 'bsettings' : r === 'commish' ? 'commishtools' : 'picks')}
+            onBack={() => { setOpen(null); setView('picks'); }}
+            onGone={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
         ) : view === 'draft' && open?.native ? (
           // A seatless commissioner has no MATCHUP to go back to — back means
           // leaving the league, not landing on a lineup that doesn't exist.
@@ -579,7 +593,7 @@ export function App() {
               onSwitchLeague={(e) => {
                 track(Ev.leagueOpened, { live: true });
                 void leagueTouch(e.league_id).catch(() => {});
-                const next: OpenLeague = { leagueId: e.league_id, rosterId: e.sleeper_roster_id, name: e.league?.name ?? 'League', native: e.league?.provider === 'native', commish: false, pickUserId: e.pick_user_id };
+                const next: OpenLeague = { leagueId: e.league_id, rosterId: e.sleeper_roster_id, name: e.league?.name ?? 'League', native: e.league?.provider === 'native', commish: false, pickUserId: e.pick_user_id, kind: e.league?.kind };
                 setOpen(next);
                 setView('picks');
                 commishOverview().then((cl) => {
@@ -589,6 +603,7 @@ export function App() {
             />} />
           </View>
         ) : (
+          <View style={{ flex: 1 }}>
           <Leagues
             key={leaguesEpoch}
             userId={session.user.id}
@@ -596,7 +611,8 @@ export function App() {
             onAdd={() => { setBoardEntry('create'); setView('board'); }}
             onDevRoom={(id) => { setDevRoomId(id); setView('devroom'); }}
             onBullseye={(leagueId, week) => { setBullTarget({ leagueId, week }); setView('bullseye'); }}
-            onOpen={(leagueId, rosterId, name, native, commish, pickUserId, landing) => {
+            onBullseyeStart={() => setView('bstart')}
+            onOpen={(leagueId, rosterId, name, native, commish, pickUserId, landing, kind) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports
               // for a live league and lands in the same funnel.
@@ -607,9 +623,13 @@ export function App() {
               // No seat → no lineup: a seatless commissioner lands on
               // management, not on a MATCHUP tab that cannot render.
               setView(rosterId == null ? 'commishtools' : (landing ?? 'home'));
-              setOpen({ leagueId, rosterId, name, native, commish, pickUserId });
+              setOpen({ leagueId, rosterId, name, native, commish, pickUserId, kind });
             }}
           />
+          {/* THE DEV BAR (v0.661.0): "dev chat live as a bar at the bottom of
+              the my leagues page for people in dev." */}
+          <DevRoomBar onOpenFull={(id) => { setDevRoomId(id); setView('devroom'); }} />
+          </View>
         )}
         </ScrollShiftCtx.Provider>
         </ScrollChromeCtx.Provider>
@@ -618,7 +638,7 @@ export function App() {
             down and returns the moment you pull up. Absolute over the
             content (screens reserve bottom padding for it), so its coming
             and going never reflows what you're reading. */}
-        {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools') && (
+        {open && (view === 'home' || view === 'picks' || view === 'draft' || view === 'team' || view === 'chat' || view === 'commishtools' || view === 'bsettings') && (
           <LeagueBottomBar theme={theme} shift={chromeDrv.shift} active={view} leagueId={open.leagueId}
             onGo={(id) => setView(id)}
             items={([

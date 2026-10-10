@@ -151,6 +151,8 @@ export function App() {
       // A DFS league invite link (?dfs=CODE) → stash; LiveOnboard auto-joins
       // after sign-in (0094 — the link IS the access; no card in the chooser).
       stash('dripDfsCode', invited?.dfs);
+      // A Bullseye league invite (?bullseye=CODE, 0463) → joined after sign-in.
+      stash('dripBullseyeCode', invited?.bullseye);
       // A dev-room invite (?room=CODE, v0.658.0) → LiveOnboard joins after sign-in.
       stash('dripDevRoomCode', readDevRoomParam((k) => p.get(k)) ?? undefined);
       const finish = () => {

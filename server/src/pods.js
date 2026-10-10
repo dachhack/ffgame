@@ -187,9 +187,8 @@ export function pairPodSeats(leagueId, week, seats) {
  *  gone. Idempotent (deterministic upserts; the board freezes once written
  *  so cap math never shifts under a part-built entry). */
 export async function ensurePods(week, season, idx) {
-  // THE OPEN BULLSEYE CONTEST (0462): this week's, made if nobody has asked
-  // for it yet, so its board and card exist before the first entrant does.
-  await ensureBullseyeContest(season, week).catch(() => {});
+  // (0463 retired the automatic weekly open Bullseye contest: Bullseye is now
+  // leagues a commissioner makes — one week, or the season.)
   const { data: all } = await db().from('league')
     .select('id, name, kind, contest_week, settings_json').in('kind', ['pod', 'weekly', 'dfs', 'bullseye']).eq('season', season);
   // Toss expired showdowns: their members' home screens drop the card once
@@ -203,10 +202,12 @@ export async function ensurePods(week, season, idx) {
       .in('league_id', expired.map((l) => l.id)).eq('enrolled', true).select('id');
     tossed = gone?.length ?? 0;
   }
-  const pods = (all ?? []).filter((l) => l.kind === 'pod' || l.kind === 'dfs' || l.contest_week === week);
-  // (A 'bullseye' contest is in `pods` for one reason: the week's salary board
-  // below must exist for it to be built against. It has no AI seats and no
-  // pairing — each entrant's scoring row is made when they save an entry.)
+  const pods = (all ?? []).filter((l) => l.kind === 'pod' || l.kind === 'dfs' || l.contest_week === week
+    || (l.kind === 'bullseye' && l.contest_week == null));
+  // (A Bullseye league — this week's, or a season one — is in `pods` for one
+  // reason: the week's salary board below must exist for it to be built
+  // against. It has no AI seats and no pairing — each entrant's scoring row
+  // is made when they save an entry.)
   if (!pods?.length) return { pods: 0, dealt: 0, matchups: 0, tossed };
 
   const { board, skipped } = await ensureSalaryBoard(season, week, idx);
@@ -273,20 +274,6 @@ export async function ensurePods(week, season, idx) {
   return { pods: pods.length, dealt, matchups: made, tossed };
 }
 
-/** The week's open Bullseye contest (0462) — the SQL's _ensure_bullseye_contest,
- *  written here because the worker holds the service role, not a signed-in
- *  user. Idempotent on (sleeper_league_id, season). */
-export async function ensureBullseyeContest(season, week) {
-  if (!(week >= 1 && week <= 22)) return null;
-  const sid = `BULL-${season}-${week}`;
-  await db().from('league').upsert({
-    sleeper_league_id: sid, season, name: `Week ${week} Bullseye`, kind: 'bullseye', contest_week: week,
-    kdst_mode: 'off', provider: 'pod', lineup_policy: 'empty',
-    settings_json: { dfs_bullseye: true, bullseye: 'slots', bullseye_radius: 10 },
-  }, { onConflict: 'sleeper_league_id,season', ignoreDuplicates: true });
-  return sid;
-}
-
 /** The week's salary board: built and FROZEN on first sight of the week, then
  *  always read back (weekly projections drift; the board a squad is being
  *  built against must not). Shared by the pods and the open Bullseye contest. */
@@ -324,11 +311,12 @@ export async function ensureSalaryBoard(season, week, idx) {
   return { board, skipped: null };
 }
 
-/** NEXT week's open contest, when someone has already opened it (the SQL
- *  answers "the week about to be played" from the slate, which can run ahead
- *  of this worker's week on a Tuesday): its board, so it can be built. */
+/** NEXT week's board, when a Bullseye league will play it — a season league,
+ *  or one made for that week (the SQL answers "the week about to be played"
+ *  from the slate, which can run ahead of this worker's week on a Tuesday). */
 export async function ensureNextBullseyeBoard(season, week, idx) {
-  const { data: lg } = await db().from('league').select('id').eq('kind', 'bullseye').eq('season', season).eq('contest_week', week).limit(1);
+  const { data: lg } = await db().from('league').select('id').eq('kind', 'bullseye').eq('season', season)
+    .or(`contest_week.is.null,contest_week.eq.${Number(week)}`).limit(1);
   if (!lg?.length) return null;
   const { skipped } = await ensureSalaryBoard(season, week, idx);
   return skipped ?? 'ok';

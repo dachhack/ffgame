@@ -52,5 +52,20 @@ ok('code: spaces and case forgiven', cleanDevCode(' abcd 1234 ') === 'ABCD1234')
 const msg = devRoomInviteMessage({ room: 'Drip Dev', code: 'abcd1234' });
 ok('message: carries the link and the bare code', msg.includes(link) && msg.includes('code ABCD1234'));
 
+// ── open to everyone, the bar, the chat chip (v0.661.0, 0463) ──────────────
+const src = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
+const sql = src('supabase/migrations/0463_bullseye_leagues.sql');
+ok('open: dev_rooms_mine seats the caller in every open room they have not left', /where r\.open_to_all\s+and not exists \(select 1 from dev_room_left/.test(sql));
+ok('open: leaving or removal is remembered, an invite clears it', sql.includes('insert into dev_room_left') && sql.includes('delete from dev_room_left'));
+ok('open: only an admin flips it', /dev_room_set_open[\s\S]*?is_admin\(\) or exists/.test(sql));
+for (const f of ['src/screens/DevRoom.tsx', 'apps/mobile/src/screens/DevRoom.tsx']) {
+  const s = src(f);
+  ok(`${f}: the bar, the panel, and the EVERYONE switch`, s.includes('export function DevRoomBar') && s.includes('export function DevRoomPanel') && s.includes('devRoomSetOpen('));
+}
+ok('web: the bar sits at the bottom of the leagues page', src('src/screens/LiveOnboard.tsx').includes('<DevRoomBar'));
+ok('phone: the bar sits under the leagues list', src('apps/mobile/App.tsx').includes('<DevRoomBar'));
+ok('web chat: a 🛠 DEV chip for people in a room', /devRooms\.length \? \(\['league', 'dm', 'dev'\]/.test(src('src/app/chat.tsx')));
+ok('phone chat: a 🛠 DEV chip for people in a room', /devRooms\.length \? \(\['league', 'dm', 'dev'\]/.test(src('apps/mobile/src/ui/Chat.tsx')));
+
 if (fails) { console.log(`\n${fails} DEV-ROOM ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DEV-ROOM ASSERTIONS PASSED');

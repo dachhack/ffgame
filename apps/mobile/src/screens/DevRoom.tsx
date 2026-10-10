@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
   devRoomsMine, devRoomCreate, devRoomJoin, devRoomMessages, devRoomPost, devRoomTag, devRoomDelete,
-  devRoomMembers, devRoomRemove, devRoomInviteCreate, devRoomInvites, devRoomInviteRevoke, friendlyError,
+  devRoomMembers, devRoomRemove, devRoomInviteCreate, devRoomInvites, devRoomInviteRevoke, devRoomSetOpen, friendlyError,
   type DevRoom, type DevMessage, type DevMember, type DevInvite, type DevTag,
 } from '@drip/core/data/liveApi';
 import { devRoomInviteMessage, cleanDevCode, issueUrl, TAG_LABEL } from '@drip/core/data/devRoom';
@@ -40,6 +40,72 @@ export function DevRoomBanner({ onOpen }: { onOpen: (roomId: string | null) => v
       {unread > 0 && <Mono size={9} weight="700" style={{ color: t.bg, backgroundColor: t.you, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' }}>{unread}</Mono>}
     </Pressable>
   );
+}
+
+/** THE BAR (v0.661.0) — the web twin's note: "dev chat live as a bar at the
+ *  bottom of the my leagues page for people in dev." Pinned under the leagues
+ *  list; tap it and the room rises over the bottom of the screen. */
+export function DevRoomBar({ onOpenFull }: { onOpenFull: (roomId: string | null) => void }) {
+  const t = useTheme();
+  const [rooms, setRooms] = useState<DevRoom[] | null>(null);
+  const [canCreate, setCanCreate] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [last, setLast] = useState<DevMessage | null>(null);
+  const read = useCallback(() => devRoomsMine().then((r) => { if (r.ok) { setRooms(r.rooms ?? []); setCanCreate(!!r.can_create); } }).catch(() => {}), []);
+  useEffect(() => { void read(); const iv = setInterval(() => { void read(); }, 30_000); return () => clearInterval(iv); }, [read]);
+  const first = rooms?.[0]?.id ?? null;
+  useEffect(() => {
+    // The newest line for the folded bar — only with nothing unread, since
+    // reading the latest page marks the room read.
+    if (!first || open || (rooms?.[0]?.unread ?? 0) > 0) return;
+    devRoomMessages(first).then((r) => { if (r.ok) setLast(r.messages?.[0] ?? null); }).catch(() => {});
+  }, [first, open, rooms]);
+  if (!rooms || (!rooms.length && !canCreate)) return null;
+  const unread = rooms.reduce((n, r) => n + r.unread, 0);
+  return (
+    <View style={{ borderTopWidth: 1, borderTopColor: t.bd, backgroundColor: t.surface }}>
+      {open && rooms.length > 0 && (
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ height: 420, paddingTop: 8 }}>
+          <DevRoomPanel rooms={rooms} />
+        </KeyboardAvoidingView>
+      )}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
+        <Pressable accessibilityRole="button" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+          onPress={() => { tap(); if (!rooms.length) { onOpenFull(null); return; } setOpen((o) => !o); if (open) void read(); }}>
+          <Mono size={10.5} tone="you" weight="700" track={0.08}>{`🛠 ${rooms.length === 1 ? rooms[0].name.toUpperCase() : 'DEV ROOM'}`}</Mono>
+          <Mono size={9} tone="faint" numberOfLines={1} style={{ flex: 1 }}>
+            {!rooms.length ? 'make one and invite testers' : open ? 'tap to fold away' : unread > 0 ? `${unread} new` : last ? `${last.mine ? 'you' : last.author}: ${last.body}` : 'say what you’d change — 💡 or 🐞 logs it'}
+          </Mono>
+          {!open && unread > 0 && <Mono size={9} weight="700" style={{ color: t.bg, backgroundColor: t.you, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' }}>{unread}</Mono>}
+          <Mono size={10} tone="faint">{open ? '▾' : '▴'}</Mono>
+        </Pressable>
+        {rooms.length > 0 && <Chip small label="⤢" a11y="Open the full room" onPress={() => { tap(); onOpenFull(rooms.length === 1 ? rooms[0].id : null); }} />}
+      </View>
+    </View>
+  );
+}
+
+/** The room in place: the bar's panel and league chat's 🛠 DEV chip. */
+export function DevRoomPanel({ rooms }: { rooms: DevRoom[] }) {
+  const [roomId, setRoomId] = useState<string | null>(rooms[0]?.id ?? null);
+  if (!roomId) return <Mono size={10} tone="faint" style={{ padding: 12 }}>You’re not in a dev room.</Mono>;
+  return (
+    <View style={{ flex: 1 }}>
+      {rooms.length > 1 && (
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 6 }}>
+          {rooms.map((r) => <Chip key={r.id} small on={r.id === roomId} label={`${r.name}${r.unread ? ` · ${r.unread}` : ''}`} onPress={() => { tap(); setRoomId(r.id); }} />)}
+        </View>
+      )}
+      <Room key={roomId} roomId={roomId} onLeft={() => setRoomId(null)} />
+    </View>
+  );
+}
+
+/** Rooms I'm in (an open room joins me on this read) — for the chat chip. */
+export function useDevRooms(): DevRoom[] {
+  const [rooms, setRooms] = useState<DevRoom[]>([]);
+  useEffect(() => { let alive = true; devRoomsMine().then((r) => { if (alive && r.ok) setRooms(r.rooms ?? []); }).catch(() => {}); return () => { alive = false; }; }, []);
+  return rooms;
 }
 
 export function DevRoomScreen({ roomId: initial, onBack }: { roomId: string | null; onBack: () => void }) {
@@ -244,9 +310,23 @@ function People({ roomId, roomName, onLeft }: { roomId: string; roomName: string
   const confirm = (title: string, verb: string, go: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Cancel', style: 'cancel' }, { text: verb, style: 'destructive', onPress: go }]);
   const me = members.find((m) => m.me);
+  // OPEN TO EVERYONE (0463): "Let me turn it on for platform registered users."
+  const [openAll, setOpenAll] = useState<boolean | null>(null);
+  useEffect(() => { devRoomsMine().then((r) => { if (r.ok) setOpenAll(!!r.rooms?.find((x) => x.id === roomId)?.open); }).catch(() => {}); }, [roomId]);
+  const setOpen = async (on: boolean) => { if (await act(devRoomSetOpen(roomId, on))) setOpenAll(on); };
   return (
     <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 60 }}>
       {err && <Mono size={10} tone="warn">{err}</Mono>}
+      {admin && openAll !== null && (
+        <Card style={{ gap: 8 }}>
+          <Mono size={9} tone="faint" weight="700" track={0.1}>WHO’S IN</Mono>
+          <Mono size={10} tone="dim">{openAll ? 'Everyone signed in — anyone who leaves stays out until invited back.' : 'Invited people only.'}</Mono>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Chip small label="INVITE ONLY" on={!openAll} onPress={() => { tap(); void setOpen(false); }} />
+            <Chip small label="EVERYONE" on={openAll} onPress={() => { tap(); confirm('Open this room to every signed-in player? Tagged lines become public GitHub issues.', 'Open it', () => void setOpen(true)); }} />
+          </View>
+        </Card>
+      )}
       {admin && (
         <Card style={{ gap: 8 }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>INVITE PEOPLE</Mono>

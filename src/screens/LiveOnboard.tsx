@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BullseyeContestCard, BullseyeSquad, SquadScreen } from './BullseyeContest';
-import { DevRoomBanner, DevRoomScreen } from './DevRoom';
+import { DevRoomBar, DevRoomScreen } from './DevRoom';
+import { BullseyeLeaguePage, BullseyeStart } from './BullseyeLeague';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag, Img, Crest } from '../app/ui';
 import { liveConfigured } from '@drip/core/data/liveConfig';
@@ -8,7 +9,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, joinBullseye, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
   inviteSeats, claimPlatformSeat, type InviteSeat,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
@@ -74,7 +75,7 @@ function GoogleG() {
  *  us while it is up (v0.356.11). 'admin' is not one: it needs no league. */
 const ROOM_VIEWS = ['leaguehome', 'team', 'draft'];
 
-type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper' | 'provider' | 'devroom' | 'bullseye';
+type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper' | 'provider' | 'devroom' | 'bullseye' | 'bleague' | 'bstart';
 
 export function LiveOnboard() {
   const { navigate, route, viewAs, setViewAs } = useStore();
@@ -898,6 +899,22 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   const [devRoomId, setDevRoomId] = useState<string | null>(null);
   // THE WEEKLY BULLSEYE (0462): the open contest's squad screen.
   const [bullTarget, setBullTarget] = useState<{ leagueId: string; week: number } | null>(null);
+  // BULLSEYE LEAGUES (0463): the open league, and an invite link's code
+  // (?bullseye=CODE → dripBullseyeCode), joined once signed in.
+  const [bullLeague, setBullLeague] = useState<string | null>(null);
+  const [bullCode, setBullCode] = useState<string | null>(null);
+  useEffect(() => {
+    let code: string | null = null;
+    try { code = localStorage.getItem('dripBullseyeCode'); localStorage.removeItem('dripBullseyeCode'); } catch { /* ignore */ }
+    if (!code) return;
+    joinBullseye(code)
+      .then((r) => {
+        if (r.ok && r.league_id) { refresh(); setBullLeague(r.league_id); setView('bleague'); }
+        else { setBullCode(code); setView('bstart'); }
+      })
+      .catch(() => { setBullCode(code); setView('bstart'); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.user.id]);
   useEffect(() => {
     let code: string | null = null;
     try { code = localStorage.getItem('dripDevRoomCode'); localStorage.removeItem('dripDevRoomCode'); } catch { /* ignore */ }
@@ -938,7 +955,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       {/* EVERY ACCOUNT MAY CREATE (0422, v0.612.0). "Start a fresh league"
           and "Add Drip to my Sleeper league" are for everyone now; the
           'native' flag that gated the first is read by nothing. */}
-      <RoleChooser onPlayer={() => setView('join')} onCreate={() => setView('create')} onSleeper={() => setView('sleeper')} onProvider={() => setView('provider')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
+      <RoleChooser onPlayer={() => setView('join')} onCreate={() => setView('create')} onBullseye={() => setView('bstart')} onSleeper={() => setView('sleeper')} onProvider={() => setView('provider')} onCommish={() => setView('commish')} onRequest={() => setRequesting(true)} onSolo={showSolo ? () => playSolo('pod') : undefined} onWeekly={showSolo ? () => playSolo('weekly') : undefined} onDfsJoin={showSolo || showDfsCreate ? () => setView('dfsjoin') : undefined} onDfsCreate={showDfsCreate ? () => setView('dfscreate') : undefined} onSoloPass={!showSolo ? () => setView('solopass') : undefined} soloBusy={soloBusy} soloErr={soloErr} />
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={() => setView('home')} className="mono" style={linkBtn}>← back</button></div>
       {requesting && <RequestCodeModal initialPlatform="" onClose={() => setRequesting(false)} />}
     </>
@@ -1030,6 +1047,11 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // Leaving also clears `view` from the route. Without that the URL still says
   // admin while the screen says leagues, and the effect above would bounce you
   // back into the console on the next route change.
+  if (view === 'bstart') return <BullseyeStart initialCode={bullCode ?? undefined} onOpen={(id) => { setBullCode(null); refresh(); setBullLeague(id); setView('bleague'); }} onBack={() => { setBullCode(null); setView('home'); }} />;
+  if (view === 'bleague' && bullLeague) return (
+    <BullseyeLeaguePage key={bullLeague} leagueId={bullLeague} onBack={() => { setBullLeague(null); setView('home'); refresh(); }}
+      onGone={() => { setBullLeague(null); setView('home'); refresh(); }} />
+  );
   if (view === 'devroom') return <DevRoomScreen roomId={devRoomId} onBack={() => { setDevRoomId(null); setView('home'); }} />;
   if (view === 'admin') return <AdminPage onBack={() => { setView('home'); if (route.name === 'live' && route.view === 'admin') navigate({ name: 'live' }); }} />;
   // Only a first-load failure blanks the screen; a background refresh failure keeps
@@ -1113,20 +1135,27 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
   return (
     <>
-    {!viewAs && <DevRoomBanner onOpen={(id) => { setDevRoomId(id); setView('devroom'); }} />}
     {!viewAs && <BullseyeContestCard onOpen={(leagueId, week) => { setBullTarget({ leagueId, week }); setView('bullseye'); }} />}
     <LeagueHome
       enrollments={enrollments}
       commishLeagues={commishLeagues}
       cards={cards}
       commishIds={commishIds}
-      onPodBuild={(leagueId, rosterId, week, name) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId, week, name }); setView('podbuild'); })()}
+      onPodBuild={(leagueId, rosterId, week, name) => guard(() => {
+        setHomeFor(null);
+        // A Bullseye league (0463) builds in its own MATCHUP room.
+        if (enrollments?.find((x) => x.league_id === leagueId)?.league?.kind === 'bullseye') { setBullLeague(leagueId); setView('bleague'); return; }
+        setTarget({ leagueId, rosterId, week, name }); setView('podbuild');
+      })()}
       onManage={(id) => guard(() => { setHomeFor(null); setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
       onDraft={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('draft'); })()}
       onOpen={(e) => {
         // Presence (0151) — skipped under browse-as: the admin looking is
         // not the member opening.
         if (!viewAs) void leagueTouch(e.league_id).catch(() => {});
+        // A BULLSEYE LEAGUE (0463) has its own rooms — matchup, league, team,
+        // chat, settings, commish — under one page.
+        if (e.league?.kind === 'bullseye') { setHomeFor(null); setBullLeague(e.league_id); setView('bleague'); return; }
         // WHERE THE LEAGUE IS IS WHERE YOU WANT TO BE (v0.356.16, founder):
         // the matchup once it has drafted, the draft room while it is
         // running, the hub when there is neither. `homeFor` is set either
@@ -1161,6 +1190,9 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         ))}
       </div>
     )}
+    {/* THE DEV BAR (v0.661.0): "dev chat live as a bar at the bottom of the
+        my leagues page for people in dev." */}
+    {!viewAs && <DevRoomBar onOpenFull={(id) => { setDevRoomId(id); setView('devroom'); }} />}
     </>
   );
 }
@@ -1795,7 +1827,7 @@ function LeagueResults({ leagueId, onBack }: { leagueId: string; onBack: () => v
 // chip beside ＋ ADD A LEAGUE now, rather than a card three-deep inside the
 // add flow. This chooser is for people who already know how they are getting
 // in: with a code, as a commissioner, or by making one.
-function RoleChooser({ onPlayer, onCreate, onSleeper, onProvider, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onSleeper?: () => void; onProvider?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
+function RoleChooser({ onPlayer, onCreate, onBullseye, onSleeper, onProvider, onCommish, onRequest, onSolo, onWeekly, onDfsJoin, onDfsCreate, onSoloPass, soloBusy, soloErr }: { onPlayer: () => void; onCreate?: () => void; onBullseye?: () => void; onSleeper?: () => void; onProvider?: () => void; onCommish: () => void; onRequest?: () => void; onSolo?: () => void; onWeekly?: () => void; onDfsJoin?: () => void; onDfsCreate?: () => void; onSoloPass?: () => void; soloBusy?: 'pod' | 'weekly' | null; soloErr?: { mode: 'pod' | 'weekly'; msg: string } | null }) {
   const choice: React.CSSProperties = { width: '100%', textAlign: 'left', fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16, cursor: 'pointer' };
   // Everyone sees the league paths — join, create, bring a Sleeper league in,
   // commission (0422). Everything below the divider only renders because
@@ -1820,6 +1852,12 @@ function RoleChooser({ onPlayer, onCreate, onSleeper, onProvider, onCommish, onR
           <button onClick={onCreate} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>Start a fresh league →</div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>No existing league needed — create one here, invite friends, and draft your teams right in the app.</div>
+          </button>
+        )}
+        {onBullseye && (
+          <button onClick={onBullseye} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>🎯 A Bullseye league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Start one (up to 32 people, one week or the season) or join one with its code. Each week: a $50k squad aimed at the week’s numbers.</div>
           </button>
         )}
         {onSleeper && (
