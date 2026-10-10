@@ -1,4 +1,4 @@
--- 0462: DFS BULLSEYE (v0.660.0). Spec: docs/dfs-bullseye.md.
+-- 0462: DFS BULLSEYE (v0.660.0, tie-breaker and sealed squads v0.660.1). Spec: docs/dfs-bullseye.md.
 --
 -- Founder: "we need to build a dfs-style version of bullseye." Chosen: an open
 -- weekly contest anyone signed in can enter (one leaderboard) AND a Bullseye
@@ -15,6 +15,43 @@ alter table league drop constraint if exists league_kind_check;
 alter table league add constraint league_kind_check check (kind in ('league', 'pod', 'weekly', 'dfs', 'bullseye'));
 -- One open contest per NFL week.
 create unique index if not exists league_bullseye_contest_week on league (season, contest_week) where kind = 'bullseye';
+
+-- THE TIE-BREAKER (v0.660.1). Founder: "the CPU picks one spot per team either
+-- WR or RB and sets a target … Distance from this spot target is used for tie
+-- breakers only and is known to the manager before they build their team."
+-- Each seat's spot and number are dealt from its own seed (dfsTiebreak in
+-- core/engine/dfsBullseye.ts); the worker stores the distance it landed at,
+-- and on an exact tie of ring totals puts the closer team 0.01 ahead in the
+-- finals, so every reader that compares finals settles it the same way.
+alter table matchup add column if not exists home_tb numeric;
+alter table matchup add column if not exists away_tb numeric;
+
+-- SEALED SQUADS (v0.660.1): "Opposing team picks need to be sealed." Any
+-- league member could read every seat's sleeper_lineup row directly (0108), and
+-- in the open contest every entrant is a member of one league. In a Bullseye
+-- contest league a member reads only their own seat's row; another seat's
+-- squad comes through dfs_bullseye_state, one player at a time, as each
+-- player's game locks.
+create or replace function _league_sealed(p_league uuid) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select coalesce((select (settings_json ->> 'dfs_bullseye')::boolean from league where id = p_league), false)
+$$;
+drop policy if exists lineup_read on sleeper_lineup;
+create policy lineup_read on sleeper_lineup
+  for select using (
+    is_admin()
+    or (is_league_member(league_id) and (
+      not _league_sealed(league_id)
+      or exists (select 1 from league_membership m where m.league_id = sleeper_lineup.league_id
+                   and m.sleeper_roster_id = sleeper_lineup.roster_id and m.app_user_id = auth.uid()))));
+
+-- Has this salary-board player's game locked (1 hour before his kickoff, 0093)?
+create or replace function _dfs_player_locked(p_season text, p_week int, p_slug text) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (select 1 from pod_salary ps join nfl_slate g on g.season = ps.season and g.week = ps.week and ps.team in (g.home, g.away)
+                  where ps.season = p_season and ps.week = p_week and ps.slug = p_slug
+                    and g.kickoff is not null and g.kickoff - interval '1 hour' <= now())
+$$;
 
 -- ── the squad's slots ───────────────────────────────────────────────────────
 -- The contest shape (QB·RB·RB·WR·WR·WR·TE·K·DST, 0092) with a NAME per slot,
@@ -209,8 +246,14 @@ begin
   if opp = me.sleeper_roster_id then opp := null; end if;
   started := coalesce(_week_first_lock(p_season, wk) <= now(), false);
   select starters_json into mine from sleeper_lineup where league_id = p_league and week = wk and roster_id = me.sleeper_roster_id;
-  if opp is not null and started then
-    select starters_json into theirs from sleeper_lineup where league_id = p_league and week = wk and roster_id = opp;
+  -- The opponent's squad, SEALED (v0.660.1): a player shows once his own
+  -- game has locked; the rest are their slot and nothing else.
+  if opp is not null then
+    select jsonb_agg(case when _dfs_player_locked(p_season, wk, e ->> 'player_slug') then e
+                          else jsonb_build_object('slot', e -> 'slot', 'sealed', true) end order by ord)
+      into theirs
+      from sleeper_lineup sl, jsonb_array_elements(sl.starters_json) with ordinality x(e, ord)
+     where sl.league_id = p_league and sl.week = wk and sl.roster_id = opp;
   end if;
   select * into st from matchup_state where matchup_id = m.id and game_window = 'wk';
   return jsonb_build_object('ok', true, 'on', true, 'kind', lg.kind, 'name', lg.name, 'week', wk, 'season', p_season,
@@ -219,7 +262,8 @@ begin
     'roster_id', me.sleeper_roster_id, 'team', me.team_name, 'started', started,
     'entry', mine,
     'matchup', case when m.id is null then null else jsonb_build_object('id', m.id, 'status', m.status,
-      'home', m.home_roster_id, 'away', m.away_roster_id, 'home_final', m.home_final, 'away_final', m.away_final) end,
+      'home', m.home_roster_id, 'away', m.away_roster_id, 'home_final', m.home_final, 'away_final', m.away_final,
+      'home_tb', m.home_tb, 'away_tb', m.away_tb) end,
     'opponent', case when opp is null then null else jsonb_build_object('roster_id', opp,
       'team', (select team_name from league_membership where league_id = p_league and sleeper_roster_id = opp limit 1),
       'entry', theirs) end,
@@ -243,7 +287,7 @@ begin
   if not started then return jsonb_build_object('ok', true, 'started', false, 'entries', n, 'rows', '[]'::jsonb); end if;
   with sc as (
     select m.home_roster_id as roster_id, lm.team_name, lm.app_user_id = auth.uid() as me,
-           coalesce(m.home_final, st.home_score, 0) as ring,
+           coalesce(m.home_final, st.home_score, 0) as ring, m.home_tb as tb,
            (select coalesce(sum((x ->> 'score')::numeric), 0) from jsonb_array_elements(coalesce(st.slot_scores, '[]'::jsonb)) x
              where x ->> 'side' = 'home') as points,
            m.status
@@ -252,9 +296,9 @@ begin
       left join matchup_state st on st.matchup_id = m.id and st.game_window = 'wk'
      where m.league_id = p_league and m.week = lg.contest_week
   ), ranked as (
-    select sc.*, rank() over (order by ring desc) as rank from sc
+    select sc.*, rank() over (order by ring desc, tb asc nulls last) as rank from sc
   )
-  select coalesce(jsonb_agg(to_jsonb(r) order by r.rank, r.team_name) filter (where r.rank <= greatest(1, least(coalesce(p_limit, 100), 500))), '[]'::jsonb),
+  select coalesce(jsonb_agg(to_jsonb(r) order by r.rank, r.tb nulls last, r.team_name) filter (where r.rank <= greatest(1, least(coalesce(p_limit, 100), 500))), '[]'::jsonb),
          (select to_jsonb(x) from ranked x where x.me limit 1)
     into rows, mine from ranked r;
   return jsonb_build_object('ok', true, 'started', true, 'entries', n, 'week', lg.contest_week, 'rows', rows, 'me', mine);
@@ -305,7 +349,7 @@ begin
   return jsonb_build_object('ok', true, 'variant', p_variant, 'radius', p_radius);
 end $$;
 
-revoke all on function _ensure_bullseye_contest(text, int), _contest_week(text), _week_first_lock(text, int) from public, anon, authenticated;
+revoke all on function _ensure_bullseye_contest(text, int), _contest_week(text), _week_first_lock(text, int), _dfs_player_locked(text, int, text) from public, anon, authenticated;
 revoke all on function bullseye_contest(text), join_bullseye_contest(text, text), save_bullseye_entry(uuid, int, jsonb, text),
   dfs_bullseye_state(uuid, int, text), bullseye_contest_board(uuid, int), set_bullseye_contest(int, text, int, text),
   set_dfs_bullseye(uuid, text, int) from public, anon;

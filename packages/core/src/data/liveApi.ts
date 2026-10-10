@@ -800,11 +800,15 @@ export interface DfsBullseyeState {
   variant?: DfsVariant; radius?: number; roster_id?: number | null; team?: string | null; started?: boolean;
   /** sleeper_lineup.starters_json — read it with dfsSlotsOf. */
   entry?: unknown;
-  matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null } | null;
+  matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null;
+    /** Tie-break distances (v0.660.1), stamped with the finals; lower wins a tie. */
+    home_tb?: number | null; away_tb?: number | null } | null;
+  /** SEALED (v0.660.1): their squad, one row per slot — a player shows once
+   *  his game has locked; until then the row is `{ slot, sealed: true }`. */
   opponent?: { roster_id: number; team: string | null; entry: unknown } | null;
   state?: { home: number; away: number; slots: DfsSlotScore[] } | null;
 }
-export interface BullseyeBoardRow { roster_id: number; team_name: string | null; me: boolean; ring: number; points: number; status: string; rank: number }
+export interface BullseyeBoardRow { roster_id: number; team_name: string | null; me: boolean; ring: number; points: number; status: string; rank: number; tb?: number | null }
 async function rpcOk<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await (await client()).rpc(fn, args);
   if (error) return { ok: false, error: friendlyError(error) } as T;

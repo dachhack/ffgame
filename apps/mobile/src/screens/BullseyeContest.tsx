@@ -10,7 +10,7 @@ import {
   podSalaries, weekGameLocks, isAdmin, friendlyError,
   type BullseyeContest, type DfsBullseyeState, type PodSalaryRow, type BullseyeBoardRow, type DfsVariant,
 } from '@drip/core/data/liveApi';
-import { DFS_SLOTS, DFS_CAP, DFS_MIN_SALARY, dfsCard, dfsSlotsOf, dfsSlotLabel, projectedRing, dfsBullseyeConfigOf, type DfsSlot } from '@drip/core/engine/dfsBullseye';
+import { DFS_SLOTS, DFS_CAP, DFS_MIN_SALARY, dfsCard, dfsSlotsOf, dfsSlotLabel, projectedRing, dfsBullseyeConfigOf, dfsTiebreak, tiebreakDistance, sealedSquadOf, type DfsSlot } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -137,6 +137,14 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
   const theirRing = st.opponent && st.state ? (mySide === 'home' ? st.state.away : st.state.home) : null;
   const myPoints = live.reduce((s, r) => s + (r.score || 0), 0);
   const editable = st.matchup?.status !== 'final';
+  // THE TIE-BREAKER (v0.660.1): my own spot and number, known before I build.
+  const myTb = st.roster_id != null && st.week != null ? dfsTiebreak(leagueId, st.week, st.roster_id, theCard) : null;
+  const tbLive = myTb ? liveOf(myTb.slot) : undefined;
+  const myTbDist = st.matchup?.status === 'final'
+    ? (mySide === 'home' ? st.matchup.home_tb : st.matchup.away_tb) ?? null
+    : tbLive ? tiebreakDistance(tbLive.score, myTb!.target, cfg.radius) : null;
+  const tieBroken = st.matchup?.status === 'final' && st.opponent && myRing != null && theirRing != null && Math.abs(Number(myRing) - Number(theirRing)) < 0.0101 && Number(myRing) !== Number(theirRing);
+  const theirSquad = st.opponent ? sealedSquadOf(st.opponent.entry) : [];
 
   const save = async () => {
     if (st.week == null) return;
@@ -182,6 +190,11 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
             </View>
           )}
           <Text style={{ fontSize: 12, color: t.dim, lineHeight: 17 }}>{howTo(cfg.variant, cfg.radius)}</Text>
+          {myTb && (
+            <Mono size={9.5} tone="dim" style={{ borderTopWidth: 1, borderTopColor: t.bd, paddingTop: 6, lineHeight: 14 }}>
+              {`⚖️ TIE-BREAKER: your ${dfsSlotLabel(myTb.slot)} aims at ${myTb.target} — it only counts if you tie, and closer wins.${myTbDist != null ? ` Now ${myTbDist.toFixed(1)} off.` : ''}`}
+            </Mono>
+          )}
         </Card>
 
         {st.started && (
@@ -190,6 +203,7 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
             <Display size={24}>{myRing != null ? Number(myRing).toFixed(1) : '—'}</Display>
             <Mono size={9} tone="faint">{`${myPoints.toFixed(1)} pts${isTotal ? ` · ${Math.abs(myPoints - theCard.total).toFixed(1)} off ${theCard.total}` : ''}`}</Mono>
             {st.opponent && <Mono size={9} tone="dim">{`vs ${st.opponent.team ?? 'opponent'} · ${theirRing != null ? Number(theirRing).toFixed(1) : '—'}`}</Mono>}
+            {tieBroken && <Mono size={8.5} tone="faint" style={{ width: '100%' }}>{`Tied on rings — settled by the tie-breaker (${myTbDist?.toFixed(1) ?? '—'} off vs ${(mySide === 'home' ? st.matchup!.away_tb : st.matchup!.home_tb)?.toFixed(1) ?? '—'} off).`}</Mono>}
           </Card>
         )}
 
@@ -211,6 +225,7 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
                 <View style={{ width: 52, alignItems: 'center', borderWidth: 1, borderColor: t.bd, borderRadius: 6, paddingVertical: 4 }}>
                   <Mono size={10} weight="700">{dfsSlotLabel(d.slot)}</Mono>
                   {!isTotal && <Mono size={12} tone="you" weight="700">{String(target)}</Mono>}
+                  {myTb?.slot === d.slot && <Mono size={8} tone="dim">{`⚖️ ${myTb.target}`}</Mono>}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   {p ? (
@@ -239,6 +254,24 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
           )}
           {note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'warn'} style={{ marginTop: 6 }}>{note}</Mono>}
         </Card>
+
+        {/* THEIR SQUAD, SEALED (v0.660.1): each player shows once his game locks. */}
+        {st.opponent && (
+          <Card style={{ gap: 0 }}>
+            <Mono size={9} tone="faint" weight="700" track={0.1} style={{ marginBottom: 6 }}>{`${(st.opponent.team ?? 'OPPONENT').toUpperCase()}’S SQUAD`}</Mono>
+            {theirSquad.map((r) => {
+              const lv = st.state?.slots?.find((x) => x.side !== mySide && x.slot === r.slot);
+              const p = r.slug ? bySlug.get(r.slug) : null;
+              return (
+                <View key={r.slot} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
+                  <Mono size={9.5} tone="faint" style={{ width: 40 }}>{dfsSlotLabel(r.slot)}</Mono>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, color: r.slug ? t.text : t.faint }}>{r.slug ? (p?.name ?? r.slug) : '🔒 sealed until his game locks'}</Text>
+                  <Mono size={10}>{lv ? lv.score.toFixed(1) : ''}</Mono>
+                </View>
+              );
+            })}
+          </Card>
+        )}
 
         {st.kind === 'bullseye' && <BullseyeLeaderboard leagueId={leagueId} />}
       </ScrollView>
@@ -294,7 +327,7 @@ export function BullseyeLeaderboard({ leagueId }: { leagueId: string }) {
         <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
           <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 28 }}>{String(r.rank)}</Mono>
           <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
-          <Mono size={9} tone="faint">{`${Number(r.points).toFixed(1)} pts`}</Mono>
+          <Mono size={9} tone="faint">{`${Number(r.points).toFixed(1)} pts${r.tb != null && (b.rows ?? []).some((o) => o.roster_id !== r.roster_id && Number(o.ring) === Number(r.ring)) ? ` · ⚖️${Number(r.tb).toFixed(1)}` : ''}`}</Mono>
           <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 52, textAlign: 'right' }}>{Number(r.ring).toFixed(1)}</Mono>
         </View>
       ))}

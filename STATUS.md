@@ -26,6 +26,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 > - New: the Weekly Bullseye. Build a $50,000 squad aimed at this week's numbers — a target for every slot, or one team total — and see how close you land against everyone on one leaderboard. Join from your leagues page on the web or in the app.
 > - Salary-cap leagues can play Bullseye too: the commissioner picks slot targets or a team total, and each week's head-to-head goes to whoever lands closer.
+> - Ties are settled by your own tie-breaker: the app gives your team one RB or WR spot and a number before you build, and if you tie, whoever lands closer to theirs wins. Opponents' squads stay sealed — each player shows only once his game locks.
 
 Founder: "we need to build a dfs-style version of bullseye." Chosen: both
 formats, the variant picked per contest, the $50k cap kept, web and phone.
@@ -51,8 +52,17 @@ the squad screen (builder → live darts → standings), Bullseye on the DFS
 create form and a commissioner switch on the squad screen. Phone: the first
 salary-cap builder in the app — contest banner on Your leagues, squad screen,
 standings; a Bullseye salary-cap league opens to it. check:dfsbullseye, and server/test/dfs-bullseye.mjs drives the real stampFinals on baked week-1 plays.
-Migration and every RPC gate tested on a scratch Postgres; the screens were not
-exercised signed in.
+Tie-breaker + sealing (founder, same day): each seat is dealt one RB/WR spot
+and a number near that slot's card target (dfsTiebreak), shown to its manager
+before building; the distance is stamped as matchup.home_tb/away_tb and an
+exact ring tie puts the closer team 0.01 ahead in its final (every reader
+compares finals), the open board ranks ring then tie-break. Sealed: a Bullseye
+league's sleeper_lineup is readable only by its own seat (it was readable by
+every member — in the open contest, everyone); the opponent's squad comes
+through dfs_bullseye_state player by player as each locks; the scorer writes
+no row for a player still to kick off. Migration and every RPC gate (and the
+sealed policy, as a signed-in user) tested on a scratch Postgres; the screens
+were not exercised signed in.
 
 ### v0.659.1 — a full IR takes a swap
 

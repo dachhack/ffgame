@@ -74,3 +74,38 @@ week's first kickoff. Lock's drip auto-lineup skips these leagues.
   first lock. Default SLOTS, radius 10.
 - Commissioner: `set_dfs_bullseye(league, variant|null, radius)` — off, SLOTS
   or TOTAL; refused while any of the league's matchups is live.
+
+## 7. The tie-breaker (v0.660.1)
+
+Founder: "the CPU picks one spot per team either WR or RB and sets a target
+(keeping in mind the overall target and typical contribution of the spot) for
+that spot for that team … Distance from this spot target is used for tie
+breakers only and is known to the manager before they build their team."
+
+- Per (league, week, seat), seeded: one of RB1 RB2 WR1 WR2 WR3, and a number
+  1–4 points either side of that slot's own card target (the card's targets
+  are each slot's share of the total, in both variants), never below 3. So
+  one team may have RB2 → 12 while its opponent has WR1 → 7.
+- Shown to its own manager on the squad screen from the start (⚖️ beside the
+  slot), with the live distance once that player has played.
+- The distance it lands at is stored with the finals (`home_tb`/`away_tb`).
+  A zero there is the target plus the radius. Lower wins.
+- Head to head: when two teams' ring totals are equal, the closer tie-break is
+  put 0.01 ahead in its final, so every standings, playoff and report reader —
+  all of which compare finals — settles it the same way. An equal tie-break
+  leaves the tie standing.
+- The open contest's standings rank ring total, then tie-break distance.
+
+## 8. Sealed squads (v0.660.1)
+
+"Opposing team picks need to be sealed."
+
+- In a Bullseye contest league a member reads only their own seat's squad
+  (`sleeper_lineup` policy); before this any league member could read every
+  seat's row — in the open contest, everyone's.
+- An opponent's squad comes through `dfs_bullseye_state` one player at a time:
+  each shows once his own game locks (an hour before kickoff), the rest are
+  their slot and 🔒.
+- The scorer writes no row, and scores no zero, for a player whose game hasn't
+  kicked off yet, so `matchup_state` (which both sides of a matchup read)
+  never names him early.

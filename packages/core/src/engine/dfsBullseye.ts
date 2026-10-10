@@ -64,6 +64,33 @@ export function dfsSlotsOf(starters: unknown): Record<DfsSlot, string | null> {
   return out;
 }
 
+// ── THE TIE-BREAKER (v0.660.1) ────────────────────────────────────────────
+// Founder: "the CPU picks one spot per team either WR or RB and sets a target
+// (keeping in mind the overall target and typical contribution of the spot)
+// for that spot for that team … Distance from this spot target is used for
+// tie breakers only and is known to the manager before they build their team."
+//
+// Per (league, week, ROSTER): one of RB1 RB2 WR1 WR2 WR3, and a number near
+// that slot's own card target — the card's targets are its share of the total
+// in either variant — moved 1–4 points either way, so it is a real
+// prediction ("12", not the card's 10) and two teams rarely share one.
+export const TIEBREAK_SLOTS: DfsSlot[] = ['RB1', 'RB2', 'WR1', 'WR2', 'WR3'];
+export interface DfsTiebreak { slot: DfsSlot; target: number }
+export function dfsTiebreak(leagueId: string, week: number, rosterId: number, card: BullseyeCard): DfsTiebreak {
+  const r = mulberry(`tiebreak|${leagueId}|${week}|${rosterId}`);
+  const slot = TIEBREAK_SLOTS[Math.floor(r() * TIEBREAK_SLOTS.length) % TIEBREAK_SLOTS.length];
+  const mag = 1 + Math.floor(r() * 4);
+  const sign = r() < 0.5 ? -1 : 1;
+  const base = card.targets[slot] ?? 10;
+  return { slot, target: Math.max(3, base + sign * mag) };
+}
+/** How far the tie-break spot landed — LOWER wins a tie. A zero (or an empty
+ *  spot) is the whole target plus the radius: the dart's own zero penalty. */
+export function tiebreakDistance(points: number | null | undefined, target: number, radius: number): number {
+  if (points == null || !Number.isFinite(points) || Math.abs(points) < 1e-9) return Math.round((target + radius) * 10) / 10;
+  return Math.round(Math.abs(points - target) * 10) / 10;
+}
+
 /** Score a week's squads under the card. `pointsOf` is the player's real
  *  points for the week (the worker: classicPoints under stock PPR). Rows are
  *  the classic 'wk' window so they reveal with the classic rule. A SOLO row
@@ -73,23 +100,51 @@ export function scoreDfsBullseye(
   squads: { home: Record<string, string | null>; away: Record<string, string | null> },
   card: BullseyeCard, cfg: BullseyeConfig,
   pointsOf: (slug: string, slot: string) => number,
-): ClassicResult {
-  const rows: ClassicSlotScore[] = [];
-  const sideTotal = { home: 0, away: 0 };
+  opts: {
+    /** SEALED (v0.660.1): a player whose game hasn't started yet. His row is
+     *  not written (an opponent must not learn who he is) and he is neither
+     *  scored nor penalised as a zero until it has. Omitted at the final. */
+    pending?: (slug: string) => boolean;
+    /** Each side's tie-break spot (dfsTiebreak). */
+    tiebreak?: { home?: DfsTiebreak | null; away?: DfsTiebreak | null };
+  } = {},
+): ClassicResult & { tiebreak: { home: number | null; away: number | null } } {
+  const pending = opts.pending ?? (() => false);
+  const sideRows = { home: [] as ClassicSlotScore[], away: [] as ClassicSlotScore[] };
+  const counted = { home: 0, away: 0 };
+  const tb = { home: null as number | null, away: null as number | null };
   for (const side of ['home', 'away'] as const) {
+    const t = opts.tiebreak?.[side] ?? null;
+    let tbDone = false;
     for (const d of DFS_SLOTS) {
       const slug = squads[side][d.slot] ?? null;
-      if (!slug) continue;   // an empty slot is a zero — applyBullseye penalises the missing row
+      if (slug && pending(slug)) continue;   // sealed and unscored until his game starts
+      counted[side]++;
+      if (!slug) continue;                   // an empty slot is a zero — the penalty finds the missing row
       const score = Math.round(pointsOf(slug, d.slot) * 10) / 10;
-      sideTotal[side] += score;
-      rows.push({ win: 'wk', side, slot: d.slot, slug, metric: null, score });
+      sideRows[side].push({ win: 'wk', side, slot: d.slot, slug, metric: null, score });
+      if (t && t.slot === d.slot) { tb[side] = tiebreakDistance(score, t.target, cfg.radius); tbDone = true; }
     }
+    // The tie-break spot left empty is a zero; one still to play has no distance yet.
+    if (t && !tbDone && !(squads[side][t.slot] && pending(squads[side][t.slot]!))) tb[side] = tiebreakDistance(0, t.target, cfg.radius);
   }
-  const raw: ClassicResult = {
-    home: sideTotal.home, away: sideTotal.away, slots: rows,
-    states: [{ window: 'wk', home: sideTotal.home, away: sideTotal.away }],
+  // Each side is darted over the spots it has actually played: a player still
+  // to kick off is not a zero yet. At the final nothing is pending, and this
+  // is exactly applyBullseye over all nine.
+  const dartSide = (side: 'home' | 'away') => {
+    // applyBullseye darts the 'home' rows; each side is run through it as home.
+    const rows = sideRows[side].map((r) => ({ ...r, side: 'home' as const }));
+    const pts = rows.reduce((s, r) => s + r.score, 0);
+    const res = applyBullseye({ home: pts, away: 0, slots: rows, states: [{ window: 'wk', home: pts, away: 0 }] }, { cfg, card }, Math.max(1, counted[side]));
+    return { ring: res.home, rows: res.slots.filter((r) => r.side === 'home').map((r) => ({ ...r, side })), summary: res.bullseye?.home };
   };
-  return applyBullseye(raw, { cfg, card }, DFS_SLOTS.length);
+  const h = dartSide('home'), a = dartSide('away');
+  return {
+    home: h.ring, away: a.ring, slots: [...h.rows, ...a.rows],
+    states: [{ window: 'wk', home: h.ring, away: a.ring }],
+    ...(h.summary && a.summary ? { bullseye: { variant: cfg.variant, radius: cfg.radius, home: h.summary, away: a.summary } } : {}),
+    tiebreak: tb,
+  };
 }
 
 export interface BoardPlayer { slug: string; pos: string; salary: number; proj: number; name?: string; team?: string }
@@ -142,4 +197,16 @@ function mulberry(seed: string): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** An opponent's squad as dfs_bullseye_state hands it over (v0.660.1): per
+ *  slot, the player once his game has locked, else null (sealed). */
+export function sealedSquadOf(entry: unknown): { slot: DfsSlot; slug: string | null }[] {
+  const rows = Array.isArray(entry) ? entry as { slot?: unknown; player_slug?: unknown; sealed?: unknown }[] : [];
+  const bySlot = new Map<string, string | null>();
+  for (const r of rows) {
+    if (typeof r?.slot !== 'string') continue;
+    bySlot.set(r.slot, r.sealed ? null : (typeof r.player_slug === 'string' ? r.player_slug : null));
+  }
+  return DFS_SLOT_NAMES.map((slot) => ({ slot, slug: bySlot.get(slot) ?? null }));
 }

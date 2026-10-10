@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import {
   DFS_SLOTS, DFS_SLOT_NAMES, DFS_CAP, dfsCard, dfsSlotsOf, scoreDfsBullseye, aimBuild, dfsBullseyeConfigOf, squadSalary,
+  dfsTiebreak, tiebreakDistance, TIEBREAK_SLOTS,
 } from '../packages/core/src/engine/dfsBullseye.ts';
 
 let fails = 0;
@@ -70,6 +71,24 @@ const offBy = DFS_SLOT_NAMES.reduce((sum, s) => sum + Math.abs((board.find((b) =
 const greedy = DFS_SLOT_NAMES.reduce((sum, s) => sum + Math.abs(Math.max(...board.filter((b) => b.pos === DFS_SLOTS.find((d) => d.slot === s).pos[0]).map((b) => b.proj)) - target.targets[s]), 0);
 ok('build: aims closer than taking the biggest projection', offBy < greedy, { offBy, greedy });
 ok('build: the same seed builds the same squad', JSON.stringify(aimBuild(board, target, 'seed-1')) === JSON.stringify(built));
+
+// ── the tie-breaker (v0.660.1) ──────────────────────────────────────────────
+const tbs = [1, 2, 3, 4, 5, 6, 7, 8].map((rid) => ({ rid, tb: dfsTiebreak('league-a', 6, rid, card) }));
+ok('tiebreak: always an RB or WR spot', tbs.every(({ tb }) => TIEBREAK_SLOTS.includes(tb.slot)), tbs);
+ok('tiebreak: within 1–4 of that spot\'s card target, never on it', tbs.every(({ tb }) => { const d = Math.abs(tb.target - card.targets[tb.slot]); return (d >= 1 && d <= 4) || tb.target === 3; }));
+ok('tiebreak: every team its own (not all the same spot and number)', new Set(tbs.map(({ tb }) => `${tb.slot}:${tb.target}`)).size > 1);
+ok('tiebreak: dealt the same every time', JSON.stringify(dfsTiebreak('league-a', 6, 3, card)) === JSON.stringify(tbs[2].tb));
+ok('tiebreak distance: |points − target|', tiebreakDistance(13.5, 12, 10) === 1.5);
+ok('tiebreak distance: a zero is the target plus the radius', tiebreakDistance(0, 12, 10) === 22);
+const tbA = { slot: 'RB1', target: 12 };
+const scored = scoreDfsBullseye({ home: squad, away: squad }, fixed, slots, (slug) => (slug === 'RB1-guy' ? 13 : 10), { tiebreak: { home: tbA, away: { slot: 'WR2', target: 9 } } });
+ok('tiebreak: each side measured on its own spot', scored.tiebreak.home === 1 && scored.tiebreak.away === 1, scored.tiebreak);
+ok('tiebreak: it does not change the ring score', scored.home === scoreDfsBullseye({ home: squad, away: squad }, fixed, slots, (slug) => (slug === 'RB1-guy' ? 13 : 10)).home);
+
+// ── sealed (v0.660.1): a player still to kick off is neither written nor a zero ─
+const live = scoreDfsBullseye({ home: squad, away: squad }, fixed, slots, () => 10, { pending: (slug) => slug === 'K-guy' || slug === 'DEF-guy' });
+ok('sealed: no row for a player whose game hasn\'t started', !live.slots.some((r) => r.slug === 'K-guy' || r.slug === 'DEF-guy'));
+ok('sealed: and no zero penalty for him either', live.home === 7 * 20, live.home);
 
 // ── the wiring ──────────────────────────────────────────────────────────────
 const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');

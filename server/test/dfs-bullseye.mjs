@@ -13,7 +13,7 @@ import { stampFinals } from '../src/resolve.js';
 import { injectWeek, makePlayer } from '../src/engine.js';
 import { slugMeta } from '../../packages/core/src/data/slugMeta.ts';
 import { classicPoints } from '../../packages/core/src/engine/classic.ts';
-import { dfsCard, dfsSlotsOf, dfsSlotPos, scoreDfsBullseye, dfsBullseyeConfigOf, DFS_SLOT_NAMES } from '../../packages/core/src/engine/dfsBullseye.ts';
+import { dfsCard, dfsSlotsOf, dfsSlotPos, scoreDfsBullseye, dfsBullseyeConfigOf, DFS_SLOT_NAMES, dfsTiebreak, tiebreakDistance } from '../../packages/core/src/engine/dfsBullseye.ts';
 
 const WEEK = 1;
 function makeFakeDb(tables) {
@@ -75,24 +75,31 @@ const TABLES = {
     { id: 'OPEN', lineup_policy: 'empty', settings_json: SET },
     { id: 'PRIV', lineup_policy: 'best_lineup', settings_json: { ...SET, bullseye: 'total' } },
     { id: 'OLD', lineup_policy: 'empty', settings_json: SET },
+    { id: 'TIE', lineup_policy: 'best_lineup', settings_json: SET },
   ],
   league_membership: [
     { league_id: 'OPEN', sleeper_roster_id: 1, app_user_id: 'u1', enrolled: true, controller: 'human' },
     { league_id: 'PRIV', sleeper_roster_id: 1, app_user_id: 'u1', enrolled: true, controller: 'human' },
     { league_id: 'PRIV', sleeper_roster_id: 2, app_user_id: null, enrolled: false, controller: 'ai' },
     { league_id: 'OLD', sleeper_roster_id: 1, app_user_id: 'u1', enrolled: true, controller: 'human' },
+    { league_id: 'TIE', sleeper_roster_id: 1, app_user_id: 'u1', enrolled: true, controller: 'human' },
+    { league_id: 'TIE', sleeper_roster_id: 2, app_user_id: 'u2', enrolled: true, controller: 'human' },
   ],
   sleeper_lineup: [
     { league_id: 'OPEN', week: WEEK, roster_id: 1, starters_json: named(A) },
     { league_id: 'PRIV', week: WEEK, roster_id: 1, starters_json: named(A) },
     { league_id: 'PRIV', week: WEEK, roster_id: 2, starters_json: named(B) },
     { league_id: 'OLD', week: WEEK, roster_id: 1, starters_json: legacyA },
+    // THE SAME SQUAD on both sides: the rings must tie, so the tie-breaker decides.
+    { league_id: 'TIE', week: WEEK, roster_id: 1, starters_json: named(A) },
+    { league_id: 'TIE', week: WEEK, roster_id: 2, starters_json: named(A) },
   ],
   sealed_pick: [], applied_state: [], player_flag: [], seat_agent: [], player_adjustment: [],
   matchup: [
     { id: 'open1', league_id: 'OPEN', week: WEEK, home_roster_id: 1, away_roster_id: 1, status: 'final', home_final: null, away_final: null },
     { id: 'priv1', league_id: 'PRIV', week: WEEK, home_roster_id: 1, away_roster_id: 2, status: 'final', home_final: null, away_final: null },
     { id: 'old1', league_id: 'OLD', week: WEEK, home_roster_id: 1, away_roster_id: 1, status: 'final', home_final: null, away_final: null },
+    { id: 'tie1', league_id: 'TIE', week: WEEK, home_roster_id: 1, away_roster_id: 2, status: 'final', home_final: null, away_final: null },
   ],
 };
 const fake = makeFakeDb(TABLES);
@@ -110,7 +117,7 @@ const expectOf = (leagueId, home, away, settings) =>
   scoreDfsBullseye({ home: dfsSlotsOf(named(home)), away: dfsSlotsOf(named(away)) }, dfsCard(leagueId, WEEK), dfsBullseyeConfigOf(settings), pts);
 
 const stamped = await stampFinals(WEEK, playerIndex, { playsInjected: true });
-ok('stampFinals stamps all three rows', stamped === 3, stamped);
+ok('stampFinals stamps all four rows', stamped === 4, stamped);
 
 const raw = Object.values(A).reduce((s, slug, i) => s + pts(slug, DFS_SLOT_NAMES[i]), 0);
 ok('the squad really scored (baked week-1 points)', raw > 20, raw);
@@ -126,6 +133,23 @@ ok('no drip coin is banked for a Bullseye contest', fake.rpc.filter((c) => c.nam
 
 const eOld = expectOf('OLD', A, A, SET);
 ok('a numbered (save_pod_entry) squad scores like the named one', M('old1').home_final === Math.round(eOld.home * 10) / 10, [M('old1').home_final, eOld.home]);
+
+// ── THE TIE-BREAKER (v0.660.1): identical squads tie on rings; the seat whose
+// own tie-break spot landed closer is put 0.01 ahead, and both distances land.
+const tieCard = dfsCard('TIE', WEEK);
+const tb1 = dfsTiebreak('TIE', WEEK, 1, tieCard), tb2 = dfsTiebreak('TIE', WEEK, 2, tieCard);
+const d1 = tiebreakDistance(pts(A[tb1.slot], tb1.slot), tb1.target, 10), d2 = tiebreakDistance(pts(A[tb2.slot], tb2.slot), tb2.target, 10);
+const ring = Math.round(expectOf('TIE', A, A, SET).home * 10) / 10;
+const T = M('tie1');
+ok('tie: both tie-break distances are stored', T.home_tb === d1 && T.away_tb === d2, [T.home_tb, T.away_tb, d1, d2]);
+if (d1 !== d2) {
+  const homeWins = d1 < d2;
+  ok('tie: the closer tie-break wins by exactly 0.01', homeWins
+    ? T.home_final === Math.round((ring + 0.01) * 100) / 100 && T.away_final === ring
+    : T.away_final === Math.round((ring + 0.01) * 100) / 100 && T.home_final === ring, [T.home_final, T.away_final, ring, d1, d2]);
+} else {
+  ok('tie: an equal tie-break leaves the tie standing', T.home_final === T.away_final);
+}
 
 console.log(`\n  open ${M('open1').home_final} · private ${M('priv1').home_final}–${M('priv1').away_final} · old ${M('old1').home_final}`);
 if (fails) { console.log(`\nFAIL — ${fails} assertion(s) failed.`); process.exit(1); }

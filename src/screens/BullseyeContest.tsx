@@ -16,7 +16,8 @@ import {
   type BullseyeContest, type DfsBullseyeState, type PodSalaryRow, type BullseyeBoardRow, type DfsVariant,
 } from '@drip/core/data/liveApi';
 import {
-  DFS_SLOTS, DFS_CAP, DFS_MIN_SALARY, dfsCard, dfsSlotsOf, dfsSlotLabel, projectedRing, dfsBullseyeConfigOf, type DfsSlot,
+  DFS_SLOTS, DFS_CAP, DFS_MIN_SALARY, dfsCard, dfsSlotsOf, dfsSlotLabel, projectedRing, dfsBullseyeConfigOf,
+  dfsTiebreak, tiebreakDistance, sealedSquadOf, type DfsSlot,
 } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
 import { PlayerImg } from '../app/ui';
@@ -176,6 +177,14 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
   const theirRing = st.opponent && st.state ? (mySide === 'home' ? st.state.away : st.state.home) : null;
   const myPoints = live.reduce((s, r) => s + (r.score || 0), 0);
   const editable = st.matchup?.status !== 'final';
+  // THE TIE-BREAKER (v0.660.1): my own spot and number, known before I build.
+  const myTb = st.roster_id != null && st.week != null ? dfsTiebreak(leagueId, st.week, st.roster_id, theCard) : null;
+  const tbLive = myTb ? liveOf(myTb.slot) : undefined;
+  const myTbDist = st.matchup?.status === 'final'
+    ? (mySide === 'home' ? st.matchup.home_tb : st.matchup.away_tb) ?? null
+    : tbLive ? tiebreakDistance(tbLive.score, myTb!.target, cfg.radius) : null;
+  const tieBroken = st.matchup?.status === 'final' && st.opponent && myRing != null && theirRing != null && Math.abs(Number(myRing) - Number(theirRing)) < 0.0101 && Number(myRing) !== Number(theirRing);
+  const theirSquad = st.opponent ? sealedSquadOf(st.opponent.entry) : [];
 
   const save = async () => {
     if (st.week == null) return;
@@ -223,6 +232,12 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
           </div>
         )}
         <div style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.45 }}>{howTo(cfg.variant, cfg.radius)}</div>
+        {myTb && (
+          <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
+            ⚖️ TIE-BREAKER: your <b style={{ color: 'var(--you)' }}>{dfsSlotLabel(myTb.slot)}</b> aims at <b style={{ color: 'var(--you)' }}>{myTb.target}</b> — it only counts if you tie, and closer wins.
+            {myTbDist != null && <span>{` Now ${myTbDist.toFixed(1)} off.`}</span>}
+          </div>
+        )}
       </div>
 
       {/* the score, once the week is on */}
@@ -233,6 +248,9 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
           <span className="mono" style={small}>{`${myPoints.toFixed(1)} pts${isTotal ? ` · target ${theCard.total} · ${Math.abs(myPoints - theCard.total).toFixed(1)} off` : ''}`}</span>
           {st.opponent && (
             <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`vs ${st.opponent.team ?? 'opponent'} · ${theirRing != null ? Number(theirRing).toFixed(1) : '—'}`}</span>
+          )}
+          {tieBroken && (
+            <span className="mono" style={{ ...small, flexBasis: '100%' }}>{`Tied on rings — settled by the tie-breaker (${myTbDist?.toFixed(1) ?? '—'} off vs ${(mySide === 'home' ? st.matchup!.away_tb : st.matchup!.home_tb)?.toFixed(1) ?? '—'} off).`}</span>
           )}
         </div>
       )}
@@ -257,6 +275,7 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
                 style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 4px', cursor: editable && !isLocked ? 'pointer' : 'default', color: 'var(--text)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700 }}>{dfsSlotLabel(d.slot)}</div>
                 {!isTotal && <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--you)' }}>{target}</div>}
+                {myTb?.slot === d.slot && <div title="tie-breaker" style={{ fontSize: 9, color: 'var(--dim)' }}>{`⚖️ ${myTb.target}`}</div>}
               </button>
               {p ? (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
@@ -291,6 +310,24 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
           </div>
         )}
       </div>
+
+      {/* THEIR SQUAD, SEALED (v0.660.1): each player shows once his game locks. */}
+      {st.opponent && (
+        <div style={{ ...card, display: 'grid', gap: 2 }}>
+          <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 4 }}>{`${(st.opponent.team ?? 'OPPONENT').toUpperCase()}’S SQUAD`}</span>
+          {theirSquad.map((r) => {
+            const lv = st.state?.slots?.find((x) => x.side !== mySide && x.slot === r.slot);
+            const p = r.slug ? bySlug.get(r.slug) : null;
+            return (
+              <div key={r.slot} className="mono" style={{ display: 'grid', gridTemplateColumns: '52px minmax(0,1fr) 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
+                <span style={{ color: 'var(--faint)' }}>{dfsSlotLabel(r.slot)}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: r.slug ? 'var(--text)' : 'var(--faint)' }}>{r.slug ? (p?.name ?? r.slug) : '🔒 sealed until his game locks'}</span>
+                <span style={{ textAlign: 'right' }}>{lv ? lv.score.toFixed(1) : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {st.kind === 'bullseye' && <BullseyeLeaderboard leagueId={leagueId} />}
 
@@ -344,10 +381,10 @@ export function BullseyeLeaderboard({ leagueId }: { leagueId: string }) {
       <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>{`STANDINGS · ${b.entries ?? 0} ${b.entries === 1 ? 'ENTRY' : 'ENTRIES'}`}</span>
       {!b.started && <span className="mono" style={small}>Squads and scores show once the week’s first game locks.</span>}
       {(b.rows ?? []).map((r) => (
-        <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: '36px minmax(0,1fr) 70px 64px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
+        <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: '36px minmax(0,1fr) 110px 64px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
           <span>{r.rank}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
-          <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{`${Number(r.points).toFixed(1)} pts`}</span>
+          <span style={{ textAlign: 'right', color: 'var(--faint)' }} title={r.tb != null ? 'tie-break distance — lower wins a tie' : undefined}>{`${Number(r.points).toFixed(1)} pts${r.tb != null && (b.rows ?? []).some((o) => o.roster_id !== r.roster_id && Number(o.ring) === Number(r.ring)) ? ` · ⚖️${Number(r.tb).toFixed(1)}` : ''}`}</span>
           <span style={{ textAlign: 'right', fontWeight: 700 }}>{Number(r.ring).toFixed(1)}</span>
         </div>
       ))}
