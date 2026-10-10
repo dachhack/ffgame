@@ -11,6 +11,7 @@
 // Self-driving: any member's poll calls draft_tick when a clock is overdue or
 // the acting seat is auto. That's what lets a phone-only league draft with no
 // worker awake — the room advances as long as ANYONE has it open.
+import { useMySeatRule, seatRuleShows, SeatRuleBanner } from '../ui/seatRule';
 import { installSportMarketFor } from '@drip/core/sports/market';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -294,6 +295,9 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
   const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug)), [st?.picks]);
   const myRoster = team?.my_roster_id ?? null;
+  // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
+  const mySeatRule = useMySeatRule(leagueId, myRoster);
+  const [seatShowAll, setSeatShowAll] = useState(false);
   // DEVY SHARES (0387): who holds a graduate's right. A reserved player is
   // his holder's alone; the server refuses anyone else, this says so first.
   const [reserved, setReserved] = useState<Map<string, number>>(new Map());
@@ -360,9 +364,10 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && levelClassMatch(p, level, cls)
       && confMatch(p, conf)
-      && poolSearchMatch(p, needle));
+      && poolSearchMatch(p, needle)
+      && seatRuleShows(mySeatRule, seatShowAll, p, expMap[p.slug]));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken, tenure, expMap, level, cls, conf]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, showTaken, tenure, expMap, level, cls, conf, mySeatRule, seatShowAll]);
   // 0379: college filters where the pool has college players — class always,
   // NFL/CFB only where both kinds are in it.
   const poolKinds = useMemo(() => {
@@ -1003,6 +1008,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
       {/* PLAYERS — available list with ADP + projections */}
       {tab === 'players' && (
         <Card>
+          <SeatRuleBanner rule={mySeatRule} showAll={seatShowAll} onToggle={() => setSeatShowAll((v) => !v)} />
           <TextInput value={q} onChangeText={setQ} placeholder="Search players, teams or schools…" placeholderTextColor={t.faint}
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: t.text, backgroundColor: t.bg, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}

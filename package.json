@@ -78,6 +78,7 @@
     "check:widgetrender": "node scripts/check-widget-render.mjs",
     "check:bye": "tsx scripts/check-bye.mjs",
     "check:devroom": "tsx scripts/check-dev-room.mjs",
+    "check:seatrules": "tsx scripts/check-seat-rules.mjs",
     "check:themes": "tsx scripts/check-themes.mjs",
     "check:publicapi": "node scripts/check-public-api.mjs",
     "check:tradegrade": "tsx scripts/check-trade-grade.mjs",

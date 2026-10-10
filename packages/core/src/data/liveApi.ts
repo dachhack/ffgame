@@ -3913,6 +3913,18 @@ export const setLeaguePositionAccess = (leagueId: string, positions: string[]) =
     p_league_id: leagueId, p_positions: positions,
   });
 
+/** Seat rules (0460): who each team may draft and pick up. Read by any
+ *  member; set by the commissioner at any time (null / {} clears). */
+export const seatPlayerRules = (leagueId: string) =>
+  rpc<{ ok: boolean; error?: string; rules?: import('./seatRules').SeatRule[];
+    /** Every seat in the league; `mine` is the caller's (null for a seatless commissioner). */
+    seats?: { roster_id: number; team: string }[]; mine?: number | null }>('seat_player_rules', { p_league_id: leagueId });
+export const setSeatPlayerRule = (leagueId: string, rosterId: number,
+  rule: { positions?: string[]; teams?: string[]; teams_label?: string | null; min_exp?: number | null; max_exp?: number | null } | null) =>
+  rpc<{ ok: boolean; error?: string; rule?: string; cleared?: boolean }>('set_seat_player_rule', {
+    p_league_id: leagueId, p_roster_id: rosterId, p_rule: rule,
+  });
+
 /** Commissioner (0171, pre-draft): allowable-player filter for the pool —
  *  team whitelist and/or tenure window. Null/empty clears. */
 export const setLeaguePoolFilter = (leagueId: string, filter: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null) =>
