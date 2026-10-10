@@ -7,13 +7,18 @@ import { makePlayer, injectWeek, EMPTY } from '../src/engine.js';
 import { resolveSlot, windowShield, defEarnScore, defSuppressScore } from '../../packages/core/src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve.ts';
 import { clutchOffers, RIVALRY_SIPHON } from '../../packages/core/src/engine/matchup.ts';
+import { coinBreakdown, WEEKLY_STIPEND, WINDOW_MVP_COIN_PER_SLOT } from '../../packages/core/src/engine/scoringRules.ts';
 
 const WEEK = 1;
 const w = JSON.parse(readFileSync(new URL(`../../public/pbp/w${WEEK}.json`, import.meta.url)));
 injectWeek(WEEK, w.pbp, w.points);
 
 const P = (slug, pos, team) => makePlayer(slug, pos, team);
-const ok = (label, cond) => console.log(`${cond ? '✓' : '✗ FAIL'}  ${label}`);
+// Counts failures and exits non-zero at the end (v0.660.2). It used to only
+// print, so `npm test` passed with a ✗ FAIL in its log — which is how the
+// stale coin assertion below sat failing unnoticed.
+let fails = 0;
+const ok = (label, cond) => { console.log(`${cond ? '✓' : '✗ FAIL'}  ${label}`); if (!cond) fails++; };
 
 // ── 1. UNDERDOG ──────────────────────────────────────────────────────────────
 // An underdog trailing a strong opponent should surface ×1.5 comeback-boosted
@@ -61,8 +66,19 @@ for (const s of raw.slots) slotSum[s.side] += s.score;
 console.log(`\nWINDOW BATTLE: state home ${st.home} / away ${st.away} · slot-sum home ${slotSum.home.toFixed(1)} / away ${slotSum.away.toFixed(1)}`);
 const bonusApplied = Math.abs((st.home - slotSum.home)) >= 4.9 || Math.abs((st.away - slotSum.away)) >= 4.9;
 ok('window-win bonus (+5) baked into the winning window state', bonusApplied);
-console.log(`coin: home ${raw.coin.home} / away ${raw.coin.away} (includes window MVP ◈5/slot + 50 stipend + unopposed/notes)`);
-ok('coin totals are positive (stipend + MVP + notes)', raw.coin.home > 50 && raw.coin.away > 50);
+// THE COIN (v0.660.2). This used to assert both sides banked MORE THAN 50 —
+// the weekly stipend — on Week-1 plays. But the stipend is zero in week 1 by
+// rule ("the season opens on the commissioner's seed budget only",
+// scoringRules.ts WEEKLY_STIPEND / coinBreakdown), the same rule the wallet
+// and the earnings modal follow, so the engine was right and the assertion
+// stale. What the economy actually promises is asserted instead.
+console.log(`coin: home ${raw.coin.home} / away ${raw.coin.away} (week ${WEEK}: no stipend; window MVP ◈${WINDOW_MVP_COIN_PER_SLOT}/slot + unopposed/notes)`);
+ok('no stipend in week 1, the full stipend from week 2', coinBreakdown([], 1).stipend === 0 && coinBreakdown([], 2).stipend === WEEKLY_STIPEND);
+ok('both sides earn coin from their slots (notes / bounties)', raw.coin.home > 0 && raw.coin.away > 0);
+const mvpSlot = [...raw.slots].sort((a, b) => b.score - a.score)[0];
+const mvpOther = mvpSlot.side === 'home' ? 'away' : 'home';
+ok(`the MVP side (${mvpSlot.side}) banks the window MVP bounty and out-earns the other`,
+  raw.coin[mvpSlot.side] >= WINDOW_MVP_COIN_PER_SLOT * home.length && raw.coin[mvpSlot.side] > raw.coin[mvpOther]);
 
 // ── 4. DEF EARN DRIP vs MARSHAL (distinct identities) ────────────────────────
 // A splashy DST on `earn` should out-score the same DST on `marshal` (earn drips,
@@ -236,4 +252,5 @@ const cwLive = resolveLiveMatchup(cwHome2, cwAway2, WEEK, {}, { home: { clutchCo
 console.log(`CLUTCH LIVE: counter-wipe home ${cwBase2.home} → ${cwLive.home} (nuke at ${cwNuke?.clock})`);
 ok('clutch Counter-Wipe negates the nuke through the live resolver', cwLive.home > cwBase2.home);
 
+if (fails) { console.log(`\n${fails} ASSERTION(S) FAILED.`); process.exit(1); }
 console.log('\nDONE.');

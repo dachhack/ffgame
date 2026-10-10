@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.660.1 — The coin test that sat failing, fixed (and the test now fails loudly)
+
+> - Behind the scenes: a long-standing failing check on weekly coin earnings is fixed. Nothing changes in the app.
+
+- `server/test/h2h-verify.mjs` asserted both sides banked over ◈50 (the weekly
+  stipend) on Week-1 plays. The stipend is zero in week 1 by rule
+  (scoringRules.ts `coinBreakdown`), so the engine was right and the assertion
+  stale. It now checks no stipend in week 1 and the full one from week 2, coin
+  on both sides, and the MVP side banking the window MVP bounty.
+- Its `ok()` only printed, so `npm test` passed with a ✗ FAIL in the log. It
+  now counts failures and exits 1.
+
 ### v0.660.0 — DFS Bullseye: the weekly contest, and Bullseye for salary-cap leagues
 
 > - New: the Weekly Bullseye. Build a $50,000 squad aimed at this week's numbers — a target for every slot, or one team total — and see how close you land against everyone on one leaderboard. Join from your leagues page on the web or in the app.
