@@ -14,6 +14,8 @@
 --
 -- What each section answers:
 --   1. is the table alive, and how stale is it
+--  1b. the same, per feed: did the NFL poll and the college poll each run,
+--      and did this week's conference reports land
 --   2. who decided the designations standing right now
 --   3. every player in a league's POOL carrying one — deliberately the same
 --      population 0333 discounts (it joins league_pool too), so this is the
@@ -32,6 +34,28 @@ select count(*)                                   as designations,
        count(*) filter (where status = 'D')       as doubtful,
        count(*) filter (where status = 'Q')       as questionable
 from injury_status;
+
+-- ── 1b. freshness per feed ──────────────────────────────────────────────────
+-- Section 1's last_poll is the newest row in the whole table, so a live NFL
+-- poll can hide a college poll that stopped (or the reverse). Each poll stamps
+-- updated_at on every row it writes, so last_write per feed is that poll's
+-- last successful run. newest_report is the newest designation_date the feed
+-- carried: for 'conf' rows it is when the conference posted the report, so it
+-- says whether this week's reports reached us, not just that the poll ran.
+-- College rows are only written for conference games, so expect 'conf' to go
+-- quiet midweek and land Wednesday to Saturday.
+select case when player_slug like 'c-%' then 'college'
+            when player_slug ~ '^(nba|wnba|nhl|mlb|epl|mls)-\d+$' then 'other sports'
+            else 'nfl' end                        as feed,
+       source,
+       count(*)                                   as rows,
+       count(*) filter (where status in ('O','IR')) as ruled_out,
+       max(updated_at)                            as last_write,
+       now() - max(updated_at)                    as age,
+       max(designation_date)                      as newest_report
+from injury_status
+group by 1, 2
+order by 1, rows desc;
 
 -- ── 2. who decided them ─────────────────────────────────────────────────────
 -- 'espn+sleeper' is agreement; a lopsided split toward one source, or no
