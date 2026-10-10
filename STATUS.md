@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.8 — no NFL filters on an all-college player pool
+
+> - When every player in the pool is a college player, the waiver list drops the NFL tenure and NFL team filters, and the draft room drops ROOKIES.
+
+Founder, with the Devy Test 1 waivers on a phone: "the tenure and NFL team
+filter isn't needed for all college leagues". Where the pool holds only
+college players (`poolKinds.college && !poolKinds.both`), the wire hides the
+tenure bands and the NFL-team picker (web) / ALL NFL + team chips (app), and
+the draft room hides 🌱 ROOKIES (NFL years). SHOW OWNED stays. Mixed pools
+(NFL + college) keep all of them. Web and app; JavaScript only.
+
 ### v0.656.7 — the waiver filters stay on one line
 
 > - The waiver list's filters are single lines that scroll sideways, like the draft room's, so the players show sooner on a phone.
