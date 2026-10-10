@@ -62,3 +62,19 @@ a { color: inherit; }
 }
 /* v0.638.1: a chip strip scrolls sideways and shows no bar — its › cap says there is more. */
 .chip-strip::-webkit-scrollbar { display: none; }
+/* THE ROSTER BUILDER'S ROW (v0.656.6, founder: "fix the line up of the
+   columns"): a grid, so every row shares one set of columns whatever its
+   position list, name or row number says. Wide: one line. Phone: the
+   positions on top, the name and the switches under them — one line was
+   ~100px wider than a phone and pushed ⛳ / 🔎 / ✕ off the edge. */
+.spot-row { display: grid; align-items: center; column-gap: 6px; row-gap: 4px;
+  grid-template-columns: auto 22px 150px minmax(0, 1fr) auto auto auto auto auto;
+  grid-template-areas: "grip num pos label bb lvl zero flt x" "filter filter filter filter filter filter filter filter filter"; }
+.spot-row > .sr-grip { grid-area: grip; } .spot-row > .sr-num { grid-area: num; } .spot-row > .sr-pos { grid-area: pos; }
+.spot-row > .sr-label { grid-area: label; } .spot-row > .sr-bb { grid-area: bb; } .spot-row > .sr-lvl { grid-area: lvl; }
+.spot-row > .sr-zero { grid-area: zero; } .spot-row > .sr-flt { grid-area: flt; } .spot-row > .sr-x { grid-area: x; }
+.spot-row > .sr-filter { grid-area: filter; }
+@media (max-width: 560px) {
+  .spot-row { grid-template-columns: auto 22px minmax(0, 1fr) auto auto auto auto;
+    grid-template-areas: "grip num pos pos pos pos x" ". . label lvl bb zero flt" "filter filter filter filter filter filter filter"; }
+}

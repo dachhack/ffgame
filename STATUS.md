@@ -22,9 +22,10 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.656.6 — the front page shows the new Shotgun Wedding trade box
+### v0.656.6 — the roster builder fits a phone; the front page's pictures catch up
 
-> - The front page's Shotgun Wedding picture now shows the new trade box.
+> - The roster builder lines up on every row and fits a phone: positions on top, the name and switches underneath.
+> - The front page's Shotgun Wedding and roster builder pictures show the new layouts.
 
 Founder, after v0.656.4 shipped: "did we get rid of the wall of text on this
 and reformat the trade box view?" The card had changed; the landing's
@@ -33,6 +34,15 @@ sentence layout. Reshot at 390px @2x in the neon theme from the real
 ShotgunWeddingCard, with liveApi aliased to fixture weddings (your 2-for-2
 with a counter, plus two of the league's others). The version bump is what
 busts the cached image (the landing puts APP_VERSION on each screen's URL).
+
+Founder, same day, on the roster-builder screen: "fix the line up of the
+columns". v0.656.4 fixed the width of the position dropdown, but at phone
+width each row was still ~100px too wide (⛳ / 🔎 / ✕ off the edge), and the
+squeezed rows let a two-digit row number push the columns. The row is now a
+CSS grid (`.spot-row` in styles.css, a class per cell): one line from 561px
+up, two lines under it. Checked in Chromium at 390 and 700px with 14 spots
+(no row overflows; the 🔎 panel opens full width under its row), and
+`positions-roster.png` reshot from it.
 
 ### v0.656.5 — the FAQ, rewritten
 
