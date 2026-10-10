@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.6 — the front page shows the new Shotgun Wedding trade box
+
+> - The front page's Shotgun Wedding picture now shows the new trade box.
+
+Founder, after v0.656.4 shipped: "did we get rid of the wall of text on this
+and reformat the trade box view?" The card had changed; the landing's
+`public/brand/funnel/mode-shotgun.png` was still the v0.654.2 shot of the old
+sentence layout. Reshot at 390px @2x in the neon theme from the real
+ShotgunWeddingCard, with liveApi aliased to fixture weddings (your 2-for-2
+with a counter, plus two of the league's others). The version bump is what
+busts the cached image (the landing puts APP_VERSION on each screen's URL).
+
 ### v0.656.5 — the FAQ, rewritten
 
 > - The FAQ is rewritten: plainer answers, the full league platform first and Drip as one game in it, and a note on who builds Drip Fantasy.
