@@ -3469,6 +3469,49 @@ export const chatMembers = (leagueId: string) =>
          *  owner and hands the id to 💬 MESSAGE / ⇄ TRADE. */
         seats?: { roster: number; user: string }[] }>('chat_members', { p_league_id: leagueId });
 
+// ── THE DEV ROOM (0459, v0.658.0): a chat that belongs to no league ────────
+// Members join by an admin's invite code; a message tagged idea or bug is
+// filed as a GitHub issue by the worker (server/src/devRoom.js), and its
+// number comes back on the message.
+export type DevTag = 'idea' | 'bug';
+export interface DevRoom { id: string; name: string; role: 'member' | 'admin'; members: number; unread: number }
+export interface DevMessage {
+  id: number; body: string; at: string; tag: DevTag | null;
+  /** The GitHub issue it was filed as; null until the worker files it. */
+  issue: number | null;
+  /** The worker has it in hand right now. */
+  filing: boolean;
+  author: string; author_id: string | null; mine: boolean;
+}
+export interface DevMember { user_id: string; name: string; role: 'member' | 'admin'; me: boolean; joined_at: string }
+export interface DevInvite { code: string; uses: number; max_uses: number | null; at: string }
+type Ok = { ok: boolean; error?: string };
+export const devRoomsMine = () =>
+  rpc<Ok & { rooms?: DevRoom[]; can_create?: boolean }>('dev_rooms_mine');
+export const devRoomCreate = (name: string) =>
+  rpc<Ok & { room_id?: string }>('dev_room_create', { p_name: name });
+export const devRoomJoin = (code: string) =>
+  rpc<Ok & { room_id?: string; name?: string; already?: boolean }>('dev_room_join', { p_code: code });
+/** Latest page (no `before`) marks the room read. Newest first. */
+export const devRoomMessages = (roomId: string, before?: number) =>
+  rpc<Ok & { name?: string; messages?: DevMessage[] }>('dev_room_messages', { p_room: roomId, p_before: before ?? null, p_limit: 50 });
+export const devRoomPost = (roomId: string, body: string, tag: DevTag | null = null) =>
+  rpc<Ok & { id?: number }>('dev_room_post', { p_room: roomId, p_body: body, p_tag: tag });
+export const devRoomTag = (messageId: number, tag: DevTag | null) =>
+  rpc<Ok>('dev_room_tag', { p_message: messageId, p_tag: tag });
+export const devRoomDelete = (messageId: number) =>
+  rpc<Ok>('dev_room_delete', { p_message: messageId });
+export const devRoomMembers = (roomId: string) =>
+  rpc<Ok & { members?: DevMember[]; admin?: boolean }>('dev_room_members', { p_room: roomId });
+export const devRoomRemove = (roomId: string, userId: string) =>
+  rpc<Ok>('dev_room_remove', { p_room: roomId, p_user: userId });
+export const devRoomInviteCreate = (roomId: string, maxUses?: number | null) =>
+  rpc<Ok & { code?: string }>('dev_room_invite_create', { p_room: roomId, p_max_uses: maxUses ?? null });
+export const devRoomInvites = (roomId: string) =>
+  rpc<Ok & { invites?: DevInvite[] }>('dev_room_invites', { p_room: roomId });
+export const devRoomInviteRevoke = (code: string) =>
+  rpc<Ok>('dev_room_invite_revoke', { p_code: code });
+
 // ── App push notifications (0150): device token registry + per-device mutes ──
 export interface PushTokenRow { token: string; platform: string; prefs: Record<string, boolean>; last_seen_at: string; }
 export const registerPushToken = (token: string, platform = 'android', prefs?: Record<string, boolean>) =>

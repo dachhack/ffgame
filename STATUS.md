@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.658.0 — the dev room: an invite-only chat for ideas and bugs
+
+> - A new invite-only Dev room: a group chat outside any league where invited testers suggest changes and report bugs. Tag a message 💡 idea or 🐞 bug and it's logged straight to the public issue list (without your name), with a link back on the message.
+
+Founder: "Can I have a special dev group chat and invite users into the chat
+where they can log changes and suggestions for the game?" — then chose a new
+room (not a league borrowed as one) and "auto-file every tag".
+
+Migration 0459: `dev_room`, `dev_room_member`, `dev_room_invite`,
+`dev_room_message`, RPC-only (RLS on, no policies, the 0147 pattern). Only an
+admin makes a room or an invite code (one-person or reusable, revocable);
+joining by code is the only way in; an admin removes members, anyone leaves,
+the last admin can't. A message's tag is set when posted or later by its
+author/an admin, until it is filed. Worker: `server/src/devRoom.js` (in the
+push sweep) claims each tagged, unfiled line (`filing_at`), opens the issue
+with labels `dev-room` + `idea`/`bug`, writes `issue_number` back, and pushes
+the author a receipt; a refused issue releases the claim for the next sweep.
+The issue (devRoomIssue.js, pinned by check:devroom) names nobody and breaks
+every @mention with a zero-width joiner, so a tester's text can't ping anyone
+or reach the @computer route. Web: a DEV ROOM card on the leagues home for
+members/admins, the room at view 'devroom', and `?live=1&room=CODE` links
+joined after sign-in. Phone: ⚙ → Dev room (where a tester types the code), a
+banner on Your leagues, SHARE for invite messages. Verified the migration and
+every RPC gate against a scratch Postgres; the screens were not exercised
+signed in.
+
 ### v0.657.0 — set your lineup from My Team, any week, with projections
 
 > - In a classic league, My Team now shows your lineup for any week: use the arrows to change weeks, tap a position (QB, RB, BN…) to swap who plays there, and every player shows his projection for that week next to your projected total.
