@@ -9,6 +9,8 @@ import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeag
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
 import { NFL_DIVISIONS } from '@drip/core/data/kdst';
+import { seatPlayerRules, setSeatPlayerRule } from '@drip/core/data/liveApi';
+import { seatRuleText, teamsLabel, RULE_POSITIONS, type SeatRule } from '@drip/core/data/seatRules';
 import { teamLogo } from '@drip/core/data/media';
 import { DevyModeRow } from './DevyShares';
 import { leagueScoringGet, commishDeleteLeague, friendlyError, setLeagueName, setLeagueAvatar, leagueGraduationConflicts, commishResolveGraduation, type GraduationConflict } from '@drip/core/data/liveApi';
@@ -431,6 +433,111 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
           })}
         </div>
       ))}
+    </div>
+  );
+}
+
+/** WHO EACH TEAM MAY TAKE (v0.659.0, 0460) — one rule per seat: positions,
+ *  NFL teams (the chips; a conference or division is one click) and an
+ *  experience window. It binds that team's draft picks, free-agent adds and
+ *  waiver claims; trades stay open and nobody already rostered is touched.
+ *  The commissioner may change it at any time, and the league chat says so. */
+function SeatRulesPanel({ leagueId }: { leagueId: string }) {
+  const [seats, setSeats] = useState<{ roster_id: number; team: string }[]>([]);
+  const [rules, setRules] = useState<SeatRule[]>([]);
+  const [open, setOpen] = useState<number | null>(null);
+  const [pos, setPos] = useState<string[]>([]);
+  const [teams, setTeams] = useState('');
+  const [mn, setMn] = useState('');
+  const [mx, setMx] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = async () => {
+    const r = await seatPlayerRules(leagueId);
+    if (r.ok) { setSeats(r.seats ?? []); setRules(r.rules ?? []); }
+  };
+  useEffect(() => { void load().catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const ruleOf = (rid: number) => rules.find((r) => r.roster_id === rid) ?? null;
+  const edit = (rid: number) => {
+    const r = ruleOf(rid);
+    setOpen(open === rid ? null : rid); setNote(null);
+    setPos(r?.positions ?? []); setTeams((r?.teams ?? []).join(', '));
+    setMn(r?.min_exp != null ? String(r.min_exp) : ''); setMx(r?.max_exp != null ? String(r.max_exp) : '');
+  };
+  const save = async (clear = false) => {
+    if (open == null) return;
+    setBusy(true); setNote(null);
+    try {
+      const tl = teamList(teams);
+      const num = (v: string) => (v.trim() === '' ? null : Math.max(0, Math.min(30, Math.round(Number(v)))));
+      const r = await setSeatPlayerRule(leagueId, open, clear ? null : {
+        positions: pos, teams: tl, teams_label: teamsLabel(tl), min_exp: num(mn), max_exp: num(mx),
+      });
+      if (!r.ok) { setNote(friendlyError(r.error ?? 'Couldn’t save.')); return; }
+      setNote(r.cleared ? 'Rule lifted.' : `Saved: ${r.rule}`);
+      await load();
+      if (r.cleared) setOpen(null);
+    } catch (e) { setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const chip = (on: boolean): React.CSSProperties => ({
+    fontSize: 11, fontWeight: 700, borderRadius: RADIUS, padding: '4px 10px', cursor: 'pointer',
+    color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--bg)',
+    border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, opacity: busy ? 0.5 : 1,
+  });
+  const num: React.CSSProperties = { fontFamily: 'inherit', fontSize: 12.5, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, width: 74 };
+  const preview = seatRuleText({ positions: pos, teams: teamList(teams), teams_label: teamsLabel(teamList(teams)), min_exp: mn.trim() === '' ? null : Number(mn), max_exp: mx.trim() === '' ? null : Number(mx) });
+  return (
+    <div style={{ marginTop: 14, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
+      <span className="mono" style={{ fontSize: 11, color: 'var(--faint)', fontWeight: 700 }}>⚖️ TEAM RULES · who each team may draft and pick up</span>
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 4, lineHeight: 1.5 }}>
+        e.g. one team takes only TEs, another only NFC players, another only Bears. Applies to draft picks, free agents and waiver claims — not trades — and never removes anyone already rostered. Change it any time; the league chat hears about it. College players are held to the position part only.
+      </div>
+      <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+        {seats.map((st) => {
+          const r = ruleOf(st.roster_id);
+          return (
+            <div key={st.roster_id}>
+              <button onClick={() => edit(st.roster_id)} className="mono"
+                style={{ display: 'flex', width: '100%', gap: 10, alignItems: 'center', background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer', textAlign: 'left', color: 'var(--text)' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, flex: '0 1 200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.team}</span>
+                <span style={{ fontSize: 11.5, color: r ? 'var(--you)' : 'var(--faint)', flex: 1 }}>{r?.text ? `only ${r.text}` : 'any player'}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>{open === st.roster_id ? '▾' : 'edit ▸'}</span>
+              </button>
+              {open === st.roster_id && (
+                <div style={{ padding: '6px 0 10px 12px', borderLeft: '2px solid var(--bd)', display: 'grid', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', width: 70 }}>POSITIONS</span>
+                    {RULE_POSITIONS.map((p) => (
+                      <button key={p} disabled={busy} className="mono" style={chip(pos.includes(p))}
+                        onClick={() => setPos(pos.includes(p) ? pos.filter((x) => x !== p) : [...pos, p])}>{p}</button>
+                    ))}
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>none = any</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', width: 70 }}>NFL TEAMS</span>
+                    <input value={teams} onChange={(e) => setTeams(e.target.value)} placeholder="empty = any (tap AFC/NFC divisions below)" className="mono"
+                      style={{ fontFamily: 'inherit', fontSize: 12.5, padding: '5px 7px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: RADIUS, flex: '1 1 220px' }} />
+                    <TeamChips value={teams} disabled={busy} onChange={setTeams} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', width: 70 }}>YEARS</span>
+                    <input value={mn} onChange={(e) => setMn(e.target.value)} placeholder="min yrs" inputMode="numeric" className="mono" style={num} />
+                    <input value={mx} onChange={(e) => setMx(e.target.value)} placeholder="max yrs" inputMode="numeric" className="mono" style={num} />
+                    <button disabled={busy} className="mono" style={chip(mn === '0' && mx === '0')} onClick={() => { setMn('0'); setMx('0'); }}>ROOKIES</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={() => void save()} disabled={busy} className="mono" style={chip(true)}>SAVE RULE</button>
+                    {ruleOf(st.roster_id) && <button onClick={() => void save(true)} disabled={busy} className="mono" style={chip(false)}>LIFT RULE</button>}
+                    <span className="mono" style={{ fontSize: 11, color: 'var(--dim)' }}>{preview ? `${st.team} may only take ${preview}` : 'No limits set — saving lifts the rule.'}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!seats.length && <span className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>No teams yet.</span>}
+      </div>
+      {note && <div className="mono" style={{ fontSize: 11, color: note.startsWith('Saved') || note.startsWith('Rule lifted') ? 'var(--you)' : 'var(--warn, #c66)', marginTop: 6 }}>{note}</div>}
     </div>
   );
 }
@@ -1174,6 +1281,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
         </div>
         );
       })()}
+      {sport === 'nfl' && view === 'lineup' && mode !== null && <SeatRulesPanel leagueId={leagueId} />}
       {sport === 'nfl' && view === 'scoring' && (
         <div>
           <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>

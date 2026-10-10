@@ -6,6 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
+import { useMySeatRule, seatRuleShows, SeatRuleBanner } from '../app/seatRule';
 import { ClassicBoard } from './ClassicBoard';
 import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, collegeSetupBlocked, collegeSetupActive, collegeSetupLine, collegePoolOpts, collegeScheduleWeeks, COLLEGE_SETUP_INFO, DEFAULT_COLLEGE_SETUP, type CollegeSetup } from '@drip/core/data/devyShares';
 import { formatBlocked, shelfBlocked, isRedraft } from '@drip/core/data/leagueRules';
@@ -1462,6 +1463,9 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
   const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug)), [st?.picks]);
   const myRoster = team?.my_roster_id ?? null;
+  // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
+  const mySeatRule = useMySeatRule(leagueId, myRoster);
+  const [seatShowAll, setSeatShowAll] = useState(false);
   const isCommish = !!team?.is_commish;
   const auction = st?.mode === 'auction';
   // DEVY SHARES (0387): a graduate reserved for his right's holder.
@@ -1557,9 +1561,10 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos, { teamUnits: false })
       && levelClassMatch(p, level, cls)
       && confMatch(p, conf)
-      && poolSearchMatch(p, needle));
+      && poolSearchMatch(p, needle)
+      && seatRuleShows(mySeatRule, seatShowAll, p, expMap[p.slug]));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap, level, cls, conf]);
+  }, [pool, taken, st?.lots, q, posSel, st?.pos_caps, eligPos, starMode, favs, sortBy, own, tenure, expMap, level, cls, conf, mySeatRule, seatShowAll]);
   // 0379: which college filters this pool needs — class for any college
   // player, NFL/CFB only where both kinds are in it.
   const poolKinds = useMemo(() => {
@@ -2273,6 +2278,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
           embed: settings and teams only there. */}
       {tab === 'players' && !embedded && (
         <div style={card}>
+          <SeatRuleBanner rule={mySeatRule} showAll={seatShowAll} onToggle={() => setSeatShowAll((v) => !v)} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players, teams or schools…" style={{ ...input, marginBottom: 10 }} />
           {/* position filters double as my roster-fill meter: taken/limit */}
           {/* COMPACT, AND CAPPED (v0.638.1): single-line strips of small
@@ -3281,6 +3287,9 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
   const rostered = useMemo(() => new Set(rosters.map((r) => r.slug)), [rosters]);
   const myRoster = team?.my_roster_id ?? null;
+  // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
+  const mySeatRule = useMySeatRule(leagueId, myRoster);
+  const [seatShowAll, setSeatShowAll] = useState(false);
   const mine = useMemo(() => rosters.filter((r) => r.roster_id === myRoster)
     .map((r) => { const p = poolBySlug.get(r.slug); return p ? { ...p, spot: r.spot ?? 'active' } : null; })
     .filter(Boolean) as (LeaguePoolPlayer & { spot: string })[], [rosters, myRoster, poolBySlug]);
@@ -3421,9 +3430,10 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && levelClassMatch(p, level, cls)
       && confMatch(p, conf)
-      && poolSearchMatch(p, needle));
+      && poolSearchMatch(p, needle)
+      && seatRuleShows(mySeatRule, seatShowAll, p, expMap[p.slug]));
     return sortPool(starApply(base, starMode, favs, (p) => p.slug), sortBy, own);
-  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls, conf]);
+  }, [pool, rostered, showOwned, q, posSel, eligiblePos, nflTeam, tenure, expMap, starMode, favs, sortBy, own, level, cls, conf, mySeatRule, seatShowAll]);
   const poolKinds = useMemo(() => {
     const college = pool.some((p) => /^c-\d+$/.test(p.slug));
     return { college, both: college && pool.some((p) => !/^c-\d+$/.test(p.slug)) };
@@ -3915,7 +3925,8 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
                 : ` · ${team.waiver_mode === 'faab' ? '💸 bids' : '📋 claims'} only — this league has no free agency`)
             : ''}
         </div>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players, teams or schools…" style={{ ...input, marginBottom: 10 }} />
+        <SeatRuleBanner rule={mySeatRule} showAll={seatShowAll} onToggle={() => setSeatShowAll((v) => !v)} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players, teams or schools…" style={{ ...input, marginBottom: 10 }} />
         <ChipStrip>
           <Chip small on={posSel.size === 0} onClick={() => setPosSel(new Set())}>ALL</Chip>
           {posChips.map((p) => (

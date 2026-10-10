@@ -43,7 +43,9 @@ import { leagueCustomCollege, commishAddCustomCollege, commishRemoveCustomColleg
 import { inviteMessage } from '@drip/core/data/invite';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
 import { classicSlots, slotSpecLabel, CLASSIC_SCORING_SECTIONS, CLASSIC_SCORING_FIELDS, DEFAULT_CLASSIC_SCORING, BYPOS_SECTIONS, parseByPos, byPosSummary, DELAYED_SCORING_KEYS, DELAYED_SCORING_NOTE, type SlotSpec } from '@drip/core/engine/classic';
-import { NFL_CODES } from '@drip/core/data/kdst';
+import { NFL_CODES, NFL_DIVISIONS } from '@drip/core/data/kdst';
+import { seatPlayerRules, setSeatPlayerRule } from '@drip/core/data/liveApi';
+import { seatRuleText, teamsLabel, RULE_POSITIONS, type SeatRule } from '@drip/core/data/seatRules';
 
 // The builder's position chips (0163) — combos are made by lighting several.
 const BUILDER_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'];
@@ -1808,6 +1810,106 @@ function TeamChips({ value, onChange, disabled }: { value: string; onChange: (ne
   );
 }
 
+/** WHO EACH TEAM MAY TAKE (v0.659.0, 0460) — the web console's TEAM RULES
+ *  twin: one rule per seat (positions, NFL teams, years), binding that team's
+ *  picks, adds and claims, never trades; changeable any time. */
+function SeatRulesCard({ leagueId }: { leagueId: string }) {
+  const t = useTheme();
+  const [seats, setSeats] = useState<{ roster_id: number; team: string }[]>([]);
+  const [rules, setRules] = useState<SeatRule[]>([]);
+  const [open, setOpen] = useState<number | null>(null);
+  const [pos, setPos] = useState<string[]>([]);
+  const [teams, setTeams] = useState('');
+  const [mn, setMn] = useState('');
+  const [mx, setMx] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = async () => {
+    const r = await seatPlayerRules(leagueId);
+    if (r.ok) { setSeats(r.seats ?? []); setRules(r.rules ?? []); }
+  };
+  useEffect(() => { void load().catch(() => {}); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const ruleOf = (rid: number) => rules.find((r) => r.roster_id === rid) ?? null;
+  const edit = (rid: number) => {
+    const r = ruleOf(rid);
+    setOpen(open === rid ? null : rid); setNote(null);
+    setPos(r?.positions ?? []); setTeams((r?.teams ?? []).join(', '));
+    setMn(r?.min_exp != null ? String(r.min_exp) : ''); setMx(r?.max_exp != null ? String(r.max_exp) : '');
+  };
+  const n = (v: string) => (v.trim() === '' ? null : Math.max(0, Math.min(30, Math.round(Number(v)))));
+  const save = async (clear = false) => {
+    if (open == null) return;
+    setBusy(true); setNote(null);
+    try {
+      const tl = teamList(teams);
+      const r = await setSeatPlayerRule(leagueId, open, clear ? null : { positions: pos, teams: tl, teams_label: teamsLabel(tl), min_exp: n(mn), max_exp: n(mx) });
+      if (!r.ok) { warn(); setNote(friendlyError(r.error ?? 'Couldn’t save.')); return; }
+      commit(); setNote(r.cleared ? 'Rule lifted.' : `Saved: ${r.rule}`);
+      await load();
+      if (r.cleared) setOpen(null);
+    } catch (e) { warn(); setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  // Conference and division in one tap — the phone's team chips are a flat run.
+  const groups: { label: string; codes: string[] }[] = [
+    ...(['AFC', 'NFC'] as const).map((c) => ({ label: c, codes: NFL_DIVISIONS.filter((d) => d.conf === c).flatMap((d) => d.teams.map((x) => x.toUpperCase())) })),
+    ...NFL_DIVISIONS.map((d) => ({ label: `${d.conf} ${d.div}`, codes: d.teams.map((x) => x.toUpperCase()) })),
+  ];
+  const cur = teamList(teams);
+  const preview = seatRuleText({ positions: pos, teams: cur, teams_label: teamsLabel(cur), min_exp: n(mn), max_exp: n(mx) });
+  const field = { color: t.text, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), width: 70 } as const;
+  return (
+    <View style={{ marginTop: 12, gap: 6 }}>
+      <Mono size={8.5} tone="faint" weight="700">⚖️ TEAM RULES · who each team may draft and pick up</Mono>
+      <Mono size={8} tone="faint" style={{ lineHeight: fs(11) }}>
+        Draft picks, free agents and waiver claims — not trades; nobody rostered is removed. Change any time; the league chat hears about it. College players are held to the position part only.
+      </Mono>
+      {seats.map((st) => {
+        const r = ruleOf(st.roster_id);
+        return (
+          <View key={st.roster_id}>
+            <Pressable onPress={() => { tap(); edit(st.roster_id); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 }}>
+              <Display size={12.5} style={{ flexShrink: 1, maxWidth: '45%' }}>{st.team}</Display>
+              <Mono size={9} tone={r ? 'you' : 'faint'} style={{ flex: 1 }} numberOfLines={1}>{r?.text ? `only ${r.text}` : 'any player'}</Mono>
+              <Mono size={9} tone="faint">{open === st.roster_id ? '▾' : 'edit ▸'}</Mono>
+            </Pressable>
+            {open === st.roster_id && (
+              <View style={{ paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: t.bd, gap: 8, paddingBottom: 8 }}>
+                <Mono size={8} tone="faint" weight="700">POSITIONS (none = any)</Mono>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+                  {RULE_POSITIONS.map((p) => (
+                    <Chip key={p} small label={p} on={pos.includes(p)} disabled={busy}
+                      onPress={() => { tap(); setPos(pos.includes(p) ? pos.filter((x) => x !== p) : [...pos, p]); }} />
+                  ))}
+                </View>
+                <Mono size={8} tone="faint" weight="700">NFL TEAMS (none = any)</Mono>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
+                  {groups.map((g) => {
+                    const on = g.codes.length === cur.length && g.codes.every((c) => cur.includes(c));
+                    return <Chip key={g.label} small label={g.label} on={on} disabled={busy} onPress={() => { tap(); setTeams(on ? '' : g.codes.join(', ')); }} />;
+                  })}
+                </View>
+                <TeamChips value={teams} disabled={busy} onChange={setTeams} />
+                <Mono size={8} tone="faint" weight="700">YEARS IN THE LEAGUE</Mono>
+                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <TextInput value={mn} onChangeText={setMn} placeholder="min" placeholderTextColor={t.faint} keyboardType="number-pad" style={field} />
+                  <TextInput value={mx} onChangeText={setMx} placeholder="max" placeholderTextColor={t.faint} keyboardType="number-pad" style={field} />
+                  <Chip small label="ROOKIES" on={mn === '0' && mx === '0'} disabled={busy} onPress={() => { tap(); setMn('0'); setMx('0'); }} />
+                </View>
+                <Mono size={9} tone="dim">{preview ? `${st.team} may only take ${preview}` : 'No limits set — saving lifts the rule.'}</Mono>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <Chip label="SAVE RULE" on disabled={busy} onPress={() => { tap(); void save(); }} />
+                  {r && <Chip label="LIFT RULE" disabled={busy} onPress={() => { tap(); void save(true); }} />}
+                </View>
+              </View>
+            )}
+          </View>
+        );
+      })}
+      {note && <Mono size={9} tone={note.startsWith('Saved') || note.startsWith('Rule lifted') ? 'you' : 'warn'}>{note}</Mono>}
+    </View>
+  );
+}
+
 /** One component, three destinations (v0.259.0) — the same shape as the web's
  *  LeagueSettings `view` prop: the state (mode gates everything; the builder
  *  and the scoring drafts load together) stays shared, and `view` only decides
@@ -2408,6 +2510,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under MODE for the full scoring editor.
         </Mono>
       )}
+      {/* ⚖️ TEAM RULES (v0.659.0): any NFL league, either mode — drafts and waivers are both. */}
+      {view === 'lineup' && mode !== null && sport === 'nfl' && <SeatRulesCard leagueId={leagueId} />}
       {view === 'lineup' && mode === 'classic' && sport !== 'nfl' && (
         <SportLineup leagueId={leagueId} sport={sport} gm={gmInfo} locked={drafted}
           onSaved={() => { leagueGameMode(leagueId).then((r) => { if (r.ok) { setGmInfo(r); setRounds(r.rounds ?? null); } }).catch(() => {}); }} />
