@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.656.9 — a new matchup widget shows up straight away
+
+> - A matchup widget added to the home screen shows a loading card at once, instead of an invisible box until the app is opened.
+
+Founder, adding the matchup widget on Android: an invisible box until the app
+was opened. The widget's first frame is the remembered picture, which lasts a
+day and is only written by a read that landed; a widget added fresh had none,
+and the library's placeholder layout is transparent, so nothing showed until
+the cold headless read finished inside Android's 30-second task. Every wake
+with no remembered picture now draws a "Loading your matchup…" card first, and
+a read that runs past 22 s draws the tap-to-retry error card instead of
+nothing. Not confirmed on a device: the read timing was not observed.
+
 ### v0.656.8 — no NFL filters on an all-college player pool
 
 > - When every player in the pool is a college player, the waiver list drops the NFL tenure and NFL team filters, and the draft room drops ROOKIES.
