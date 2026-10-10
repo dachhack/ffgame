@@ -27,6 +27,7 @@ import { AllFieldsSheet } from './src/ui/AllFieldsSheet';
 import { PlayerCardHost, setCardLeague } from './src/ui/PlayerCardSheet';
 import { loadCardSkin, saveCardSkin, loadCardSize, saveCardSize, type CardSkin, type CardSize } from './src/ui/cards';
 import { DevRoomScreen } from './src/screens/DevRoom';
+import { BullseyeSquad, BullseyeGate } from './src/screens/BullseyeContest';
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin, loadCollegeWeekDates, loadCollegeLogos, syncMarkFree } from '@drip/core/data/liveApi';
 import { onMarkFree } from '@drip/core/data/markFree';
@@ -119,9 +120,11 @@ export function App() {
   // Bumped when a board join lands a new seat — remounts Leagues so the fresh
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
-  const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board' | 'devroom'>('picks');
+  const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board' | 'devroom' | 'bullseye'>('picks');
   // THE DEV ROOM (v0.658.0): which room the screen opens on (null = the list).
   const [devRoomId, setDevRoomId] = useState<string | null>(null);
+  // THE WEEKLY BULLSEYE (0462): the open contest's squad screen.
+  const [bullTarget, setBullTarget] = useState<{ leagueId: string; week: number } | null>(null);
   // Which door opened the board: 🔎 FIND A LEAGUE browses, ＋ ADD A LEAGUE
   // opens the create card. One screen, two entrances (see Recruit).
   const [boardEntry, setBoardEntry] = useState<'root' | 'browse' | 'create'>('root');
@@ -501,6 +504,8 @@ export function App() {
           <View style={{ flex: 1 }}><Admin onBack={() => setView('picks')} /></View>
         ) : view === 'devroom' ? (
           <View style={{ flex: 1 }}><DevRoomScreen roomId={devRoomId} onBack={() => { setDevRoomId(null); setView('picks'); }} /></View>
+        ) : view === 'bullseye' && bullTarget ? (
+          <View style={{ flex: 1 }}><BullseyeSquad leagueId={bullTarget.leagueId} week={bullTarget.week} onBack={() => { setBullTarget(null); setView('picks'); }} /></View>
         ) : view === 'board' ? (
           <View style={{ flex: 1 }}>
             <Recruit onBack={() => setView('picks')} onJoined={() => setLeaguesEpoch((n) => n + 1)} initial={boardEntry}
@@ -555,7 +560,8 @@ export function App() {
           </View>
         ) : open && open.rosterId != null ? (
           <View style={{ flex: 1 }}>
-            <LivePicks
+            {/* A salary-cap league playing Bullseye (0462) opens its squad screen. */}
+            <BullseyeGate key={`gate-${open.leagueId}-${open.rosterId}`} leagueId={open.leagueId} onBack={() => setView('home')} fallback={<LivePicks
               // Remounts when you switch leagues, so no state leaks between them.
               key={`picks-${open.leagueId}-${open.rosterId}`}
               // Co-managed seat: write picks AS the owner (0125) — the board
@@ -580,7 +586,7 @@ export function App() {
                   if (cl.some((l) => l.league_id === e.league_id)) setOpen((cur) => (cur && cur.leagueId === e.league_id ? { ...cur, commish: true } : cur));
                 }).catch(() => {});
               }}
-            />
+            />} />
           </View>
         ) : (
           <Leagues
@@ -589,6 +595,7 @@ export function App() {
             onBoard={(entry) => { setBoardEntry(entry ?? 'root'); setView('board'); }}
             onAdd={() => { setBoardEntry('create'); setView('board'); }}
             onDevRoom={(id) => { setDevRoomId(id); setView('devroom'); }}
+            onBullseye={(leagueId, week) => { setBullTarget({ leagueId, week }); setView('bullseye'); }}
             onOpen={(leagueId, rosterId, name, native, commish, pickUserId, landing) => {
               // `live: true` unconditionally: the native app has no sim leagues
               // to open, so this is the same activation step the web reports

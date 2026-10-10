@@ -36,6 +36,8 @@ import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/ga
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { installBullseye, bullseyeCardsFor, bullseyeCfgOf } from './bullseye.js';
+import { dfsBullseyeConfigOf, dfsCard, dfsSlotsOf, dfsSlotPos, scoreDfsBullseye, dfsTiebreak } from '../../packages/core/src/engine/dfsBullseye.ts';
+import { classicPoints } from '../../packages/core/src/engine/classic.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
 export function baseScore(plays) {
@@ -218,6 +220,8 @@ export const modeOfSettings = (s) => ({
   bullseye: s?.bullseye === 'slots' || s?.bullseye === 'total' ? s.bullseye : null,
   bullseye_radius: Number.isFinite(Number(s?.bullseye_radius)) ? Number(s.bullseye_radius) : null,
   bullseye_deal: s?.bullseye_deal === 'team' ? 'team' : null,
+  // DFS BULLSEYE (0462): a salary-cap contest league scored by the dart.
+  dfs_bullseye: s?.dfs_bullseye === true,
 });
 async function leagueModeOf(leagueId, ctx) {
   if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false, bullseye: null, bullseye_radius: null, bullseye_deal: null };
@@ -294,6 +298,10 @@ export async function prefetchTick(live, week) {
   // per-matchup path MUST agree; they are the same rule read two ways, and a
   // divergence would score a league differently depending on tick size.
   for (const r of lu.data ?? []) lineups.set(`${r.league_id}:${r.roster_id}`, starterSlugs(r.starters_json));
+  // The raw squads too (0462): a DFS Bullseye squad's SLOT is the game, and
+  // the slug list above drops it.
+  const lineupRows = new Map();
+  for (const r of lu.data ?? []) lineupRows.set(`${r.league_id}:${r.roster_id}`, r.starters_json);
   const applied = new Map();   // `${matchupId}:${appUser}` -> payload
   for (const r of ap.data ?? []) applied.set(`${r.matchup_id}:${r.app_user_id}`, r.payload_json ?? {});
   const allPicks = new Map();  // matchupId -> raw sealed rows, ALL authors (seat assignment happens per-resolve)
@@ -322,7 +330,7 @@ export async function prefetchTick(live, week) {
   // install before each classic resolve is a lookup, not a read.
   const bullLeagues = [...mode].filter(([, gm]) => bullseyeCfgOf(gm)).map(([id]) => id);
   const cards = await bullseyeCardsFor(bullLeagues, week);
-  return { members, policy, scoring, mode, flags, lineups, applied, allPicks, agents, adjust, illegal, cards };
+  return { members, policy, scoring, mode, flags, lineups, lineupRows, applied, allPicks, agents, adjust, illegal, cards };
 }
 
 /** Resolve one matchup → write matchup_state (per game_window) + finals when final.
@@ -559,7 +567,57 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     return Object.keys(ex).length ? ex : undefined;
   };
 
-  if (gameMode.mode === 'classic') {
+  // ── DFS BULLSEYE (0462, docs/dfs-bullseye.md) ─────────────────────────────
+  // A salary-cap contest league playing Bullseye: each side's squad is its
+  // sleeper_lineup (named slots — save_bullseye_entry, or an aimed auto-build),
+  // each player scored under stock PPR, the week's card applied with classic
+  // Bullseye's dart. Ahead of classic and drip: contest leagues carry no
+  // game_mode, so without this they would fall to the drip engine. The open
+  // contest's rows pair a seat with itself; both sides then score the same
+  // squad, and its board reads `home`.
+  const dfsCfg = dfsBullseyeConfigOf(gameMode);
+  let dfsTb = null;   // { home, away } tie-break distances (v0.660.1)
+  if (dfsCfg) {
+    const squadOf = async (rid) => {
+      if (ctx?.lineupRows) return ctx.lineupRows.get(`${matchup.league_id}:${rid}`) ?? null;
+      const { data } = await db().from('sleeper_lineup').select('starters_json')
+        .eq('league_id', matchup.league_id).eq('week', matchup.week).eq('roster_id', rid).maybeSingle();
+      return data?.starters_json ?? null;
+    };
+    const homeSquad = dfsSlotsOf(await squadOf(matchup.home_roster_id));
+    const awaySquad = matchup.away_roster_id === matchup.home_roster_id ? homeSquad : dfsSlotsOf(await squadOf(matchup.away_roster_id));
+    // The installs classicPoints reads, synchronously before the scoring and
+    // unconditionally (module globals: no league inherits another's).
+    setLeagueScoring(scoringKnobs, matchup.league_id);
+    setLeagueFlags(matchup.league_id, flagRows);
+    setLeagueAdjustments(matchup.league_id, []);
+    setLeagueGolf(false, 0);
+    const card = dfsCard(matchup.league_id, matchup.week);
+    // SEALED (v0.660.1): until a player's own game kicks off he is neither
+    // written nor scored — an opponent reads matchup_state, and a zero there
+    // would name him. The tick hands the week's kickoffs; a final has none
+    // pending (and stampFinals passes none).
+    const kicks = matchup.status === 'final' ? null : (opts.teamKicks ?? null);
+    const nowMs = Date.now();
+    const pending = (slug) => {
+      if (!kicks) return false;
+      const team = normTeam(meta(slug)?.team ?? '');
+      const k = kicks[team] ?? kicks[String(meta(slug)?.team ?? '').toUpperCase()];
+      return Number.isFinite(k) && k > nowMs;
+    };
+    // THE TIE-BREAKER (v0.660.1): each seat's own spot and number.
+    const tiebreak = {
+      home: dfsTiebreak(matchup.league_id, matchup.week, matchup.home_roster_id, card),
+      away: dfsTiebreak(matchup.league_id, matchup.week, matchup.away_roster_id, card),
+    };
+    const r = scoreDfsBullseye({ home: homeSquad, away: awaySquad }, card, dfsCfg,
+      (slug, slot) => classicPoints(player(slug), matchup.week, 1, dfsSlotPos(slot) ?? undefined, slot),
+      { pending, tiebreak });
+    for (const st of r.states) states.push({ game_window: st.window, home_score: st.home, away_score: st.away });
+    slotRows = r.slots;
+    homeTotal = r.home; awayTotal = r.away;
+    dfsTb = r.tiebreak;
+  } else if (gameMode.mode === 'classic') {
     // ── CLASSIC league (0157): standard fantasy, one weekly lineup, no buffs,
     //    no bonuses, no coin. Only 'wk' picks count — a drip-shaped auto-lineup
     //    from the fallback paths must not leak into a classic score. A side that
@@ -829,6 +887,19 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const patch = {};
   if (coin) { patch.home_coin = coin.home; patch.away_coin = coin.away; }
   if (matchup.status === 'final') { patch.home_final = round(homeTotal); patch.away_final = round(awayTotal); }
+  // DFS BULLSEYE'S TIE-BREAKER (v0.660.1). Stored beside the finals; and when
+  // two different teams' ring totals tie, the team whose tie-break spot landed
+  // closer is put 0.01 ahead — so every standings, playoff and report reader,
+  // which all compare finals, settles the tie the same way without learning a
+  // new rule. A tie on the tie-break too stays a tie.
+  if (dfsTb && matchup.status === 'final') {
+    patch.home_tb = dfsTb.home; patch.away_tb = dfsTb.away;
+    if (matchup.home_roster_id !== matchup.away_roster_id && patch.home_final === patch.away_final
+        && dfsTb.home != null && dfsTb.away != null && dfsTb.home !== dfsTb.away) {
+      if (dfsTb.home < dfsTb.away) patch.home_final = Math.round((patch.home_final + 0.01) * 100) / 100;
+      else patch.away_final = Math.round((patch.away_final + 0.01) * 100) / 100;
+    }
+  }
   if (Object.keys(patch).length) await db().from('matchup').update(patch).eq('id', matchup.id);
 
   // Bank each side's weekly drip-coin into its persistent wallet, once, when the

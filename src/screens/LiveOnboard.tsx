@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BullseyeContestCard, BullseyeSquad, SquadScreen } from './BullseyeContest';
 import { DevRoomBanner, DevRoomScreen } from './DevRoom';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag, Img, Crest } from '../app/ui';
@@ -25,7 +26,7 @@ import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
 import { isPreseasonWeek, weekTitle } from '@drip/core/data/nflSlate';
 import { FieldBoard } from '../app/FieldView';
 import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
-import { slateWeeks, weekGameFeeds, weekLivePlays, devRoomJoin } from '@drip/core/data/liveApi';
+import { slateWeeks, weekGameFeeds, weekLivePlays, devRoomJoin, setDfsBullseye } from '@drip/core/data/liveApi';
 import { APK_ZIP_URL, IOS_TESTFLIGHT_URL } from '@drip/core/data/changelog';
 import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
@@ -42,7 +43,6 @@ import { RequestCodeModal } from './RequestCode';
 import { SleeperImport } from './SleeperImport';
 import { ProviderImport } from './ProviderImport';
 import { mobileOs } from '../app/pwa';
-import { PodBuilder } from './PodBuilder';
 import type { Session } from '@supabase/supabase-js';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
@@ -74,7 +74,7 @@ function GoogleG() {
  *  us while it is up (v0.356.11). 'admin' is not one: it needs no league. */
 const ROOM_VIEWS = ['leaguehome', 'team', 'draft'];
 
-type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper' | 'provider' | 'devroom';
+type OnboardView = 'home' | 'leaguehome' | 'commish' | 'commishdash' | 'picks' | 'admin' | 'add' | 'join' | 'board' | 'results' | 'create' | 'draft' | 'team' | 'podbuild' | 'dfsjoin' | 'dfscreate' | 'solopass' | 'sleeper' | 'provider' | 'devroom' | 'bullseye';
 
 export function LiveOnboard() {
   const { navigate, route, viewAs, setViewAs } = useStore();
@@ -896,6 +896,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // joins once signed in and opens the room; a dead code opens the room list,
   // where it can be typed again.
   const [devRoomId, setDevRoomId] = useState<string | null>(null);
+  // THE WEEKLY BULLSEYE (0462): the open contest's squad screen.
+  const [bullTarget, setBullTarget] = useState<{ leagueId: string; week: number } | null>(null);
   useEffect(() => {
     let code: string | null = null;
     try { code = localStorage.getItem('dripDevRoomCode'); localStorage.removeItem('dripDevRoomCode'); } catch { /* ignore */ }
@@ -1012,8 +1014,12 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   if (view === 'solopass') return <SoloPassForm initialCode={soloPassCode ?? undefined} onRedeemed={() => { setSoloPassCode(null); myFeatures().then(setFeatures).catch(() => {}); setView('home'); }} onBack={() => { setSoloPassCode(null); setView('home'); }} />;
   if (view === 'dfscreate') return <DfsCreateForm onDone={() => { setView('home'); refresh(); }} onBack={() => setView('home')} />;
   if (view === 'podbuild' && target) return (
-    <PodBuilder leagueId={target.leagueId} rosterId={target.rosterId} week={target.week} leagueName={target.name}
+    // A salary-cap league playing Bullseye (0462) gets its squad screen.
+    <SquadScreen leagueId={target.leagueId} rosterId={target.rosterId} week={target.week} leagueName={target.name}
       onBack={() => { setView('home'); refresh(); }} />
+  );
+  if (view === 'bullseye' && bullTarget) return (
+    <BullseyeSquad leagueId={bullTarget.leagueId} week={bullTarget.week} onBack={() => { setBullTarget(null); setView('home'); refresh(); }} />
   );
   if (view === 'results' && target) return (
     <>
@@ -1108,6 +1114,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   return (
     <>
     {!viewAs && <DevRoomBanner onOpen={(id) => { setDevRoomId(id); setView('devroom'); }} />}
+    {!viewAs && <BullseyeContestCard onOpen={(leagueId, week) => { setBullTarget({ leagueId, week }); setView('bullseye'); }} />}
     <LeagueHome
       enrollments={enrollments}
       commishLeagues={commishLeagues}
@@ -1553,7 +1560,7 @@ function LeagueCard({ e, commish, slate, glance, unread, seats, onPodBuild, onOp
   onOpen: () => void;
 }) {
   const drafting = e.league?.draft_status === 'live';
-  const squadLeague = e.league?.kind === 'pod' || e.league?.kind === 'weekly' || e.league?.kind === 'dfs';
+  const squadLeague = e.league?.kind === 'pod' || e.league?.kind === 'weekly' || e.league?.kind === 'dfs' || e.league?.kind === 'bullseye';
   return (
     // THE SPINE HAS TO EARN ITS PLACE (founder: "I don't like the chips with
     // the highlight on the left"). card2's accent bar was on EVERY card, which
@@ -1967,6 +1974,8 @@ function DfsCreateForm({ onDone, onBack }: { onDone: () => void; onBack: () => v
   const [err, setErr] = useState<string | null>(null);
   const [made, setMade] = useState<{ league?: string; invite_code?: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // 🎯 BULLSEYE (0462): the league aims at a weekly card instead of piling up points.
+  const [bull, setBull] = useState<'off' | 'slots' | 'total'>('off');
   const go = async () => {
     if (busy) return;
     setBusy(true); setErr(null);
@@ -1974,6 +1983,11 @@ function DfsCreateForm({ onDone, onBack }: { onDone: () => void; onBack: () => v
       const r = await createDfsLeague(name, teams, team);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Couldn’t create the league.')); return; }
       track(Ev.dfsCreated, { teams });
+      const lid = (r as { league_id?: string }).league_id;
+      if (bull !== 'off' && lid) {
+        const b = await setDfsBullseye(lid, bull);
+        if (!b.ok) setErr(`League made, but Bullseye didn’t switch on: ${b.error ?? 'try again from the league'}`);
+      }
       setMade({ league: r.league, invite_code: (r as { invite_code?: string }).invite_code });
     } catch (x) { setErr(friendlyError(x)); }
     finally { setBusy(false); }
@@ -2013,6 +2027,17 @@ function DfsCreateForm({ onDone, onBack }: { onDone: () => void; onBack: () => v
         <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>YOUR TEAM NAME <span style={{ fontWeight: 400 }}>(optional)</span></label>
         <input value={team} onChange={(e) => setTeam(e.target.value)} maxLength={30}
           placeholder="Commish’s Crew" style={{ ...input, width: '100%', boxSizing: 'border-box', marginTop: 7 }} />
+        <label className="mono" style={{ ...label, display: 'block', marginTop: 12 }}>🎯 BULLSEYE</label>
+        <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+          {([['off', 'OFF'], ['slots', 'SLOT TARGETS'], ['total', 'TEAM TOTAL']] as const).map(([v, l]) => (
+            <button key={v} onClick={() => setBull(v)} className="mono" style={{ flex: 1, fontSize: 11, fontWeight: 700, color: bull === v ? 'var(--on-accent)' : 'var(--dim)', background: bull === v ? 'var(--you)' : 'var(--bg)', border: `1px solid ${bull === v ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '9px 0', cursor: 'pointer' }}>{l}</button>
+          ))}
+        </div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+          {bull === 'off' ? 'Most points wins, head to head.' : bull === 'slots'
+            ? 'Each week deals a number to every slot; closest to the numbers wins.'
+            : 'Each week deals one total; the squad that lands closest wins.'}
+        </div>
         <button onClick={go} disabled={busy} className="mono"
           style={{ ...btn, width: '100%', padding: '12px 0', marginTop: 14, opacity: busy ? 0.6 : 1 }}>{busy ? '…' : '🏈 CREATE LEAGUE →'}</button>
         {err && <div className="mono" style={errStyle}>{err}</div>}

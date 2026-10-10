@@ -22,6 +22,48 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.660.0 — DFS Bullseye: the weekly contest, and Bullseye for salary-cap leagues
+
+> - New: the Weekly Bullseye. Build a $50,000 squad aimed at this week's numbers — a target for every slot, or one team total — and see how close you land against everyone on one leaderboard. Join from your leagues page on the web or in the app.
+> - Salary-cap leagues can play Bullseye too: the commissioner picks slot targets or a team total, and each week's head-to-head goes to whoever lands closer.
+> - Ties are settled by your own tie-breaker: the app gives your team one RB or WR spot and a number before you build, and if you tie, whoever lands closer to theirs wins. Opponents' squads stay sealed — each player shows only once his game locks.
+
+Founder: "we need to build a dfs-style version of bullseye." Chosen: both
+formats, the variant picked per contest, the $50k cap kept, web and phone.
+Spec: docs/dfs-bullseye.md.
+
+Migration 0462: league kind `bullseye` (one per season/week, unlimited seats;
+`bullseye_contest`, `join_bullseye_contest`), `save_bullseye_entry` (nine
+NAMED slots — under SLOTS which back aims at the 15 is the decision — board,
+shape, cap and 0093's per-player lock, a locked player can't change slot),
+the open contest's self-paired scoring row on first entry,
+`dfs_bullseye_state` (the squad screen's read), `bullseye_contest_board`
+(everyone signed in; nothing before the first lock), `set_bullseye_contest`
+(admin, until lock) and `set_dfs_bullseye` (commissioner, not mid-week).
+Engine: core/engine/dfsBullseye.ts — the slots, the card (classic's dealer,
+stock catalog, seeded per league/week), `scoreDfsBullseye` (classicPoints
+under stock PPR + applyBullseye), the aimed auto-build. Worker: a resolver
+branch ahead of classic/drip (contest leagues carry no game_mode), prefetch
+keeps raw squads, lock skips the drip auto-lineup, pods ensure the week's
+contest and board (and next week's, when the slate opens it first), AI seats
+and no-shows aim at the card, old contests leave the leagues list after two
+weeks. Web: the contest card on the leagues home (admin SLOTS/TOTAL switch),
+the squad screen (builder → live darts → standings), Bullseye on the DFS
+create form and a commissioner switch on the squad screen. Phone: the first
+salary-cap builder in the app — contest banner on Your leagues, squad screen,
+standings; a Bullseye salary-cap league opens to it. check:dfsbullseye, and server/test/dfs-bullseye.mjs drives the real stampFinals on baked week-1 plays.
+Tie-breaker + sealing (founder, same day): each seat is dealt one RB/WR spot
+and a number near that slot's card target (dfsTiebreak), shown to its manager
+before building; the distance is stamped as matchup.home_tb/away_tb and an
+exact ring tie puts the closer team 0.01 ahead in its final (every reader
+compares finals), the open board ranks ring then tie-break. Sealed: a Bullseye
+league's sleeper_lineup is readable only by its own seat (it was readable by
+every member — in the open contest, everyone); the opponent's squad comes
+through dfs_bullseye_state player by player as each locks; the scorer writes
+no row for a player still to kick off. Migration and every RPC gate (and the
+sealed policy, as a signed-in user) tested on a scratch Postgres; the screens
+were not exercised signed in.
+
 ### v0.659.1 — a full IR takes a swap
 
 > - When IR (or OUT, taxi or a devy spot) is full, tap the player in it and pick who replaces him: the two swap in one move, so you no longer have to drop someone to put an injured player on IR.
