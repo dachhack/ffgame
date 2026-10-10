@@ -61,7 +61,7 @@ import { lockStartedGames, resolveSportLeagues, sportReplayClocks } from './spor
 import { currentSeason } from '../../packages/core/src/sports/league.ts';
 import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 import { db } from './supabase.js';
-import { ensurePods } from './pods.js';
+import { ensurePods, ensureNextBullseyeBoard } from './pods.js';
 import { PRESEASON, REGULAR_SEASON } from './seasonType.js';
 import { setRuntimeSlate, PRESEASON_BASE, PRESEASON_WEEKS } from '../../packages/core/src/data/nflSlate.ts';
 
@@ -1247,6 +1247,8 @@ async function main() {
     const season = config.season;
     const week = await regularWeek(season);
     const r = await ensurePods(week, season, playerIndex);
+    // The open Bullseye contest can open the coming week first (0462).
+    await ensureNextBullseyeBoard(season, week + 1, playerIndex).catch(() => {});
     if (r.dealt || r.matchups || r.tossed) log('pods:', JSON.stringify(r), 'week', week);
   };
   await podTick().catch((e) => log('pod tick error', e.message));

@@ -19,6 +19,7 @@ import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { REGULAR_SEASON } from './seasonType.js';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
+import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
 
 // ── Seeded RNG (mulberry32 over a string hash — mirrors the playtester) ──────
 function hashStr(s) {
@@ -186,12 +187,16 @@ export function pairPodSeats(leagueId, week, seats) {
  *  gone. Idempotent (deterministic upserts; the board freezes once written
  *  so cap math never shifts under a part-built entry). */
 export async function ensurePods(week, season, idx) {
+  // THE OPEN BULLSEYE CONTEST (0462): this week's, made if nobody has asked
+  // for it yet, so its board and card exist before the first entrant does.
+  await ensureBullseyeContest(season, week).catch(() => {});
   const { data: all } = await db().from('league')
-    .select('id, name, kind, contest_week').in('kind', ['pod', 'weekly', 'dfs']).eq('season', season);
+    .select('id, name, kind, contest_week, settings_json').in('kind', ['pod', 'weekly', 'dfs', 'bullseye']).eq('season', season);
   // Toss expired showdowns: their members' home screens drop the card once
   // every seat is unenrolled. League + matchup rows stay as history.
   let tossed = 0;
-  const expired = (all ?? []).filter((l) => l.kind === 'weekly' && l.contest_week != null && l.contest_week <= week - 2);
+  // An open Bullseye contest (0462) leaves the leagues list the same way.
+  const expired = (all ?? []).filter((l) => (l.kind === 'weekly' || l.kind === 'bullseye') && l.contest_week != null && l.contest_week <= week - 2);
   if (expired.length) {
     const { data: gone } = await db().from('league_membership')
       .update({ enrolled: false })
@@ -199,37 +204,13 @@ export async function ensurePods(week, season, idx) {
     tossed = gone?.length ?? 0;
   }
   const pods = (all ?? []).filter((l) => l.kind === 'pod' || l.kind === 'dfs' || l.contest_week === week);
+  // (A 'bullseye' contest is in `pods` for one reason: the week's salary board
+  // below must exist for it to be built against. It has no AI seats and no
+  // pairing — each entrant's scoring row is made when they save an entry.)
   if (!pods?.length) return { pods: 0, dealt: 0, matchups: 0, tossed };
 
-  // Slate: prefer the synced nfl_slate rows; fall back to a live ESPN build.
-  let { data: slateRows } = await db().from('nfl_slate').select('home, away').eq('season', season).eq('week', week);
-  if (!slateRows?.length) {
-    try {
-      const slate = await buildSlate(season, week, REGULAR_SEASON);
-      slateRows = slate.map((g) => ({ home: g.home, away: g.away }));
-    } catch { slateRows = []; }
-  }
-  const slateTeams = new Set(slateRows.flatMap((g) => [g.home, g.away]).filter(Boolean));
-  if (!slateTeams.size) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no slate' };
-
-  // The week's salary board: build + freeze on first sight of the week, then
-  // always read back the frozen rows (weekly projections drift; the board a
-  // human is building against must not).
-  let board;
-  const { data: haveSal } = await db().from('pod_salary')
-    .select('slug').eq('season', season).eq('week', week).limit(1);
-  if (!haveSal?.length) {
-    const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
-    board = buildSalaryBoard(idx, slateTeams, weekly);
-    if (board.length) {
-      await db().from('pod_salary').upsert(
-        board.map((r) => ({ season, week, ...r })), { onConflict: 'season,week,slug' });
-    }
-  } else {
-    const { data: rows } = await db().from('pod_salary')
-      .select('slug, name, pos, team, salary, proj').eq('season', season).eq('week', week);
-    board = rows ?? [];
-  }
+  const { board, skipped } = await ensureSalaryBoard(season, week, idx);
+  if (skipped) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped };
   if (!board.length) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no board' };
 
   const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON).catch(() => null);
@@ -239,6 +220,10 @@ export async function ensurePods(week, season, idx) {
 
   let dealt = 0, made = 0;
   for (const pod of pods) {
+    if (pod.kind === 'bullseye') continue;
+    // DFS Bullseye (0462): AI seats and no-shows AIM at the card instead.
+    const bullCfg = dfsBullseyeConfigOf(pod.settings_json);
+    const card = bullCfg ? dfsCard(pod.id, week) : null;
     const { data: mems } = await db().from('league_membership')
       .select('sleeper_roster_id, enrolled, app_user_id, controller').eq('league_id', pod.id);
     const seats = (mems ?? []).map((m) => m.sleeper_roster_id);
@@ -257,6 +242,13 @@ export async function ensurePods(week, season, idx) {
     });
     if (need.length) {
       const rows = need.map((m) => {
+        if (card) {
+          const aimed = aimBuild(board, card, `${pod.id}|w${week}|aim${m.sleeper_roster_id}`);
+          return {
+            league_id: pod.id, week, roster_id: m.sleeper_roster_id,
+            starters_json: DFS_SLOT_NAMES.filter((sl) => aimed[sl]).map((sl) => ({ slot: sl, sleeper_id: null, player_slug: aimed[sl], pos: dfsSlotPos(sl) })),
+          };
+        }
         const squad = aiSalaryEntry(pod.id, week, m.sleeper_roster_id, board);
         return {
           league_id: pod.id, week, roster_id: m.sleeper_roster_id,
@@ -279,4 +271,65 @@ export async function ensurePods(week, season, idx) {
     }
   }
   return { pods: pods.length, dealt, matchups: made, tossed };
+}
+
+/** The week's open Bullseye contest (0462) — the SQL's _ensure_bullseye_contest,
+ *  written here because the worker holds the service role, not a signed-in
+ *  user. Idempotent on (sleeper_league_id, season). */
+export async function ensureBullseyeContest(season, week) {
+  if (!(week >= 1 && week <= 22)) return null;
+  const sid = `BULL-${season}-${week}`;
+  await db().from('league').upsert({
+    sleeper_league_id: sid, season, name: `Week ${week} Bullseye`, kind: 'bullseye', contest_week: week,
+    kdst_mode: 'off', provider: 'pod', lineup_policy: 'empty',
+    settings_json: { dfs_bullseye: true, bullseye: 'slots', bullseye_radius: 10 },
+  }, { onConflict: 'sleeper_league_id,season', ignoreDuplicates: true });
+  return sid;
+}
+
+/** The week's salary board: built and FROZEN on first sight of the week, then
+ *  always read back (weekly projections drift; the board a squad is being
+ *  built against must not). Shared by the pods and the open Bullseye contest. */
+export async function ensureSalaryBoard(season, week, idx) {
+  // Slate: prefer the synced nfl_slate rows; fall back to a live ESPN build.
+  let { data: slateRows } = await db().from('nfl_slate').select('home, away').eq('season', season).eq('week', week);
+  if (!slateRows?.length) {
+    try {
+      const slate = await buildSlate(season, week, REGULAR_SEASON);
+      slateRows = slate.map((g) => ({ home: g.home, away: g.away }));
+    } catch { slateRows = []; }
+  }
+  const slateTeams = new Set(slateRows.flatMap((g) => [g.home, g.away]).filter(Boolean));
+  if (!slateTeams.size) return { board: [], skipped: 'no slate' };
+
+  // The week's salary board: build + freeze on first sight of the week, then
+  // always read back the frozen rows (weekly projections drift; the board a
+  // human is building against must not).
+  let board;
+  const { data: haveSal } = await db().from('pod_salary')
+    .select('slug').eq('season', season).eq('week', week).limit(1);
+  if (!haveSal?.length) {
+    const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
+    board = buildSalaryBoard(idx, slateTeams, weekly);
+    if (board.length) {
+      await db().from('pod_salary').upsert(
+        board.map((r) => ({ season, week, ...r })), { onConflict: 'season,week,slug' });
+    }
+  } else {
+    const { data: rows } = await db().from('pod_salary')
+      .select('slug, name, pos, team, salary, proj').eq('season', season).eq('week', week);
+    board = rows ?? [];
+  }
+  if (!board.length) return { board, skipped: 'no board' };
+  return { board, skipped: null };
+}
+
+/** NEXT week's open contest, when someone has already opened it (the SQL
+ *  answers "the week about to be played" from the slate, which can run ahead
+ *  of this worker's week on a Tuesday): its board, so it can be built. */
+export async function ensureNextBullseyeBoard(season, week, idx) {
+  const { data: lg } = await db().from('league').select('id').eq('kind', 'bullseye').eq('season', season).eq('contest_week', week).limit(1);
+  if (!lg?.length) return null;
+  const { skipped } = await ensureSalaryBoard(season, week, idx);
+  return skipped ?? 'ok';
 }

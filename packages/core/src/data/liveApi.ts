@@ -784,6 +784,49 @@ export async function savePodEntry(leagueId: string, week: number, picks: string
   return data as { ok: boolean; error?: string; spent?: number; cap?: number };
 }
 
+// ── DFS BULLSEYE (0462, docs/dfs-bullseye.md) ───────────────────────────────
+// The open weekly contest and a salary-cap league's Bullseye switch. The card
+// is dealt client-side (engine/dfsBullseye.ts dfsCard) from the same seed the
+// worker scores with.
+export type DfsVariant = 'slots' | 'total';
+export interface BullseyeContest {
+  ok: boolean; error?: string; season?: string; week?: number; league_id?: string; name?: string;
+  variant?: DfsVariant; radius?: number; entries?: number; first_lock?: string | null; started?: boolean;
+  me?: { roster_id: number; team: string | null; entered: boolean } | null;
+}
+export interface DfsSlotScore { side: 'home' | 'away'; slot: string; slug: string | null; score: number; aim?: { target: number; dist: number; ring: number; penalty?: number } }
+export interface DfsBullseyeState {
+  ok: boolean; error?: string; on?: boolean; kind?: string; name?: string; week?: number; season?: string;
+  variant?: DfsVariant; radius?: number; roster_id?: number | null; team?: string | null; started?: boolean;
+  /** sleeper_lineup.starters_json — read it with dfsSlotsOf. */
+  entry?: unknown;
+  matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null } | null;
+  opponent?: { roster_id: number; team: string | null; entry: unknown } | null;
+  state?: { home: number; away: number; slots: DfsSlotScore[] } | null;
+}
+export interface BullseyeBoardRow { roster_id: number; team_name: string | null; me: boolean; ring: number; points: number; status: string; rank: number }
+async function rpcOk<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await (await client()).rpc(fn, args);
+  if (error) return { ok: false, error: friendlyError(error) } as T;
+  return data as T;
+}
+export const bullseyeContest = (season = '2026') => rpcOk<BullseyeContest>('bullseye_contest', { p_season: season });
+export const joinBullseyeContest = (teamName?: string | null, season = '2026') =>
+  rpcOk<{ ok: boolean; error?: string; league_id?: string; week?: number; roster_id?: number; already?: boolean }>('join_bullseye_contest', { p_team_name: teamName ?? null, p_season: season });
+/** `slots`: all nine — {QB, RB1, RB2, WR1, WR2, WR3, TE, K, DEF} → slug. */
+export const saveBullseyeEntry = (leagueId: string, week: number, slots: Record<string, string>, season = '2026') =>
+  rpcOk<{ ok: boolean; error?: string; spent?: number; cap?: number }>('save_bullseye_entry', { p_league: leagueId, p_week: week, p_slots: slots, p_season: season });
+export const dfsBullseyeState = (leagueId: string, week?: number | null, season = '2026') =>
+  rpcOk<DfsBullseyeState>('dfs_bullseye_state', { p_league: leagueId, p_week: week ?? null, p_season: season });
+export const bullseyeContestBoard = (leagueId: string, limit = 100) =>
+  rpcOk<{ ok: boolean; error?: string; started?: boolean; entries?: number; week?: number; rows?: BullseyeBoardRow[]; me?: BullseyeBoardRow | null }>('bullseye_contest_board', { p_league: leagueId, p_limit: limit });
+/** Admin: the open contest's variant and radius for a week, until it locks. */
+export const setBullseyeContest = (week: number, variant: DfsVariant, radius = 10, season = '2026') =>
+  rpcOk<{ ok: boolean; error?: string }>('set_bullseye_contest', { p_week: week, p_variant: variant, p_radius: radius, p_season: season });
+/** Commissioner: a salary-cap league's Bullseye — 'slots' | 'total', or null for off. */
+export const setDfsBullseye = (leagueId: string, variant: DfsVariant | null, radius = 10) =>
+  rpcOk<{ ok: boolean; error?: string }>('set_dfs_bullseye', { p_league: leagueId, p_variant: variant, p_radius: radius });
+
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
  *  through a SECURITY DEFINER RPC granted to anon, so it works before sign-in. */

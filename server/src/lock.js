@@ -743,6 +743,9 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
     // eat the 9-slot classic cap. Missed classic lineups score their honest
     // zeros instead (the resolver's classic branch fields only 'wk' picks).
     if (lg?.settings_json?.game_mode === 'classic') continue;
+    // DFS Bullseye (0462): the squad IS the lineup, read slot by slot by the
+    // resolver's own branch; a drip auto-lineup would only be noise beside it.
+    if (lg?.settings_json?.dfs_bullseye === true) continue;
     const policy = lg?.lineup_policy ?? 'best_lineup';
     // no_start flags (0144): the auto-fill must never field a player the
     // commissioner has barred — the sealed_pick trigger exempts the server
