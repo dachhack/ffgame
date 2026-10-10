@@ -2290,7 +2290,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
             {/* ROOKIES (v0.398.0). Shown only once years_exp has actually
                 loaded — an empty map would make the chip hide every player and
                 look broken rather than empty. */}
-            {Object.keys(expMap).length > 0 && (
+            {Object.keys(expMap).length > 0 && !(poolKinds.college && !poolKinds.both) && (
               <Chip small on={tenure === 'rookie'} onClick={() => setTenure((t) => (t === 'rookie' ? 'any' : 'rookie'))}>
                 🌱 ROOKIES
               </Chip>
@@ -3916,14 +3916,17 @@ export function TeamManage({ leagueId, onDraft, focus }: {
         {/* One line (v0.656.7, founder: "we shouldn't have wrapping filter
             rows"): the last wrapping row on the wire, now a strip like the rest. */}
         <ChipStrip>
-          {TENURE_BANDS.map((b) => (
+          {/* AN ALL-COLLEGE POOL (v0.656.8, founder: "the tenure and NFL team
+              filter isn't needed for all college leagues"): NFL seasons and
+              NFL teams mean nothing to a pool of college players. */}
+          {!(poolKinds.college && !poolKinds.both) && TENURE_BANDS.map((b) => (
             <Chip small key={b.id} on={tenure === b.id} onClick={() => setTenure(b.id)}>{b.short}</Chip>
           ))}
-          <select value={nflTeam} onChange={(e) => setNflTeam(e.target.value)} className="mono"
+          {!(poolKinds.college && !poolKinds.both) && <select value={nflTeam} onChange={(e) => setNflTeam(e.target.value)} className="mono"
             style={{ fontSize: 10, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 8px', flexShrink: 0 }}>
             <option value="ALL">ALL NFL TEAMS</option>
             {poolTeams.map((tm) => <option key={tm} value={tm}>{tm}</option>)}
-          </select>
+          </select>}
           {/* 0341 — founder: "the option to see owned players and if they
               belong to you other teams (button right there to trade)." Off by
               default: the wire's first job is still who you can HAVE. */}

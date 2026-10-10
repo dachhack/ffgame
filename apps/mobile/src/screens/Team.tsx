@@ -1226,19 +1226,22 @@ export function Team({ leagueId, onBack, onDraft, tradePartner }: {
         {/* Tenure BANDS rather than a number box — nobody searches for
             "exactly 6 accrued seasons" — with ROOKIES as the first band so it
             and the tenure filter can never disagree about who is one. */}
-        <ChipStrip style={{ marginTop: 6 }}>
+        {/* AN ALL-COLLEGE POOL (v0.656.8, founder: "the tenure and NFL team
+            filter isn't needed for all college leagues"): no NFL seasons or
+            NFL teams to filter by, so neither strip shows. */}
+        {!(poolKinds.college && !poolKinds.both) && <ChipStrip style={{ marginTop: 6 }}>
           {TENURE_BANDS.map((b) => (
             <Chip small key={b.id} label={b.short} on={tenure === b.id} onPress={() => { tap(); setTenure(b.id); }} />
           ))}
-        </ChipStrip>
+        </ChipStrip>}
         {/* The team strip scrolls: 32 codes wrapped would fill a phone screen
             before a single player showed. */}
         <ChipStrip style={{ marginTop: 6 }}>
-          <Chip small label="ALL NFL" on={nflTeam === 'ALL'} onPress={() => { tap(); setNflTeam('ALL'); }} />
+          {!(poolKinds.college && !poolKinds.both) && <Chip small label="ALL NFL" on={nflTeam === 'ALL'} onPress={() => { tap(); setNflTeam('ALL'); }} />}
           {/* 0341: owned players in the list, with who holds them. */}
           <Chip small label={showOwned ? 'OWNED ✓' : 'SHOW OWNED'} on={showOwned}
             onPress={() => { tap(); setShowOwned(!showOwned); }} />
-          {poolTeams.map((tm) => (
+          {!(poolKinds.college && !poolKinds.both) && poolTeams.map((tm) => (
             <Chip small key={tm} label={tm} on={nflTeam === tm} onPress={() => { tap(); setNflTeam(nflTeam === tm ? 'ALL' : tm); }} />
           ))}
         </ChipStrip>

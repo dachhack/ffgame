@@ -1032,7 +1032,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
             })}
             {/* ROOKIES (v0.398.0). Only once years_exp has loaded — an empty
                 map would hide every player and look broken rather than empty. */}
-            {Object.keys(expMap).length > 0 && (
+            {Object.keys(expMap).length > 0 && !(poolKinds.college && !poolKinds.both) && (
               <Chip small label="🌱 ROOKIES" on={tenure === 'rookie'}
                 onPress={() => { tap(); setTenure((cur) => (cur === 'rookie' ? 'any' : 'rookie')); }} />
             )}
