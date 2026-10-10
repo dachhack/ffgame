@@ -17,7 +17,7 @@ import { clearsOn } from '@drip/core/data/waiverDays';
 import { SPORTS } from '@drip/core/sports/index';
 import { sportLeagueMarket,
   addFreeAgent, cancelWaiverClaim,
-  friendlyError, leaguePool, nativeRosters, setRosterSpot,
+  friendlyError, leaguePool, nativeRosters, setRosterSpot, swapRosterSpot,
   rosterRules, injuryTags, leagueMarket,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, seatFullError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
@@ -587,6 +587,14 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
     tap();
     setFillFor(null);
     void run(() => setRosterSpot(leagueId, slug, spot));
+  };
+  // A FULL spot takes a SWAP (0461, #1188): the occupant back to active and
+  // this player into his place, as one move — with a full roster there was
+  // no other way to do it short of a drop.
+  const swapIntoSpot = (outSlug: string, inSlug: string) => {
+    tap();
+    setFillFor(null);
+    void run(() => swapRosterSpot(leagueId, outSlug, inSlug));
   };
 
   // ── THE ROSTER, LAID OUT LIKE A ROSTER (v0.281.0, founder) ───────────────
@@ -1505,7 +1513,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                   <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: t.you }}>↩ BACK TO ACTIVE</Text>
                 </Pressable>
               </View>
-              <Mono size={9} tone="dim" track={0.1}>{`OR MOVE SOMEONE ${fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : fillFor === 'devy' ? 'TO A DEVY SPOT' : 'TO THE TAXI SQUAD'}`}</Mono>
+              <Mono size={9} tone="dim" track={0.1}>{`OR ${(gm?.shape?.[fillFor!] ?? 0) > 0 && bySpot[fillFor!].length >= (gm?.shape?.[fillFor!] ?? 0) ? `SWAP ${occ.full_name.toUpperCase()} FOR SOMEONE` : 'MOVE SOMEONE'} ${fillFor === 'ir' ? 'TO INJURED RESERVE' : fillFor === 'out' ? 'TO OUT' : fillFor === 'devy' ? 'TO A DEVY SPOT' : 'TO THE TAXI SQUAD'}`}</Mono>
             </View>
           );
         })()}
@@ -1519,11 +1527,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
             // greyed out", and the answer prints right under him.
             const cap = fillFor ? gm?.shape?.[fillFor] ?? 0 : 0;
             const full = !!fillFor && cap > 0 && bySpot[fillFor].length >= cap;
-            const why = !fillFor ? null : full
-              ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'The devy shelf' : 'The taxi squad'} is full (${cap}/${cap}) — move someone back to active first`
+            const swapOcc = full && fillOcc && bySpot[fillFor!].some((x) => x.slug === fillOcc) ? fillOcc : null;
+            const why = !fillFor ? null : full && !swapOcc
+              ? `${fillFor === 'ir' ? 'IR' : fillFor === 'out' ? 'OUT' : fillFor === 'devy' ? 'The devy shelf' : 'The taxi squad'} is full (${cap}/${cap}) — tap a player in it to swap him out`
               : stashBlock(p.slug, fillFor);
             return (
-            <Pressable key={p.slug} disabled={busy || !!why} onPress={() => moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : fillFor === 'out' ? 'out' : fillFor === 'devy' ? 'devy' : 'taxi')}
+            <Pressable key={p.slug} disabled={busy || !!why} onPress={() => (swapOcc ? swapIntoSpot(swapOcc, p.slug) : moveToSpot(p.slug, fillFor === 'ir' ? 'ir' : fillFor === 'out' ? 'out' : fillFor === 'devy' ? 'devy' : 'taxi'))}
               style={{ paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, opacity: busy || why ? 0.45 : 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Face slug={p.slug} pos={p.pos} />
@@ -1531,7 +1540,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
                 {fillFor !== 'taxi' && !!injTags[p.slug] && <Mono size={8.5} weight="700" tone="warn">{injTags[p.slug]}</Mono>}
                 <Mono size={8.5} tone="faint">{teamLabel(p)}</Mono>
-                <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{fillFor === 'ir' ? '\u2192IR' : fillFor === 'out' ? '\u2192OUT' : fillFor === 'devy' ? '\u2192DV' : '\u2192TX'}</Mono>
+                <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{swapOcc ? '\u21c4 SWAP' : fillFor === 'ir' ? '\u2192IR' : fillFor === 'out' ? '\u2192OUT' : fillFor === 'devy' ? '\u2192DV' : '\u2192TX'}</Mono>
               </View>
               {!!why && <Mono size={8} tone="faint" style={{ marginTop: 3, lineHeight: fs(11) }}>{why}</Mono>}
             </Pressable>

@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.659.1 — a full IR takes a swap
+
+> - When IR (or OUT, taxi or a devy spot) is full, tap the player in it and pick who replaces him: the two swap in one move, so you no longer have to drop someone to put an injured player on IR.
+
+#1188, a Kickoff League manager: "Trying to swap Jonah Coleman for Saquon on
+IR for waiver add purposes and it won't let me swap/move Jonah off without
+dropping someone." set_roster_spot moves one player at a time; with IR full
+and the active roster full, Saquon → IR is "IR is full" and Jonah → active is
+"active roster is full", and the pickers said "move someone back to active
+first" — reachable only by a drop. 0461 `swap_roster_spot` does both halves as
+one move, each held to set_roster_spot's own rules, undone together on a
+refusal; both pickers offer ⇄ SWAP when the spot is full and opened from its
+occupant. Reproduced both refusals and the swap on a scratch Postgres.
+UNCONFIRMED against live data: scripts/db/stash-swap-1188-probe.sql reads the
+team's IR/active counts and the league's IR tags.
+
 ### v0.659.0 — the commissioner decides who each team may take
 
 > - Commissioners can give any team its own rule for who it may draft and pick up: only certain positions (TE only), only certain NFL teams (NFC only, Bears only, a division), only rookies or veterans — or any mix. The draft room and waiver list show each team who it may take, and the league chat announces every change. Trades stay open.
