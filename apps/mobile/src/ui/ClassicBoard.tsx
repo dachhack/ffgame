@@ -387,7 +387,15 @@ const fmtKick = (iso: string): string => {
  *  (fmtQuarterClock, v0.368.0) so the row clocks and the log can't drift. */
 const fmtQClock = fmtQuarterClock;
 
-export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; leagueId: string; rosterId: number }) {
+export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fallback }: {
+  userId: string; leagueId: string; rosterId: number;
+  /** 'team' (v0.657.0): only MY lineup, for the Team tab — week arrows, the
+   *  spots as buttons, a projection on every row. */
+  variant?: 'match' | 'team';
+  /** What the Team tab shows when there is no lineup to draw (no schedule
+   *  built, a failed read): its old read-only fit. */
+  fallback?: React.ReactNode;
+}) {
   const t = useTheme();
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'error'>('loading');
   const [err, setErr] = useState<string | null>(null);
@@ -1423,7 +1431,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // waits for both caches to speak for THIS league, which is the same spinner
   // it already shows and typically the same tick.
   if (state === 'loading' || !rulesReady) return <View style={{ padding: 32, alignItems: 'center' }}><ActivityIndicator color={t.you} /></View>;
-  if (byeWeek != null) return (
+  if (byeWeek != null && variant !== 'team') return (
     <NoGame week={byeWeek} bye>
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
         <Chip label={`‹ ${weekLabel(byeWeek - 1)}`} disabled={!canGo(-1)} onPress={() => goWeek(-1)} />
@@ -1435,6 +1443,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       </View>
     </NoGame>
   );
+  if (variant === 'team' && (state === 'none' || state === 'error')) return <>{fallback ?? null}</>;
   if (state === 'none') return <View style={{ padding: 24 }}><Mono size={10} tone="faint">No matchup this week.</Mono></View>;
   if (state === 'error') return <View style={{ padding: 24 }}><Mono size={10} tone="warn">{err}</Mono></View>;
 
@@ -1442,6 +1451,304 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
   // empty-spot handling); the fallback grid below computes its own inline.
 
   const slotDef = pickerSlot ? slotDefs.find((d) => d.slot === pickerSlot) : null;
+
+  // The two pickers, shared by the matchup board and the Team tab's lineup
+  // (v0.657.0): one way to change a spot, wherever the spot is drawn.
+  const pickerSheets = (
+    <>
+      {/* ── THE PICKER, as a sheet over the board ──────────────────────────
+          It used to render inline BELOW the whole board, so tapping a spot near
+          the top scrolled the answer off screen — you pressed a thing and
+          nothing appeared to happen. A spot is a question ("who goes here?"),
+          so the answer comes up over it, in the app's own bottom-sheet idiom
+          (ui/Overlay: enters from the thumb's edge, drag to dismiss).
+
+          It lists ONLY what may legally go in this spot: the spot's own
+          position + filter rules (slotAllows), minus anyone already starting,
+          minus anyone whose game has kicked off — the database refuses all
+          three, and a picker that offers a refusal is a trap. */}
+      <Overlay
+        visible={!!(pickerSlot && slotDef && canEdit(pickerSlot))}
+        title={slotDef ? nameOf(slotDef) : 'Set spot'}
+        subtitle={slotDef
+          ? `TAKES ${slotDef.pos.join(' / ')}${slotFilterLabel(slotDef.flt) ? ` · ${slotFilterLabel(slotDef.flt)}` : ''}`
+          : undefined}
+        onClose={() => setPickerSlot(null)}>
+        {pickerSlot && slotDef && (() => {
+          // EVERY eligible player on the roster, not just the bench (founder):
+          // "put my TE in the flex" was a two-step dance when it is one move.
+          const spotOf = new Map<string, string>();
+          for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
+          const eligible = pool
+            .filter((p) => !stashed.has(p.slug))
+            .filter((p) => slotAllows(slotDef, { id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
+            .filter((p) => !kickedOff(p.slug))
+            .filter((p) => spotOf.get(p.slug) !== pickerSlot)
+            // Starting in a spot that has locked means he cannot leave it: the
+            // DB refuses the vacating write, so don't offer the move.
+            // …but a BEST-BALL spot never holds anyone (v0.424.1, founder:
+            // "I can't move him into my WR spot"): the fill parked him there
+            // and will simply pick someone else once he starts manually.
+            .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); })
+            // THE ROW CARRIES THE DECISION (v0.639.0). A member: "I can't
+            // always see the opponent for my players in the matchup screen
+            // where I switch the lineup around … so I have to toggle between
+            // screens." Each candidate is the board's own entry for this spot
+            // — kickoff, opponent, venue marks, the spot-aware projection —
+            // plus the position matchup graded red to green (v0.639.1), and
+            // the list runs best first so the choice is usually the top row.
+            .map((p) => ({ p, e: entryFor(p.slug, slotDef.pos, pickerSlot), grade: matchupGrade(wk.rows[p.slug], p.pos, wk.dvp) }))
+            .sort((a, b) => (b.e?.proj ?? 0) - (a.e?.proj ?? 0) || a.p.full.localeCompare(b.p.full));
+          const anyGrade = eligible.some((x) => x.grade && (x.e?.proj ?? 0) > 0);
+          return (
+            // The body must be able to SHRINK or the sheet clips its own bottom
+            // — the one contract ui/Overlay asks of every caller, and the bug
+            // the founder hit: `flexShrink: 1` on a ScrollView, not a View.
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+              {!!mine[pickerSlot] && (
+                <Pressable onPress={() => { tap(); void assign(pickerSlot, null); setPickerSlot(null); }}
+                  style={{ paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                  <Mono size={10} tone="dim">✕ LEAVE THIS SPOT EMPTY</Mono>
+                </Pressable>
+              )}
+              {eligible.length === 0 && (
+                <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
+                  Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
+                </Mono>
+              )}
+              {eligible.map(({ p, e, grade }) => {
+                const bye = e?.opponent === 'BYE';
+                const game = e ? `${gameLineOf(e)}${e.state === 'pre' ? roofMark(e) : ''}` : 'no game listed';
+                const team = p.team || collegeNameFor(p.slug)?.school || '';
+                // No grade on a man the board prices at 0 (O/IR, a proven
+                // bye): the injury tag and the BYE line already say it.
+                const g = grade && (e?.proj ?? 0) > 0 ? grade : null;
+                return (
+                <Pressable key={p.slug} onPress={() => { tap(); void pickInto(pickerSlot, p.slug); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                  <Face slug={p.slug} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Display size={12.5}>{shortName(p.full)}</Display>
+                      <InjuryNow slug={p.slug} size={8} />
+                      {!!spotOf.get(p.slug) && (
+                        <Mono size={8} tone="you">{`in ${slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}`}</Mono>
+                      )}
+                    </View>
+                    <Mono size={8.5} tone={bye ? 'warn' : 'faint'} numberOfLines={1} style={{ marginTop: 1 }}>
+                      {`${team ? `${team} · ` : ''}${game}`}
+                    </Mono>
+                  </View>
+                  <PosPill pos={p.pos} />
+                  <View style={{ width: 66, alignItems: 'flex-end' }}>
+                    <Mono size={11} tone="dim" weight="700">{(e?.proj ?? 0).toFixed(1)}</Mono>
+                    {/* THE GRADE, AS A PILL (v0.639.1, founder: "more linear
+                        with more distinction — red / orange / yellow /
+                        yellow-green / green"). The percent is the opponent's
+                        factor against his position; the colour is its band. */}
+                    {g && (
+                      <View style={{ marginTop: 2, borderWidth: 1, borderColor: MATCHUP_BAND_COLOR[g.band], borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: MATCHUP_BAND_COLOR[g.band] }}>
+                          {`${g.basis === 'def' ? (p.pos === 'DEF' ? 'DST' : p.pos) : 'wk'} ${matchupGradeLabel(g)}`}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+                );
+              })}
+              {anyGrade && (
+                <View style={{ paddingTop: 8, gap: 3 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    {([1, 2, 3, 4, 5] as const).map((b) => (
+                      <View key={b} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: MATCHUP_BAND_COLOR[b] }} />
+                        <Mono size={7.5} tone="faint">{MATCHUP_BAND_WORD[b]}</Mono>
+                      </View>
+                    ))}
+                  </View>
+                  <Mono size={8} tone="faint" style={{ lineHeight: 12 }}>
+                    Matchup: what the defense he faces gives up to his position, against the league average. “wk” is his whole week’s line against his usual, where the defense table has no entry.
+                  </Mono>
+                </View>
+              )}
+            </ScrollView>
+          );
+        })()}
+      </Overlay>
+
+      {/* ── THE SPOT PICKER, for a bench player (v0.640.1) ─────────────────
+          The mirror of the sheet above: he is fixed, the spot is the
+          question. One row per spot he may take, with who stands in it now
+          (he goes to the bench) or EMPTY, and his own projection IN that
+          spot on the right — a flex and a WR spot can price him differently. */}
+      <Overlay
+        visible={!!benchPick}
+        title={benchPick ? `Start ${prettySlug(benchPick)}` : 'Start'}
+        subtitle="WHERE HE CAN GO · TAP A SPOT · HIS PROJECTION THERE, RIGHT"
+        onClose={() => setBenchPick(null)}>
+        {benchPick && (() => {
+          const me = entryFor(benchPick);
+          const spots = spotsFor(benchPick);
+          return (
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+              {!!me && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                  <Face slug={benchPick} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Display size={12.5}>{me.name}</Display>
+                      <InjuryNow slug={benchPick} size={8} />
+                    </View>
+                    <Mono size={8.5} tone={me.opponent === 'BYE' ? 'warn' : 'faint'} numberOfLines={1}>
+                      {`${me.pos}${me.team ? ` · ${me.team}` : ''} · ${gameLineOf(me)}${me.state === 'pre' ? roofMark(me) : ''}`}
+                    </Mono>
+                  </View>
+                  <Mono size={11} tone="dim" weight="700">{me.proj.toFixed(1)}</Mono>
+                </View>
+              )}
+              {spots.length === 0 && (
+                <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
+                  No spot he can take is open right now — every one that fits him has {vocab.started}, is best ball, or already holds him.
+                </Mono>
+              )}
+              {spots.map(({ d, occupant }) => {
+                const oe = occupant ? entryFor(occupant, d.pos, d.slot) : null;
+                const here = entryFor(benchPick, d.pos, d.slot);
+                return (
+                  <Pressable key={d.slot} onPress={() => { tap(); void pickInto(d.slot, benchPick); setBenchPick(null); }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
+                    <View style={{ width: 66, alignItems: 'center' }}>
+                      <SlotPill pos={d.pos} label={nameOf(d)} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      {oe ? (
+                        <>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Display size={12.5}>{oe.name}</Display>
+                            <InjuryNow slug={occupant!} size={8} />
+                          </View>
+                          <Mono size={8.5} tone="faint" numberOfLines={1}>{`${oe.proj.toFixed(1)} · ${gameLineOf(oe)} → bench`}</Mono>
+                        </>
+                      ) : (
+                        <Mono size={10} tone="you">+ EMPTY</Mono>
+                      )}
+                    </View>
+                    <Mono size={11} tone="you" weight="700" style={{ width: 36, textAlign: 'right' }}>{here ? here.proj.toFixed(1) : ''}</Mono>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          );
+        })()}
+      </Overlay>
+
+    </>
+  );
+
+  // ── THE TEAM TAB'S LINEUP (v0.657.0) ──────────────────────────────────────
+  // Founder, with Sleeper's team screen open beside ours: "Can we add weeks
+  // to my team so you can change your lineup on that screen as well as the
+  // matchup. Also include projections." The Team tab drew a read-only FIT of
+  // the roster; this is the same lineup the matchup board edits, one side of
+  // it, written by the same applyMove/pickInto and priced by the same
+  // week-aware projection — so the two screens can never disagree about who
+  // starts. It sits inside the Team tab's own ScrollView, so no scroller and
+  // no swipe of its own: the arrows walk the weeks.
+  if (variant === 'team') {
+    const side = board?.home;
+    // Projections until the first starter kicks off; points (projection under) after.
+    const pre = !board?.starters.some((r) => r.home && r.home.state !== 'pre');
+    const scoreCol = (e: BoardEntry | null) => {
+      if (!e) return null;
+      return e.state === 'pre'
+        ? <Mono size={12.5} tone="dim" weight="700">{e.proj.toFixed(2)}</Mono>
+        : <>
+            <Mono size={12.5} weight="700">{e.live.toFixed(2)}</Mono>
+            <Mono size={8} tone="faint">{`proj ${e.proj.toFixed(1)}`}</Mono>
+          </>;
+    };
+    const row = (key: string, badge: React.ReactNode, e: BoardEntry | null, empty: React.ReactNode) => (
+      <View key={key} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: t.bd }}>
+        <View style={{ width: 66, alignItems: 'center' }}>{badge}</View>
+        {e ? <Face slug={e.slug} size={30} /> : <View style={{ width: 30 }} />}
+        {e ? (
+          <BoardCell e={e} align="left" onGame={gameOpener(e)}
+            onName={() => openPlayerCard({ slug: e.slug, name: e.name, pos: e.pos, team: e.team ?? '', week: matchup?.week, userId })} />
+        ) : <View style={{ flex: 1 }}>{empty}</View>}
+        <View style={{ width: 52, alignItems: 'flex-end' }}>{scoreCol(e)}</View>
+      </View>
+    );
+    // The spot's pill IS the button, Sleeper's way: tap QB to change the QB.
+    const spotBadge = (slot: string, pos: string[], label: string, on: boolean, onPress: () => void) => (
+      <Pressable disabled={!on} hitSlop={4} onPress={() => { tap(); onPress(); }}
+        accessibilityRole="button" accessibilityLabel={on ? `change ${label}` : label}
+        style={{ alignItems: 'center', opacity: on ? 1 : 0.55 }}>
+        <SlotPill pos={pos} label={label} />
+        {bb.has(slot) && <Mono size={7} tone="you" numberOfLines={1}>🎯 AUTO</Mono>}
+      </Pressable>
+    );
+    const weekNav = (title: string) => (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Pressable onPress={() => goWeek(-1)} disabled={!canGo(-1)} hitSlop={10} accessibilityLabel="previous week">
+          <Mono size={15} tone={canGo(-1) ? 'you' : 'faint'} weight="700">‹</Mono>
+        </Pressable>
+        <Mono size={10} tone="you" weight="700" track={0.08}>{title}</Mono>
+        <Pressable onPress={() => goWeek(1)} disabled={!canGo(1)} hitSlop={10} accessibilityLabel="next week">
+          <Mono size={15} tone={canGo(1) ? 'you' : 'faint'} weight="700">›</Mono>
+        </Pressable>
+      </View>
+    );
+    if (byeWeek != null) return (
+      <View style={{ gap: 6, marginTop: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Mono size={9} tone="faint" track={0.12}>STARTERS</Mono>
+          {weekNav(weekTitle(byeWeek))}
+        </View>
+        <Mono size={10} tone="faint">{`Your team is off in ${weekTitle(byeWeek)} — no lineup to set.`}</Mono>
+      </View>
+    );
+    if (!board || !matchup || !side) return <>{fallback ?? null}</>;
+    return (
+      <View style={{ marginTop: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <View style={{ flexShrink: 1 }}>
+            <Mono size={9} tone="faint" track={0.12}>STARTERS</Mono>
+            <Mono size={8} tone="faint" numberOfLines={1}>
+              {issues[String(seat)] ? 'lineup frozen — roster isn’t legal' : `tap a spot to change it · each locks at its own ${vocab.start}`}
+            </Mono>
+          </View>
+          {weekNav(boardWeekTitle(matchup.week, slate.map((g) => g.kickoff)))}
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'baseline', gap: 6, paddingVertical: 4 }}>
+          {!pre && <Mono size={12} weight="700">{side.live.toFixed(2)}</Mono>}
+          <Mono size={9} tone="faint">{pre ? `projected ${side.projected.toFixed(2)}` : `proj ${side.projected.toFixed(1)}`}</Mono>
+        </View>
+        {board.starters.map((r) => {
+          const settable = canEdit(r.slot) && !bb.has(r.slot);
+          const d = slotDefs.find((x) => x.slot === r.slot);
+          const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
+          return row(`s-${r.slot}`,
+            spotBadge(r.slot, r.pos, r.label, settable, () => setPickerSlot(r.slot)),
+            r.home,
+            bb.has(r.slot)
+              ? <Mono size={10} tone="you">🎯 BEST BALL</Mono>
+              : <Pressable disabled={!settable} onPress={() => { tap(); setPickerSlot(r.slot); }}>
+                  <Mono size={10} tone={settable ? 'you' : 'faint'}>{settable ? `+ SET ${r.label}` : 'Empty'}</Mono>
+                  {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
+                </Pressable>);
+        })}
+        {board.bench.home.length > 0 && (
+          <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14, marginBottom: 2 }}>{`BENCH (${board.bench.home.length})`}</Mono>
+        )}
+        {board.bench.home.map((e) => row(`b-${e.slug}`,
+          spotBadge(`bn-${e.slug}`, [e.pos], 'BN', canBenchPick(e.slug), () => setBenchPick(e.slug)),
+          e, null))}
+        {saveNote && <Mono size={9} tone={saveNote.startsWith('✓') ? 'faint' : 'warn'} style={{ marginTop: 6 }}>{saveNote}</Mono>}
+        {pickerSheets}
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }} {...swipe.panHandlers}>
@@ -1933,192 +2240,7 @@ export function ClassicBoard({ userId, leagueId, rosterId }: { userId: string; l
       )}
       {saveNote && <Mono size={9} tone={saveNote.startsWith('✓') ? 'faint' : 'warn'}>{saveNote}</Mono>}
 
-      {/* ── THE PICKER, as a sheet over the board ──────────────────────────
-          It used to render inline BELOW the whole board, so tapping a spot near
-          the top scrolled the answer off screen — you pressed a thing and
-          nothing appeared to happen. A spot is a question ("who goes here?"),
-          so the answer comes up over it, in the app's own bottom-sheet idiom
-          (ui/Overlay: enters from the thumb's edge, drag to dismiss).
-
-          It lists ONLY what may legally go in this spot: the spot's own
-          position + filter rules (slotAllows), minus anyone already starting,
-          minus anyone whose game has kicked off — the database refuses all
-          three, and a picker that offers a refusal is a trap. */}
-      <Overlay
-        visible={!!(pickerSlot && slotDef && canEdit(pickerSlot))}
-        title={slotDef ? nameOf(slotDef) : 'Set spot'}
-        subtitle={slotDef
-          ? `TAKES ${slotDef.pos.join(' / ')}${slotFilterLabel(slotDef.flt) ? ` · ${slotFilterLabel(slotDef.flt)}` : ''}`
-          : undefined}
-        onClose={() => setPickerSlot(null)}>
-        {pickerSlot && slotDef && (() => {
-          // EVERY eligible player on the roster, not just the bench (founder):
-          // "put my TE in the flex" was a two-step dance when it is one move.
-          const spotOf = new Map<string, string>();
-          for (const x of slotDefs) { const sl = effective.mine[x.slot]; if (sl) spotOf.set(sl, x.slot); }
-          const eligible = pool
-            .filter((p) => !stashed.has(p.slug))
-            .filter((p) => slotAllows(slotDef, { id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }))
-            .filter((p) => !kickedOff(p.slug))
-            .filter((p) => spotOf.get(p.slug) !== pickerSlot)
-            // Starting in a spot that has locked means he cannot leave it: the
-            // DB refuses the vacating write, so don't offer the move.
-            // …but a BEST-BALL spot never holds anyone (v0.424.1, founder:
-            // "I can't move him into my WR spot"): the fill parked him there
-            // and will simply pick someone else once he starts manually.
-            .filter((p) => { const from = spotOf.get(p.slug); return !from || bb.has(from) || canEdit(from); })
-            // THE ROW CARRIES THE DECISION (v0.639.0). A member: "I can't
-            // always see the opponent for my players in the matchup screen
-            // where I switch the lineup around … so I have to toggle between
-            // screens." Each candidate is the board's own entry for this spot
-            // — kickoff, opponent, venue marks, the spot-aware projection —
-            // plus the position matchup graded red to green (v0.639.1), and
-            // the list runs best first so the choice is usually the top row.
-            .map((p) => ({ p, e: entryFor(p.slug, slotDef.pos, pickerSlot), grade: matchupGrade(wk.rows[p.slug], p.pos, wk.dvp) }))
-            .sort((a, b) => (b.e?.proj ?? 0) - (a.e?.proj ?? 0) || a.p.full.localeCompare(b.p.full));
-          const anyGrade = eligible.some((x) => x.grade && (x.e?.proj ?? 0) > 0);
-          return (
-            // The body must be able to SHRINK or the sheet clips its own bottom
-            // — the one contract ui/Overlay asks of every caller, and the bug
-            // the founder hit: `flexShrink: 1` on a ScrollView, not a View.
-            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-              {!!mine[pickerSlot] && (
-                <Pressable onPress={() => { tap(); void assign(pickerSlot, null); setPickerSlot(null); }}
-                  style={{ paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
-                  <Mono size={10} tone="dim">✕ LEAVE THIS SPOT EMPTY</Mono>
-                </Pressable>
-              )}
-              {eligible.length === 0 && (
-                <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
-                  Nobody on your roster can fill this spot right now — everyone eligible has already {vocab.started}.
-                </Mono>
-              )}
-              {eligible.map(({ p, e, grade }) => {
-                const bye = e?.opponent === 'BYE';
-                const game = e ? `${gameLineOf(e)}${e.state === 'pre' ? roofMark(e) : ''}` : 'no game listed';
-                const team = p.team || collegeNameFor(p.slug)?.school || '';
-                // No grade on a man the board prices at 0 (O/IR, a proven
-                // bye): the injury tag and the BYE line already say it.
-                const g = grade && (e?.proj ?? 0) > 0 ? grade : null;
-                return (
-                <Pressable key={p.slug} onPress={() => { tap(); void pickInto(pickerSlot, p.slug); }}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
-                  <Face slug={p.slug} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Display size={12.5}>{shortName(p.full)}</Display>
-                      <InjuryNow slug={p.slug} size={8} />
-                      {!!spotOf.get(p.slug) && (
-                        <Mono size={8} tone="you">{`in ${slotName.get(spotOf.get(p.slug)!) ?? spotOf.get(p.slug)}`}</Mono>
-                      )}
-                    </View>
-                    <Mono size={8.5} tone={bye ? 'warn' : 'faint'} numberOfLines={1} style={{ marginTop: 1 }}>
-                      {`${team ? `${team} · ` : ''}${game}`}
-                    </Mono>
-                  </View>
-                  <PosPill pos={p.pos} />
-                  <View style={{ width: 66, alignItems: 'flex-end' }}>
-                    <Mono size={11} tone="dim" weight="700">{(e?.proj ?? 0).toFixed(1)}</Mono>
-                    {/* THE GRADE, AS A PILL (v0.639.1, founder: "more linear
-                        with more distinction — red / orange / yellow /
-                        yellow-green / green"). The percent is the opponent's
-                        factor against his position; the colour is its band. */}
-                    {g && (
-                      <View style={{ marginTop: 2, borderWidth: 1, borderColor: MATCHUP_BAND_COLOR[g.band], borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
-                        <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: MATCHUP_BAND_COLOR[g.band] }}>
-                          {`${g.basis === 'def' ? (p.pos === 'DEF' ? 'DST' : p.pos) : 'wk'} ${matchupGradeLabel(g)}`}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </Pressable>
-                );
-              })}
-              {anyGrade && (
-                <View style={{ paddingTop: 8, gap: 3 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                    {([1, 2, 3, 4, 5] as const).map((b) => (
-                      <View key={b} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                        <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: MATCHUP_BAND_COLOR[b] }} />
-                        <Mono size={7.5} tone="faint">{MATCHUP_BAND_WORD[b]}</Mono>
-                      </View>
-                    ))}
-                  </View>
-                  <Mono size={8} tone="faint" style={{ lineHeight: 12 }}>
-                    Matchup: what the defense he faces gives up to his position, against the league average. “wk” is his whole week’s line against his usual, where the defense table has no entry.
-                  </Mono>
-                </View>
-              )}
-            </ScrollView>
-          );
-        })()}
-      </Overlay>
-
-      {/* ── THE SPOT PICKER, for a bench player (v0.640.1) ─────────────────
-          The mirror of the sheet above: he is fixed, the spot is the
-          question. One row per spot he may take, with who stands in it now
-          (he goes to the bench) or EMPTY, and his own projection IN that
-          spot on the right — a flex and a WR spot can price him differently. */}
-      <Overlay
-        visible={!!benchPick}
-        title={benchPick ? `Start ${prettySlug(benchPick)}` : 'Start'}
-        subtitle="WHERE HE CAN GO · TAP A SPOT · HIS PROJECTION THERE, RIGHT"
-        onClose={() => setBenchPick(null)}>
-        {benchPick && (() => {
-          const me = entryFor(benchPick);
-          const spots = spotsFor(benchPick);
-          return (
-            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-              {!!me && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.bd }}>
-                  <Face slug={benchPick} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Display size={12.5}>{me.name}</Display>
-                      <InjuryNow slug={benchPick} size={8} />
-                    </View>
-                    <Mono size={8.5} tone={me.opponent === 'BYE' ? 'warn' : 'faint'} numberOfLines={1}>
-                      {`${me.pos}${me.team ? ` · ${me.team}` : ''} · ${gameLineOf(me)}${me.state === 'pre' ? roofMark(me) : ''}`}
-                    </Mono>
-                  </View>
-                  <Mono size={11} tone="dim" weight="700">{me.proj.toFixed(1)}</Mono>
-                </View>
-              )}
-              {spots.length === 0 && (
-                <Mono size={10} tone="faint" style={{ lineHeight: 16, paddingVertical: 8 }}>
-                  No spot he can take is open right now — every one that fits him has {vocab.started}, is best ball, or already holds him.
-                </Mono>
-              )}
-              {spots.map(({ d, occupant }) => {
-                const oe = occupant ? entryFor(occupant, d.pos, d.slot) : null;
-                const here = entryFor(benchPick, d.pos, d.slot);
-                return (
-                  <Pressable key={d.slot} onPress={() => { tap(); void pickInto(d.slot, benchPick); setBenchPick(null); }}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.bd }}>
-                    <View style={{ width: 66, alignItems: 'center' }}>
-                      <SlotPill pos={d.pos} label={nameOf(d)} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      {oe ? (
-                        <>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Display size={12.5}>{oe.name}</Display>
-                            <InjuryNow slug={occupant!} size={8} />
-                          </View>
-                          <Mono size={8.5} tone="faint" numberOfLines={1}>{`${oe.proj.toFixed(1)} · ${gameLineOf(oe)} → bench`}</Mono>
-                        </>
-                      ) : (
-                        <Mono size={10} tone="you">+ EMPTY</Mono>
-                      )}
-                    </View>
-                    <Mono size={11} tone="you" weight="700" style={{ width: 36, textAlign: 'right' }}>{here ? here.proj.toFixed(1) : ''}</Mono>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          );
-        })()}
-      </Overlay>
+      {pickerSheets}
 
       {/* ── ▦ ALL FIELDS, in a sheet (v0.270.0) ────────────────────────────
           Every NFL game with a starter on either side, one live drive chart

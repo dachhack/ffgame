@@ -6,6 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
+import { ClassicBoard } from './ClassicBoard';
 import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, collegeSetupBlocked, collegeSetupActive, collegeSetupLine, collegePoolOpts, collegeScheduleWeeks, COLLEGE_SETUP_INFO, DEFAULT_COLLEGE_SETUP, type CollegeSetup } from '@drip/core/data/devyShares';
 import { formatBlocked, shelfBlocked, isRedraft } from '@drip/core/data/leagueRules';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -3059,8 +3060,11 @@ export function CapSheet({ leagueId, myRoster, isCommish = false }: { leagueId: 
   );
 }
 
-export function TeamManage({ leagueId, onDraft, focus }: {
+export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRosterId }: {
   leagueId: string; onDraft: () => void; focus?: TeamFocus;
+  /** Who writes the lineup and for which seat (v0.657.0) — the matchup
+   *  board's own pair, so a co-managed seat writes as its owner (0125). */
+  lineupUserId?: string; lineupRosterId?: number | null;
 }) {
   // Player cards opened from this screen's roster and wire lists get the
   // league's own panels — who holds him, and the league's moves on him
@@ -3293,6 +3297,10 @@ export function TeamManage({ leagueId, onDraft, focus }: {
   // off for a rival's roster. For the commissioner they stay on, and the
   // pickers offer THAT roster.
   const canStash = viewingMine || !!team?.is_commish;
+  // The weekly lineup replaces the fit only where it can be edited: a classic
+  // league, my own seat, a seat to write for, and not while browsing as
+  // someone (v0.657.0; browse-as refuses every write).
+  const lineupHere = gm?.mode === 'classic' && viewingMine && !viewAs && !!lineupUserId && lineupRosterId != null;
   // 0440: a mixed league with devy spots — college players may be active or
   // shelved, so the DV chips open the picker like the taxi squad's do.
   const mixedDevy = (gm?.shape?.devy ?? 0) > 0 && collegeStartsHere(gm);
@@ -3587,6 +3595,24 @@ export function TeamManage({ leagueId, onDraft, focus }: {
     return out;
   })();
 
+  // The read-only FIT (assignSpots): a drip league's roster view, a rival's,
+  // and the classic lineup's stand-in when there is no week to draw.
+  const fitStarters = shown.length > 0 && slotDefs.length > 0 ? (<>
+    <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>STARTING SPOTS</div>
+    {bySpot.starters.map((r, i) => (
+      <RosterLine key={`spot-${i}`} badge={r.label} badgePos={r.pos[0]} p={r.player} busy={busy} inj={r.player ? injTags[r.player.slug] : null} />
+    ))}
+  </>) : null;
+  const fitBench = (bySpot.bench.length > 0 || !!gm?.shape?.bench) ? (<>
+    <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>
+      BENCH ({bySpot.bench.length}{gm?.shape?.bench ? `/${gm.shape.bench}` : ''})
+    </div>
+    {bySpot.bench.map((p) => <RosterLine key={p.slug} badge="BN" p={p} busy={busy} inj={injTags[p.slug]} />)}
+    {Array.from({ length: Math.max(0, (gm?.shape?.bench ?? 0) - bySpot.bench.length) }, (_, i) => (
+      <RosterLine key={`bn-empty-${i}`} badge="BN" p={null} busy={busy} emptyLabel="Open" />
+    ))}
+  </>) : null;
+
   return (
     <div>
       {err && <div className="mono" style={{ ...errStyle, marginBottom: 10 }}>{err}</div>}
@@ -3682,25 +3708,24 @@ export function TeamManage({ leagueId, onDraft, focus }: {
 
         {/* STARTERS — one row per starting spot the league plays, filled by
             assignSpots. Labelled as the FIT, not the lineup. */}
-        {shown.length > 0 && slotDefs.length > 0 && (<>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>STARTING SPOTS</div>
-          {bySpot.starters.map((r, i) => (
-            <RosterLine key={`spot-${i}`} badge={r.label} badgePos={r.pos[0]} p={r.player} busy={busy} inj={r.player ? injTags[r.player.slug] : null} />
-          ))}
-        </>)}
+        {/* THE LINEUP, for a classic league's own seat (v0.657.0) — the
+            founder, with Sleeper's team page beside ours: weeks, lineup
+            changes and projections here as well as on the matchup. The
+            matchup board's own editor, one side of it; drip keeps the FIT,
+            its lineup being per window with a stat on each pick. */}
+        {lineupHere && shown.length > 0 && slotDefs.length > 0 && lineupUserId && lineupRosterId != null && (
+          <ClassicBoard variant="team" onBack={() => {}}
+            // A move to IR/taxi/OUT below changes who can start: redraw.
+            key={shown.map((p) => `${p.slug}:${p.spot}`).join('|')}
+            userId={lineupUserId} leagueId={leagueId} rosterId={lineupRosterId}
+            fallback={<>{fitStarters}{fitBench}</>} />
+        )}
+        {!lineupHere && fitStarters}
 
         {/* BENCH */}
         {/* Every bench spot, open ones too (v0.530.0, founder: "have bench
             still show (x/x) and show all spots"), the way IR draws its. */}
-        {(bySpot.bench.length > 0 || !!gm?.shape?.bench) && (<>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 14 }}>
-            BENCH ({bySpot.bench.length}{gm?.shape?.bench ? `/${gm.shape.bench}` : ''})
-          </div>
-          {bySpot.bench.map((p) => <RosterLine key={p.slug} badge="BN" p={p} busy={busy} inj={injTags[p.slug]} />)}
-          {Array.from({ length: Math.max(0, (gm?.shape?.bench ?? 0) - bySpot.bench.length) }, (_, i) => (
-            <RosterLine key={`bn-empty-${i}`} badge="BN" p={null} busy={busy} emptyLabel="Open" />
-          ))}
-        </>)}
+        {!lineupHere && fitBench}
 
         {/* INJURED RESERVE — the empty places are drawn too, up to the
             league's limit: "you have two more" is what a manager wants here,

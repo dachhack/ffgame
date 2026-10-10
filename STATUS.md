@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.657.0 — set your lineup from My Team, any week, with projections
+
+> - In a classic league, My Team now shows your lineup for any week: use the arrows to change weeks, tap a position (QB, RB, BN…) to swap who plays there, and every player shows his projection for that week next to your projected total.
+
+Founder, with Sleeper's team screen beside ours: "Can we add weeks to my team
+so you can change your line up on that screen as well as the matchup. Also
+include projections." The Team tab drew a read-only FIT (assignSpots). For a
+classic league's own seat it now draws the matchup board's own lineup editor,
+one side of it — `ClassicBoard variant="team"` on both hosts: the same
+loads, `canEdit`, `applyMove`/`pickInto`, auto-slot and `slateAwareProj`
+pricing, so the two screens cannot disagree about who starts, what is locked
+or what he projects. The spot pill is the button (Sleeper's way); the bench's
+BN pill opens the where-can-he-go sheet. Both pickers are now one shared
+`pickerSheets` element. A bye week says so; no schedule or a failed read falls
+back to the old fit. Drip leagues, a rival's roster and browse-as keep the
+fit: drip sets its lineup per window with a stat on each pick, which stays on
+the board. IR/taxi/OUT stay the Team tab's own sections.
+
 ### v0.656.9 — a new matchup widget shows up straight away
 
 > - A matchup widget added to the home screen shows a loading card at once, instead of an invisible box until the app is opened.

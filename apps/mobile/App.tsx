@@ -519,7 +519,7 @@ export function App() {
             }}
             onDeleted={() => { setOpen(null); setView('home'); }} /></View>
         ) : view === 'team' && open?.native ? (
-          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
+          <View style={{ flex: 1 }}><Team leagueId={open.leagueId} tradePartner={tradePartner} lineupUserId={open.pickUserId ?? session.user.id} lineupRosterId={open.rosterId ?? null} onBack={() => { if (open.rosterId == null) setOpen(null); setView('home'); }} onDraft={() => setView('draft')} /></View>
         ) : view === 'team' && open && open.rosterId != null ? (
           // External league (v0.356.5): the read-only team page — the roster
           // the platform sync carries, no waivers or trades.

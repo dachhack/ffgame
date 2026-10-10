@@ -977,7 +977,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
           desk is the older behaviour and the safer guess. */}
       {homeFor?.league?.provider && homeFor.league.provider !== 'native'
         ? <PlatformTeam leagueId={target.leagueId} rosterId={target.rosterId} userId={session.user.id} />
-        : <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')} />}
+        : <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')}
+            lineupUserId={homeFor?.pick_user_id ?? session.user.id} lineupRosterId={target.rosterId} />}
     </>
   );
   if (view === 'join') return (
