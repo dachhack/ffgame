@@ -42,6 +42,7 @@ import { publishBullseyeCards } from './bullseye.js';
 import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
 import { sweepRescores } from './rescore.js';
 import { postWeekReports, sweepRequests } from './report.js';
+import { postContestRecaps } from './contestRecap.js';
 import { sweepScoreAsIs } from './scoreAsIs.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
@@ -546,6 +547,12 @@ async function closeWeek(tag, week, games, season, regular) {
       const posted = await postWeekReports(week, season);
       if (posted) log(`[${tag}] posted`, posted, 'weekly reports');
     } catch (e) { log(`[${tag}] weekly reports`, e.message); }
+    // THE CONTEST RECAP (v0.668.1): the week's result card into every contest
+    // league's chat, on the same morning-after release.
+    try {
+      const carded = await postContestRecaps(week, season);
+      if (carded) log(`[${tag}] posted`, carded, 'contest recaps');
+    } catch (e) { log(`[${tag}] contest recaps`, e.message); }
   }
 }
 

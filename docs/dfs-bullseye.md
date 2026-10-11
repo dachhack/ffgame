@@ -390,3 +390,20 @@ board can meet is dropped rather than leaving a spot empty. The builder's
 bar reads SPEND under no cap and says how far short of the minimum the
 squad is; SAVE waits until it is over.
 
+## 19. The result card, and the lock reminder (v0.668.1)
+
+When every matchup of a contest league's week is final and stamped, and the
+morning-after release has passed, `postContestRecaps` posts one card into
+the league chat: the podium (with the Bullseye tie-break and a CPU tag), the
+size of the field, the head-to-head results, the season leader for a season
+league, and when next week's squads lock. Every human who played gets a push
+with their place and their result. The card is a `league_message` of kind
+`txn` carrying `{kind: 'contest_recap', week}`, which is also how the worker
+knows a week is done after a restart.
+
+The lock reminder (`detectContestLock` in push.js) fires twice per week to
+anyone in a contest league who has not saved a squad: the day before the
+week's first lock and an hour before it. Head-to-head seats are told the CPU
+builds for them at lock; leaderboard seats that a missing squad scores
+nothing. Both ride the existing `lineup` push preference.
+

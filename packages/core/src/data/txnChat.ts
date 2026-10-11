@@ -44,6 +44,8 @@ export function txnLook(txn: TxnPayload | null | undefined): TxnLook {
     // 0325: the week's awards, and a badge the commissioner pinned on somebody.
     case 'award':  return { icon: '🏅', tone: 'you',  label: 'AWARDS' };
     case 'badge':  return { icon: '🎖', tone: 'you',  label: 'BADGE' };
+    // v0.668.1: a contest league's week, settled.
+    case 'contest_recap': return { icon: '🏁', tone: 'you', label: 'WEEK RESULT' };
     default:       return { icon: '·',  tone: 'dim',  label: 'MOVE' };
   }
 }

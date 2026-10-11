@@ -516,6 +516,73 @@ async function detectLineup() {
   await enqueue(rows);
 }
 
+// ── NO SQUAD YET (v0.668.1): the contest league's lock reminder ────────────
+// Founder, on the weekly contest suite: "no push says 'you have no squad and
+// the first game locks in 2 hours'. For a 50,000-seat weekly contest, that one
+// push is most of the retention." Two reminders per week, to a member of a
+// contest league who has NOT saved a squad for it: the day before (24h ± 5
+// min before the week's first lock) and the last call (the same 55–65 min
+// band the lineup alert uses). Each is one sweep-width band, so each fires
+// once; the dedupe key carries the band. A head-to-head seat is told the CPU
+// will build for it at lock; a leaderboard seat is told it scores nothing.
+const DAY_MS = 24 * 3_600_000;
+const DAY_BAND_MS = 5 * 60_000;
+/** PURE: which reminder a week's first lock is due for right now, or null. */
+export function contestLockBand(firstKickMs, now) {
+  const toLock = firstKickMs - LOCK_LEAD_MS - now;
+  if (toLock > ALARM_MIN_MS && toLock <= ALARM_MAX_MS) return 'last';
+  if (toLock > DAY_MS - DAY_BAND_MS && toLock <= DAY_MS + DAY_BAND_MS) return 'day';
+  return null;
+}
+/** PURE: the push rows for one league's members without a squad. */
+export function contestLockRows(league, week, band, lockMs, members, entered) {
+  const lockLabel = new Date(lockMs).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+  const h2h = (league.settings_json?.contest_format ?? (league.kind === 'bullseye' ? 'board' : 'h2h')) === 'h2h';
+  const tail = h2h ? 'the CPU builds one for you at lock, and you can still swap until each player’s game' : 'a week without a squad scores nothing';
+  const rows = [];
+  for (const m of members) {
+    if (!m.app_user_id || !m.enrolled || m.controller === 'ai' || entered.has(m.sleeper_roster_id)) continue;
+    rows.push({
+      app_user_id: m.app_user_id, kind: 'lineup',
+      title: band === 'last' ? `⚠ Squads lock ${lockLabel} ET` : `🗓 ${league.name}: squads lock ${lockLabel} ET`,
+      body: band === 'last' ? `No squad yet in ${league.name} for week ${week} — ${tail}.` : `You haven’t built a week ${week} squad yet — ${tail}.`,
+      data: { league_id: league.id, open: 'league' },
+      dedupe_key: `contest-lock:${band}:${league.id}:${week}:${m.app_user_id}`,
+    });
+  }
+  return rows;
+}
+async function detectContestLock() {
+  const { data: slate } = await db().from('nfl_slate').select('season, week, kickoff').not('kickoff', 'is', null);
+  const now = Date.now();
+  const first = new Map(); // `${season}:${week}` → earliest kickoff ms
+  for (const g of slate ?? []) {
+    const k = `${g.season}:${g.week}`;
+    const ms = Date.parse(g.kickoff);
+    if (!first.has(k) || ms < first.get(k)) first.set(k, ms);
+  }
+  const due = [...first.entries()].map(([k, kick]) => [k, kick, contestLockBand(kick, now)]).filter(([, , band]) => band);
+  if (!due.length) return;
+  const rows = [];
+  for (const [key, kick, band] of due) {
+    const [season, weekStr] = key.split(':');
+    const week = Number(weekStr);
+    const { data: leagues } = await db().from('league').select('id, name, kind, season, contest_week, settings_json')
+      .in('kind', ['dfs', 'bullseye']).eq('season', String(season));
+    for (const lg of leagues ?? []) {
+      if (lg.contest_week != null && Number(lg.contest_week) !== week) continue;
+      const [{ data: mems }, { data: have }] = await Promise.all([
+        db().from('league_membership').select('sleeper_roster_id, app_user_id, enrolled, controller').eq('league_id', lg.id),
+        db().from('sleeper_lineup').select('roster_id').eq('league_id', lg.id).eq('week', week),
+      ]);
+      const entered = new Set((have ?? []).map((r) => r.roster_id));
+      rows.push(...contestLockRows(lg, week, band, kick - LOCK_LEAD_MS, mems ?? [], entered));
+    }
+  }
+  if (rows.length) log(`contest lock: ${rows.length} reminder${rows.length === 1 ? '' : 's'}`);
+  await enqueue(rows);
+}
+
 // ── sender ──────────────────────────────────────────────────────────────────
 // Three channels, per device platform: 'web' rows hold a browser subscription
 // JSON and go out via the Web Push protocol (webpush.js, VAPID creds); 'ios'
@@ -727,6 +794,7 @@ export async function sweepPush() {
   await detectDraft().catch((e) => log('draft detector error', e.message));
   await detectWaivers().catch((e) => log('waivers detector error', e.message));
   await detectLineup().catch((e) => log('lineup detector error', e.message));
+  await detectContestLock().catch((e) => log('contest lock detector error', e.message));
   try { await detectWidget(); } catch (e) { log('detectWidget', e.message); }
   await detectChopped().catch((e) => log('chopped detector error', e.message));
   await detectBitten().catch((e) => log('bitten detector error', e.message));

@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.668.1 — The week's result in the chat; a nudge before squads lock
+
+> - When a contest week is settled, a result card lands in the league chat: the podium, the field, every head-to-head result, the season leader and when next week's squads lock. Everyone who played gets a push with their place.
+> - No squad yet? You get a reminder the day before the week's first lock and a last call an hour before it, with what happens if you don't build one.
+
+- Founder: "do the recap card and lock reminder as one PR."
+  `server/src/contestRecap.js`: `postContestRecaps(week, season)` runs from
+  closeWeek beside the weekly reports, on the same morning-after release
+  (weekReportRelease); a league is ready when every matchup of the week is
+  final and stamped; the card is a league_message kind 'txn' with txn
+  {kind: 'contest_recap', week, top} (txnLook: 🏁 WEEK RESULT), so the chat
+  itself is the idempotency record across restarts; pushes (kind 'report')
+  to every human who played, deduped per league-week-user. push.js
+  `detectContestLock`: the day-before (24h ± 5 min) and last-call (55–65
+  min) bands before a week's first lock, to enrolled humans of contest
+  leagues playing that week with no sleeper_lineup row; a head-to-head
+  seat hears the CPU builds at lock, a leaderboard seat that it scores
+  nothing. `check:contestrecap`. No iPhone build needed.
+
 ### v0.668.0 — The cap is optional; golf gets a minimum spend
 
 > - A weekly squad league can now run with NO CAP: pick the players, not the prices. Bullseye keeps its budget by default, since the card does the limiting either way.
