@@ -19,7 +19,7 @@
 // league that merely plays Bullseye; this one is for contest leagues.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestState, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
+  contestState, addContestEntry, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
@@ -124,9 +124,11 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const [injTick, setInjTick] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
+  // MY SEATS (v0.682.0): which of my seats the builder is on; null = my first.
+  const [rosterId, setRosterId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    const s = await contestState(leagueId, weekProp);
+    const s = await contestState(leagueId, weekProp, '2026', rosterId);
     setSt(s);
     if (!s.ok || s.week == null) return;
     const slots = classicSlotsFromSpec(s.slots ?? null) ?? [];
@@ -135,19 +137,19 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     const [rows, lk, sl] = await Promise.all([podSalaries(s.week).catch(() => []), weekGameLocks(s.week, '2026', 0).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
     setBoard(rows); setLocks(lk); setSlate(sl);
     void loadLiveInjuries(s.week).then(() => setInjTick((n) => n + 1));
-  }, [leagueId, weekProp]);
+  }, [leagueId, weekProp, rosterId]);
   useEffect(() => { void load().catch((e) => setNote(friendlyError(e))); }, [load]);
   // The pool filter and my seat's rule: what greys a player out before I tap him.
   useEffect(() => {
     leagueGameMode(leagueId).then((g) => { if (g.ok) setPoolFilter(g.pool_filter ?? null); }).catch(() => {});
-    seatPlayerRules(leagueId).then((r) => { if (r.ok) setSeatRule((r.rules ?? []).find((x) => x.roster_id === r.mine) ?? null); }).catch(() => {});
-  }, [leagueId]);
+    seatPlayerRules(leagueId).then((r) => { if (r.ok) setSeatRule((r.rules ?? []).find((x) => x.roster_id === (st?.roster_id ?? r.mine)) ?? null); }).catch(() => {});
+  }, [leagueId, st?.roster_id]);
   // Live numbers: re-read while the week is being played.
   useEffect(() => {
     if (!st?.started || st.matchup?.status === 'final') return;
-    const id = setInterval(() => { void contestState(leagueId, weekProp).then(setSt).catch(() => {}); }, 60_000);
+    const id = setInterval(() => { void contestState(leagueId, weekProp, '2026', rosterId).then(setSt).catch(() => {}); }, 60_000);
     return () => clearInterval(id);
-  }, [st?.started, st?.matchup?.status, leagueId, weekProp]);
+  }, [st?.started, st?.matchup?.status, leagueId, weekProp, rosterId]);
 
   const bySlug = useMemo(() => new Map((board ?? []).map((r) => [r.slug, r])), [board]);
   const salaryOf = useCallback((slug: string) => bySlug.get(slug)?.salary ?? 0, [bySlug]);
@@ -229,7 +231,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     if (filled < n) { setNote(`Fill all ${n} spots first.`); return; }
     setBusy(true); setNote(null);
     try {
-      const r = await saveContestEntry(leagueId, week, picks as Record<string, string>);
+      const r = await saveContestEntry(leagueId, week, picks as Record<string, string>, '2026', st.roster_id);
       setNote(r.ok ? '✓ squad saved' : (r.error ?? 'Didn’t save.'));
       if (r.ok) await load();
     } catch (e) { setNote(friendlyError(e)); } finally { setBusy(false); }
@@ -240,6 +242,17 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     const got = slots.filter((d) => !picks[d.slot] && built[d.slot]).length;
     setPicks(built);
     setNote(got === open ? `✓ filled ${got} spot${got === 1 ? '' : 's'} — swap any you like, then save` : got ? `filled ${got} of ${open} — the rest don’t fit the budget; free some up` : 'nothing fits the budget — clear a pricey pick first');
+  };
+  // ANOTHER ENTRY (v0.682.0): a second seat under the league's rule; the builder moves to it.
+  const another = async () => {
+    const nm = window.prompt('A name for your new entry (blank for a default):', '') ;
+    if (nm === null) return;
+    setBusy(true);
+    const r = await addContestEntry(leagueId, nm).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; roster_id?: number; team?: string }));
+    setBusy(false);
+    if (!r.ok) { setNote(r.error ?? 'Couldn’t add an entry.'); return; }
+    setNote(`✓ ${r.team ?? 'your new entry'} is in — build its squad`);
+    setRosterId(r.roster_id ?? null);
   };
   const clearAll = () => {
     const keep: Record<string, string | null> = {};
@@ -360,8 +373,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
       <div style={{ ...card, display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span className="mono" style={head}>{`MY SQUAD · ${filled} OF ${n}`}</span>
+          {/* MY SEATS (v0.682.0): a member with several entries builds one at a time */}
+          {(st.seats?.length ?? 0) > 1 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(st.seats ?? []).map((x) => <button key={x.roster_id} disabled={busy} onClick={() => setRosterId(x.roster_id)} className="mono" style={chip(x.roster_id === st.roster_id)}>{x.team ?? `Seat ${x.roster_id}`}</button>)}
+            </div>
+          )}
           {editable && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(st.max_entries ?? 1) > (st.seats?.length ?? 1) && <button disabled={busy} onClick={() => void another()} className="mono" style={chip(false)} title={`this league allows ${st.max_entries} entries per member`}>＋ ANOTHER ENTRY</button>}
               <button onClick={() => openSheet('any')} className="mono" style={chip(false)}>＋ PLAYERS</button>
               {bl.open > 0 && <button onClick={fill} className="mono" style={chip(false)}>✨ FILL FOR ME</button>}
               {filled > 0 && <button onClick={clearAll} className="mono" style={chip(false, true)}>CLEAR</button>}

@@ -120,6 +120,17 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
           ))}
           <span className="mono" style={small}>A new squad can go in until its players kick off, or not at all once the week’s first game has — a saved squad still swaps its unlocked players either way.</span>
         </div>
+        {!h2h && (
+          <>
+            <div className="mono" style={label}>ENTRIES PER MEMBER</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              {[...new Set([1, 2, 3, 5, 10, 20, b.max_entries ?? 1])].sort((x, y) => x - y).map((v) => (
+                <button key={v} disabled={busy} onClick={() => void act(setContestRules(leagueId, { maxEntries: v }), `${v} ${v === 1 ? 'entry' : 'entries'} per member`)} className="mono" style={chip((b.max_entries ?? 1) === v)}>{v}</button>
+              ))}
+              <span className="mono" style={small}>How many squads one member may field — each is its own seat on the board, built one at a time on MY TEAM. Head-to-head is always one: an opponent is a person.</span>
+            </div>
+          </>
+        )}
       </div>
 
       {b.contest === 'bullseye' && (

@@ -22,6 +22,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.682.0 — Multiple entries per member
+
+> - A leaderboard contest can let one member field more than one squad: the commissioner sets ENTRIES PER MEMBER (1–50) on the COMMISH card. Head-to-head stays one, since an opponent is a person.
+> - With a seat to spare, ＋ ANOTHER ENTRY on MY TEAM or in the builder takes the next one. Each entry is its own seat on the board with its own name, squad, swaps and weeks; a switcher on MY TEAM and in the builder picks which one you're working on.
+> - The matchup tab lists every squad of yours as YOU, and your own squads are always open to you.
+
+HANDOFF's last not-done item. Migration `0481_multiple_entries.sql`:
+`_contest_max_entries(lg)` (the rule, `settings_json.max_entries`, board
+leagues only), `_my_contest_seats` / `_my_contest_seat(league, roster)` /
+`_my_contest_seats_json` (the caller's seats; the one asked for if it is
+theirs, else their first), `_contest_take_seat(…, p_another)` and
+`add_contest_entry(league, team)` (the next seat under the rule, its own
+default name), `set_contest_rules(…, p_max_entries)` (old 8-parameter
+overload dropped), `_bullseye_info` + `max_entries` / `my_entries`;
+`contest_state(…, p_roster)` and `bullseye_my_weeks(league, p_roster)` list
+`seats` and read the seat asked for (old overloads dropped);
+`save_contest_entry(…, p_roster)` refuses a seat that isn't the caller's;
+`contest_swaps` opens every seat of mine; `contest_matchup` knows every seat
+of mine (`me` is the seat of mine in the matchup shown, every squad of mine
+is open and marked `mine`); `contest_board`'s `me` row and `near` go by my
+best seat. Engine `ContestConfig.maxEntries`. liveApi `addContestEntry`,
+`ContestSeat`, `contestState` / `saveContestEntry` / `bullseyeMyWeeks` take a
+roster, `setContestRules({ maxEntries })`. Both builders carry a seat
+switcher and ＋ ANOTHER ENTRY (the web asks for a name; the phone takes the
+default and renames on MY TEAM); both MY TEAM cards switch seat for the
+rename and MY WEEKS; both COMMISH cards gain ENTRIES PER MEMBER.
+`scripts/db/contest-entries-probes.sql` (full chain, in the runner). Plain
+JS and SQL: no iPhone build.
+
 ### v0.681.0 — The squad builder deals cards
 
 > - Building a weekly contest squad is now a card table: each spot is a card on the felt in your chosen deck, your picks face up with the price on the card and an open spot the deck's back with ＋ PICK on it. Buying a player deals him in: the card turns over.

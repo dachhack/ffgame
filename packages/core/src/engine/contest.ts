@@ -50,6 +50,8 @@ export interface ContestConfig {
    *  game); `first` — a seat with no squad at the week's first kickoff is
    *  closed out, and the no-show rule above decides its week. */
   entryDeadline: ContestEntryDeadline;
+  /** ENTRIES PER MEMBER (0481): seats one member may hold; 1 on head-to-head. */
+  maxEntries: number;
 }
 export type ContestLateEntry = 'cpu' | 'zero' | 'drop';
 export type ContestEntryDeadline = 'open' | 'first';
@@ -81,6 +83,8 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const lateEntry: ContestLateEntry = s.late_entry === 'cpu' || s.late_entry === 'zero' || (s.late_entry === 'drop' && format === 'board')
     ? s.late_entry : contestLateEntryDefault(format);
   const entryDeadline: ContestEntryDeadline = s.entry_deadline === 'first' ? 'first' : 'open';
+  const me = Number(s.max_entries);
+  const maxEntries = format === 'board' && Number.isFinite(me) && me >= 1 ? Math.min(50, Math.floor(me)) : 1;
   const ms = Number(s.min_spend);
   const minSpend = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 100) * 100 : 0;
   const spec = Array.isArray(s.roster_slots) && s.roster_slots.length ? s.roster_slots as SlotSpec[] : CONTEST_DEFAULT_SLOTS;
@@ -88,7 +92,7 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const bullseye = contest === 'bullseye'
     ? (bullseyeConfigOf({ bullseye: (s.bullseye as string) ?? 'slots', bullseye_radius: (s.bullseye_radius as number) ?? null }) ?? bullseyeConfigOf({ bullseye: 'slots' }))
     : null;
-  return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null, lateEntry, entryDeadline };
+  return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null, lateEntry, entryDeadline, maxEntries };
 }
 
 /** PLAYOFFS (v0.674.0, 0476): a season head-to-head contest league plays the
