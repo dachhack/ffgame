@@ -53,6 +53,18 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
 export const CONTEST_WORD: Record<ContestKind, string> = { high: 'HIGHEST SCORE', golf: 'GOLF · LOWEST SCORE', bullseye: 'BULLSEYE' };
 export const CONTEST_FORMAT_WORD: Record<ContestFormat, string> = { h2h: 'HEAD-TO-HEAD', board: 'LEADERBOARD' };
 export const CONTEST_EMOJI: Record<ContestKind, string> = { high: '🏆', golf: '⛳', bullseye: '🎯' };
+/** CREDIT WHERE IT'S DUE (v0.667.1). Founder: "add a credit info chip to
+ *  bullseye leagues and settings for bullseye crediting Jon Acevedo for the
+ *  idea." The chip sits on a Bullseye league's hub and its settings; the
+ *  other contests carry none. */
+export const CONTEST_CREDIT: { who: string; chip: string; title: string; line: string } = {
+  who: 'Jon Acevedo',
+  chip: '💡 IDEA · JON ACEVEDO',
+  title: 'Credit where it’s due',
+  line: 'Bullseye was Jon Acevedo’s idea: aim every spot at a number instead of chasing the biggest score. The whole league type is here because he asked for it.',
+};
+/** The credit a contest carries, or null — only Bullseye has one. */
+export const contestCredit = (contest: ContestKind): typeof CONTEST_CREDIT | null => (contest === 'bullseye' ? CONTEST_CREDIT : null);
 /** What a squad scores, in a word: a Bullseye squad banks a RING, the others points. */
 export const CONTEST_SCORE_WORD: Record<ContestKind, string> = { high: 'pts', golf: 'pts', bullseye: 'ring' };
 /** Is this score better than that one, by the contest's own rule? */

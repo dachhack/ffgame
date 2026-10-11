@@ -23,7 +23,7 @@ import {
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
-import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT } from '@drip/core/engine/contest';
+import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { CommishDash } from './CommishDash';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
@@ -104,6 +104,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
       <div style={{ fontSize: 13, color: 'var(--dim)', lineHeight: 1.5 }}>
         {CONTEST_BLURB[contest]} You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board.
       </div>
+      {contestCredit(contest) && <CreditChip contest={contest} />}
 
       <div style={{ ...card, display: 'grid', gap: 10 }}>
         <div className="mono" style={label}>START ONE</div>
@@ -234,6 +235,19 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
   );
 }
 
+// ── CREDIT WHERE IT'S DUE: the chip, and the line it opens ─────────────────
+function CreditChip({ contest }: { contest: ContestKind }) {
+  const credit = contestCredit(contest);
+  const [open, setOpen] = useState(false);
+  if (!credit) return null;
+  return (
+    <div style={{ display: 'grid', gap: 6, justifyItems: 'start' }}>
+      <button onClick={() => setOpen((o) => !o)} className="mono" title={credit.title} aria-expanded={open} style={{ ...chip(open), fontSize: 9.5 }}>{credit.chip}</button>
+      {open && <div style={{ fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.5 }}>{credit.line}</div>}
+    </div>
+  );
+}
+
 function WeekArrows({ weeks, week, current, onWeek }: { weeks: number[]; week: number | null; current: number | null; onWeek: (w: number) => void }) {
   if (week == null || weeks.length < 2) return null;
   const i = weeks.indexOf(week);
@@ -279,6 +293,7 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
             <button onClick={() => flash('link', joinLink(lg.invite_code!))} className="mono" style={chip(false)}>{copied === 'link' ? '✓ COPIED' : 'COPY LINK'}</button>
           </div>
         )}
+        {bull && <CreditChip contest={b.contest} />}
       </div>}
 
       {!compact && <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />}
@@ -421,7 +436,9 @@ function SettingsRoom({ lg, onLeft }: { lg: ContestLeague; onLeft: () => void })
         {b.format === 'h2h' && <li>Your opponent’s picks are sealed: each shows once his game locks.</li>}
         {b.contest === 'bullseye' && <li>Ties are settled by your tie-breaker: one RB or WR spot with its own number, shown before you build. Closer wins.</li>}
         <li>{b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`}</li>
+        {contestCredit(b.contest) && <li>{`💡 ${contestCredit(b.contest)!.line}`}</li>}
       </ul>
+      {contestCredit(b.contest) && <CreditChip contest={b.contest} />}
       {lg.me && !lg.commish && (
         <button onClick={() => void leave()} className="mono" style={{ ...chip(false, true), justifySelf: 'start' }}>LEAVE THE LEAGUE</button>
       )}

@@ -15,7 +15,7 @@ import {
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
-import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT } from '@drip/core/engine/contest';
+import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -91,6 +91,7 @@ export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, n
         <Mono size={11} tone="you" weight="700" track={0.1}>{`${CONTEST_EMOJI[contest]} WEEKLY SQUAD LEAGUE`}</Mono>
       </View>
       <Text style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`${CONTEST_BLURB[contest]} You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board.`}</Text>
+      {contestCredit(contest) && <CreditChip contest={contest} />}
       <Card style={{ gap: 10 }}>
         <Mono size={9} tone="faint" weight="700" track={0.1}>START ONE</Mono>
         <Field value={name} onChangeText={setName} maxLength={60} placeholder="League name" />
@@ -182,6 +183,13 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
   );
 }
 
+// ── CREDIT WHERE IT'S DUE: the chip opens the line ─────────────────────────
+function CreditChip({ contest }: { contest: ContestKind }) {
+  const credit = contestCredit(contest);
+  if (!credit) return null;
+  return <Chip small dim label={credit.chip} onPress={() => { tap(); Alert.alert(credit.title, credit.line); }} />;
+}
+
 function WeekArrows({ weeks, week, current, onWeek }: { weeks: number[]; week: number | null; current: number | null; onWeek: (w: number) => void }) {
   if (week == null || weeks.length < 2) return null;
   const i = weeks.indexOf(week);
@@ -229,6 +237,7 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
           {lg.commish && <Chip small label="⚑ COMMISSIONER" onPress={() => { tap(); onCommish(); }} />}
           <Chip small dim label="← MY LEAGUES" onPress={() => { tap(); onBack(); }} />
         </View>
+        {bull && <CreditChip contest={b.contest} />}
       </Card>
       <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />
       <Card style={{ gap: 2 }}>
@@ -361,12 +370,14 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
     ...(b.format === 'h2h' ? ['Your opponent’s picks are sealed: each shows once his game locks.'] : []),
     ...(b.contest === 'bullseye' ? ['Ties are settled by your tie-breaker: one RB or WR spot with its own number, shown before you build. Closer wins.'] : []),
     b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`,
+    ...(contestCredit(b.contest) ? [`💡 ${contestCredit(b.contest)!.line}`] : []),
   ];
   return (
     <Card style={{ gap: 8 }}>
       <Mono size={9} tone="faint" weight="700" track={0.1}>HOW THIS LEAGUE PLAYS</Mono>
       {rules.map((r, i) => <Text key={i} style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`• ${r}`}</Text>)}
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+        {contestCredit(b.contest) && <CreditChip contest={b.contest} />}
         {lg.commish && <Chip label="⚑ COMMISSIONER" onPress={() => { tap(); onCommish(); }} />}
         {lg.me && !lg.commish && <Chip dim label="LEAVE THE LEAGUE" onPress={() => { tap(); leave(); }} />}
       </View>

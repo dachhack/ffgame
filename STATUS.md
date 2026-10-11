@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.667.1 — Credit where it's due: Bullseye's idea chip
+
+> - Bullseye leagues now carry a small "💡 IDEA · JON ACEVEDO" chip on the league page, in its settings and on the create form. Tap it and it says so: Bullseye was Jon Acevedo's idea.
+
+- Founder: "add a credit info chip to bullseye leagues and settings for
+  bullseye crediting Jon Acevedo for the idea." `CONTEST_CREDIT` /
+  `contestCredit(contest)` in engine/contest.ts (Bullseye only; HIGH and
+  GOLF carry none); `CreditChip` on web (toggles the line inline) and
+  phone (opens an alert) in BullseyeLeague.tsx; the settings room's rule
+  list ends with the line. No iPhone build needed.
+
 ### v0.667.0 — Head coaches by name, scanned every week
 
 > - A HEAD COACH spot now shows the coach's name — "Liam Coen", not "JAX Head Coach" — on the pool, the draft, the matchup and the weekly squad board. The names are checked against the NFL's current staffs every day, so a mid-season change shows up on its own.
