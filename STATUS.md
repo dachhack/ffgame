@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.677.1 — The site builds again
+
+> - A fix to the web build: v0.677.0's card table didn't compile on the site's deploy, so the site stayed on v0.670.1 while the app and the worker moved. This gets it through.
+
+- `src/screens/ContestMatchup.tsx`: a JSX comment sat inside a
+  parenthesised expression (`{cond && ( {/* … */} <div …` — not valid
+  JSX), added after the last local typecheck and never re-checked; Pages'
+  `tsc -b` refused it (run 38173380280). The comment now sits beside the
+  expression. Verified with the same `tsc -b && vite build` the workflow
+  runs. No iPhone build needed.
+
 ### v0.677.0 — The card table: a squad league's matchup as cards
 
 > - A weekly squad league's MATCHUP tab is now a card table: your squad face up down one column, your opponent's card backs down the other, each turning face up as its player's game kicks off. Come back to the screen and the reveal flips play again. Arrows walk the weeks, and chips above the table open the week's other matchups (on a leaderboard, any squad).

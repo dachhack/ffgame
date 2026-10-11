@@ -114,8 +114,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       <Felt>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-start', padding: '10px 4px' }}>
           <div className="ct-col">{column(left, L.rows, L.mine)}</div>
+          {/* the kit's ct-mid pads 34px for the drip board's header row; here the labels sit level with the cards */}
           {!solo && (
-            {/* the kit's ct-mid pads 34px for the drip board's header row; here the labels sit level with the cards */}
             <div className="ct-mid" style={{ paddingTop: 0, gap: 9 }}>
               {slots.map((d) => <div key={d.slot} className="mono" style={{ height: 150, display: 'flex', alignItems: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.7)' }}>{labels[d.slot] ?? d.slot}</div>)}
             </div>
