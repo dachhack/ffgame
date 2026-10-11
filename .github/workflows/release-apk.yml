@@ -252,7 +252,12 @@ jobs:
           # The app reads this to learn the newest build it could be (core's
           # changelog.ts, APK_MANIFEST_URL) — version, code, and when. The
           # fingerprint is for the gate above: the native app this APK runs.
-          printf '{"version":"%s","versionCode":%s,"built":"%s","fingerprint":"%s"}\n' "${{ steps.ver.outputs.app }}" "$ANDROID_VERSION_CODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${{ needs.gate.outputs.fingerprint }}" > "$RUNNER_TEMP/out/manifest.json"
+          # `runtime` (v0.661.1) is the fingerprint the APK itself carries — the
+          # one expo-updates matches updates on, which differs from the gate's.
+          # eas-update.yml republishes every update to it.
+          rt=$(unzip -p "$apk" assets/fingerprint | tr -d '[:space:]')
+          echo "APK runtime: $rt"
+          printf '{"version":"%s","versionCode":%s,"built":"%s","fingerprint":"%s","runtime":"%s"}\n' "${{ steps.ver.outputs.app }}" "$ANDROID_VERSION_CODE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${{ needs.gate.outputs.fingerprint }}" "$rt" > "$RUNNER_TEMP/out/manifest.json"
           cat "$RUNNER_TEMP/out/manifest.json"
           ls -la "$RUNNER_TEMP/out"
 

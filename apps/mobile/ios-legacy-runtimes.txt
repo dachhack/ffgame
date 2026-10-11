@@ -9,8 +9,5 @@
 # hash                                       why it's safe
 ed8fbb368ad26d098d923d2a34456690f36d5c40   # until Oct 4 2026; moved only by the Android Fields widget's description text (#1128)
 #
-# `build <EAS build id>` (v0.661.1): a build whose own runtime the CI fingerprint
-# got wrong. eas-update.yml asks Expo for the runtime that build was stamped
-# with and publishes to it too. Safe only while that build's native code is
-# today's (check:ios-runtime still compares against ios-build-runtime.txt).
-build 7d0567c7-251e-4688-a71d-652b4f49ef16   # TestFlight build 5, Oct 9 (v0.655.3): stamped be78b4bc… by EAS, recorded as 2f593a89… from CI; same commit, same native code
+# `build <EAS build id>` (v0.661.1): an iPhone build named by its id instead;
+# eas-update.yml asks Expo for the runtime that build was stamped with.
