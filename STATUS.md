@@ -22,6 +22,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.664.0 — Weekly squad leagues: DFS, golf and Bullseye, with every classic option
+
+> - Bullseye leagues are now one kind of weekly squad league, alongside plain DFS (highest score wins) and golf DFS (lowest score wins). Start one from your leagues page: pick how it wins, head-to-head or leaderboard, one week or the season, and the squad budget.
+> - The commissioner gets the full classic console for it — the roster builder (any spot, FLEX, HC, FB and more), scoring and scoped bonuses, eligible players and seat rules — plus a CONTEST card for the contest, format, budget, card and size.
+> - Your squad screen draws the league's own spots and budget; the pick sheet sorts the way the league scores.
+
+- Founder: "all the classic league options … this is just a version of dfs,
+  but with a target. Let's build regular highest score dfs and golf dfs while
+  we are at it." docs/dfs-bullseye.md §13.
+- Migration 0466: `pod_salary` prices every position a spot can take and
+  carries `exp`; contest leagues are classic leagues with `contest`,
+  `contest_format`, `budget`, `roster_slots` in settings (existing Bullseye
+  and DFS leagues backfilled); `create_contest_league`, `join_contest`,
+  `contest_league`, `contest_state`, `save_contest_entry` (spot-by-spot
+  eligibility, pool filter, seat rules, budget, locks), `contest_board`,
+  `set_contest_rules`; head-to-head pre-seats AI; `commish_overview` carries
+  the kind.
+- Engine `packages/core/src/engine/contest.ts`: config, card over the
+  league's spots, scoring (high / golf zero-fill / dart), tie-break,
+  auto-build under the budget. The worker's resolver scores contest leagues
+  through it under the league's catalog; pods.js builds the board with every
+  position and auto-builds AI seats and no-shows.
+- Web: `ContestSquad`, the creation form, `ContestCommishPanel` in
+  CommishDash; LeagueRow trims a contest league's map. Phone: `ContestSquad`,
+  `ContestCommishCard` in CommishTools (`contest` prop). Routing goes by
+  `isContestKind` (dfs + bullseye). No iPhone build needed.
+- PR 2 brings the rich squad builder.
+
 ### v0.663.2 — Bullseye leagues on the web look like every other league
 
 > - On the website, a Bullseye league now opens in the same full-width league layout as every other league, with the usual bottom bar (League · Matchup · My Team · Chat) and the ⚙ Settings button.

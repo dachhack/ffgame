@@ -13,7 +13,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
-import { getSession, onAuth, signOut, leagueTouch, nativeTeamState, myEnrollments, commishOverview } from '@drip/core/data/liveApi';
+import { getSession, onAuth, signOut, leagueTouch, nativeTeamState, myEnrollments, commishOverview, isContestKind } from '@drip/core/data/liveApi';
 import { refreshMatchupWidgets } from './src/widget/widgetTask';
 import { Ev, identify, track } from '@drip/core/analytics';
 import { APP_VERSION } from '@drip/core/version';
@@ -474,7 +474,7 @@ export function App() {
                 second gear asks you to guess which is which, and a grey
                 hairline against a grey header is not a control, it is a
                 decoration. It carries the accent and its own word now. */}
-            <Pressable hitSlop={10} onPress={() => { tap(); if (open.kind === 'bullseye') setView('bsettings'); else setLeagueSheet(true); }}
+            <Pressable hitSlop={10} onPress={() => { tap(); if (isContestKind(open.kind)) setView('bsettings'); else setLeagueSheet(true); }}
               accessibilityRole="button" accessibilityLabel="League settings and info"
               style={{
                 borderWidth: 1, borderColor: theme.you, borderRadius: 999,
@@ -522,12 +522,14 @@ export function App() {
           </View>
         ) : view === 'bstart' ? (
           <View style={{ flex: 1 }}><BullseyeStart onBack={() => setView('picks')}
-            onOpen={(leagueId, name, rosterId) => { setLeaguesEpoch((n) => n + 1); setOpen({ leagueId, rosterId, name, native: false, kind: 'bullseye' }); setView('picks'); }} /></View>
-        ) : open?.kind === 'bullseye' && view !== 'chat' ? (
-          // A BULLSEYE LEAGUE (0463): its own rooms on the same room bar —
-          // MATCHUP, LEAGUE, MY TEAM, CHAT (below) — and ⚙ SETTINGS / ⚑.
+            onOpen={(leagueId, name, rosterId) => { setLeaguesEpoch((n) => n + 1); setOpen({ leagueId, rosterId, name, native: false, commish: true, kind: 'dfs' }); setView('picks'); }} /></View>
+        ) : open && isContestKind(open.kind) && view !== 'chat' && view !== 'commishtools' ? (
+          // A CONTEST LEAGUE (0463/0466 — Bullseye, DFS, golf): its own rooms
+          // on the same room bar — MATCHUP, LEAGUE, MY TEAM, CHAT (below) —
+          // and ⚙ SETTINGS; its commissioner's tools are the classic
+          // CommishTools (below), trimmed, with the CONTEST card.
           <View style={{ flex: 1 }}><BullseyeLeagueRoom key={`bull-${open.leagueId}`} leagueId={open.leagueId}
-            room={view === 'home' ? 'league' : view === 'team' ? 'team' : view === 'bsettings' ? 'settings' : view === 'commishtools' ? 'commish' : open.rosterId != null ? 'matchup' : 'league'}
+            room={view === 'home' ? 'league' : view === 'team' ? 'team' : view === 'bsettings' ? 'settings' : open.rosterId != null ? 'matchup' : 'league'}
             onRoom={(r) => setView(r === 'league' ? 'home' : r === 'team' ? 'team' : r === 'settings' ? 'bsettings' : r === 'commish' ? 'commishtools' : 'picks')}
             onBack={() => { setOpen(null); setView('picks'); }}
             onGone={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
@@ -552,7 +554,7 @@ export function App() {
           <View style={{ flex: 1 }}><ChatScreen key={`chat-${open.leagueId}-${chatDm?.peerId ?? ''}`} leagueId={open.leagueId} initialDm={chatDm} /></View>
         ) : view === 'commishtools' && open ? (
           <View style={{ flex: 1 }}><CommishTools key={`tools-${open.leagueId}-${toolsSection ?? ''}`}
-            leagueId={open.leagueId} native={open.native} rosterId={open.rosterId} initialSection={toolsSection}
+            leagueId={open.leagueId} native={open.native} contest={isContestKind(open.kind)} rosterId={open.rosterId} initialSection={toolsSection}
             // A seatless commissioner has nowhere else in the league to land —
             // back means back to the leagues list.
             onBack={() => { setToolsSection(null); if (open.rosterId == null) { setOpen(null); setView('picks'); } else setView('home'); }}

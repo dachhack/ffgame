@@ -80,6 +80,7 @@ import { SportSettings } from '../ui/SportSettings';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { AvatarGrid } from '../ui/AvatarGrid';
 import { CommishSettings } from '../ui/CommishSettings';
+import { ContestCommishCard } from './ContestCommish';
 import { CommishPlayers } from '../ui/LeagueExtras';
 import { CommishToolsCard } from '../ui/CommishKit';
 import { RegisterView } from '../ui/LeagueInfo';
@@ -88,7 +89,7 @@ import { CommissionersCard, LocksCard, WaiverOrderCard, WaiverHoldsCard, TxnLimi
 // The app's commissioner map — the same grouping as the web side rail, so a
 // commissioner who learns one host already knows the other. `nativeOnly`
 // hides what a Sleeper-backed league manages on its own platform.
-const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean; dripOnly?: boolean; contractOnly?: boolean }[] }[] = [
+const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnly?: boolean; dripOnly?: boolean; contractOnly?: boolean; contestOnly?: boolean; notContest?: boolean }[] }[] = [
   // MODE & SCORING was ONE mega-scroll (mode toggle + roster builder + the
   // ~36-knob catalog stacked); the scoring knobs lived two screens below the
   // fold. Split three ways (v0.259.0) to match the web rail exactly.
@@ -96,7 +97,11 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // 0187: the league's own identity — the name had NO setter at all before
     // this, so a typo at creation was permanent for every member.
     { id: 'identity', label: 'NAME & CREST' },
-    { id: 'mode', label: 'MODE' },
+    // A CONTEST LEAGUE (0466): what wins, how it plays, the budget, the
+    // Bullseye card, the size, the board — in place of MODE, which it has no
+    // say in (it is classic, scored by its contest).
+    { id: 'contest', label: '🏁 CONTEST', contestOnly: true },
+    { id: 'mode', label: 'MODE', notContest: true },
     { id: 'lineup', label: 'ROSTER' },
     { id: 'scoring', label: 'SCORING' },
     // the old SETTINGS overlay, folded into the map (v0.264.0) — each slice
@@ -269,8 +274,11 @@ function LeagueIdentityCard({ leagueId }: { leagueId: string }) {
   );
 }
 
-export function CommishTools({ leagueId, native, rosterId, initialSection, onBack, onSelfUnassigned, onLeagueDeleted }: {
+export function CommishTools({ leagueId, native, contest = false, rosterId, initialSection, onBack, onSelfUnassigned, onLeagueDeleted }: {
   leagueId: string;
+  /** A contest league (0466): the classic map trimmed — no draft, waivers,
+   *  playoffs or contracts — plus the CONTEST card. */
+  contest?: boolean;
   /** After the league is deleted — somewhere that is not the league (v0.625.0). */
   onLeagueDeleted?: () => void;
   /** Open on a destination rather than the map — creating a league lands on
@@ -379,7 +387,9 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
           <View style={{ flex: 1, minWidth: 0 }}>
             <Display size={17}>Commissioner</Display>
             <Mono size={9} tone="faint" style={{ marginTop: 3 }}>
-              {!native
+              {contest
+                ? 'A weekly squad league: the roster, scoring, seats and the contest itself are yours to set.'
+                : !native
                 ? 'Rosters and rules live on Sleeper — seats, co-managers and coin are managed here.'
                 : myRoster != null ? 'You also manage a team — that stays in MY TEAM.' : 'You run this league without a team in it.'}
             </Mono>
@@ -401,7 +411,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
           all fit on screen, so nothing hides behind a swipe (the mistake the
           web's phone strip made). One section renders at a time. */}
       <Card>
-        {NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => (!it.nativeOnly || native) && (!it.dripOnly || !classic) && (!it.contractOnly || contracts)) }))
+        {NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((it) => (!it.nativeOnly || native) && (!it.dripOnly || !classic) && (!it.contractOnly || contracts) && (!it.contestOnly || contest) && (!it.notContest || !contest)) }))
           .filter((g) => g.items.length > 0).map((g) => (
           <View key={g.title} style={{ marginBottom: 10 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.14}>{g.title}</Mono>
@@ -466,6 +476,7 @@ export function CommishTools({ leagueId, native, rosterId, initialSection, onBac
                 <View style={{ maxHeight: 520 }}><RegisterView leagueId={leagueId} /></View>
               </View>
             )}
+            {section === 'contest' && <ContestCommishCard leagueId={leagueId} />}
             {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
             {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" onDragActive={(a) => setSheetScroll(!a)} />}
             {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}

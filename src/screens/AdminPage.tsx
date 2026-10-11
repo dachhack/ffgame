@@ -27,6 +27,7 @@ import {
   type PlayoffState, type PlayoffMatchup,
   type AdminLeague, type AdminMatchup, type AdminOverride, type AdminAudit, type AdminAdmin, type AdminUser, type AdminMember, type CodeRequest, type MatchupBoard, type BoardPick, type BoardSlotScore,
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
+  isContestKind,
 } from '@drip/core/data/liveApi';
 import { DAY_LABEL, DEFAULT_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
   waiverDaysOf, waiverDayModesFor, normalizeWaiverDays, effectiveGameHoldDow,
@@ -345,7 +346,7 @@ export type LeagueTab =
   | 'overview' | 'waivers' | 'admin' | 'salary'
   | 'mode' | 'lineup' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
-  | 'activity' | 'buffs' | 'awards' | 'delete';
+  | 'activity' | 'buffs' | 'awards' | 'delete' | 'contest';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -1254,10 +1255,15 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   // and the destinations show meanwhile, because a menu that pops items in
   // reads worse than one that briefly offers a room you don't need.
   const [classic, setClassic] = useState(false);
+  // A CONTEST LEAGUE (0466) is a classic league whose squads are rebuilt
+  // weekly from the board: no draft, waivers, trades, playoffs, contracts or
+  // coin to run. Its map keeps the classic SET UP (roster, scoring), the
+  // seats, picks, matchups, kit and awards, and gains the CONTEST card.
+  const contest = isContestKind(l.kind);
   useEffect(() => {
-    if (l.provider !== 'native') return;
+    if (l.provider !== 'native' && !contest) return;
     leagueGameMode(l.league_id).then((r) => { if (r.ok) setClassic(r.mode === 'classic'); }).catch(() => {});
-  }, [l.league_id, l.provider]);
+  }, [l.league_id, l.provider, contest]);
   const [open, setOpen] = useState(collapsible ? defaultOpen : true);
   const wide = useWide();
   // roster_id → team name, from members (drives readable matchup labels).
@@ -1541,7 +1547,30 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   // rendered as a left rail on desktop and the same scrolling strip on mobile.
   const native = l.provider === 'native';
   const has = (id: LeagueTab) => panels?.[id] !== undefined;
-  const navGroups: NavGroup<LeagueTab>[] = [
+  const navGroups: NavGroup<LeagueTab>[] = contest ? [
+    { title: 'SET UP', items: [
+      { id: 'overview', label: 'INVITE & ACCESS' },
+      ...(has('contest') ? [{ id: 'contest', label: '🏁 CONTEST' } as TabDef<LeagueTab>] : []),
+      ...(has('mode') ? [{ id: 'mode', label: 'NAME & CREST' } as TabDef<LeagueTab>] : []),
+      ...(has('lineup') ? [{ id: 'lineup', label: '🧩 ROSTER' } as TabDef<LeagueTab>] : []),
+      ...(has('scoring') ? [{ id: 'scoring', label: '⚖ SCORING' } as TabDef<LeagueTab>] : []),
+    ] },
+    { title: 'RUN THE SEASON', items: [
+      { id: 'members', label: '👥 SEATS' },
+      { id: 'ready', label: 'PICKS' },
+      { id: 'matchups', label: 'MATCHUPS' },
+    ] },
+    { title: 'ENGAGE', items: [
+      { id: 'kit', label: '⚑ COMMISH KIT' },
+      { id: 'awards', label: '🏅 AWARDS & BADGES' },
+      ...(has('activity') ? [{ id: 'activity', label: '👁 ACTIVITY' } as TabDef<LeagueTab>] : []),
+    ] },
+    { title: 'DIAGNOSE', items: [
+      { id: 'audit', label: 'AUDIT' },
+      ...(admin ? [{ id: 'admin', label: '⚙ ADMIN MODES' } as TabDef<LeagueTab>] : []),
+    ] },
+    ...(has('delete') ? [{ title: 'DANGER', items: [{ id: 'delete', label: '✕ DELETE LEAGUE' } as TabDef<LeagueTab>] }] : []),
+  ] : [
     {
       title: 'SET UP',
       items: [

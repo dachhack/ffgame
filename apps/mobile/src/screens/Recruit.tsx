@@ -21,7 +21,7 @@ import {
   postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat, setupLeagueCollege, setLeagueDevyOpen,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
-  myEnrollments, type Enrollment, bullseyeLeagueLine, isWeeklyKind,
+  myEnrollments, type Enrollment, bullseyeLeagueLine, contestPitch, isWeeklyKind,
 } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
@@ -731,7 +731,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>{r.name}</Text>
               <Mono size={9} tone="faint" style={{ marginTop: 2 }}>
-                {r.bullseye ? `${r.season} · 🎯 no draft — a $50k squad each week` : `${r.season} · ${r.draft_mode.toUpperCase()} draft ${r.draft_status === 'pending' ? 'not started' : r.draft_status}`}
+                {r.bullseye ? `${r.season} · no draft — a squad each week` : `${r.season} · ${r.draft_mode.toUpperCase()} draft ${r.draft_status === 'pending' ? 'not started' : r.draft_status}`}
               </Mono>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
@@ -1333,7 +1333,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             <>
               {/* the truth block first (0223): type, money, then the pitch */}
               {preview.bullseye ? (
-                <Mono size={9} tone="you" style={{ lineHeight: 14 }}>{`${bullseyeLeagueLine(preview.bullseye)}\nEach week you build a $50,000 squad aimed at the week’s numbers; closest wins.${preview.bullseye.span === 'season' ? ' Season standings add up every week.' : ''}`}</Mono>
+                <Mono size={9} tone="you" style={{ lineHeight: 14 }}>{`${bullseyeLeagueLine(preview.bullseye)}\n${contestPitch(preview.bullseye)}`}</Mono>
               ) : !!preview.identity && (
                 <Mono size={9} tone="dim" style={{ lineHeight: 14 }}>{identityLine(preview.identity)}</Mono>
               )}
