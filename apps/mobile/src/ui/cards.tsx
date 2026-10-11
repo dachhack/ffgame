@@ -26,7 +26,7 @@
 // which is exactly what the native driver takes off the JS thread. Reanimated
 // pays for itself on gestures and on animations that must read values back
 // mid-flight; this board has neither. See the header of animations.tsx.
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useEffect, useRef } from 'react';
@@ -119,7 +119,27 @@ export function loadCardSkin(): CardSkin {
   const s = storeGet(CARD_SKIN_KEY) as CardSkin | null;
   return s && SKINS.includes(s) ? s : 'playbook';
 }
-export function saveCardSkin(s: CardSkin): void { storeSet(CARD_SKIN_KEY, s); }
+export function saveCardSkin(s: CardSkin): void { storeSet(CARD_SKIN_KEY, s); for (const l of skinListeners) l(s); }
+
+// THE CONTEST TABLE'S DECK (v0.680.0). Founder: "use the card themes from
+// drip mode and let the users change it in the options." The weekly contest's
+// card table (ContestCards.tsx) had its own emerald felt and lattice back; it
+// now deals from the deck chosen under ⚙ → Cards → CARD DECK, the same one
+// drip mode's sealed cards show. The felt under the cards takes the deck's
+// colour (the web's --ct-felt per skin), and a pick reaches every open table
+// at once through the listeners below, not just the next visit.
+const skinListeners = new Set<(s: CardSkin) => void>();
+/** The deck as a live value: re-renders when a pick under ⚙ changes it. */
+export function useCardSkin(): CardSkin {
+  const [s, setS] = useState<CardSkin>(loadCardSkin);
+  useEffect(() => { skinListeners.add(setS); return () => { skinListeners.delete(setS); }; }, []);
+  return s;
+}
+/** The felt colour under each deck, the web's --ct-felt per skin. */
+export const SKIN_FELT: Record<CardSkin, string> = {
+  emerald: '#0E5A3C', playbook: '#10203A', blitz: '#0E1A30', rivalry: '#2A0C10', allstar: '#12213A',
+  heritage: '#12100A', gilded: '#1E1608', cosmic: '#0E1024', fireworks: '#14122E', battalion: '#16180E',
+};
 
 const SKINS: CardSkin[] = ['emerald', 'playbook', 'blitz', 'rivalry', 'allstar', 'heritage', 'gilded', 'cosmic', 'fireworks', 'battalion'];
 
