@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.665.1 — CPU teams keep a player for every scoped spot
+
+> - A CPU-run team no longer drops the only player who fits a scoped spot (a rookie-only spot, a one-team spot), and when it has nobody for one it goes and gets one — that claim comes before any other move.
+
+- Founder: Team 2 in Kickoff League "has no rookies but the league has a
+  rookie only bestball spot." The wire planner (engine/seatWaivers.ts) never
+  counted coverage: the shortlist was the top twelve per position, which a
+  rookie rarely makes; a bench rookie on his bye was the cheapest body and
+  the first drop; a healed rookie worth less than every bench body was the
+  cut. Three rails now: `soleCover` (the only body for a spot is never the
+  drop, in the plan and in legalizeIrDrop), `uncoveredSpots` (a scoped spot
+  nobody covers is a hole that clears on any season value and outranks every
+  other claim; the Puka floor still holds), and shortlistWire keeps the best
+  few bodies for each uncovered spot. check:seatwire pins all three.
+- `seat-wire` ops mode / CLI: one pass of the hourly sweep for one league and
+  seat, now. ops/run/037 files Team 2's claim.
+
 ### v0.665.0 — The squad builder: budget bar, player cards, filters, FILL FOR ME
 
 > - Building your weekly squad is a proper builder now, on web and app: a budget bar that fills as you pick, player cards with face, game time, salary, projection and value, and a pick sheet with position tabs, a team filter, search and sort.

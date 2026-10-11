@@ -34,7 +34,7 @@
 // The asymmetry IS the design. Collapsing both into one threshold either makes
 // the agent ignore injuries (bar too high) or churn (bar too low).
 import type { ClassicSlotDef, SpotPlayer } from './classic';
-import { optimalLineup } from './classic';
+import { optimalLineup, slotAllows } from './classic';
 import { flagRulesFor } from '../data/commish';
 import { faabBid, type MarketClaim } from './faabMarket';
 
@@ -277,6 +277,46 @@ export function wireBid(gain: number, budget: number, faab: boolean): number {
   return Math.min(budget, Math.max(1, Math.min(cap, Math.ceil(gain * FAAB_PER_POINT))));
 }
 
+// ── COVERAGE (v0.665.1) ──────────────────────────────────────────────────────
+// Founder: "AI teams … will make roster moves that leave them without players
+// that fit scoped positions. Team 2 in Kickoff League … has no rookies but the
+// league has a rookie only bestball spot." A spot with a filter (a rookie-only
+// spot, a team spot, a flag spot) is a spot the lineup matcher can only fill
+// from the bodies that pass it — and nothing below ever counted them. The
+// shortlist was the best twelve per position, which a rookie rarely makes;
+// a bench rookie on his bye was the cheapest body and the first man overboard;
+// a healed rookie worth less than every bench body was the one cut. Three
+// rails now hold: the ONLY player who covers a spot is never the drop; a spot
+// nobody on the roster covers is a hole that clears on any season value and
+// ranks ahead of every other claim; and the shortlist carries the best few
+// bodies for each such spot, whatever their position's rank.
+
+/** Which roster players may stand in each spot (the matcher's own test). */
+export function spotCover(slots: ClassicSlotDef[], roster: SpotPlayer[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const d of slots) out.set(d.slot, roster.filter((p) => slotAllows(d, p)).map((p) => p.id));
+  return out;
+}
+/** A SCOPED spot: one with a filter beyond its positions — a team, a tenure
+ *  window, a flag, a level or a college rule. A plain DEF spot with no
+ *  defense on the roster is the ordinary hole the value rails govern (the
+ *  Puka rule, v0.561.4); a rookie-only spot with no rookie is the gap this
+ *  rail exists for. */
+export const isScopedSpot = (d: ClassicSlotDef): boolean => {
+  const f = d.flt;
+  return !!f && !!(f.teams?.length || f.min_exp != null || f.max_exp != null || f.flags?.length || f.level || f.confs?.length || f.classes?.length);
+};
+/** The scoped spots nobody on this roster can stand in. */
+export function uncoveredSpots(slots: ClassicSlotDef[], roster: SpotPlayer[]): ClassicSlotDef[] {
+  const cover = spotCover(slots, roster);
+  return slots.filter((d) => isScopedSpot(d) && !(cover.get(d.slot) ?? []).length);
+}
+/** Is this player the only one on the roster who can stand in some spot? */
+export function soleCover(slots: ClassicSlotDef[], roster: SpotPlayer[], p: SpotPlayer): boolean {
+  const cover = spotCover(slots, roster);
+  return slots.some((d) => { const ids = cover.get(d.slot) ?? []; return ids.length === 1 && ids[0] === p.id; });
+}
+
 /** How deep into the pool the planner looks, PER POSITION, ranked by this
  *  week's projection. The planner solves a lineup per candidate per claim, so
  *  an empty roster (a bot vampire's, after a draft it sat out — v0.425.0)
@@ -292,6 +332,10 @@ export function shortlistWire<P extends SpotPlayer>(
   available: P[],
   valueOf: (p: SpotPlayer) => number,
   depth = POOL_DEPTH_PER_POS,
+  /** COVERAGE (v0.665.1): the league's spots and this roster. For every spot
+   *  nobody on the roster can stand in, the best few bodies who CAN are kept
+   *  too — a rookie-only spot's rookies are rarely a position's top twelve. */
+  cover?: { slots: ClassicSlotDef[]; roster: SpotPlayer[] } | null,
 ): P[] {
   const byPos = new Map<string, P[]>();
   for (const p of available) {
@@ -299,11 +343,14 @@ export function shortlistWire<P extends SpotPlayer>(
     byPos.get(p.pos)!.push(p);
   }
   const keep = new Set<string>();
+  const rank = (a: P, b: P) => (valueOf(b) - valueOf(a)) || String(a.id).localeCompare(String(b.id));
   for (const list of byPos.values()) {
-    list.slice()
-      .sort((a, b) => (valueOf(b) - valueOf(a)) || String(a.id).localeCompare(String(b.id)))
-      .slice(0, Math.max(0, depth))
-      .forEach((p) => keep.add(p.id));
+    list.slice().sort(rank).slice(0, Math.max(0, depth)).forEach((p) => keep.add(p.id));
+  }
+  if (cover) {
+    for (const d of uncoveredSpots(cover.slots, cover.roster)) {
+      available.filter((p) => slotAllows(d, p)).sort(rank).slice(0, Math.max(1, Math.ceil(depth / 2))).forEach((p) => keep.add(p.id));
+    }
   }
   return available.filter((p) => keep.has(p.id));
 }
@@ -410,9 +457,16 @@ export function seatWirePlan(
     // is known, so a backup QB with his double on the wire goes before a
     // running back nobody could replace.
     const holdOf = (p: SpotPlayer) => (opts.rosValueOf ? holdValue(p) : rosOf(p));
+    // …and never the ONLY body who can stand in some spot (v0.665.1): the
+    // rookie-only spot's one rookie, the team spot's one Cowboy. Dropping him
+    // empties that spot every week until the wire happens to answer it.
     const droppable = have
-      .filter((p) => !starting.has(p.id) && !used.has(p.id))
+      .filter((p) => !starting.has(p.id) && !used.has(p.id) && !soleCover(slots, have, p))
       .sort((a, b) => (holdOf(a) - holdOf(b)) || (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
+    // THE SPOTS NOBODY COVERS (v0.665.1): a hole no projection can see,
+    // because the matcher has nobody to seat there at any value.
+    const uncovered = uncoveredSpots(slots, have);
+    const coversGap = (p: SpotPlayer) => uncovered.some((d) => slotAllows(d, p));
 
     // With a seat open the add costs nobody; otherwise the worst bench body
     // goes. A roster that is full AND has no droppable bench player cannot
@@ -422,6 +476,7 @@ export function seatWirePlan(
     if (!dropOpts.length) break;
 
     let best: WireClaim | null = null;
+    let bestCovers = false;
     for (const cand of pool) {
       if (used.has(cand.id) || have.some((p) => p.id === cand.id)) continue;
       for (const drop of dropOpts) {
@@ -437,7 +492,12 @@ export function seatWirePlan(
         // sits on the wire costs nothing to cut. Same position, the two
         // agree; across positions the second is what lets the hoarded backup
         // QB go for a real back. It only ever loosens the raw rail.
-        if (drop && opts.rosValueOf && rosOf(drop) > rosOf(cand)
+        // A body who COVERS AN UNCOVERED SCOPED SPOT (v0.665.1) is exempt
+        // from the "worth more" rail: the bench body he costs is worth less
+        // than a starting spot that stands empty every week. The floor
+        // below still holds — never a star for a rookie-spot body.
+        const covers = coversGap(cand);
+        if (drop && opts.rosValueOf && !covers && rosOf(drop) > rosOf(cand)
           && overWire(drop, cand.id) > overWire(cand, cand.id)) continue;
         // …and whatever the wire looks like, never a clearly better player
         // for a clearly worse one (v0.561.4, DROP_FLOOR_GAP).
@@ -453,14 +513,21 @@ export function seatWirePlan(
         // the season bar sooner and ranks ahead of a flat one. The drop rails
         // above read pure season value, so momentum never cheapens a drop.
         const rosGain = (opts.rosValueOf ? lineupValue(slots, next, rosOf) - rosBase : 0) + momentum(cand);
-        const kind: 'hole' | 'upgrade' = hole ? 'hole' : 'upgrade';
-        const clears = hole ? gain >= HOLE_MIN_GAIN : (gain >= UPGRADE_MIN_GAIN || rosGain >= UPGRADE_MIN_GAIN);
+        const kind: 'hole' | 'upgrade' = hole || covers ? 'hole' : 'upgrade';
+        // A coverage fill clears on any season value at all: the spot scores
+        // nothing without him, this week and every week.
+        const clears = covers ? (gain >= HOLE_MIN_GAIN || rosOf(cand) > 0)
+          : hole ? gain >= HOLE_MIN_GAIN : (gain >= UPGRADE_MIN_GAIN || rosGain >= UPGRADE_MIN_GAIN);
         if (!clears) continue;
         const score = Math.max(gain, rosGain);
         // Ties break toward the SMALLER move: keeping a roster spot open beats
         // filling it for the same projected points, and an earlier candidate
         // beats a later one, so the plan is deterministic for a given pool.
-        if (best && !(score > Math.max(best.gain, best.rosGain) + 1e-9)) continue;
+        // A coverage fill outranks everything else (v0.665.1); among coverage
+        // fills, the score.
+        if (best && bestCovers && !covers) continue;
+        if (best && !(covers && !bestCovers) && !(score > Math.max(best.gain, best.rosGain) + 1e-9)) continue;
+        bestCovers = covers;
         best = {
           add: cand.id,
           drop: drop?.id ?? null,
@@ -584,10 +651,13 @@ export function legalizeIrDrop<P extends SpotPlayer>(
   const together = [...active.filter((p) => p.id !== healed.id), healed];
   const starting = new Set(optimalLineup(slots, together, startValueOf).spots
     .flatMap((r) => (r.player ? [r.player.id] : [])));
+  // COVERAGE (v0.665.1): the only body who can stand in some spot is not a
+  // bench body to spend, and a healed man who alone covers a spot comes back
+  // whatever he is worth — the cheapest other body goes instead.
   const bench = active
-    .filter((p) => p.id !== healed.id && !starting.has(p.id))
+    .filter((p) => p.id !== healed.id && !starting.has(p.id) && !soleCover(slots, together, p))
     .sort((a, b) => (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
   const cheapest = bench[0];
-  if (cheapest && rosOf(cheapest) <= rosOf(healed)) return cheapest.id;
+  if (cheapest && (rosOf(cheapest) <= rosOf(healed) || soleCover(slots, together, healed))) return cheapest.id;
   return healed.id;
 }

@@ -13,7 +13,7 @@
 import {
   seatWirePlan, wireBid, shortlistWire, positionNeed, wireInstrument, HUMANS_FIRST_MS,
   UPGRADE_MIN_GAIN, HOLE_MIN_GAIN, FAAB_PER_POINT, FAAB_MAX_SHARE, BENCH_MIN_GAIN, benchUse, DROP_FLOOR_GAP,
-  trendMomentum, legalizeIrDrop, MOMENTUM_MAX, TREND_PER_POINT,
+  trendMomentum, legalizeIrDrop, MOMENTUM_MAX, TREND_PER_POINT, spotCover, uncoveredSpots, soleCover, isScopedSpot,
 } from '../packages/core/src/engine/seatWaivers.ts';
 import { slateAwareProj } from '../packages/core/src/engine/classic.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
@@ -510,6 +510,62 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   // Never a starter, even when the bench is empty of cheaper men.
   const tight = projOf({ s1: 12, s2: 11, s3: 10, healed: 5 });
   ok(legalizeIrDrop(SLOTS, [rb('s1'), rb('s2'), wr('s3')], rb('healed'), tight) === 'healed', 'with no bench body at all, the starters are never touched');
+}
+
+// ── COVERAGE (v0.665.1) ─────────────────────────────────────────────────────
+// Founder: "AI teams … will make roster moves that leave them without players
+// that fit scoped positions. Team 2 in Kickoff League … has no rookies but the
+// league has a rookie only bestball spot."
+{
+  const SL = [
+    { slot: 'S1', type: 'RB', pos: ['RB'] }, { slot: 'S2', type: 'WR', pos: ['WR'] },
+    { slot: 'S3', type: 'FLEX', pos: ['RB', 'WR', 'TE', 'QB'], flt: { max_exp: 0 }, label: 'Rookie Only Bestball' },
+  ];
+  const vet = (id, pos, exp = 5) => ({ id, pos, exp });
+  const rook = (id, pos) => ({ id, pos, exp: 0 });
+  ok(isScopedSpot(SL[2]) && !isScopedSpot(SL[0]), 'a tenure-filtered spot is scoped; a plain RB spot is not');
+  // 1. The only rookie is never the drop, even on his bye.
+  {
+    const roster = [vet('rb1', 'RB'), vet('wr1', 'WR'), rook('rookie', 'WR'), vet('bench', 'TE', 3)];
+    ok(soleCover(SL, roster, roster[2]) && !soleCover(SL, roster, roster[3]), 'the one rookie alone covers the rookie spot');
+    const wk = projOf({ rb1: 12, wr1: 11, rookie: 0, bench: 3, streamer: 9 });
+    const ros = projOf({ rb1: 12, wr1: 11, rookie: 4, bench: 3, streamer: 9 });
+    const plan = seatWirePlan(SL, roster, [free({ ...vet('streamer', 'TE', 4) }, false)], wk, { ...OPTS, rosValueOf: ros });
+    ok(!plan.some((c) => c.drop === 'rookie'), `the rookie on his bye is not the drop (${JSON.stringify(plan.map((c) => [c.add, c.drop]))})`);
+  }
+  // 2. No rookie at all: the gap is filled first, from a rookie the position's
+  //    top twelve would never carry, paying with the cheapest bench body.
+  {
+    const roster = [vet('rb1', 'RB'), vet('wr1', 'WR'), vet('bench', 'TE', 3), vet('bench2', 'WR', 6)];
+    ok(uncoveredSpots(SL, roster).map((d) => d.slot).join() === 'S3', 'the rookie spot is uncovered');
+    const wk = projOf({ rb1: 12, wr1: 11, bench: 3, bench2: 5, rookie: 2, star: 14 });
+    const ros = projOf({ rb1: 12, wr1: 11, bench: 3, bench2: 5, rookie: 3, star: 14 });
+    const pool = [free(vet('star', 'WR', 4), false), free(rook('rookie', 'WR'), true)];
+    const short = shortlistWire(pool.concat(Array.from({ length: 14 }, (_, i) => free(vet(`wr${i + 10}`, 'WR', 4), false))), (p) => (p.id === 'rookie' ? 1 : 8), 12, { slots: SL, roster });
+    ok(short.some((p) => p.id === 'rookie'), 'the shortlist keeps a rookie for the uncovered spot past the top twelve');
+    const plan = seatWirePlan(SL, roster, pool, wk, { ...OPTS, rosValueOf: ros, maxClaims: 2 });
+    // The drop is the cheapest body TO HOLD (v0.518.0's positional measure):
+    // the WR with a 14 free at his position, not the TE with no double.
+    ok(plan[0]?.add === 'rookie' && plan[0].kind === 'hole' && ['bench', 'bench2'].includes(plan[0].drop), `the rookie fill comes first, for a bench body (${JSON.stringify(plan.map((c) => [c.add, c.drop, c.kind]))})`);
+    ok(plan[0]?.onWaivers === true, 'as a claim when he is held');
+  }
+  // 3. Still never a star for a rookie-spot body (the floor holds).
+  {
+    const roster = [vet('rb1', 'RB'), vet('wr1', 'WR'), vet('puka', 'WR', 2)];
+    const wk = projOf({ rb1: 12, wr1: 11, puka: 2.6, rookie: 2 });
+    const ros = projOf({ rb1: 12, wr1: 11, puka: 17.5, rookie: 3 });
+    const plan = seatWirePlan(SL, roster, [free(rook('rookie', 'WR'), false)], wk, { ...OPTS, rosValueOf: ros, healthyValueOf: ros });
+    ok(plan.length === 0, 'a 17.5 star is not cut for a rookie-spot body');
+  }
+  // 4. A healed rookie comes back; the cheapest other bench body goes.
+  {
+    const active = [vet('rb1', 'RB'), vet('wr1', 'WR'), vet('bench', 'TE', 3)];
+    const ros = projOf({ rb1: 12, wr1: 11, bench: 3, rookie: 2 });
+    ok(legalizeIrDrop(SL, active, rook('rookie', 'WR'), ros) === 'bench', 'the healed rookie is not the cut even though he is worth less than every bench body');
+    const noBench = [vet('rb1', 'RB'), vet('wr1', 'WR')];
+    ok(legalizeIrDrop(SL, noBench, rook('rookie', 'WR'), ros) === 'rookie', 'with no bench body at all, the rookie (not a starter) is still the only cut');
+  }
+  ok(spotCover(SL, [rook('r', 'RB')]).get('S3')?.join() === 'r', 'spotCover lists who may stand in each spot');
 }
 
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
