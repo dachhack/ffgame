@@ -17,7 +17,8 @@ for (const [name, path] of [['app', 'apps/mobile/src/ui/Chat.tsx'], ['web', 'src
   ok(src.includes('function PlusMenu(') && /canPoll && item\('poll'/.test(src)
     && /item\('image'/.test(src) && /canGif && item\('gif'/.test(src),
     `${name}: the + menu offers poll, image and GIF`);
-  ok(lc.includes('<PlusMenu canPoll={canModerate}'), `${name}: …with polls still the commissioner's, as the server rules`);
+  // v0.663.0: through the chat backend — league chat's says canPoll: canModerate.
+  ok(lc.includes('<PlusMenu canPoll={be.canPoll}') && src.includes('canPoll: canModerate,'), `${name}: …with polls still the commissioner's, as the server rules`);
   ok(/if \(what === 'poll'\) setPollOpen\(true\)/.test(lc) && /else if \(what === 'gif'\) setGifOpen\(true\)/.test(lc),
     `${name}: each choice opens what its old button opened`);
   ok(!lc.includes('setPollOpen((v) => !v)') && !lc.includes('<ImageButton'),

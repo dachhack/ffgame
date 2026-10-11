@@ -184,3 +184,23 @@ contest is retired.
   other league listing. Maybe have another filter for weekly draft leagues."
   The banner is gone. My Leagues and the league board have a WEEKLY filter
   (`isWeeklyKind`: pods, showdowns, DFS and Bullseye leagues).
+
+## 12. Every chat tool in the dev room; @computer for everyone (v0.663.0, 0465)
+
+- "Let's have all chat tools in the dev chat, pics, gifs, polls, reactions, @,
+  etc." The dev room now has the league chat thread itself.
+  - Web `src/app/chat.tsx` and phone `apps/mobile/src/ui/Chat.tsx`:
+    `LeagueChat` takes a `ChatBackend`. League chat's backend is the default,
+    and `devChatBackend` / `DevChat` provide the dev room's.
+  - The dev room gets pictures with captions, GIFs, polls (any member may post
+    one), the league's six reactions, @mentions (including @all, with a push),
+    edits, admin pins and the "N new" catch-up pill.
+  - Pictures go to the `chat-image` bucket under `dev/<room>/<author>/…`.
+- "Let's not have the chat/bug/suggestion distinction. Just a chat window.
+  Allow at computer for everyone in dev chat."
+  - The 💡/🐞 tag chips are gone.
+  - A dev room line that says @computer, from ANY member, is filed by the
+    @computer worker (`server/src/computer.js`, source `dev`). COMPUTER_USERS
+    still gates league chat and DMs.
+  - Computer's reply, and when the issue closes, its fix card, post back into
+    the room as kind `computer`.

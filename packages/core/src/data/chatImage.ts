@@ -110,7 +110,9 @@ export function chatImagePath(url?: string | null): string | null {
   const u = (url ?? '').trim();
   if (!isChatImageUrl(u)) return null;
   const path = u.slice(u.indexOf(PUBLIC_PATH) + PUBLIC_PATH.length).split('?')[0];
-  return path.split('/').length === 3 && !path.endsWith('/') ? path : null;
+  // <league>/<author>/<file>, or a dev room's dev/<room>/<author>/<file> (0465).
+  const n = path.split('/');
+  return (n.length === 3 || (n.length === 4 && n[0] === 'dev')) && !path.endsWith('/') ? path : null;
 }
 
 /** 16 hex characters of file name. Not crypto.randomUUID: Hermes has no
@@ -126,6 +128,8 @@ function randomName(): string {
  *  the league out of the first folder and the author out of the second, so a
  *  key that is not exactly three segments can only ever be rejected. Built in
  *  one place, checked by scripts/check-chat-image.mjs against the SQL. */
+/** `leagueId` is the first folder: a league's id, or `dev/<room>` for a dev
+ *  room's pictures (0465, devImageFolder). */
 export function chatImageKey(leagueId: string, authorId: string, type: ChatImageType): string {
   return `${leagueId}/${authorId}/${randomName()}.${EXT[type]}`;
 }

@@ -3584,6 +3584,9 @@ export interface DevMessage {
   /** The worker has it in hand right now. */
   filing: boolean;
   author: string; author_id: string | null; mine: boolean;
+  /** Every chat tool (0465): the same fields league chat's rows carry. */
+  kind?: 'text' | 'poll'; poll?: ChatPoll; caption?: string | null; pinned?: boolean;
+  edited_at?: string | null; mentions_me?: boolean; reactions?: import('./chatReactions').ChatReactionCount[];
 }
 export interface DevMember { user_id: string; name: string; role: 'member' | 'admin'; me: boolean; joined_at: string }
 export interface DevInvite { code: string; uses: number; max_uses: number | null; at: string }
@@ -3596,9 +3599,22 @@ export const devRoomJoin = (code: string) =>
   rpc<Ok & { room_id?: string; name?: string; already?: boolean }>('dev_room_join', { p_code: code });
 /** Latest page (no `before`) marks the room read. Newest first. */
 export const devRoomMessages = (roomId: string, before?: number) =>
-  rpc<Ok & { name?: string; messages?: DevMessage[] }>('dev_room_messages', { p_room: roomId, p_before: before ?? null, p_limit: 50 });
-export const devRoomPost = (roomId: string, body: string, tag: DevTag | null = null) =>
-  rpc<Ok & { id?: number }>('dev_room_post', { p_room: roomId, p_body: body, p_tag: tag });
+  rpc<Ok & { name?: string; messages?: DevMessage[]; pins?: DevMessage[]; last_read?: number; unread?: number }>('dev_room_messages', { p_room: roomId, p_before: before ?? null, p_limit: 50 });
+export const devRoomPost = (roomId: string, body: string, tag: DevTag | null = null, mentions: string[] = [], caption: string | null = null) =>
+  rpc<Ok & { id?: number }>('dev_room_post', { p_room: roomId, p_body: body, p_tag: tag, p_mentions: mentions, p_caption: caption });
+/** Every chat tool (0465): polls, reactions, edits, pins — league chat's, for the dev room. */
+export const devRoomPostPoll = (roomId: string, question: string, options: string[]) =>
+  rpc<Ok & { id?: number }>('dev_room_post_poll', { p_room: roomId, p_question: question, p_options: options });
+export const devRoomPollCast = (messageId: number, choice: number) =>
+  rpc<Ok>('dev_room_poll_cast', { p_message: messageId, p_choice: choice });
+export const devRoomReact = (messageId: number, emoji: string) =>
+  rpc<Ok & { on?: boolean; reactions?: import('./chatReactions').ChatReactionCount[] }>('dev_room_react', { p_message: messageId, p_emoji: emoji });
+export const devRoomEdit = (messageId: number, body: string, mentions: string[] = [], caption: string | null = null) =>
+  rpc<Ok>('dev_room_edit', { p_message: messageId, p_body: body, p_mentions: mentions, p_caption: caption });
+export const devRoomPin = (messageId: number, on: boolean) =>
+  rpc<Ok>('dev_room_pin', { p_message: messageId, p_on: on });
+/** Where a dev room's pictures go in the chat-image bucket (0465). */
+export const devImageFolder = (roomId: string) => `dev/${roomId}`;
 export const devRoomTag = (messageId: number, tag: DevTag | null) =>
   rpc<Ok>('dev_room_tag', { p_message: messageId, p_tag: tag });
 export const devRoomDelete = (messageId: number) =>

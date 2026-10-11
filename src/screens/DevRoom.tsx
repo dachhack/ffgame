@@ -1,23 +1,20 @@
-// THE DEV ROOM, web (v0.658.0, 0459). Founder: "Can I have a special dev
-// group chat and invite users into the chat where they can log changes and
+// THE DEV ROOM, web (v0.658.0, 0459; v0.663.0). Founder: "Can I have a special
+// dev group chat and invite users into the chat where they can log changes and
 // suggestions for the game?"
 //
-// A chat that belongs to no league. People get in by an admin's invite link
-// or code; a message tagged 💡 idea or 🐞 bug is filed as a GitHub issue by
-// the worker (server/src/devRoom.js), and the issue number comes back on the
-// message as a link. The repo is public, so the composer says so where the
-// tag is chosen, and the issue carries no name (devRoomIssue.js).
-//
-// Polled like league chat (0147): every few seconds while open.
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+// A chat that belongs to no league. An admin switches people in from the list
+// of every registered player (0464). Since v0.663.0 the thread IS league
+// chat's (app/chat.tsx DevChat): pictures, GIFs, polls, reactions, @mentions,
+// and @computer from any member, filed by the worker (server/src/computer.js)
+// with Computer's reply and fix card back in the room.
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
-  devRoomsMine, devRoomCreate, devRoomMessages, devRoomPost, devRoomTag, devRoomDelete,
+  devRoomsMine, devRoomCreate,
   devRoomMembers, devRoomRemove, devRoomSetOpen, devRoomUsers, devRoomSetMember, friendlyError,
-  type DevRoom, type DevMessage, type DevMember, type DevTag, type DevUser,
+  type DevRoom, type DevMember, type DevUser,
 } from '@drip/core/data/liveApi';
-import { issueUrl, TAG_LABEL } from '@drip/core/data/devRoom';
+import { DevChat } from '../app/chat';
 
-const POLL_MS = 5000;
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const chip = (on: boolean): CSSProperties => ({
   fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
@@ -25,7 +22,6 @@ const chip = (on: boolean): CSSProperties => ({
   border: '1px solid color-mix(in srgb, var(--you) 55%, var(--bd))', borderRadius: 999, padding: '5px 11px',
 });
 const small: CSSProperties = { fontSize: 10, color: 'var(--faint)' };
-const fmtAt = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
 
 /** The home-screen door: shown to a member of any room, and to an admin. */
 export function DevRoomBanner({ onOpen }: { onOpen: (roomId: string | null) => void }) {
@@ -168,112 +164,24 @@ function RoomList({ onPick }: { onPick: (id: string) => void }) {
 function Room({ roomId, onLeft, compact }: { roomId: string; onLeft: () => void; compact?: boolean }) {
   const [tab, setTab] = useState<'chat' | 'people'>('chat');
   const [name, setName] = useState('');
-  const [msgs, setMsgs] = useState<DevMessage[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const [tag, setTag] = useState<DevTag | null>(null);
-  const [busy, setBusy] = useState(false);
   const [admin, setAdmin] = useState(false);
-  const end = useRef<HTMLDivElement | null>(null);
-  const count = useRef(0);
-
-  const load = useCallback(async () => {
-    const r = await devRoomMessages(roomId);
-    if (!r.ok) { setErr(r.error ?? 'Couldn’t read the room.'); return; }
-    setErr(null); setName(r.name ?? ''); setMsgs([...(r.messages ?? [])].reverse());
-  }, [roomId]);
   useEffect(() => {
-    void load().catch((e) => setErr(friendlyError(e)));
+    devRoomsMine().then((r) => { if (r.ok) setName(r.rooms?.find((x) => x.id === roomId)?.name ?? ''); }).catch(() => {});
     devRoomMembers(roomId).then((r) => { if (r.ok) setAdmin(!!r.admin); }).catch(() => {});
-    const t = setInterval(() => { void load().catch(() => {}); }, POLL_MS);
-    return () => clearInterval(t);
-  }, [load, roomId]);
-  useEffect(() => {
-    if (msgs.length > count.current) end.current?.scrollIntoView({ block: 'end' });
-    count.current = msgs.length;
-  }, [msgs.length]);
-
-  const send = async () => {
-    if (!draft.trim() || busy) return;
-    setBusy(true);
-    try {
-      const r = await devRoomPost(roomId, draft, tag);
-      if (!r.ok) { setErr(r.error ?? 'Didn’t send.'); return; }
-      setDraft(''); setTag(null); await load();
-    } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
-  };
-  const retag = async (m: DevMessage, t: DevTag | null) => {
-    const r = await devRoomTag(m.id, t).catch((e) => ({ ok: false, error: friendlyError(e) }));
-    if (!r.ok) setErr(r.error ?? 'Couldn’t tag it.'); else await load();
-  };
-  const del = async (m: DevMessage) => {
-    if (!window.confirm('Delete this message?')) return;
-    const r = await devRoomDelete(m.id).catch((e) => ({ ok: false, error: friendlyError(e) }));
-    if (!r.ok) setErr(r.error ?? 'Couldn’t delete it.'); else await load();
-  };
-
+  }, [roomId]);
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: compact ? 14 : 18, fontWeight: 700, flex: 1 }}>{name}</span>
         <button onClick={() => setTab('chat')} className="mono" style={chip(tab === 'chat')}>CHAT</button>
-        <button onClick={() => setTab('people')} className="mono" style={chip(tab === 'people')}>PEOPLE{admin ? ' & INVITES' : ''}</button>
+        <button onClick={() => setTab('people')} className="mono" style={chip(tab === 'people')}>{admin ? 'PEOPLE' : 'WHO’S HERE'}</button>
       </div>
-      {err && <div className="mono" style={{ fontSize: 11, color: 'var(--warn, #c66)' }}>{err}</div>}
       {tab === 'people' ? <People roomId={roomId} roomName={name} onLeft={onLeft} /> : (
-        <>
-          <div style={{ ...card, display: 'grid', gap: 12, maxHeight: compact ? '38vh' : '62vh', overflowY: 'auto' }}>
-            {!msgs.length && <div className="mono" style={small}>Nothing yet. Say what you’d change — tag it 💡 or 🐞 to log it.</div>}
-            {msgs.map((m) => {
-              const open = !m.issue && !m.filing;
-              const canTag = open && (m.mine || admin);
-              return (
-                <div key={m.id} style={{ display: 'grid', gap: 3 }}>
-                  <div className="mono" style={{ ...small, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, color: m.mine ? 'var(--you)' : 'var(--dim)' }}>{m.mine ? 'you' : m.author}</span>
-                    <span>{fmtAt(m.at)}</span>
-                    {m.tag && <span style={{ fontWeight: 700, color: m.tag === 'bug' ? 'var(--warn, #c66)' : 'var(--you)' }}>{TAG_LABEL[m.tag]}</span>}
-                    {m.issue ? <a href={issueUrl(m.issue)} target="_blank" rel="noreferrer" style={{ color: 'var(--you)' }}>logged #{m.issue} ↗</a>
-                      : m.tag ? <span>{m.filing ? 'logging…' : 'queued to log'}</span> : null}
-                  </div>
-                  <div style={{ fontSize: 13.5, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.body}</div>
-                  {(canTag || m.mine || admin) && (
-                    <div className="mono" style={{ display: 'flex', gap: 10, fontSize: 9.5 }}>
-                      {canTag && (['idea', 'bug'] as const).map((t) => (
-                        <button key={t} onClick={() => void retag(m, m.tag === t ? null : t)}
-                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: m.tag === t ? 'var(--you)' : 'var(--faint)', fontFamily: 'inherit', fontSize: 'inherit' }}>
-                          {m.tag === t ? `✓ ${TAG_LABEL[t]}` : `tag ${TAG_LABEL[t]}`}
-                        </button>
-                      ))}
-                      {(m.mine || admin) && (
-                        <button onClick={() => void del(m)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--faint)', fontFamily: 'inherit', fontSize: 'inherit' }}>delete</button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <div ref={end} />
-          </div>
-          <div style={{ ...card, display: 'grid', gap: 8 }}>
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={1000} rows={compact ? 2 : 3}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send(); }}
-              placeholder="A suggestion, a bug, a thought…"
-              style={{ fontSize: 13.5, padding: 10, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 6, resize: 'vertical', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => setTag(null)} className="mono" style={chip(tag === null)}>JUST CHAT</button>
-              <button onClick={() => setTag('idea')} className="mono" style={chip(tag === 'idea')}>{TAG_LABEL.idea}</button>
-              <button onClick={() => setTag('bug')} className="mono" style={chip(tag === 'bug')}>{TAG_LABEL.bug}</button>
-              <span style={{ flex: 1 }} />
-              <button onClick={() => void send()} disabled={busy || !draft.trim()} className="mono" style={chip(true)}>SEND</button>
-            </div>
-            {/* THE PUBLIC LINE. A tagged message leaves the app: said where
-                the choice is made, not buried in a FAQ. */}
-            <div className="mono" style={small}>
-              {tag ? 'Tagged messages are logged as public GitHub issues (your name isn’t included).' : 'Tag a message 💡 or 🐞 to log it as a public GitHub issue (no names).'}
-            </div>
-          </div>
-        </>
+        // EVERY CHAT TOOL (v0.663.0): league chat's own thread on the room's
+        // backend — pictures, GIFs, polls, reactions, @mentions, @computer.
+        <div style={{ ...card, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <DevChat roomId={roomId} height={compact ? '42vh' : '58vh'} />
+        </div>
       )}
     </>
   );

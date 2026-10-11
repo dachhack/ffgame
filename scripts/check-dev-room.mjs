@@ -78,5 +78,22 @@ for (const f of ['src/screens/DevRoom.tsx', 'apps/mobile/src/screens/DevRoom.tsx
   ok(`${f}: the dev chip floats, bottom left`, /position: 'fixed', left: 16, bottom: 16|position: 'absolute', left: 14, bottom/.test(s));
 }
 
+// ── every chat tool, one window, @computer for everyone (v0.663.0, 0465) ────
+const sql5 = src('supabase/migrations/0465_dev_room_chat_tools.sql');
+ok('tools: polls, reactions, edits, pins, captions and mentions in the dev room', ['dev_room_post_poll', 'dev_room_poll_cast', 'dev_room_react', 'dev_room_edit', 'dev_room_pin', 'p_caption', '_dev_room_mentions'].every((k) => sql5.includes(k)));
+ok('tools: the league\'s six reactions, not a second list', /dev_room_react[\s\S]*?_chat_reaction_ok\(p_emoji\)/.test(sql5));
+ok('pictures: a member writes dev/<room>/<own id>/…', /dev chat image write[\s\S]*?dev_image_author\(name\) = auth\.uid\(\)[\s\S]*?_dev_room_member\(public\.dev_image_room\(name\)\)/.test(sql5));
+ok('catch-up: the latest page says where the reader was', sql5.includes("'last_read', coalesce(lr, 0), 'unread', un"));
+ok('@computer: the dev room is an ask source', sql5.includes("check (source in ('league', 'dm', 'dev'))"));
+const worker2 = src('server/src/computer.js');
+ok('@computer: everyone in the dev room, not just COMPUTER_USERS', /from\('dev_room_message'\)[\s\S]{0,160}\.gt\('created_at', since\)\.eq\('kind', 'text'\)/.test(worker2) && !/dev_room_message[^\n]*\.in\('author_id', who\)/.test(worker2));
+for (const f of ['src/app/chat.tsx', 'apps/mobile/src/ui/Chat.tsx']) {
+  const c = src(f);
+  ok(`${f}: the dev room runs on league chat's thread (a backend), with no idea/bug chips`, c.includes('export function devChatBackend(') && c.includes('backend={be}') && !c.includes('JUST CHAT'));
+}
+for (const f of ['src/screens/DevRoom.tsx', 'apps/mobile/src/screens/DevRoom.tsx']) {
+  ok(`${f}: the room's chat is DevChat`, src(f).includes('<DevChat roomId={roomId}') && !src(f).includes('devRoomPost('));
+}
+
 if (fails) { console.log(`\n${fails} DEV-ROOM ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DEV-ROOM ASSERTIONS PASSED');
