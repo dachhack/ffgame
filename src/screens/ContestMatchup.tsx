@@ -38,9 +38,13 @@ export function squadRows(entry: unknown, slots: { slot: string }[]): Row[] {
   return slots.map((d) => by.get(d.slot) ?? { slot: d.slot, slug: null, sealed: false });
 }
 
+/** THE TIE-BREAKER CHIP (v0.682.2): what the number on the card means. */
+const TB_NOTE = 'This spot is your tie-breaker: its player aims at this number. If the matchup ties on rings, the squad whose tie-breaker lands closer to its own number wins.';
+
 export function ContestMatchup({ leagueId, week }: { leagueId: string; week: number }) {
   const [st, setSt] = useState<ContestMatchupState | null>(null);
   const [pick, setPick] = useState<string | null>(null);
+  const [tbNote, setTbNote] = useState<string | null>(null);   // THE TIE-BREAKER CHIP (v0.682.2): the explainer, on a click
   const [board, setBoard] = useState<PodSalaryRow[]>([]);
   useEffect(() => {
     let alive = true;
@@ -83,7 +87,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const scoreOf = (s: 'home' | 'away', slot: string) => m.state?.slots?.find((x) => x.side === s && x.slot === slot)?.score ?? null;
   // THE TIE-BREAKER SPOT (v0.681.0, founder: "the spot-specific tie breaker
   // target chip on the player spots in the matchup as well"): each squad's own
-  // ⚖️ spot and target, dealt per seat as the builder shows it.
+  // tie-breaker spot and target, dealt per seat; the number rides the card as a chip (v0.682.2).
   const tbs = {
     home: theCard ? contestTiebreak(leagueId, st.week ?? week, m.home, theCard, slots) : null,
     away: theCard ? contestTiebreak(leagueId, st.week ?? week, m.away, theCard, slots) : null,
@@ -93,7 +97,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   // unseals him). Empty spots show a dashed outline.
   const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
     const p = r.slug ? bySlug.get(r.slug) : null;
-    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} slot={labels[r.slot] ?? r.slot} opp={!mine} idx={i} />;
+    const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
+    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} chip={tbc ? String(tbc.target) : null} onChip={() => setTbNote(TB_NOTE)} />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={false} />;
     return (
       <div key={`${s}-${r.slot}-empty`} className="ct-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed color-mix(in srgb, var(--text) 25%, transparent)', borderRadius: 10 }}>
@@ -109,16 +114,14 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
-    const tb = tbs[s]?.slot === r.slot ? tbs[s] : null;
     const color = mine ? 'var(--you)' : 'var(--opp)';
     return (
       <div style={{ display: 'grid', gap: 1, alignContent: 'center', textAlign: edge, padding: edge === 'left' ? '0 4px 0 10px' : '0 10px 0 4px', minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${tb ? ` · ⚖️ ${tb.target}` : ''}`}</span>
+        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</span>
         <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
         <span className="mono" style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>
           {proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}
           {target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}
-          {tb && score != null ? ` · ⚖️ ${Math.abs(score - tb.target).toFixed(1)} off` : ''}
         </span>
       </div>
     );
@@ -189,6 +192,12 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         {!solo && <span className="mono" style={small}>{`${L.team} v ${R.team}`}</span>}
         {!solo && !st.started && <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`${R.mine ? 'Your' : 'Their'} cards turn face up as each player's game kicks off.`}</span>}
       </div>
+      {tbNote && (
+        <div style={{ ...card, display: 'flex', gap: 10, alignItems: 'baseline' }}>
+          <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', flex: 1 }}>{tbNote}</span>
+          <button onClick={() => setTbNote(null)} className="mono" style={chip(false)}>✕</button>
+        </div>
+      )}
       <Felt>
         {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}
         <div style={{ display: 'grid', gridTemplateColumns: solo ? '1fr' : 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: '4px 8px 12px', borderBottom: '1px solid color-mix(in srgb, var(--text) 12%, transparent)', marginBottom: 8 }}>

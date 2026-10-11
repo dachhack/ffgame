@@ -10,7 +10,7 @@
 // filter, the pool filter, your seat's rule), FILL FOR ME for the open spots,
 // and the week's injuries. The engine is engine/contestBuilder.ts.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
   contestState, addContestEntry, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
@@ -84,6 +84,9 @@ function InjuryTag({ week, slug }: { week: number; slug: string }) {
   const c = bad ? t.warn : '#D9A441';
   return <View accessibilityLabel={INJ_WORD[s]} style={{ borderWidth: 1, borderColor: c, borderRadius: 3, paddingHorizontal: 3, marginLeft: 5 }}><Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '800', color: c }}>{s}</Text></View>;
 }
+
+/** THE TIE-BREAKER CHIP (v0.682.2): what the number on the card means. */
+const TB_NOTE = 'This spot is your tie-breaker: its player aims at this number. If the matchup ties on rings, the squad whose tie-breaker lands closer to its own number wins.';
 
 export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leagueId: string; week?: number; onBack: () => void;
   /** Under the builder, inside its scroll (v0.677.0: MY TEAM's name and weeks). */ after?: React.ReactNode }) {
@@ -372,11 +375,11 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
                 const changed = slug !== saved[d.slot];
                 const hint = d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price';
                 const dim = alpha(t.text, 75);
-                const face = p ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={labels[d.slot]} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} /> : <View />;
+                const face = p ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} /> : <View />;
                 return (
                   <View key={d.slot} style={{ width: CARD_W + 6, alignItems: 'center', gap: 3 }}>
                     <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.8, color: changed ? t.you : dim }}>
-                      {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${myTb?.slot === d.slot ? ` · ⚖️ ${myTb.target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
+                      {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
                     </Text>
                     <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }} style={{ borderRadius: 13, borderWidth: 2, borderColor: changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
                       <FlipCard key={`${d.slot}-${slug ?? 'open'}`} flipped={!!p} idx={i} back={<CardBack seed={`${leagueId}|${d.slot}`} />} face={face} />

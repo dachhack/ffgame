@@ -102,6 +102,9 @@ function InjuryTag({ week, slug }: { week: number; slug: string }) {
   return <span className="mono" title={INJ_WORD[s]} style={{ fontSize: 8.5, fontWeight: 800, color: bad ? 'var(--warn, #c66)' : '#D9A441', border: `1px solid ${bad ? 'var(--warn, #c66)' : '#D9A441'}`, borderRadius: 3, padding: '0 3px', marginLeft: 5 }}>{s}</span>;
 }
 
+/** THE TIE-BREAKER CHIP (v0.682.2): what the number on the card means. */
+const TB_NOTE = 'This spot is your tie-breaker: its player aims at this number. If the matchup ties on rings, the squad whose tie-breaker lands closer to its own number wins.';
+
 export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { leagueId: string; week?: number; onBack: () => void;
   /** Inside the league's own frame: no back row, no outer padding. */
   embedded?: boolean }) {
@@ -415,11 +418,11 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
               return (
                 <div key={d.slot} style={{ width: 104, display: 'grid', gap: 4, justifyItems: 'center', alignContent: 'start' }}>
                   <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap' }}>
-                    {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${myTb?.slot === d.slot ? ` · ⚖️ ${myTb.target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
+                    {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
                   </span>
                   <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
                     {p
-                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={labels[d.slot]} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} />
+                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
                       : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => openSheet(d.slot) : undefined} />}
                   </div>
                   <span className="mono" style={{ fontSize: 9.5, color: dim, textAlign: 'center', lineHeight: 1.3, minHeight: 25 }}>

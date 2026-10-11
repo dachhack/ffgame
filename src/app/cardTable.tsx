@@ -142,6 +142,7 @@ const CSS = `
 .ctable .ct-facehead{display:flex;justify-content:space-between;align-items:center;}
 .ctable .ct-suit{font-size:8px;font-weight:800;letter-spacing:.06em;padding:2.5px 5px;border-radius:4px;border:1.5px solid;}
 .ctable .ct-slot{font-size:7px;color:#6E6650;letter-spacing:.1em;}
+.ctable .ct-tbchip{font-family:ui-monospace,monospace;font-size:9px;font-weight:800;color:#FFD86B;background:#2A2010;border-radius:5px;padding:1px 6px;cursor:pointer;}
 .ctable .ct-art{align-self:center;margin-top:4px;width:72px;height:52px;border-radius:7px;border:2px solid;overflow:hidden;position:relative;
   background:radial-gradient(circle at 50% 20%,#FFF 0%,#E8E0C8 100%);display:flex;align-items:center;justify-content:center;}
 .ctable .ct-art img{width:100%;height:100%;object-fit:cover;object-position:top;display:block;}
@@ -569,8 +570,9 @@ function CornerLogo({ src, size = 11 }: { src: string; size?: number }) {
     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
 }
 
-export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = false, flip = false, hot = false, nuked = false, idx = 0, onClick, selected = false, locked = false, badge }: {
+export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = false, flip = false, hot = false, nuked = false, idx = 0, onClick, selected = false, locked = false, badge, chip, onChip }: {
   slug: string; name: string; pos: string; team?: string | null; slot?: string; metric?: string | null;
+  /** THE TIE-BREAKER CHIP (v0.682.2): a number top-right in place of the slot label; a click explains it. */ chip?: string | null; onChip?: () => void;
   bank?: number | null; opp?: boolean;
   /** Flip-in entrance (the reveal animation) WITHOUT the opponent styling — a
    *  YOUR-side card turning face-up (the demo preview's opening beat). */
@@ -593,7 +595,9 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               {/* header crest — skipped while the art box itself shows the logo */}
               {art.logo && art.stage !== 'logo' && <CornerLogo src={art.logo} />}
-              {slot && <span className="ct-slot">{slot.toUpperCase()}</span>}
+              {chip != null
+                ? <span className="ct-tbchip" title="tie-breaker — tap for what it means" onClick={(e) => { e.stopPropagation(); onChip?.(); }}>{chip}</span>
+                : slot && <span className="ct-slot">{slot.toUpperCase()}</span>}
             </span>
           </div>
           <div className="ct-art" style={{ borderColor: suit.color as string }}>
