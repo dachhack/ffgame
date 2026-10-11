@@ -10,22 +10,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
 import {
-  contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
-  type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
+  type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, Mono } from '../ui/prims';
+import { Playoffs } from '../ui/LeagueExtras';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
+import { ContestMatchup } from './ContestMatchup';
 import { CONTEST_BUDGETS, CONTEST_MIN_SPENDS, moneyChip } from './ContestCommish';
 
 export type BullseyeRoom = 'matchup' | 'league' | 'team' | 'settings' | 'commish';
 type ContestLeague = BullseyeLeague & { kind?: string; bullseye?: ContestInfo };
 const n0 = (n: number) => n.toLocaleString('en-US');
+/** contest_board's default page; a board this long is one worth searching (0473). */
+const BOARD_LIMIT = 100;
 const CONTEST_BLURB: Record<ContestKind, string> = {
   high: 'Each week everyone builds a squad under the budget from the week’s salary board. Most points wins.',
   golf: 'Each week everyone builds a squad that spends at least the minimum. FEWEST points wins — but a scoreless spot banks a penalty, so no-shows are no bargain.',
@@ -174,15 +178,22 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
   const [week, setWeek] = useState<number | null>(null);
   const load = useCallback(() => contestLeague(leagueId).then((r) => { setLg(r); if (r.ok && r.week != null) setWeek((w) => w ?? r.week!); return r; }), [leagueId]);
   useEffect(() => { void load().catch(() => {}); }, [load]);
+  // Each arrival at the matchup room is a new deal (the flips replay).
+  const [visit, setVisit] = useState(0);
+  useEffect(() => { if (room === 'matchup') setVisit((v) => v + 1); }, [room]);
   if (!lg) return <View style={{ flex: 1, backgroundColor: t.bg }}><Mono size={10} tone="faint" style={{ padding: 16 }}>Loading…</Mono></View>;
   if (!lg.ok || !lg.bullseye) return <View style={{ flex: 1, backgroundColor: t.bg }}><Mono size={10} tone="warn" style={{ padding: 16 }}>{lg.error ?? 'Couldn’t open the league.'}</Mono></View>;
   const weeks = [...new Set([...(lg.weeks ?? []), ...(lg.week != null ? [lg.week] : [])])].sort((x, y) => x - y);
 
-  if (room === 'matchup' && lg.me) {
+  if (room === 'team' && lg.me) {
+    // MY TEAM is where the weekly squad is built (v0.677.0, founder: "make
+    // my team the place where you select your weekly team"); the name and
+    // MY WEEKS ride under the builder.
     return (
       <View style={{ flex: 1, backgroundColor: t.bg }}>
         <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-        {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} onBack={() => onRoom('league')} />}
+        {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} onBack={() => onRoom('league')}
+          after={<TeamRoom lg={lg} onOpenWeek={(w) => { setWeek(w); onRoom('matchup'); }} onRenamed={() => void load()} />} />}
       </View>
     );
   }
@@ -190,8 +201,14 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 90 }} keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); }} />}>
       <Mono size={9} tone="dim">{contestLeagueLine(lg.bullseye)}</Mono>
-      {room === 'team' && lg.me ? <TeamRoom lg={lg} onOpenWeek={(w) => { setWeek(w); onRoom('matchup'); }} onRenamed={() => void load()} />
-        : room === 'settings' ? <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />
+      {room === 'matchup' && lg.me && week != null ? (
+        // THE CARD TABLE (v0.677.0): the week's matchup as two columns of
+        // cards, remounted on every visit so the reveal flips play again.
+        <>
+          <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
+          <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week} />
+        </>
+      ) : room === 'settings' ? <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />
         : <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} onCommish={() => onRoom('commish')} onBack={onBack} />}
     </ScrollView>
   );
@@ -235,6 +252,38 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
   }, [lg.league_id, week]);
   const b = lg.bullseye!;
   const bull = b.contest === 'bullseye';
+  const h2h = b.format === 'h2h';
+  // WHERE AM I (0473): a board bigger than the rows it shows gets a team
+  // search, and my own stretch of the table when I'm off the top.
+  const big = (bd?.rows?.length ?? 0) >= BOARD_LIMIT || (bd?.season?.rows.length ?? 0) >= BOARD_LIMIT;
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<{ q: string; found: BullseyeBoardRow[]; season: BullseyeSeasonRow[] } | null>(null);
+  useEffect(() => {
+    const want = q.trim();
+    if (!want) { setHits(null); return; }
+    let alive = true;
+    const id = setTimeout(() => {
+      contestBoardFind(lg.league_id!, week, want).then((r) => { if (alive && r.ok) setHits({ q: want, found: r.found, season: r.season }); }).catch(() => {});
+    }, 300);
+    return () => { alive = false; clearTimeout(id); };
+  }, [q, lg.league_id, week]);
+  const weekRow = (r: BullseyeBoardRow) => (
+    <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
+      <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
+      {bull && <Mono size={9} tone="faint">{`${Number(r.points).toFixed(1)} pts`}</Mono>}
+      <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 52, textAlign: 'right' }}>{Number(r.ring).toFixed(1)}</Mono>
+    </View>
+  );
+  const seasonRow = (r: BullseyeSeasonRow) => (
+    <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
+      <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
+      <Mono size={9} tone="faint">{h2h ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}`}</Mono>
+      <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 60, textAlign: 'right' }}>{h2h ? recordWord(r) : Number(r.total).toFixed(1)}</Mono>
+    </View>
+  );
+  const gap = (rank: number) => <Mono size={9} tone="faint" style={{ marginTop: 6 }}>{`⋯ you, at #${n0(rank)}`}</Mono>;
   const share = async () => {
     if (!lg.invite_code) return;
     try { await Share.share({ message: `Join my league "${lg.name}" on Drip Fantasy: ${SITE_ORIGIN}/?bullseye=${lg.invite_code}\nCode: ${lg.invite_code}` }); } catch { /* ignore */ }
@@ -262,30 +311,37 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
       </Card>
       <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />
       <Card style={{ gap: 2 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${b.format === 'h2h' ? ' · HEAD-TO-HEAD' : ''}`}</Mono>
+        <Mono size={9} tone="faint" weight="700" track={0.1}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${b.format === 'h2h' ? ' · HEAD-TO-HEAD' : ''}${bd?.void ? ' · VOIDED' : ''}`}</Mono>
         {bd && !bd.started && <Mono size={9} tone="faint">Squads and scores show once the week’s first game locks.</Mono>}
-        {(bd?.rows ?? []).map((r) => (
-          <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
-            <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
-            {bull && <Mono size={9} tone="faint">{`${Number(r.points).toFixed(1)} pts`}</Mono>}
-            <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 52, textAlign: 'right' }}>{Number(r.ring).toFixed(1)}</Mono>
-          </View>
-        ))}
-        {bd?.me && !(bd.rows ?? []).some((r) => r.me) && <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${bd.me.rank} · ${Number(bd.me.ring).toFixed(1)}`}</Mono>}
+        {bd?.void && <Mono size={9} tone="warn">The commissioner voided this week — it doesn’t count in the standings.</Mono>}
+        {big && <Field value={q} onChangeText={setQ} maxLength={30} placeholder="Find a team…" autoCorrect={false} style={{ marginTop: 4, marginBottom: 4 }} />}
+        {hits && (
+          <>
+            <Mono size={9} tone="faint" style={{ marginTop: 4 }}>{hits.found.length ? `FOUND “${hits.q}” · THIS WEEK` : `No squad named “${hits.q}” this week.`}</Mono>
+            {hits.found.map(weekRow)}
+          </>
+        )}
+        {(bd?.rows ?? []).map(weekRow)}
+        {bd?.me && !(bd.rows ?? []).some((r) => r.me) && (
+          (bd.near?.length ?? 0) > 0 ? <>{gap(bd.me.rank)}{bd.near!.map(weekRow)}</>
+            : <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${n0(bd.me.rank)} · ${Number(bd.me.ring).toFixed(1)}`}</Mono>
+        )}
       </Card>
+      {h2h && b.span === 'season' && <Playoffs leagueId={lg.league_id!} />}
       {bd?.season && (
         <Card style={{ gap: 2 }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>SEASON STANDINGS</Mono>
-          {bd.season.rows.map((r) => (
-            <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
-              <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
-              <Mono size={9} tone="faint">{b.format === 'h2h' ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}`}</Mono>
-              <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 60, textAlign: 'right' }}>{b.format === 'h2h' ? recordWord(r) : Number(r.total).toFixed(1)}</Mono>
-            </View>
-          ))}
-          {bd.season.me && !bd.season.rows.some((r) => r.me) && <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${bd.season.me.rank} · ${b.format === 'h2h' ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</Mono>}
+          {hits && (
+            <>
+              <Mono size={9} tone="faint" style={{ marginTop: 4 }}>{hits.season.length ? `FOUND “${hits.q}” · SEASON` : `No team named “${hits.q}”.`}</Mono>
+              {hits.season.map(seasonRow)}
+            </>
+          )}
+          {bd.season.rows.map(seasonRow)}
+          {bd.season.me && !bd.season.rows.some((r) => r.me) && (
+            (bd.season.near?.length ?? 0) > 0 ? <>{gap(bd.season.me.rank)}{bd.season.near!.map(seasonRow)}</>
+              : <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${n0(bd.season.me.rank)} · ${h2h ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</Mono>
+          )}
         </Card>
       )}
     </>
@@ -321,7 +377,7 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
     const golf = lg.bullseye?.contest === 'golf';
     let w = 0, l = 0, tt = 0;
     for (const x of weeks ?? []) {
-      if (x.status !== 'final' || x.opp == null || x.ring == null || x.opp_ring == null) continue;
+      if (x.status !== 'final' || x.void || x.opp == null || x.ring == null || x.opp_ring == null) continue;
       const a = Number(x.ring), bb = Number(x.opp_ring);
       if (a === bb) tt++; else if (golf ? a < bb : a > bb) w++; else l++;
     }
@@ -348,7 +404,7 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
           <Pressable key={w.week} onPress={() => { tap(); onOpenWeek(w.week); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
             <Mono size={11} tone="text" style={{ width: 64 }}>{`Week ${w.week}`}</Mono>
-            <Mono size={9} tone="faint" style={{ flex: 1 }} numberOfLines={1}>{`${w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}${w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : w.rank != null ? ` · #${w.rank} of ${n0(w.entries)}` : ''}`}</Mono>
+            <Mono size={9} tone="faint" style={{ flex: 1 }} numberOfLines={1}>{`${w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}${w.playoff ? ` · ${w.label ?? 'playoffs'}` : ''}${w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : w.rank != null ? ` · #${w.rank} of ${n0(w.entries)}` : ''}`}</Mono>
             <Mono size={11} weight="700" tone="text">{w.ring != null ? Number(w.ring).toFixed(1) : '—'}</Mono>
           </Pressable>
         ))}
@@ -393,10 +449,17 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
     b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`,
     ...(contestCredit(b.contest) ? [`💡 ${contestCredit(b.contest)!.line}`] : []),
   ];
+  // THE MONEY (0477): the dues setting and the prize list, when set.
+  const money = [
+    ...(b.dues_amount != null ? [`💵 Dues: $${n0(b.dues_amount)}${b.dues_note ? ` — ${b.dues_note}` : ''}. The platform prints it, never collects it.`] : []),
+    ...(b.prizes ?? []).map((p) => `🏆 ${p.label}: ${p.prize}`),
+  ];
   return (
     <Card style={{ gap: 8 }}>
       <Mono size={9} tone="faint" weight="700" track={0.1}>HOW THIS LEAGUE PLAYS</Mono>
       {rules.map((r, i) => <Text key={i} style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`• ${r}`}</Text>)}
+      {money.length > 0 && <Mono size={9} tone="faint" weight="700" track={0.1} style={{ marginTop: 6 }}>THE MONEY</Mono>}
+      {money.map((r, i) => <Text key={`m${i}`} style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`• ${r}`}</Text>)}
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
         {lg.commish && <Chip label="⚑ COMMISSIONER" onPress={() => { tap(); onCommish(); }} />}
         {lg.me && !lg.commish && <Chip dim label="LEAVE THE LEAGUE" onPress={() => { tap(); leave(); }} />}

@@ -14,6 +14,7 @@
 import { db } from './supabase.js';
 import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './resolve.js';
 import { buildLeagueReport, postReport } from './report.js';
+import { repostContestRecap } from './contestRecap.js';
 import { setRuntimeSlate } from '../../packages/core/src/data/nflSlate.ts';
 import { rescoreResult } from '../../packages/core/src/data/rescore.ts';
 
@@ -31,7 +32,7 @@ export async function installWeekSlate(week, season) {
   return games.length;
 }
 
-const DEPS = { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick, installWeekSlate, buildLeagueReport, postReport };
+const DEPS = { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick, installWeekSlate, buildLeagueReport, postReport, repostContestRecap };
 
 /** Seats in these matchups whose owner stored no pick at all that week. */
 async function autofilledSeats(leagueId, rows, names) {
@@ -62,7 +63,7 @@ export async function sweepRescores(playerIndex, log = () => {}, deps = DEPS) {
     const finish = (result, err) => db().rpc('rescore_finish', { p_id: r.id, p_result: result ?? null, p_error: err ?? null });
     await db().from('rescore_request').update({ started_at: new Date().toISOString() }).eq('id', r.id);
     try {
-      const { data: ls } = await db().from('league').select('id, name, season, settings_json').eq('id', r.league_id);
+      const { data: ls } = await db().from('league').select('id, name, kind, season, settings_json').eq('id', r.league_id);
       const league = ls?.[0];
       if (!league) { await finish(null, 'no such league'); n++; continue; }
       if ((league.settings_json?.game_mode ?? 'drip') !== 'classic') {
@@ -108,6 +109,15 @@ export async function sweepRescores(playerIndex, log = () => {}, deps = DEPS) {
         // an identical write-up would ping the league to tell it nothing.
         if (result.changed) {
           try {
+            // A CONTEST LEAGUE (0474) has no weekly report; its record is the
+            // result card, rebuilt in place from the corrected finals.
+            if (league.kind === 'dfs' || league.kind === 'bullseye') {
+              const re = await (deps.repostContestRecap ?? DEPS.repostContestRecap)(league, r.week);
+              result.report = re ? 'rebuilt' : 'failed';
+              await finish(result, null);
+              log('rescore APPLIED', league.name ?? r.league_id, 'wk', r.week, '—', result.changed, 'moved,', result.flipped, 'flipped; card', re ?? 'none');
+              n++; continue;
+            }
             const { data: fresh } = await db().from('matchup')
               .select('id, league_id, week, home_roster_id, away_roster_id, home_final, away_final, status')
               .eq('league_id', r.league_id).eq('week', r.week);

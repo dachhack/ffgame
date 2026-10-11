@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.670.1` · migrations through `0472`_
+_Last updated: 2026-10-11 · Build `v0.677.0` · migrations through `0479`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -41,18 +41,37 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
     dispatch is 403 from a cloud session). `scripts/db/team-role-probes.sql`
     is the read-only probe for the "Run a database query" workflow; or just
     open a league with a HEAD COACH spot and look for "Liam Coen".
+- **The card table (v0.677.0)**: the MATCHUP tab of a contest league deals
+  the week as cards (`ContestMatchup` on both clients; `contest_matchup`,
+  0479); the builder lives under MY TEAM now. First live look still to
+  have: the phone's `FlipCard` on a real device (Animated rotateY with
+  backfaceVisibility), the headshot art on the card faces, and a week with
+  a kickoff passing while the screen is open (the newly unsealed card
+  should turn on the next 60s poll).
 - **Not done, in the order I'd do them** (the founder has seen this list):
-  1. "Where am I" on a 50,000-seat leaderboard — `contest_board` returns the
-     top 500; needs the caller's row plus neighbours, and a search by team.
-     Add an index on `matchup(league_id, week)` before the first big one.
-  2. Commissioner tools to fix a week: void, rescore after a stat correction,
-     set a member's squad (CLI `set-lineup` exists for classic leagues).
-  3. Entry deadline / late-entry policy (CPU build, zero, or week dropped).
-  4. Playoffs for season head-to-head (a top-N bracket over the last weeks).
-  5. Prizes and dues on the settings and the board (the listing has a text
-     field only).
-  6. Multiple entries per user for the huge contests; swap history; sharing a
-     squad card after squads unseal.
+  1. ~~"Where am I" on a 50,000-seat leaderboard~~ — done in v0.671.0
+     (0473: `near` + `found` on `contest_board`; the index 0001 already
+     made is pinned by name).
+  2. ~~Commissioner tools to fix a week~~ — done in v0.672.0 (0474: void /
+     restore, the stat correction on the board, `commish_set_contest_squad`,
+     the re-score rebuilding the result card; FIX A WEEK on the contest
+     COMMISH card, web and phone).
+  3. ~~Entry deadline / late-entry policy~~ — done in v0.673.0 (0475:
+     `late_entry` cpu | zero | drop, `entry_deadline` open | first; the
+     worker's `noShowBuilds`; NO SQUAD BY LOCK and ENTRIES on COMMISH).
+  4. ~~Playoffs for season head-to-head~~ — done in v0.674.0 (0476: the
+     classic bracket stack opened to season head-to-head contest leagues;
+     four from week 15 by default; pods.js hands the last weeks to it).
+  5. ~~Prizes and dues on the settings and the board~~ — done in v0.675.0
+     (0477: `set_league_prizes`; the money on `_bullseye_info` and
+     `league_board`; DUES & PRIZES on the contest COMMISH card).
+  6. Multiple entries per user for the huge contests — still open (one seat
+     per user per league is assumed by contest_state, save_contest_entry,
+     contest_board's `me`, bullseye_my_weeks, the lock reminder, the recap
+     pushes and both builders; it wants a `max_entries` rule, a roster
+     parameter through those RPCs and a seat switcher in the builder).
+     ~~Swap history; sharing a squad card after squads unseal~~ — done in
+     v0.676.0 (0478 `contest_swap` / `contest_swaps`; `squadCardText`).
 
 ### The branch workflow this session used
 

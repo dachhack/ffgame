@@ -873,10 +873,19 @@ export const recordWord = (r: { wins?: number | null; losses?: number | null; ti
 export interface BullseyeLeagueBoard {
   ok: boolean; error?: string; week?: number | null; started?: boolean; entries?: number;
   rows?: BullseyeBoardRow[]; me?: BullseyeBoardRow | null;
+  /** WHERE AM I (0473): when my row is off the top, the rows around mine
+   *  (`near` either side, mine among them); empty when I'm already shown. */
+  near?: BullseyeBoardRow[];
+  /** A team-name search's hits (0473), by rank; empty without a query. */
+  found?: BullseyeBoardRow[];
+  /** VOIDED (0474): this week was struck by the commissioner, and every week that was. */
+  void?: boolean; voided?: number[];
   /** Season leagues only: ring totals summed over the stamped weeks. */
-  season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null } | null;
+  season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null; near?: BullseyeSeasonRow[]; found?: BullseyeSeasonRow[] } | null;
 }
-export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number }
+export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number;
+  /** VOIDED (0474): the commissioner struck the week; it doesn't count. */ void?: boolean;
+  /** PLAYOFFS (0476): a bracket week, and its game's name ("Semifinal"). */ playoff?: boolean; label?: string | null }
 /** WEEKLY LEAGUES (v0.662.0, founder: "maybe have another filter for weekly
  *  draft leagues"): the kinds where you build a fresh squad every week instead
  *  of drafting a season roster — pods, showdowns, DFS and Bullseye leagues.
@@ -913,7 +922,18 @@ export const setBullseyeSize = (leagueId: string, max: number) =>
 // squads are rebuilt weekly from the board. The engine is engine/contest.ts.
 export type ContestKind = 'high' | 'golf' | 'bullseye';
 export type ContestFormat = 'h2h' | 'board';
-export interface ContestInfo extends BullseyeInfo { contest: ContestKind; format: ContestFormat; /** 0 = no cap (0469). */ budget: number; /** The minimum spend (0469); 0 = none. */ min_spend?: number; /** AUTO-SUB (0470): the worker swaps a ruled-out pick before his kickoff. */ auto_sub?: boolean; spots: number }
+export interface ContestInfo extends BullseyeInfo { contest: ContestKind; format: ContestFormat; /** 0 = no cap (0469). */ budget: number; /** The minimum spend (0469); 0 = none. */ min_spend?: number; /** AUTO-SUB (0470): the worker swaps a ruled-out pick before his kickoff. */ auto_sub?: boolean;
+  /** NO SQUAD BY LOCK (0475): cpu | zero | drop. */ late_entry?: import('../engine/contest').ContestLateEntry;
+  /** ENTRIES (0475): open | first (close at the week's first kickoff). */ entry_deadline?: import('../engine/contest').ContestEntryDeadline;
+  /** THE MONEY (0477): the dues setting (0320) and the prize list. */ dues_amount?: number | null; dues_note?: string | null; prizes?: PrizeRow[]; spots: number }
+/** A place and what it wins (0477): free text both — "1st" / "$150", "Weekly high" / "a hat". */
+export interface PrizeRow { label: string; prize: string }
+/** Commissioner: the league's prize list (up to eight; [] clears). The league hears the list in chat. */
+export const setLeaguePrizes = (leagueId: string, prizes: PrizeRow[]) =>
+  tracked(rpcOk<{ ok: boolean; error?: string; prizes?: PrizeRow[] }>('set_league_prizes', { p_league_id: leagueId, p_prizes: prizes }), Ev.commishAction, { tool: 'prizes' });
+/** "1st $150 · 2nd $50" — the prize list in a line, or null. */
+export const prizesWord = (rows: PrizeRow[] | null | undefined): string | null =>
+  rows?.length ? rows.map((r) => `${r.label} ${r.prize}`).join(' · ') : null;
 export interface ContestState {
   ok: boolean; error?: string; on?: boolean; kind?: string; name?: string; week?: number; season?: string;
   contest?: ContestKind; format?: ContestFormat; budget?: number; min_spend?: number;
@@ -940,11 +960,64 @@ export const contestState = (leagueId: string, week?: number | null, season = '2
 /** `slots`: every spot — {S1: slug, S2: slug, …}. */
 export const saveContestEntry = (leagueId: string, week: number, slots: Record<string, string>, season = '2026') =>
   rpcOk<{ ok: boolean; error?: string; spent?: number; budget?: number }>('save_contest_entry', { p_league: leagueId, p_week: week, p_slots: slots, p_season: season });
-export const contestBoard = (leagueId: string, week?: number | null, limit = 100) =>
-  rpcOk<BullseyeLeagueBoard & { contest?: ContestKind }>('contest_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit });
+export const contestBoard = (leagueId: string, week?: number | null, limit = 100, near = 5, find: string | null = null) =>
+  rpcOk<BullseyeLeagueBoard & { contest?: ContestKind }>('contest_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit, p_near: near, p_find: find || null });
+// ── THE COMMISSIONER FIXES A CONTEST WEEK (0474) ─────────────────────────────
+export interface ContestWeekRow { week: number; status: string; final: boolean; void: boolean; void_note: string | null; entries: number; stamped: number; matchups: number }
+/** Every week the league has a row for: final or not, voided or not, how many squads. */
+export const contestWeekList = (leagueId: string) =>
+  rpcOk<{ ok: boolean; error?: string; week?: number | null; weeks?: ContestWeekRow[] }>('contest_week_list', { p_league: leagueId });
+/** Void a final week (it stops counting; the league is told why), or restore it. */
+export const commishVoidWeek = (leagueId: string, week: number, on: boolean, note?: string | null) =>
+  tracked(rpcOk<{ ok: boolean; error?: string; void?: boolean; already?: boolean }>('commish_void_week', { p_league: leagueId, p_week: week, p_void: on, p_note: note ?? null }),
+    Ev.commishAction, { tool: on ? 'void_week' : 'restore_week' });
+export interface CommishContestSquad {
+  ok: boolean; error?: string; roster_id?: number; team?: string | null; week?: number; season?: string;
+  entry?: unknown; status?: string | null; stamped?: boolean;
+  slots?: (import('../engine/classic').SlotSpec & { slot: string })[]; budget?: number; min_spend?: number;
+}
+/** A seat's saved squad for a week, for the commissioner. */
+export const commishContestSquad = (leagueId: string, week: number, rosterId: number) =>
+  rpcOk<CommishContestSquad>('commish_contest_squad', { p_league: leagueId, p_week: week, p_roster: rosterId });
+/** Set a seat's squad past the kickoff locks, under every other rule; a
+ *  reason is required and the league is told. `rescore` says the week is
+ *  stamped and keeps its finals until re-scored. */
+export const commishSetContestSquad = (leagueId: string, week: number, rosterId: number, slots: Record<string, string | null>, note: string) =>
+  tracked(rpcOk<{ ok: boolean; error?: string; in?: string[]; out?: string[]; spent?: number; rescore?: boolean }>('commish_set_contest_squad',
+    { p_league: leagueId, p_week: week, p_roster: rosterId, p_slots: slots, p_note: note }), Ev.commishAction, { tool: 'contest_squad_fix' });
+/** THE MATCHUP, AS CARDS (0479): any matchup of a week — mine by default, or
+ *  one by id or by a seat in it — both squads sealed per player until his
+ *  kickoff (my own open), the live/final scores, and the week's list. */
+export interface ContestMatchupRow { id: string; home: number; away: number; home_team: string; away_team: string; status: string; label: string | null; consolation: boolean; home_score: number | null; away_score: number | null; mine: boolean }
+export interface ContestMatchupState {
+  ok: boolean; error?: string; week?: number; started?: boolean; me?: number | null;
+  slots?: (import('../engine/classic').SlotSpec & { slot: string })[];
+  contest?: ContestKind; format?: ContestFormat; variant?: DfsVariant; radius?: number;
+  matchup?: {
+    id: string; status: string; home: number; away: number; home_team: string; away_team: string;
+    home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null;
+    playoff?: boolean; label?: string | null;
+    home_entry: unknown; away_entry: unknown;
+    state: { home: number; away: number; slots: DfsSlotScore[] } | null;
+  } | null;
+  matchups?: ContestMatchupRow[];
+}
+export const contestMatchup = (leagueId: string, week?: number | null, matchupId?: string | null, rosterId?: number | null) =>
+  rpcOk<ContestMatchupState>('contest_matchup', { p_league: leagueId, p_week: week ?? null, p_matchup: matchupId ?? null, p_roster: rosterId ?? null });
+/** SWAP HISTORY (0478): a seat's changes to a saved squad, newest first. Own
+ *  seat any time; another's once the week's squads unseal; the commissioner's any. */
+export interface SwapRow { id: number; slot: string; kind: 'swap' | 'commish' | 'sub'; at: string; out: string | null; out_name: string | null; in: string | null; in_name: string | null }
+export const contestSwaps = (leagueId: string, week: number, rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; week?: number; swaps?: SwapRow[] }>('contest_swaps', { p_league: leagueId, p_week: week, p_roster: rosterId ?? null });
+/** The search alone (0473): the first 20 teams whose name contains `q`, by
+ *  rank, on the week board and (season leagues) the standings. */
+export const contestBoardFind = (leagueId: string, week: number | null | undefined, q: string) =>
+  contestBoard(leagueId, week, 1, 0, q).then((r) => ({ ok: r.ok, error: r.error, found: r.found ?? [], season: r.season?.found ?? [] }));
 /** Commissioner: the contest, the format (before the first week), the budget. */
-export const setContestRules = (leagueId: string, o: { contest?: ContestKind | null; format?: ContestFormat | null; budget?: number | null; minSpend?: number | null; autoSub?: boolean | null }) =>
-  rpcOk<{ ok: boolean; error?: string; bullseye?: ContestInfo }>('set_contest_rules', { p_league: leagueId, p_contest: o.contest ?? null, p_format: o.format ?? null, p_budget: o.budget ?? null, p_min_spend: o.minSpend ?? null, p_auto_sub: o.autoSub ?? null });
+export const setContestRules = (leagueId: string, o: { contest?: ContestKind | null; format?: ContestFormat | null; budget?: number | null; minSpend?: number | null; autoSub?: boolean | null;
+  lateEntry?: import('../engine/contest').ContestLateEntry | null; entryDeadline?: import('../engine/contest').ContestEntryDeadline | null }) =>
+  rpcOk<{ ok: boolean; error?: string; bullseye?: ContestInfo }>('set_contest_rules', { p_league: leagueId, p_contest: o.contest ?? null, p_format: o.format ?? null, p_budget: o.budget ?? null, p_min_spend: o.minSpend ?? null, p_auto_sub: o.autoSub ?? null,
+    p_late_entry: o.lateEntry ?? null, p_entry_deadline: o.entryDeadline ?? null });
 /** The money rule in a few words: "$50k budget", "no cap", "min $45k" (0469). */
 export function contestMoneyWord(b: { budget?: number | null; min_spend?: number | null }): string {
   const cap = b.budget ?? 50000;
@@ -5021,6 +5094,8 @@ export interface BoardListing {
   /** The commissioner's word on money ("$50 — Venmo before the draft"); the
    *  platform prints it, it never collects it. */
   dues?: string | null;
+  /** 0477: the league's prize list, when its commissioner set one. */
+  prizes?: PrizeRow[] | null;
   identity?: LeagueIdentity;
   /** 0463: 'bullseye' for a Bullseye league, with its variant, span and size. */
   kind?: string; bullseye?: BullseyeInfo | null;

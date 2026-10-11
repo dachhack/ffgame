@@ -791,7 +791,9 @@ function WeekFixBox({ leagueId, week }: { leagueId: string; week: number }) {
 // ── ⟳ RE-SCORE A WEEK (0353) — the web's RescoreBox ─────────────────────────
 // PREVIEW changes nothing; APPLY confirms it, rewrites the finals, rebuilds the
 // week's report and tells the league. The worker does the scoring.
-function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: number; onApplied: () => void }) {
+export function RescoreBox({ leagueId, week, onApplied, fix, contest }: { leagueId: string; week: number; onApplied: () => void;
+  /** In place of the classic lineup fix: a contest league's squad fix (0474). */ fix?: React.ReactNode;
+  /** A contest league: its record is the result card, not the weekly report. */ contest?: boolean }) {
   const t = useTheme();
   const [st, setSt] = useState<RescoreState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -824,7 +826,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
   const ask = (apply: boolean) => {
     if (!apply) { void send(false); return; }
     Alert.alert(`Rewrite week ${week}'s scores?`,
-      'Standings, the weekly report and the league chat will all show the new numbers.',
+      `Standings, ${contest ? 'the result card' : 'the weekly report'} and the league chat will all show the new numbers.`,
       [{ text: 'Cancel', style: 'cancel' }, { text: 'Apply', style: 'destructive', onPress: () => { void send(true); } }]);
   };
   const res = req?.done_at && !req.error ? req.result : null;
@@ -836,13 +838,13 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         {`Recompute week ${week} from the plays as they stand now, with the lineups your managers saved and today's scoring settings. Preview first — nothing changes until you apply.`}
       </Mono>
       <AdjustBox leagueId={leagueId} week={week} />
-      <LineupFixBox leagueId={leagueId} week={week} />
+      {fix ?? <LineupFixBox leagueId={leagueId} week={week} />}
       {running && <Mono size={9} tone="dim">{`⏳ ${req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…`}</Mono>}
       {req?.error ? <Mono size={9} tone="opp">{`⚠ Last ${req.apply ? 'apply' : 'preview'} failed: ${req.error}`}</Mono> : null}
       {res && (
         <View style={{ gap: 3 }}>
           <Mono size={9.5} weight="700">
-            {`${req!.apply ? '✓ Applied. ' : 'Preview: '}${rescoreHeadline(res, req!.apply)}${req!.apply && res.report === 'rebuilt' ? ' The weekly report was rebuilt.' : ''}`}
+            {`${req!.apply ? '✓ Applied. ' : 'Preview: '}${rescoreHeadline(res, req!.apply)}${req!.apply && res.report === 'rebuilt' ? (contest ? ' The result card was rebuilt.' : ' The weekly report was rebuilt.') : ''}`}
           </Mono>
           {moved.map((m) => (
             <Mono key={m.id} size={9} tone={m.flipped ? 'warn' : 'text'} style={{ lineHeight: fs(13) }}>
@@ -868,7 +870,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
 // Points on or off one player's week, with the reason the league reads. Saved
 // at once and counted by every board; a finished week's finals follow when it
 // is re-scored just below.
-function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
+export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
   const t = useTheme();
   const [rows, setRows] = useState<PlayerAdjustment[] | null>(null);
   const [found, setFound] = useState<AdjustCandidate[]>([]);

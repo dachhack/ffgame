@@ -22,6 +22,177 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.677.0 — The card table: a squad league's matchup as cards
+
+> - A weekly squad league's MATCHUP tab is now a card table: your squad face up down one column, your opponent's card backs down the other, each turning face up as its player's game kicks off. Come back to the screen and the reveal flips play again. Arrows walk the weeks, and chips above the table open the week's other matchups (on a leaderboard, any squad).
+> - MY TEAM is where you build the week's squad now, with your team name and MY WEEKS underneath.
+
+- Founder: "incorporate the card theme into the weekly contest leagues …
+  your cards down one column with your opponent's card backs down the
+  other side then they flip at kick off … make my team the place where you
+  select your weekly team … view different weeks and different matchups in
+  the smaller leagues in the matchup tab." Migration 0479:
+  `contest_matchup(league, week, matchup?, roster?)` — any matchup of a
+  week (mine by default), both squads through `_contest_sealed_entry` (a
+  player sealed until his kickoff unless the squad is the reader's own),
+  the live/final scores, the playoff label, and the week's list for the
+  picker; a leaderboard's rows are self-paired. Web
+  `src/screens/ContestMatchup.tsx` deals the drip board's card-table kit
+  (`PlayerCard` with the reveal flip for the other squad, `SealedCard`
+  backs, `Felt`); the phone had no cards, so `ui/ContestCards.tsx` is its
+  deck — `CardFace`, `CardBack` (the emerald lattice), `FlipCard` (a 3D
+  rotateY turn, played on mount when a card starts face up, staggered down
+  the column) and `screens/ContestMatchup.tsx`. Both league screens key the
+  table on a visit counter so each arrival remounts it; the builder
+  (`ContestSquad`) moved under MY TEAM (web: stacked with the team cards;
+  phone: the builder carries them through `after`). The builder's week
+  arrows stay. `scripts/db/contest-matchup-probes.sql` on the full chain,
+  wired into the runner. No iPhone build needed.
+
+### v0.676.0 — Swap history, and a squad card to share
+
+> - Every change to a saved squad is remembered, spot by spot: who went out, who came in, when, and whether it was you, the commissioner, or the swap made for you when a player was ruled out. It shows under MY SQUAD; the rest of the league can see a seat's swaps once the week's squads unseal.
+> - Once the week's games are on, SHARE on your squad makes a card — your picks and their points, your ring and place, the result, and the league's join link — for the share sheet, or copied to paste anywhere.
+
+- HANDOFF's sixth not-done item, its last two parts. Migration 0478:
+  `contest_swap` (a row per changed spot; `swap` | `commish` | `sub`),
+  `_log_contest_swaps` called by save_contest_entry (0475's body) and
+  commish_set_contest_squad (0474's body); the worker's auto-sub
+  (contestSubs.js) writes `sub` rows from the plan's new `swaps`.
+  `contest_swaps(league, week, roster)`: own seat any time, another's once
+  `_week_first_lock` has passed, the commissioner's any. Core
+  `data/squadCard.ts` `squadCardText` (pure; cases in check:dfsbullseye).
+  Both builders: a SWAPS fold under MY SQUAD and ↗ SHARE on the live/final
+  card (web: the share sheet when the browser has one, else the clipboard;
+  phone: Share). `scripts/db/contest-swaps-probes.sql` on the full chain,
+  wired into the runner. NOT done: multiple entries per user for the huge
+  contests — one seat per user per league is assumed by contest_state,
+  save_contest_entry, contest_board's `me`, bullseye_my_weeks, the lock
+  reminder and the recap pushes, and both builders; it wants its own PR
+  (a `max_entries` rule, a roster parameter through those RPCs, a seat
+  switcher in the builder). No iPhone build needed.
+
+### v0.675.0 — Prizes and dues, on the settings and the board
+
+> - A league's commissioner can now set what the places win — 1st, 2nd, a weekly high, up to eight lines — next to the dues under COMMISH; the league hears the list in chat.
+> - Both show on the league's SETTINGS page and on the league board: a board card carries the prizes, and the dues setting when the posting has no dues line of its own.
+
+- HANDOFF's fifth not-done item. Migration 0477: `set_league_prizes`
+  (commissioner; a list of `{label, prize}`, trimmed, blanks dropped, up
+  to eight, `[]` clears; a house line "🏆 Prizes: 1st — $150 · 2nd — $50"),
+  `_league_prizes`, `_league_dues_word`; `_bullseye_info` (0475's body)
+  carries `dues_amount`, `dues_note`, `prizes`; `league_board` (0463's
+  body) carries `prizes` and falls back to the dues setting for `dues`.
+  The dues model is 0320's (any commissioner's already; the phone's
+  commissioner map marks DUES native-only, but a contest league reaches
+  it from its own card). liveApi `setLeaguePrizes`, `PrizeRow`,
+  `prizesWord`. Screens: DUES & PRIZES on the contest COMMISH card (web,
+  phone) reusing DuesPanel / DuesCard with a PrizesEditor; THE MONEY on
+  the contest SETTINGS room; a PRIZES line on the board cards (web
+  LeagueBoard, phone Recruit). `scripts/db/contest-prizes-probes.sql` on the
+  full chain, wired into the runner. No iPhone build needed.
+
+### v0.674.0 — Playoffs for a season head-to-head squad league
+
+> - A weekly squad league that plays head-to-head over the season now ends in a bracket: four teams from week 15 unless the commissioner says otherwise (PLAYOFFS under COMMISH — size, start week, seeding by hand), seeded by the regular-season standings, with everyone else on a consolation ladder. The league screen shows the bracket round by round and crowns the champion; MY WEEKS names the game ("Semifinal").
+> - The regular-season standings and records stop where the bracket starts.
+
+- HANDOFF's fourth not-done item, and not a second bracket: migration 0476
+  opens the classic playoff stack (0073/0162/0215/0246/0359) to a season
+  head-to-head contest league through `_bracket_league` (native, or such a
+  league) in the two functions that gated on is_native_league —
+  `set_playoff_rules` and `generate_playoffs_bracket` (0433's and 0249's
+  bodies, the gate swapped). The winner rule already reads `league_golf`,
+  which a golf contest sets; seeding is `league_standings` over the
+  regular season (the classic rule: wins, then points for — a contest's own
+  standings break a tie on losses, so the two can differ on a tie row;
+  noted, not changed). `league_playoff_teams`' default (4, from 15) applies
+  as it does to a classic league. contest_board's season rows and
+  bullseye_my_weeks (0474's bodies) skip / name bracket weeks; the recap's
+  season line skips them. Engine `contestPlayoffs(settings, cfg, week)`;
+  pods.js stops the round-robin at the playoff start and pokes
+  `generate_playoffs(auto)` / `advance_playoffs` (both idempotent and
+  self-guarding; `native_materialize` is a no-op off native). Screens: the
+  phone reuses `Playoffs` and `PlayoffControls` (ui/LeagueExtras); the web
+  reuses AdminPage's `PlayoffPanel` on the contest COMMISH card and gets a
+  compact bracket card on the league screen. `scripts/db/contest-playoffs-
+  probes.sql` on the full chain, wired into the runner; `check:dfsbullseye`
+  and `check:contestrecap` grew cases. No iPhone build needed.
+
+### v0.673.0 — What a no-show gets, and when entries close
+
+> - Weekly squad leagues get two new rules under COMMISH. NO SQUAD BY LOCK says what a seat with no squad gets at the week's first kickoff: the CPU builds one (what head-to-head always did), it scores a zero, or — on a leaderboard — it sits the week out. ENTRIES says whether a new squad can still go in after the week's first game has kicked off, or only until then; a saved squad still swaps its unlocked players either way.
+> - The lock reminder now says which rule your league plays by.
+
+- HANDOFF's third not-done item. Migration 0475: `late_entry`
+  (cpu | zero | drop; head-to-head can't drop — an opponent is waiting;
+  golf can't take zero until every spot prices a scoreless player, since
+  a scoreless golf squad would win) and `entry_deadline` (open | first) on
+  `set_contest_rules` (two parameters on; old overload dropped), both in
+  `_bullseye_info`; `save_contest_entry` refuses a NEW squad after the
+  week's first kickoff under `first` (an empty no-show squad counts as
+  none; the commissioner's squad fix steps past it). Engine:
+  `ContestConfig.lateEntry/entryDeadline`, `contestLateEntryDefault`, and
+  the pure `noShowBuilds(cfg, members, have, lockPassed)` the worker
+  writes from at lock — a built squad, an empty one, or nothing; a
+  leaderboard league now takes that block too (and the worker makes its
+  self-paired scoring row, as a save would) before leaving the seat loop.
+  `contestLockRows` words the reminder by the rule. Commissioner cards
+  (web, phone): NO SQUAD BY LOCK and ENTRIES chips. `check:dfsbullseye`
+  and `check:contestrecap` grew cases; `scripts/db/scratch/flow17.sql`.
+  No iPhone build needed.
+
+### v0.672.0 — The commissioner fixes a contest week
+
+> - Weekly squad leagues get a FIX A WEEK desk under COMMISH: void a finished week that shouldn't count (and restore it later), correct a player's points after a stat correction, set a member's squad past the kickoff locks, and re-score the week from the plays as they stand — preview first. Every fix is announced in the league chat with the reason.
+> - A voided week stays on the board, marked VOIDED, and drops out of the season standings, the records and the result card.
+
+- HANDOFF's second not-done item. Migration 0474: `week_void` (a row per
+  league-week, not a new matchup status — a voided week must still read
+  as played or the league would snap back to it), `commish_void_week`
+  (final weeks only; restore deletes; both tell the chat), `contest_week_list`
+  (the picker), contest_board/bullseye_my_weeks carry `void`/`voided` and
+  the season rows skip voided weeks. 0355's stat correction reaches a
+  contest league: the player check and the search read the week's priced
+  board (`pod_salary`) and `_txn_player` names a board player. The squad
+  rules are one function now, `_contest_squad_check`, called by
+  save_contest_entry (member: ruled-out rule and kickoff locks on top) and
+  by the new `commish_set_contest_squad` (past the locks; a reason; the
+  old and new squads to `lineup_edit_log`; the chat told who came in and
+  out; `rescore` when the week is stamped); `commish_contest_squad` reads
+  a seat's squad. 0353's re-score already resolved contest squads (classic
+  by game_mode); the worker's apply now rebuilds the contest RESULT CARD in
+  place (`repostContestRecap`) instead of a classic weekly report, and the
+  recap skips a voided week and leaves it out of the season line. Screens:
+  `ContestFixWeekPanel` / `ContestFixWeekCard` on the contest COMMISH card
+  (web, phone) reuse the classic console's RescoreBox and AdjustBox, with a
+  contest `SquadFixBox` (seat, a player per spot from the board, the spend
+  against the budget) in the lineup fix's slot; the league and MY WEEKS
+  mark a voided week. `scripts/db/scratch/flow16.sql` + `stub10.sql`;
+  recap and rescore checks grew cases. No iPhone build needed.
+
+### v0.671.0 — Where am I on a big leaderboard, and find a team
+
+> - On a leaderboard too long to show whole, the standings now show your own stretch of the table — the five teams above you and the five below, with you in the middle — instead of a lone "You: #23,418" line under the top 100.
+> - Boards that long also get a FIND A TEAM box: type part of a team name and the matching squads come up with their rank, this week and for the season.
+
+- HANDOFF's first not-done item. Migration 0473: `contest_board` grows
+  `p_near` (default 5, 0–50) and `p_find` (text); the week board and the
+  season standings each return `near` (the rows within `p_near` positions
+  of mine, by row position so a run of ties can't blow it up, only when my
+  rank is past `p_limit`) and `found` (team names containing the query,
+  case-insensitive, `%`/`_` escaped, first 20 by rank). The old 3-arg
+  overload is dropped (two defaulted overloads make the PostgREST call
+  ambiguous) and `bullseye_league_board` is recreated on the new one;
+  grants re-stated. The `matchup(league_id, week)` index 0001 made is
+  pinned by name (`create index if not exists`), so a rebuilt database
+  can't miss it. liveApi `contestBoard(…, near, find)` and
+  `contestBoardFind`; both screens render `near` under the top rows with a
+  "⋯ you, at #N" divider, and show the search box only when the board is
+  at its page limit (100 rows), so a twelve-seat league looks as before.
+  `scripts/db/scratch/flow15.sql` exercises it on scratch Postgres (ten
+  seats, me tied sixth, top three shown). No iPhone build needed.
+
 ### v0.670.1 — Coaches score something out of the box
 
 > - A HEAD COACH spot now pays from the first week: when a league unlocks coaches and has never set coach scoring, a preset goes in — 10 for a win, 5 for a tie, 0.1 per point scored, and +1 to +6 by the margin of victory. Leagues already playing a coach spot with no coach scoring get it too. A commissioner who set their own coach values keeps them.

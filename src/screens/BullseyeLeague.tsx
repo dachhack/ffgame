@@ -18,13 +18,14 @@
 //   COMMISH   the classic commissioner's console, trimmed, with a CONTEST card
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState, playoffState, type PlayoffState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
-  type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
+  type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
+import { ContestMatchup } from './ContestMatchup';
 import { CommishDash } from './CommishDash';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
@@ -37,6 +38,8 @@ const chip = (on: boolean, dim = false): CSSProperties => ({
 });
 const small: CSSProperties = { fontSize: 10, color: 'var(--faint)' };
 const label: CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' };
+/** contest_board's default page; a board this long is one worth searching (0473). */
+const BOARD_LIMIT = 100;
 const input: CSSProperties = { fontSize: 13, padding: '7px 10px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 6, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
 const errStyle: CSSProperties = { fontSize: 11, color: 'var(--warn, #c66)' };
 const n0 = (n: number) => n.toLocaleString('en-US');
@@ -196,6 +199,9 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
   const wide = useWide(900);
   const load = useCallback(() => contestLeague(leagueId).then((r) => { setLg(r); return r; }), [leagueId]);
   useEffect(() => { void load().then((r) => { if (r.ok && r.week != null) setWeek((w) => w ?? r.week!); }).catch(() => {}); }, [load]);
+  // Each arrival at the matchup room is a new deal (the flips replay).
+  const [visit, setVisit] = useState(0);
+  useEffect(() => { if (room === 'matchup') setVisit((v) => v + 1); }, [room]);
   if (!lg) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!lg.ok || !lg.bullseye) return <div style={{ padding: 24 }}><div className="mono" style={errStyle}>{lg.error ?? 'Couldn’t open the league.'}</div></div>;
   const b = lg.bullseye;
@@ -230,18 +236,29 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
       </div>
 
       {room === 'matchup' && seated && (
-        // Two columns on a wide screen, as the hub: the squad, and the
-        // standings it is playing for.
+        // THE CARD TABLE (v0.677.0): the week's matchup as two columns of
+        // cards — yours face up, theirs turning over at each kickoff — with
+        // the standings beside it on a wide screen. Remounted on every visit
+        // (the key), so the reveal flips play again.
         <div style={{ display: 'grid', gridTemplateColumns: wide ? 'minmax(0, 3fr) minmax(0, 2fr)' : '1fr', gap: 12, alignItems: 'start' }}>
           <div style={{ display: 'grid', gap: 12 }}>
             <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-            {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} embedded onBack={() => setRoom('league')} />}
+            {week != null && <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week} />}
           </div>
           {wide && <div style={{ display: 'grid', gap: 12 }}><LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} compact /></div>}
         </div>
       )}
       {(room === 'league' || (room === 'matchup' && !seated) || (room === 'team' && !seated)) && <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} />}
-      {room === 'team' && seated && <TeamRoom leagueId={leagueId} lg={lg} onOpenWeek={(w) => { setWeek(w); setRoom('matchup'); }} onRenamed={() => void load()} />}
+      {room === 'team' && seated && (
+        // MY TEAM is where the weekly squad is built (v0.677.0, founder:
+        // "make my team the place where you select your weekly team"); the
+        // name and MY WEEKS sit under the builder.
+        <div style={{ display: 'grid', gap: 12 }}>
+          <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
+          {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} embedded onBack={() => setRoom('league')} />}
+          <TeamRoom leagueId={leagueId} lg={lg} onOpenWeek={(w) => { setWeek(w); setRoom('matchup'); }} onRenamed={() => void load()} />
+        </div>
+      )}
       {room === 'settings' && <SettingsRoom lg={lg} onLeft={onGone} />}
       {room === 'commish' && lg.commish && (
         // THE CLASSIC COMMISSIONER'S CONSOLE (v0.664.0, founder: "all the
@@ -299,6 +316,40 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
   const bull = b.contest === 'bullseye';
   const h2h = b.format === 'h2h';
   const flash = (k: string, s: string) => { copy(s); setCopied(k); setTimeout(() => setCopied(null), 1500); };
+  // WHERE AM I (0473): a board bigger than the rows it shows gets a team
+  // search, and my own stretch of the table when I'm off the top.
+  const big = (bd?.rows?.length ?? 0) >= BOARD_LIMIT || (bd?.season?.rows.length ?? 0) >= BOARD_LIMIT;
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<{ q: string; found: BullseyeBoardRow[]; season: BullseyeSeasonRow[] } | null>(null);
+  useEffect(() => {
+    const want = q.trim();
+    if (!want) { setHits(null); return; }
+    let alive = true;
+    const id = setTimeout(() => {
+      contestBoardFind(lg.league_id!, week, want).then((r) => { if (alive && r.ok) setHits({ q: want, found: r.found, season: r.season }); }).catch(() => {});
+    }, 300);
+    return () => { alive = false; clearTimeout(id); };
+  }, [q, lg.league_id, week]);
+  const weekRow = (r: BullseyeBoardRow) => (
+    <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: bull ? '40px minmax(0,1fr) 100px 64px' : '40px minmax(0,1fr) 64px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
+      <span>{r.rank}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
+      {bull && <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{`${Number(r.points).toFixed(1)} pts`}</span>}
+      <span style={{ textAlign: 'right', fontWeight: 700 }}>{Number(r.ring).toFixed(1)}</span>
+    </div>
+  );
+  const seasonRow = (r: BullseyeSeasonRow) => (
+    <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 90px 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
+      <span>{r.rank}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
+      <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{h2h ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}${r.best != null ? ` · best ${Number(r.best).toFixed(0)}` : ''}`}</span>
+      <span style={{ textAlign: 'right', fontWeight: 700 }}>{h2h ? recordWord(r) : Number(r.total).toFixed(1)}</span>
+    </div>
+  );
+  const youLine = (rank: number, tail: string) => (
+    <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${n0(rank)} · ${tail}`}</div>
+  );
+  const gap = (rank: number) => <div className="mono" style={{ ...small, paddingTop: 6, borderTop: '1px dashed var(--bd)', color: 'var(--faint)' }}>{`⋯ you, at #${n0(rank)}`}</div>;
   return (
     <>
       {!compact && <div style={{ ...card, display: 'grid', gap: 8 }}>
@@ -320,38 +371,75 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
 
       {!compact && <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />}
       <div style={{ ...card, display: 'grid', gap: 4 }}>
-        <span className="mono" style={label}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${h2h ? ' · HEAD-TO-HEAD' : ''}`}</span>
+        <span className="mono" style={label}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${h2h ? ' · HEAD-TO-HEAD' : ''}${bd?.void ? ' · VOIDED' : ''}`}</span>
         {bd && !bd.started && <span className="mono" style={small}>Squads and scores show once the week’s first game locks.</span>}
-        {(bd?.rows ?? []).map((r) => (
-          <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: bull ? '40px minmax(0,1fr) 100px 64px' : '40px minmax(0,1fr) 64px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
-            <span>{r.rank}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
-            {bull && <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{`${Number(r.points).toFixed(1)} pts`}</span>}
-            <span style={{ textAlign: 'right', fontWeight: 700 }}>{Number(r.ring).toFixed(1)}</span>
-          </div>
-        ))}
+        {bd?.void && <span className="mono" style={{ ...small, color: 'var(--warn, #c66)' }}>The commissioner voided this week — it doesn’t count in the standings.</span>}
+        {big && (
+          <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={30} placeholder="Find a team…" aria-label="Find a team" style={{ ...input, marginTop: 4 }} />
+        )}
+        {hits && (
+          <>
+            <span className="mono" style={{ ...small, paddingTop: 4 }}>{hits.found.length ? `FOUND “${hits.q}” · THIS WEEK` : `No squad named “${hits.q}” this week.`}</span>
+            {hits.found.map(weekRow)}
+          </>
+        )}
+        {(bd?.rows ?? []).map(weekRow)}
         {bd?.me && !(bd.rows ?? []).some((r) => r.me) && (
-          <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${bd.me.rank} · ${Number(bd.me.ring).toFixed(1)}`}</div>
+          (bd.near?.length ?? 0) > 0 ? <>{gap(bd.me.rank)}{bd.near!.map(weekRow)}</> : youLine(bd.me.rank, Number(bd.me.ring).toFixed(1))
         )}
       </div>
 
+      {h2h && b.span === 'season' && <ContestPlayoffs leagueId={lg.league_id!} />}
       {bd?.season && (
         <div style={{ ...card, display: 'grid', gap: 4 }}>
           <span className="mono" style={label}>SEASON STANDINGS</span>
-          {bd.season.rows.map((r) => (
-            <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 90px 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
-              <span>{r.rank}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
-              <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{h2h ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}${r.best != null ? ` · best ${Number(r.best).toFixed(0)}` : ''}`}</span>
-              <span style={{ textAlign: 'right', fontWeight: 700 }}>{h2h ? recordWord(r) : Number(r.total).toFixed(1)}</span>
-            </div>
-          ))}
+          {hits && (
+            <>
+              <span className="mono" style={{ ...small, paddingTop: 4 }}>{hits.season.length ? `FOUND “${hits.q}” · SEASON` : `No team named “${hits.q}”.`}</span>
+              {hits.season.map(seasonRow)}
+            </>
+          )}
+          {bd.season.rows.map(seasonRow)}
           {bd.season.me && !bd.season.rows.some((r) => r.me) && (
-            <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${bd.season.me.rank} · ${h2h ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</div>
+            (bd.season.near?.length ?? 0) > 0 ? <>{gap(bd.season.me.rank)}{bd.season.near!.map(seasonRow)}</>
+              : youLine(bd.season.me.rank, `${h2h ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`)
           )}
         </div>
       )}
     </>
+  );
+}
+
+// ── PLAYOFFS (0476): the bracket, round by round — the phone's Playoffs card ──
+function ContestPlayoffs({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<PlayoffState | null>(null);
+  useEffect(() => { playoffState(leagueId).then(setSt).catch(() => {}); }, [leagueId]);
+  if (!st || st.error || !st.ok || st.playoff_teams === 0) return null;
+  const teamOf = (rid: number) => st.standings.find((s) => s.roster_id === rid)?.team ?? `Team ${rid}`;
+  const seedOf = (rid: number) => { const i = (st.seeds ?? []).indexOf(rid); return i >= 0 ? `#${i + 1} ` : ''; };
+  const rounds = [...new Set(st.matchups.map((m) => m.round))].sort((a, b) => a - b);
+  return (
+    <div style={{ ...card, display: 'grid', gap: 4 }}>
+      <span className="mono" style={label}>{`PLAYOFFS · TOP ${st.playoff_teams} FROM WEEK ${st.playoff_start_week}`}</span>
+      {st.champion != null && <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{`🏆 ${st.champion_team ?? teamOf(st.champion)} — league champion`}</span>}
+      {!st.matchups.length && <span className="mono" style={small}>No bracket yet — it’s seeded from the standings once the regular season is final.</span>}
+      {rounds.map((round) => (
+        <div key={round} style={{ display: 'grid', gap: 2 }}>
+          <span className="mono" style={{ ...small, paddingTop: 4 }}>{`ROUND ${round}`}</span>
+          {st.matchups.filter((m) => m.round === round).map((m) => (
+            <div key={m.id} className="mono" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: 'var(--text)' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: m.winner === m.home ? 700 : 400 }}>{`${seedOf(m.home)}${teamOf(m.home)}`}</span>{' vs '}<span style={{ fontWeight: m.winner === m.away ? 700 : 400 }}>{`${seedOf(m.away)}${teamOf(m.away)}`}</span>
+                <span style={{ color: 'var(--faint)' }}>{` · ${m.consolation ? 'consolation' : (m.label ?? `week ${m.week}`)}`}</span>
+              </span>
+              <span style={{ textAlign: 'right', fontWeight: 700, color: m.home_final != null ? 'var(--text)' : m.status === 'live' ? 'var(--you)' : 'var(--faint)' }}>
+                {m.home_final != null && m.away_final != null ? `${Number(m.home_final).toFixed(1)}–${Number(m.away_final).toFixed(1)}` : m.status.toUpperCase()}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -381,12 +469,12 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
     setNote(r.ok ? '✓ renamed' : (r.error ?? 'Didn’t rename.'));
     if (r.ok) onRenamed();
   };
-  const total = (weeks ?? []).filter((w) => w.status === 'final').reduce((s, w) => s + Number(w.ring ?? 0), 0);
+  const total = (weeks ?? []).filter((w) => w.status === 'final' && !w.void).reduce((s, w) => s + Number(w.ring ?? 0), 0);
   const wl = useMemo(() => {
     const golf = lg.bullseye?.contest === 'golf';
     let w = 0, l = 0, t = 0;
     for (const x of weeks ?? []) {
-      if (x.status !== 'final' || x.opp == null || x.ring == null || x.opp_ring == null) continue;
+      if (x.status !== 'final' || x.void || x.opp == null || x.ring == null || x.opp_ring == null) continue;
       const a = Number(x.ring), bb = Number(x.opp_ring);
       if (a === bb) t++; else if (golf ? a < bb : a > bb) w++; else l++;
     }
@@ -413,7 +501,7 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
           <button key={w.week} onClick={() => onOpenWeek(w.week)} className="mono"
             style={{ display: 'grid', gridTemplateColumns: '70px minmax(0,1fr) 110px 64px', gap: 8, fontSize: 12, padding: '6px 0', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', color: 'var(--text)', cursor: 'pointer', textAlign: 'left' }}>
             <span>{`Week ${w.week}`}</span>
-            <span style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}{w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : ''}</span>
+            <span style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}{w.playoff ? ` · ${w.label ?? 'playoffs'}` : ''}{w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : ''}</span>
             <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{w.rank != null ? `#${w.rank} of ${n0(w.entries)}` : ''}</span>
             <span style={{ textAlign: 'right', fontWeight: 700 }}>{w.ring != null ? Number(w.ring).toFixed(1) : '—'}</span>
           </button>
@@ -460,6 +548,15 @@ function SettingsRoom({ lg, onLeft }: { lg: ContestLeague; onLeft: () => void })
         <li>{b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`}</li>
         {contestCredit(b.contest) && <li>{`💡 ${contestCredit(b.contest)!.line}`}</li>}
       </ul>
+      {(b.dues_amount != null || (b.prizes?.length ?? 0) > 0) && (
+        <>
+          <div className="mono" style={label}>THE MONEY</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--dim)', lineHeight: 1.6 }}>
+            {b.dues_amount != null && <li>{`💵 Dues: $${n0(b.dues_amount)}${b.dues_note ? ` — ${b.dues_note}` : ''}. The platform prints it, never collects it.`}</li>}
+            {(b.prizes ?? []).map((p, i) => <li key={i}>{`🏆 ${p.label}: ${p.prize}`}</li>)}
+          </ul>
+        </>
+      )}
       {lg.me && !lg.commish && (
         <button onClick={() => void leave()} className="mono" style={{ ...chip(false, true), justifySelf: 'start' }}>LEAVE THE LEAGUE</button>
       )}

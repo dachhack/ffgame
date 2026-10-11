@@ -50,6 +50,8 @@ export function planSubs({ league, cfg, board, entries, seats, kicks, outs, card
     if (!swapped.length) continue;
     out.push({
       roster_id: e.roster_id, uid: cpu ? null : seat.app_user_id, cpu,
+      // SWAP HISTORY (0478): spot by spot, who went out for whom.
+      swaps: swapped.map((d) => ({ slot: d.slot, out_slug: rows.find((r) => r?.slot === d.slot)?.player_slug ?? null, in_slug: built[d.slot] })),
       out: hurt.map((h) => ({ slug: h.player_slug, name: bySlug.get(h.player_slug)?.name ?? h.player_slug })),
       in: swapped.map((d) => ({ slug: built[d.slot], name: bySlug.get(built[d.slot])?.name ?? built[d.slot] })),
       starters_json: cfg.slots.filter((d) => built[d.slot]).map((d) => ({ slot: d.slot, sleeper_id: null, player_slug: built[d.slot], pos: bySlug.get(built[d.slot])?.pos ?? d.pos[0] })),
@@ -91,6 +93,9 @@ export async function sweepContestSubs(week, season, now = Date.now()) {
       plan.map((p) => ({ league_id: lg.id, week, roster_id: p.roster_id, starters_json: p.starters_json })), { onConflict: 'league_id,week,roster_id' });
     if (error) { log(lg.name, error.message); continue; }
     made += plan.length;
+    // SWAP HISTORY (0478): the seat's own history carries the sub.
+    const swapRows = plan.flatMap((p) => p.swaps.map((x) => ({ league_id: lg.id, week, roster_id: p.roster_id, slot: x.slot, out_slug: x.out_slug, in_slug: x.in_slug, kind: 'sub', by_user: null })));
+    if (swapRows.length) { const { error: sErr } = await db().from('contest_swap').insert(swapRows); if (sErr) log(lg.name, 'swap log', sErr.message); }
     const pushes = plan.filter((p) => p.uid).map((p) => ({
       app_user_id: p.uid, kind: 'lineup',
       title: `🔁 ${p.out.map((x) => x.name).join(', ')} ${p.out.length === 1 ? 'was' : 'were'} ruled out`,

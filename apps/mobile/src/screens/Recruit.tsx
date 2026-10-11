@@ -21,8 +21,7 @@ import {
   postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat, setupLeagueCollege, setLeagueDevyOpen,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
-  myEnrollments, type Enrollment, bullseyeLeagueLine, contestPitch, isWeeklyKind,
-} from '@drip/core/data/liveApi';
+  myEnrollments, type Enrollment, bullseyeLeagueLine, contestPitch, isWeeklyKind, prizesWord } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
@@ -744,6 +743,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
             ? <Mono size={8.5} tone="you" style={{ marginTop: 6 }}>{bullseyeLeagueLine(r.bullseye)}</Mono>
             : !!r.identity && <Mono size={8.5} tone="dim" style={{ marginTop: 6 }}>{identityLine(r.identity)}</Mono>}
           {!!r.dues && <Mono size={9} tone="warn" weight="700" style={{ marginTop: 3 }}>DUES: {r.dues}</Mono>}
+          {!!r.prizes?.length && <Mono size={9} tone="you" weight="700" style={{ marginTop: 3 }}>PRIZES: {prizesWord(r.prizes)}</Mono>}
           {!!r.blurb && <Mono size={10} style={{ marginTop: 8, lineHeight: 15 }}>{r.blurb}</Mono>}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
             {r.mine ? (

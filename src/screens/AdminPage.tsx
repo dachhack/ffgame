@@ -4566,7 +4566,7 @@ function DynastyPanel({ leagueId, leagueName }: { leagueId: string; leagueName: 
 // The panel's one explainer (v0.350.2) — everything else it prints is state.
 const PLAYOFF_INFO = 'Bracket size, when it starts, and whether the league plays one at all.\n\nOFF ends the season with the last regular-season week \u2014 the standings decide it. A guillotine league is off by construction: it runs all 17 weeks and the survivor is the champion.\n\nSeeding = regular-season standings (wins, then points-for; division winners first when there are divisions), or your own order with ↑↓ under SEEDING, which needs a reason posted to the league. Higher seeds host; a 6-team bracket gives the top two seeds byes; ties advance the better seed. Rounds are one week apart from the start week, and finished rounds roll forward automatically.';
 
-function PlayoffPanel({ leagueId }: { leagueId: string }) {
+export function PlayoffPanel({ leagueId }: { leagueId: string }) {
   const [st, setSt] = useState<PlayoffState | null>(null);
   const [teams, setTeams] = useState(4);
   const [startWeek, setStartWeek] = useState(15);

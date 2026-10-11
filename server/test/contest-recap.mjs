@@ -41,8 +41,9 @@ function builder(name, preds = [], order = null) {
     order: (col, o = {}) => builder(name, preds, { col, asc: o.ascending !== false }),
     limit: () => api,
     then: (res, rej) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
-    insert: (row) => { inserts.push({ table: name, row }); (T[name] ??= []).push(row); return Promise.resolve({ error: null }); },
+    insert: (row) => { inserts.push({ table: name, row }); (T[name] ??= []).push({ id: T[name].length + 1, ...row }); return Promise.resolve({ error: null }); },
     upsert: (list) => { inserts.push({ table: name, rows: list }); return Promise.resolve({ error: null }); },
+    update: (patch) => ({ eq: (c, v) => { for (const r of (T[name] ?? []).filter((x) => String(x[c]) === String(v))) Object.assign(r, patch); return Promise.resolve({ error: null }); } }),
   };
   return api;
 }
@@ -89,6 +90,29 @@ T.matchup.push({ id: 'm9', league_id: 'L1', week: 7, status: 'live', home_roster
 n = await R.postContestRecaps(7, '2026', { force: true, now: Date.parse('2026-10-21T12:00:00Z') });
 ok('post: an unfinished week posts nothing', n === 0 && T.league_message.length === 1);
 
+// ── after a re-score, the card is rebuilt in place (0474) ───────────────────
+T.matchup.find((m) => m.id === 'm2').away_final = 160;   // Red Zone's corrected final
+let re = await R.repostContestRecap(L, 6);
+ok('repost: the card in chat is replaced, not doubled', re === 'rebuilt' && T.league_message.length === 1 && /🥇 Red Zone — 160 ring/.test(T.league_message[0].body), T.league_message.map((m) => m.body));
+ok('repost: no pushes the second time', (inserts.filter((i) => i.table === 'push_outbox').length) === 1);
+re = await R.repostContestRecap(L, 7);
+ok('repost: an unfinished week has no card to rebuild', re === null && T.league_message.length === 1);
+// ── a voided week (0474) ────────────────────────────────────────────────────
+T.week_void = [{ league_id: 'L1', week: 5 }];
+re = await R.repostContestRecap(L, 6);
+ok('void: a voided week drops out of the season line', re === 'rebuilt' && /after 1 week\./.test(T.league_message[0].body) && !/2 weeks/.test(T.league_message[0].body), T.league_message[0].body);
+T.week_void = [{ league_id: 'L1', week: 6 }];
+T.league_message.length = 0;
+const R3 = await import('../src/contestRecap.js?fresh=2').catch(() => null);
+if (R3) { n = await R3.postContestRecaps(6, '2026', { force: true, now: Date.parse('2026-10-14T12:20:00Z') }); ok('void: a voided week gets no card', n === 0 && T.league_message.length === 0); }
+T.week_void = [];
+// ── a bracket week (0476) is not the season's ──
+T.matchup.push({ id: 'p1', league_id: 'L1', week: 4, status: 'final', home_roster_id: 1, away_roster_id: 3, home_final: 200, away_final: 10, is_playoff: true });
+re = await R.repostContestRecap(L, 6);
+// (the void case above emptied the chat, so this repost posts a fresh card)
+ok('playoffs: a playoff final stays out of the season line', re === 'posted' && /leads at 2–0 \(242\.3 ring\) after 2 weeks/.test(T.league_message[0].body), { re, body: T.league_message[0].body });
+T.matchup = T.matchup.filter((m) => m.id !== 'p1');
+
 // ── the lock reminder ───────────────────────────────────────────────────────
 const P = await import('../src/push.js');
 const kick = Date.parse('2026-10-16T00:15:00Z');
@@ -99,6 +123,8 @@ ok('lock: humans without a squad get the push; the CPU seat and the one who buil
 ok('lock: the last call names the lock time and the head-to-head CPU rule', rows[0].title === '⚠ Squads lock Thu 8:15 PM ET' && /CPU builds one for you/.test(rows[0].body) && rows[0].kind === 'lineup' && rows[0].dedupe_key === 'contest-lock:last:L1:7:u1', rows[0]);
 const boardRows = P.contestLockRows({ ...L, settings_json: { contest: 'high', contest_format: 'board' } }, 7, 'day', kick, T.league_membership, new Set());
 ok('lock: a leaderboard seat is told a missing squad scores nothing, the day before', /scores nothing/.test(boardRows[0].body) && boardRows[0].title.startsWith('🗓 Kickoff Bullseye: squads lock') && boardRows[0].dedupe_key.startsWith('contest-lock:day:'), boardRows[0]);
+const zeroRows = P.contestLockRows({ ...L, settings_json: { ...L.settings_json, late_entry: 'zero', entry_deadline: 'first' } }, 7, 'last', kick, T.league_membership, new Set());
+ok('lock: the reminder follows the league’s no-show rule and the deadline (v0.673.0)', /scores zero — entries close at the first kickoff/.test(zeroRows[0].body) && !/CPU builds/.test(zeroRows[0].body), zeroRows[0].body);
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

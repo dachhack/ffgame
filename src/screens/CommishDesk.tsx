@@ -14,7 +14,7 @@
 //   · DuesPanel          — dues, and who has paid (SEATS)
 // Every panel loads its own state and saves on the click, the way the pick-
 // trading switch does: none of these are drafts of a change.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { mono, linkBtn, btn, inp, subhead, errMsg } from './adminUi';
 import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
 import { fixSlots, fixChosen, fixOptions, fixPayload, fixChanged, type FixSlot } from '@drip/core/data/lineupFix';
@@ -835,7 +835,9 @@ function WeekFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   );
 }
 
-function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: number; onApplied: () => void }) {
+export function RescoreBox({ leagueId, week, onApplied, fix, contest }: { leagueId: string; week: number; onApplied: () => void;
+  /** In place of the classic lineup fix: a contest league's squad fix (0474). */ fix?: ReactNode;
+  /** A contest league: its record is the result card, not the weekly report. */ contest?: boolean }) {
   const [st, setSt] = useState<RescoreState | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -860,7 +862,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
   }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
   const ask = async (apply: boolean) => {
     if (busy) return;
-    if (apply && !window.confirm(`Rewrite week ${week}'s final scores? Standings, the weekly report and the league chat will all show the new numbers.`)) return;
+    if (apply && !window.confirm(`Rewrite week ${week}'s final scores? Standings, ${contest ? 'the result card' : 'the weekly report'} and the league chat will all show the new numbers.`)) return;
     setBusy(true); setMsg(null);
     try {
       const r = await commishRequestRescore(leagueId, week, apply);
@@ -878,14 +880,14 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
         Preview first: nothing changes until you apply.
       </div>
       <AdjustBox leagueId={leagueId} week={week} />
-      <LineupFixBox leagueId={leagueId} week={week} />
+      {fix ?? <LineupFixBox leagueId={leagueId} week={week} />}
       {running && <div style={small}>⏳ {req!.apply ? 'Applying' : 'Previewing'} — the worker picks this up within a minute…</div>}
       {req?.error && <div style={{ ...small, color: 'var(--opp)' }}>⚠ Last {req.apply ? 'apply' : 'preview'} failed: {req.error}</div>}
       {res && (
         <div style={{ marginBottom: 8 }}>
           <div style={{ ...cell, fontWeight: 700, marginBottom: 4 }}>
             {req!.apply ? '✓ Applied. ' : 'Preview: '}{rescoreHeadline(res, req!.apply)}
-            {req!.apply && res.report === 'rebuilt' ? ' The weekly report was rebuilt.' : ''}
+            {req!.apply && res.report === 'rebuilt' ? (contest ? ' The result card was rebuilt.' : ' The weekly report was rebuilt.') : ''}
           </div>
           {moved.map((m) => (
             <div key={m.id} className="mono" style={{ ...mono, fontSize: 11.5, padding: '3px 0', color: m.flipped ? 'var(--warn)' : 'var(--text)' }}>
@@ -918,7 +920,7 @@ function RescoreBox({ leagueId, week, onApplied }: { leagueId: string; week: num
 // Lives in the re-score box because on a finished week that is where it lands:
 // the adjustment is saved at once and counted by every board, and the stored
 // finals follow when the week is re-scored below.
-function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
+export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }) {
   const [rows, setRows] = useState<PlayerAdjustment[] | null>(null);
   const [found, setFound] = useState<AdjustCandidate[]>([]);
   const [q, setQ] = useState('');

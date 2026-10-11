@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   contestState, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
+  contestSwaps, contestBoard, contestLeague, type SwapRow,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
 import { injuryFor } from '@drip/core/data/injuries';
@@ -28,6 +29,8 @@ import {
   contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
   type ContestConfig,
 } from '@drip/core/engine/contest';
+import { squadCardText } from '@drip/core/data/squadCard';
+import { SITE_ORIGIN } from '@drip/core/data/invite';
 import {
   builderTabs, rankCandidates, fillOpenSpots, budgetLine, roomFor, posLabel, valueOf, leagueWeekProj, pricedDelta, BUILDER_SORTS,
   type BuilderCtx, type BuilderPlayer, type BuilderSort, type PoolFilter,
@@ -165,6 +168,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const tabs = useMemo(() => (setup ? builderTabs(setup.slots) : ['ALL']), [setup]);
   const dirty = useMemo(() => JSON.stringify(picks) !== JSON.stringify(saved), [picks, saved]);
 
+  // SWAP HISTORY (0478): my seat's changes this week, newest first.
+  const [swaps, setSwaps] = useState<SwapRow[]>([]);
+  const [showSwaps, setShowSwaps] = useState(false);
+  useEffect(() => {
+    if (!st?.ok || st.roster_id == null || st.week == null) return;
+    contestSwaps(leagueId, st.week, st.roster_id).then((r) => { if (r.ok) setSwaps(r.swaps ?? []); }).catch(() => {});
+  }, [leagueId, st?.ok, st?.roster_id, st?.week, saved]);
+  // THE SQUAD CARD (v0.676.0): share the squad once the week's games are on.
+  const [shared, setShared] = useState<string | null>(null);
   if (!st) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!st.ok) return <div style={{ padding: 24 }}><div className="mono" style={{ color: 'var(--warn, #c66)', fontSize: 12 }}>{st.error}</div><button onClick={onBack} style={{ marginTop: 10 }}>← BACK</button></div>;
   if (!setup?.cfg || !setup.slots.length || !ctx) return <div style={{ padding: 24 }}><div className="mono" style={small}>This league has no spots to fill yet — its commissioner sets the roster.</div><button onClick={onBack}>← BACK</button></div>;
@@ -196,6 +208,23 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const projTotal = Object.values(picks).reduce((s, slug) => s + (slug ? byPlayer.get(slug)?.proj ?? 0 : 0), 0);
   const week = st.week!;
 
+  const share = async () => {
+    if (!st?.ok || st.week == null) return;
+    const [bd, lgInfo] = await Promise.all([contestBoard(leagueId, st.week, 1, 0).catch(() => null), contestLeague(leagueId).catch(() => null)]);
+    const text = squadCardText({
+      league: st.name ?? 'Contest', week: st.week, contest: cfg.contest, status: st.matchup?.status === 'final' ? 'final' : st.started ? 'live' : null,
+      slots, labels, picks, nameOf: (slug) => bySlug.get(slug)?.name ?? slug,
+      scoreOf: (slot) => { const r = live.find((x) => x.slot === slot); return r ? r.score : null; },
+      total: myScore != null ? Number(myScore) : null, rank: bd?.me?.rank ?? null, entries: bd?.entries ?? null,
+      opponent: st.opponent ? { team: st.opponent.team, score: theirScore != null ? Number(theirScore) : null } : null,
+      link: lgInfo?.invite_code ? `${SITE_ORIGIN}/?bullseye=${lgInfo.invite_code}` : null,
+    });
+    try {
+      if (typeof navigator !== 'undefined' && 'share' in navigator) { await (navigator as Navigator & { share: (d: { text: string }) => Promise<void> }).share({ text }); setShared('✓ shared'); return; }
+    } catch { /* the sheet was dismissed — fall through to the clipboard */ }
+    try { await navigator.clipboard.writeText(text); setShared('✓ copied — paste it anywhere'); } catch { setShared('couldn’t copy'); }
+    setTimeout(() => setShared(null), 2500);
+  };
   const save = async () => {
     if (filled < n) { setNote(`Fill all ${n} spots first.`); return; }
     setBusy(true); setNote(null);
@@ -294,6 +323,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
           {st.opponent && (
             <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`vs ${st.opponent.team ?? 'opponent'} · ${theirScore != null ? Number(theirScore).toFixed(1) : '—'}`}</span>
           )}
+          <button onClick={() => void share()} className="mono" title="Share your squad — the share sheet, or copied to paste anywhere" style={chip(false)}>{shared ?? '↗ SHARE'}</button>
           {tieBroken && (
             <span className="mono" style={{ ...small, flexBasis: '100%' }}>{`Tied on rings — settled by the tie-breaker (${myTbDist?.toFixed(1) ?? '—'} off vs ${(mySide === 'home' ? st.matchup!.away_tb : st.matchup!.home_tb)?.toFixed(1) ?? '—'} off).`}</span>
           )}
@@ -337,6 +367,14 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
             </div>
           )}
         </div>
+        {swaps.length > 0 && (
+          <div className="mono" style={{ ...small, display: 'grid', gap: 2 }}>
+            <button onClick={() => setShowSwaps((v) => !v)} className="mono" style={{ ...chip(false, true), justifySelf: 'start' }}>{`🔁 ${swaps.length} SWAP${swaps.length === 1 ? '' : 'S'} THIS WEEK ${showSwaps ? '▲' : '▼'}`}</button>
+            {showSwaps && swaps.map((x) => (
+              <span key={x.id}>{`${new Date(x.at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })} · ${labels[x.slot] ?? x.slot}: ${x.out_name ? `out ${x.out_name}` : 'filled'}${x.in_name ? `, in ${x.in_name}` : ', emptied'}${x.kind === 'commish' ? ' — by the commissioner' : x.kind === 'sub' ? ' — swapped for you (ruled out)' : ''}`}</span>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8 }}>
           {slots.map((d) => {
             const slug = picks[d.slot];
