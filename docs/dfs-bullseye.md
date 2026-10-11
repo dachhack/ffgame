@@ -425,3 +425,18 @@ for the best affordable unlocked body inside 20 minutes of his kickoff and
 pushes the owner; CPU seats are swapped any time before kickoff. Off, a
 ruled-out pick left in place banks what his spot banks.
 
+## 21. Records and the round-robin (v0.670.0, 0471)
+
+A head-to-head contest league's season standings used to sum ring totals
+like a leaderboard's. They now carry a record: each final head-to-head is a
+win, a loss or a tie by the contest's own rule (golf: the lower score wins),
+and the standings rank by record first, then the total. A leaderboard
+league's self-paired rows are neither and rank as before.
+
+Pairings come from `roundRobinPairs` in pods.js: seat one stays put and the
+rest rotate one place a round, so over n−1 rounds everyone plays everyone
+once before the cycle repeats; which round a week is comes from the league's
+first played week, offset per league; home and away swap each round; an odd
+seat count gives one seat a bye. Drip pods, built fresh each week, keep the
+seeded shuffle. The week's result card names the leader by record.
+

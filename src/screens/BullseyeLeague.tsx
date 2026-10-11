@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import {
   contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
-  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, friendlyError,
+  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
@@ -342,12 +342,12 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
             <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 90px 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
               <span>{r.rank}</span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
-              <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{`${r.weeks} wk${r.weeks === 1 ? '' : 's'}${r.best != null ? ` · best ${Number(r.best).toFixed(0)}` : ''}`}</span>
-              <span style={{ textAlign: 'right', fontWeight: 700 }}>{Number(r.total).toFixed(1)}</span>
+              <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{h2h ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}${r.best != null ? ` · best ${Number(r.best).toFixed(0)}` : ''}`}</span>
+              <span style={{ textAlign: 'right', fontWeight: 700 }}>{h2h ? recordWord(r) : Number(r.total).toFixed(1)}</span>
             </div>
           ))}
           {bd.season.me && !bd.season.rows.some((r) => r.me) && (
-            <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${bd.season.me.rank} · ${Number(bd.season.me.total).toFixed(1)}`}</div>
+            <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${bd.season.me.rank} · ${h2h ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</div>
           )}
         </div>
       )}

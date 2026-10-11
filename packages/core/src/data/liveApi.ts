@@ -866,7 +866,10 @@ export interface BullseyeLeague {
   bullseye?: BullseyeInfo; weeks?: number[]; entries?: number; first_lock?: string | null; started?: boolean;
   me?: { roster_id: number; team: string | null; entered: boolean } | null;
 }
-export interface BullseyeSeasonRow { roster_id: number; team_name: string | null; me: boolean; total: number; weeks: number; best: number | null; rank: number }
+export interface BullseyeSeasonRow { roster_id: number; team_name: string | null; me: boolean; total: number; weeks: number; best: number | null; rank: number;
+  /** RECORDS (0471): a head-to-head league's wins, losses and ties. */ wins?: number; losses?: number; ties?: number }
+/** "5–1" (or "5–1–1" with a tie), for a head-to-head season row. */
+export const recordWord = (r: { wins?: number | null; losses?: number | null; ties?: number | null }): string => `${r.wins ?? 0}–${r.losses ?? 0}${r.ties ? `–${r.ties}` : ''}`;
 export interface BullseyeLeagueBoard {
   ok: boolean; error?: string; week?: number | null; started?: boolean; entries?: number;
   rows?: BullseyeBoardRow[]; me?: BullseyeBoardRow | null;
