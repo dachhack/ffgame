@@ -372,7 +372,10 @@ export async function ensurePods(week, season, idx) {
     // an Out/IR player whose game has not locked is replaced by the best
     // affordable body for that spot, the rest of the squad kept. The hourly
     // seat wire does the same job for a season roster.
-    if (contest && outs.size) {
+    // …and FILLS A SPOT IT LEFT EMPTY (v0.679.2): a squad built before the
+    // board carried the spot's position (a coach, a rookie-only WR) gets the
+    // spot filled on a later tick, once the board does, from the unlocked.
+    if (contest) {
       const aiSeats = new Set((mems ?? []).filter((m) => m.controller === 'ai' || !m.app_user_id).map((m) => m.sleeper_roster_id));
       if (aiSeats.size) {
         const { data: entries } = await db().from('sleeper_lineup')
@@ -382,7 +385,9 @@ export async function ensurePods(week, season, idx) {
           const rowsE = Array.isArray(e.starters_json) ? e.starters_json : [];
           const bySlug = new Map(board.map((b) => [b.slug, b]));
           const hurt = rowsE.filter((r) => r?.player_slug && outs.has(r.player_slug) && !teamLocked(bySlug.get(r.player_slug)?.team));
-          if (!hurt.length) continue;
+          const filled = new Set(rowsE.filter((r) => r?.player_slug).map((r) => r.slot));
+          const empty = contest.slots.filter((d) => !filled.has(d.slot));
+          if (!hurt.length && !empty.length) continue;
           const keep = Object.fromEntries(contest.slots.map((d) => [d.slot, null]));
           for (const r of rowsE) if (r?.slot in keep && r.player_slug && !hurt.includes(r)) keep[r.slot] = r.player_slug;
           const keptSlugs = new Set(Object.values(keep).filter(Boolean));
@@ -532,18 +537,32 @@ export async function refreshBoardProj(season, week, idx, board, now = Date.now(
  *  built against them yet. Frozen salaries and projections are never
  *  touched. */
 const toppedUp = new Set();
+const toppedPos = new Map();   // `${season}|${week}` → positions this process has tried to add (v0.679.2)
 export async function topUpSalaryBoard(season, week, idx, slateTeams, board) {
   const key = `${season}|${week}`;
-  if (toppedUp.has(key) || !board.length) return board;
+  if (!board.length) return board;
+  // ONCE A WEEK for the experience fill; EVERY TICK for a position the board
+  // lacks (v0.679.2). A commissioner who adds a HEAD COACH or a rookie-only
+  // spot after the week's board is up used to wait for the next worker
+  // boot: the once-a-week memo hid the new position, the CPU's squads were
+  // built against a board without it, and a tenure spot refused everyone
+  // whose experience the board hadn't filled in yet (Kickoff League, week
+  // 6: two CPU spots EMPTY). The position check is a set compare in memory.
+  const first = !toppedUp.has(key);
   toppedUp.add(key);
+  const seenPos = toppedPos.get(key) ?? new Set();
+  toppedPos.set(key, seenPos);
   try {
     const extras = await contestExtraPositions(season).catch(() => new Set());
     const wantPos = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF', ...extras]);
     const havePos = new Set(board.map((r) => r.pos));
     const people = new Set(['QB', 'RB', 'WR', 'TE', 'FB', 'DL', 'LB', 'DB']);
-    const expFixes = board.filter((r) => r.exp == null && people.has(r.pos))
+    const expFixes = (first ? board.filter((r) => r.exp == null && people.has(r.pos)) : [])
       .map((r) => ({ r, exp: idx.metaForSlug(r.slug)?.exp ?? null })).filter((x) => x.exp != null);
-    const missingPos = [...wantPos].some((p) => !havePos.has(p));
+    // a position this process has already tried to add is not tried again
+    // (a board with no punters would otherwise be rebuilt every tick)
+    const missingPos = [...wantPos].some((p) => !havePos.has(p) && !seenPos.has(p));
+    for (const p of wantPos) if (!havePos.has(p)) seenPos.add(p);
     if (!expFixes.length && !missingPos) return board;
     let adds = [];
     if (missingPos) {
@@ -559,7 +578,7 @@ export async function topUpSalaryBoard(season, week, idx, slateTeams, board) {
     for (const { r, exp } of expFixes) r.exp = exp;
     return board.concat(adds);
   } catch (e) {
-    toppedUp.delete(key);   // try again next tick
+    if (first) toppedUp.delete(key);   // the experience fill tries again next tick
     console.log('salary board top-up', season, week, e?.message ?? e);
     return board;
   }

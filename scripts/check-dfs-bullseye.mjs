@@ -325,6 +325,27 @@ ok('pricing: the replacement is the body after the 12-team starters', SP.STARTER
 ok('pods: boards are priced by priceBoard and carry priced_proj', /priceBoard\(rows\)/.test(pods) && /priced_proj: row\.proj/.test(pods));
 ok('pods: the projection refreshes, the price does not', /export async function refreshBoardProj/.test(pods) && /salary: r\.salary, proj: next/.test(pods));
 ok('pods: CPU builds skip the ruled out and swap them before lock', /contestAutoBuild\(playable, contest,/.test(pods) && /\|sub\$\{e\.roster_id\}/.test(pods));
+// v0.679.2: a CPU squad built before the board carried a spot's position gets
+// the spot filled later; the board's missing-position check runs every tick.
+ok('pods: the CPU pass fills a spot it left empty, not only a ruled-out one', /const empty = contest\.slots\.filter\(\(d\) => !filled\.has\(d\.slot\)\)/.test(pods) && /if \(!hurt\.length && !empty\.length\) continue;/.test(pods) && /if \(contest\) \{\n      const aiSeats/.test(pods));
+ok('pods: the board top-up checks for a missing position every tick, the experience fill once', /const first = !toppedUp\.has\(key\);/.test(pods) && /\(first \? board\.filter/.test(pods) && !/if \(toppedUp\.has\(key\) \|\| !board\.length\) return board;/.test(pods));
+{
+  // The build fills a coach spot and a rookie-only spot when the board carries
+  // them, and a tenure spot refuses a player whose experience is unknown.
+  const slotsX = [{ pos: ['QB'] }, { pos: ['WR'], max_exp: 0, label: 'Rookie Only' }, { pos: ['HC'] }];
+  const cfgX = C.contestConfigOf({ contest: 'high', contest_format: 'h2h', budget: 50000, roster_slots: slotsX }, 'dfs');
+  const boardX = [
+    { slug: 'qb1', pos: 'QB', salary: 7000, proj: 20, exp: 5 }, { slug: 'wr-vet', pos: 'WR', salary: 6000, proj: 14, exp: 4 },
+    { slug: 'wr-rook', pos: 'WR', salary: 4500, proj: 9, exp: 0 }, { slug: 'wr-unknown', pos: 'WR', salary: 3000, proj: 12, exp: null },
+    { slug: 'hc-coen', pos: 'HC', salary: 4000, proj: 9.5 },
+  ];
+  const bX = C.contestAutoBuild(boardX, cfgX, 'seed');
+  ok('build: a coach spot and a rookie-only spot fill when the board carries them', bX.S3 === 'hc-coen' && bX.S2 === 'wr-rook', bX);
+  const bY = C.contestAutoBuild(boardX.filter((r) => r.pos !== 'HC'), cfgX, 'seed');
+  ok('build: without a coach on the board the coach spot stays empty (so the later fill matters)', bY.S3 === null && bY.S2 === 'wr-rook', bY);
+  const filled = C.contestAutoBuild(boardX, cfgX, 'seed', null, { S1: 'qb1', S2: 'wr-rook', S3: null });
+  ok('build: a kept squad with one empty spot gets just that spot filled', filled.S1 === 'qb1' && filled.S2 === 'wr-rook' && filled.S3 === 'hc-coen', filled);
+}
 const sql4 = read('supabase/migrations/0467_salary_pricing.sql');
 ok('sql: priced_proj, and an O/IR new pick is refused', sql4.includes('add column if not exists priced_proj') && sql4.includes("upper(ist.status) in ('O', 'IR')") && sql4.includes('is ruled out this week'));
 ok('builder: a ruled-out body says so, unless already saved', (() => {

@@ -22,6 +22,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.679.2 — The CPU fills its coach and rookie spots
+
+> - In a weekly squad league the CPU's squads were leaving the HEAD COACH and Rookie Only spots empty. A spot added after the week's board was built now reaches the board on the next tick, and a CPU squad with an empty spot gets it filled from the players still to play.
+
+- Founder: "Looks like AI teams didn't pick scoped positions or HC."
+  Confirmed from the week-6 Kickoff League board (the human's squad holds
+  Liam Coen and Carnell Tate; the CPU's opposite spots read EMPTY), and
+  from the code: `topUpSalaryBoard` (the pass that adds a league's extra
+  positions — HC, IDP — to the week's priced board and fills in years of
+  experience) ran once per week per process, so an HC or Rookie Only spot
+  the commissioner added after that pass never reached the board; the
+  CPU's squads were built against a board without a coach and with `exp`
+  unknown, which `slotAllows` refuses for a tenure spot — both spots
+  empty — and a CPU squad was never revisited except for a ruled-out
+  player. Worker (pods.js): the missing-position check runs every tick
+  (a set compare in memory; the experience fill stays once a week), and
+  the CPU pass fills an empty spot as it swaps a ruled-out one, from the
+  unlocked, keeping the rest. `check:dfsbullseye`: the build fills a coach
+  and a rookie-only spot when the board carries them, refuses unknown
+  experience for the tenure spot, and fills just the empty spot of a kept
+  squad; two source assertions pin the worker. The live week-6 CPU squads
+  fill on the worker's next tick after deploy (their spots' players have
+  not all kicked off). No iPhone build needed.
+
 ### v0.679.1 — The cards turn over; no SEALED PICK ribbon
 
 > - On the phone's card table every card was staying on its back, yours included, even with the scores beside it — the turn wasn't landing. The cards now turn over as they should. The "SEALED ◈ PICK" ribbon is gone from the card backs on both the phone and the site.
