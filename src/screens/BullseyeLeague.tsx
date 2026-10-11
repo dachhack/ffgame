@@ -356,8 +356,9 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
 
       {!compact && <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />}
       <div style={{ ...card, display: 'grid', gap: 4 }}>
-        <span className="mono" style={label}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${h2h ? ' · HEAD-TO-HEAD' : ''}`}</span>
+        <span className="mono" style={label}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${h2h ? ' · HEAD-TO-HEAD' : ''}${bd?.void ? ' · VOIDED' : ''}`}</span>
         {bd && !bd.started && <span className="mono" style={small}>Squads and scores show once the week’s first game locks.</span>}
+        {bd?.void && <span className="mono" style={{ ...small, color: 'var(--warn, #c66)' }}>The commissioner voided this week — it doesn’t count in the standings.</span>}
         {big && (
           <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={30} placeholder="Find a team…" aria-label="Find a team" style={{ ...input, marginTop: 4 }} />
         )}
@@ -419,12 +420,12 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
     setNote(r.ok ? '✓ renamed' : (r.error ?? 'Didn’t rename.'));
     if (r.ok) onRenamed();
   };
-  const total = (weeks ?? []).filter((w) => w.status === 'final').reduce((s, w) => s + Number(w.ring ?? 0), 0);
+  const total = (weeks ?? []).filter((w) => w.status === 'final' && !w.void).reduce((s, w) => s + Number(w.ring ?? 0), 0);
   const wl = useMemo(() => {
     const golf = lg.bullseye?.contest === 'golf';
     let w = 0, l = 0, t = 0;
     for (const x of weeks ?? []) {
-      if (x.status !== 'final' || x.opp == null || x.ring == null || x.opp_ring == null) continue;
+      if (x.status !== 'final' || x.void || x.opp == null || x.ring == null || x.opp_ring == null) continue;
       const a = Number(x.ring), bb = Number(x.opp_ring);
       if (a === bb) t++; else if (golf ? a < bb : a > bb) w++; else l++;
     }
@@ -451,7 +452,7 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
           <button key={w.week} onClick={() => onOpenWeek(w.week)} className="mono"
             style={{ display: 'grid', gridTemplateColumns: '70px minmax(0,1fr) 110px 64px', gap: 8, fontSize: 12, padding: '6px 0', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', color: 'var(--text)', cursor: 'pointer', textAlign: 'left' }}>
             <span>{`Week ${w.week}`}</span>
-            <span style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}{w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : ''}</span>
+            <span style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}{w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : ''}</span>
             <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{w.rank != null ? `#${w.rank} of ${n0(w.entries)}` : ''}</span>
             <span style={{ textAlign: 'right', fontWeight: 700 }}>{w.ring != null ? Number(w.ring).toFixed(1) : '—'}</span>
           </button>

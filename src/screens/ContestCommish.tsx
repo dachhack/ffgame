@@ -7,9 +7,12 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import {
   contestLeague, setContestRules, setDfsBullseye, setBullseyeSize, postLeagueListing, closeLeagueListing, leagueListingState,
   isAdmin, myFeatures, bullseyeMaxSeats, friendlyError,
-  type ContestInfo, type ContestKind, type ContestFormat,
+  contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries,
+  type ContestInfo, type ContestKind, type ContestFormat, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow,
 } from '@drip/core/data/liveApi';
-import { CONTEST_WORD, CONTEST_EMOJI } from '@drip/core/engine/contest';
+import { CONTEST_WORD, CONTEST_EMOJI, contestSquadOf, contestSlotLabels } from '@drip/core/engine/contest';
+import { classicSlotsFromSpec } from '@drip/core/engine/classic';
+import { RescoreBox, AdjustBox } from './CommishDesk';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const chip = (on: boolean, dim = false): CSSProperties => ({
@@ -138,7 +141,178 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
         </div>
         {span === 'week' && <div className="mono" style={small}>A one-week league leaves the board once its week kicks off.</div>}
       </div>
+      {played && <ContestFixWeekPanel leagueId={leagueId} />}
       {note && <div className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</div>}
+    </div>
+  );
+}
+
+// ── FIX A WEEK (0474) ───────────────────────────────────────────────────────
+// Void a week that shouldn't count (final only; restore is the undo), correct
+// a player's points (0355, now reaching the board), set a seat's squad past
+// the locks, and re-score the week (0353) — the classic console's boxes where
+// they apply, the contest's own where they don't. Every fix is announced in
+// chat with the reason.
+export function ContestFixWeekPanel({ leagueId }: { leagueId: string }) {
+  const [weeks, setWeeks] = useState<ContestWeekRow[] | null>(null);
+  const [week, setWeek] = useState<number | null>(null);
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const load = () => contestWeekList(leagueId).then((r) => {
+    if (!r.ok) { setNote(r.error ?? 'Couldn’t read the weeks.'); return; }
+    setWeeks(r.weeks ?? []);
+  }).catch((e) => setNote(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const w = weeks?.find((x) => x.week === week) ?? null;
+  const voidIt = async (on: boolean) => {
+    if (w == null || busy) return;
+    if (on && !window.confirm(`Void week ${w.week}? It stops counting in the standings and the league is told why. You can restore it later.`)) return;
+    setBusy(true); setNote(null);
+    const r = await commishVoidWeek(leagueId, w.week, on, why).catch((e) => ({ ok: false, error: friendlyError(e) }));
+    setBusy(false);
+    setNote(r.ok ? `✓ week ${w.week} ${on ? 'voided' : 'restored'}` : (r.error ?? 'That didn’t work.'));
+    if (r.ok) { setWhy(''); void load(); }
+  };
+  return (
+    <div style={{ ...card, display: 'grid', gap: 10 }}>
+      <div className="mono" style={label}>FIX A WEEK</div>
+      <div className="mono" style={small}>Void a week that shouldn’t count, correct a player’s points after a stat correction, set a member’s squad, and re-score the week from the plays as they stand. Every fix is announced in the league chat with your reason.</div>
+      {weeks && !weeks.length && <span className="mono" style={small}>No weeks yet.</span>}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {(weeks ?? []).map((x) => (
+          <button key={x.week} onClick={() => setWeek(week === x.week ? null : x.week)} className="mono" style={chip(week === x.week)}>
+            {`WEEK ${x.week}${x.void ? ' · VOIDED' : x.final ? '' : ` · ${x.status.toUpperCase()}`}`}
+          </button>
+        ))}
+      </div>
+      {w && (
+        <>
+          <div className="mono" style={small}>
+            {w.final ? `${w.stamped} of ${w.matchups} final scores stamped` : `${w.status} — ${w.matchups} ${w.matchups === 1 ? 'matchup' : 'matchups'}`}
+            {` · ${n0(w.entries)} ${w.entries === 1 ? 'squad' : 'squads'}`}
+            {w.void ? ` · VOIDED — ${w.void_note ?? ''}` : ''}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {w.void ? (
+              <button disabled={busy} onClick={() => void voidIt(false)} className="mono" style={chip(false)}>{`↩️ RESTORE WEEK ${w.week}`}</button>
+            ) : (
+              <>
+                <input value={why} onChange={(e) => setWhy(e.target.value)} maxLength={200} placeholder="why void it — the league sees this" style={{ ...input, flex: 1, minWidth: 200 }} />
+                <button disabled={busy || !w.final || !why.trim()} onClick={() => void voidIt(true)} className="mono" style={chip(false, !w.final || !why.trim())}>{`🚫 VOID WEEK ${w.week}`}</button>
+              </>
+            )}
+            <span className="mono" style={small}>{w.void ? 'A voided week stays on the board, marked, and counts for nothing.' : w.final ? 'Voiding keeps the scores but takes the week out of the standings and records.' : 'A week can be voided once it’s final.'}</span>
+          </div>
+          {w.final && w.stamped > 0
+            ? <RescoreBox leagueId={leagueId} week={w.week} onApplied={() => void load()} contest fix={<SquadFixBox leagueId={leagueId} week={w.week} />} />
+            : (
+              <div style={{ padding: '10px 12px', border: '1px solid var(--bd)', borderRadius: 8, background: 'var(--bg)' }}>
+                <div className="mono" style={{ ...small, marginBottom: 8 }}>{`Week ${w.week} is still being scored: a fix here counts on the next scoring pass, within a minute or two. Re-scoring opens once every game is final.`}</div>
+                <AdjustBox leagueId={leagueId} week={w.week} />
+                <SquadFixBox leagueId={leagueId} week={w.week} />
+              </div>
+            )}
+        </>
+      )}
+      {note && <div className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</div>}
+    </div>
+  );
+}
+
+// ── 🧾 SET A SQUAD (0474) — the contest twin of the classic lineup fix ──────
+// Pick the seat (the board's rows, or find one by name on a big board), then a
+// player per spot from the week's priced board; the spend is shown against the
+// budget. A reason is required; the league is told who came in and out.
+type Seat = { roster_id: number; team_name: string | null };
+function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
+  const [seats, setSeats] = useState<Seat[]>([]);
+  const [findQ, setFindQ] = useState('');
+  const [rid, setRid] = useState<number | null>(null);
+  const [sq, setSq] = useState<CommishContestSquad | null>(null);
+  const [board, setBoard] = useState<PodSalaryRow[]>([]);
+  const [picks, setPicks] = useState<Record<string, string | null>>({});
+  const [why, setWhy] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    contestBoard(leagueId, week, 500).then((b) => {
+      const rows = (b.season?.rows ?? b.rows ?? []) as Seat[];
+      setSeats(rows.map((r) => ({ roster_id: r.roster_id, team_name: r.team_name })).sort((a, b2) => (a.team_name ?? '').localeCompare(b2.team_name ?? '')));
+    }).catch(() => {});
+  }, [leagueId, week]);
+  useEffect(() => {
+    const q = findQ.trim();
+    if (!q) return;
+    const id = setTimeout(() => contestBoardFind(leagueId, week, q).then((r) => {
+      if (!r.ok) return;
+      const hits = (r.season.length ? r.season : r.found) as Seat[];
+      setSeats(hits.map((h) => ({ roster_id: h.roster_id, team_name: h.team_name })));
+    }).catch(() => {}), 300);
+    return () => clearTimeout(id);
+  }, [findQ, leagueId, week]);
+  useEffect(() => {
+    if (rid == null) { setSq(null); return; }
+    Promise.all([commishContestSquad(leagueId, week, rid), podSalaries(week)]).then(([s, rows]) => {
+      if (!s.ok) { setMsg(s.error ?? 'could not load'); return; }
+      setSq(s); setBoard(rows);
+      setPicks(contestSquadOf(s.entry, classicSlotsFromSpec(s.slots ?? null) ?? []));
+    }).catch((e) => setMsg(friendlyError(e)));
+  }, [leagueId, week, rid]);
+  const defs = classicSlotsFromSpec(sq?.slots ?? null) ?? [];
+  const labels = contestSlotLabels(defs);
+  const bySlug = new Map(board.map((r) => [r.slug, r]));
+  const spent = defs.reduce((sum, d) => sum + (bySlug.get(picks[d.slot] ?? '')?.salary ?? 0), 0);
+  const budget = sq?.budget ?? 0;
+  const save = async () => {
+    if (rid == null || busy) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await commishSetContestSquad(leagueId, week, rid, picks, why);
+      if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
+      setMsg(`✓ saved — in ${r.in?.length ? r.in.join(', ') : 'nobody'}; out ${r.out?.length ? r.out.join(', ') : 'nobody'}${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
+      setWhy('');
+    } catch (e) { setMsg(friendlyError(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
+      <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>{`🧾 SET A SQUAD · WEEK ${week}`}</div>
+      <div className="mono" style={{ ...small, marginBottom: 6 }}>One seat’s squad for this week, past the kickoff locks — the app that died at 12:58, the ruling the league made. The budget, the floor and each spot’s rules still apply. The league is told who came in and who went out, with your reason.</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select value={rid ?? ''} onChange={(e) => setRid(e.target.value ? Number(e.target.value) : null)} className="mono" style={{ ...input, width: 220 }}>
+          <option value="">— pick a seat —</option>
+          {seats.map((s) => <option key={s.roster_id} value={s.roster_id}>{s.team_name ?? `Team ${s.roster_id}`}</option>)}
+        </select>
+        <input value={findQ} onChange={(e) => setFindQ(e.target.value)} maxLength={30} placeholder="find a team…" style={{ ...input, width: 160 }} />
+      </div>
+      {sq && (
+        <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+          {defs.map((d) => {
+            const want = new Set(d.pos.map((p) => String(p).toUpperCase()));
+            const opts = board.filter((r) => want.has(String(r.pos).toUpperCase())).sort((a, b) => b.salary - a.salary);
+            const cur = picks[d.slot] ?? '';
+            if (cur && !opts.some((o) => o.slug === cur) && bySlug.has(cur)) opts.unshift(bySlug.get(cur)!);
+            return (
+              <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '90px minmax(0,1fr)', gap: 8, alignItems: 'center' }}>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 700 }}>{labels[d.slot] ?? d.slot}</span>
+                <select value={cur} onChange={(e) => setPicks((p) => ({ ...p, [d.slot]: e.target.value || null }))} className="mono" style={input}>
+                  <option value="">— empty —</option>
+                  {opts.map((o) => <option key={o.slug} value={o.slug}>{`${o.name} · ${o.pos} ${o.team} · $${n0(o.salary)}`}</option>)}
+                </select>
+              </div>
+            );
+          })}
+          <div className="mono" style={{ ...small, color: budget > 0 && spent > budget ? 'var(--warn, #c66)' : 'var(--faint)' }}>
+            {`$${n0(spent)} of ${budget > 0 ? `$${n0(budget)}` : 'no cap'}${sq.min_spend ? ` · min spend $${n0(sq.min_spend)}` : ''}${sq.stamped ? ' · this seat’s week is stamped — re-score after saving' : ''}`}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input value={why} onChange={(e) => setWhy(e.target.value)} maxLength={200} placeholder="why — the league sees this" style={{ ...input, flex: 1, minWidth: 180 }} />
+            <button onClick={() => void save()} disabled={busy || !why.trim()} className="mono" style={chip(true, !why.trim())}>SET THE SQUAD</button>
+          </div>
+        </div>
+      )}
+      {msg && <div className="mono" style={{ fontSize: 11, marginTop: 6, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{msg}</div>}
     </div>
   );
 }

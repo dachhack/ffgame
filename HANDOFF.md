@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.671.0` · migrations through `0473`_
+_Last updated: 2026-10-11 · Build `v0.672.0` · migrations through `0474`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -45,8 +45,10 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
   1. ~~"Where am I" on a 50,000-seat leaderboard~~ — done in v0.671.0
      (0473: `near` + `found` on `contest_board`; the index 0001 already
      made is pinned by name).
-  2. Commissioner tools to fix a week: void, rescore after a stat correction,
-     set a member's squad (CLI `set-lineup` exists for classic leagues).
+  2. ~~Commissioner tools to fix a week~~ — done in v0.672.0 (0474: void /
+     restore, the stat correction on the board, `commish_set_contest_squad`,
+     the re-score rebuilding the result card; FIX A WEEK on the contest
+     COMMISH card, web and phone).
   3. Entry deadline / late-entry policy (CPU build, zero, or week dropped).
   4. Playoffs for season head-to-head (a top-N bracket over the last weeks).
   5. Prizes and dues on the settings and the board (the listing has a text

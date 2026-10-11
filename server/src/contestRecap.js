@@ -84,6 +84,67 @@ async function releaseAt(week, season) {
 
 /** Post the week's recap into every contest league whose week is final.
  *  Returns how many were posted this pass. */
+/** The week's card for one league: null when the week isn't ready (a matchup
+ *  not final, no squads). `voids` holds the league's VOIDED weeks (0474): they
+ *  don't count toward the season line. */
+export async function buildContestRecap(lg, week, season, voids = new Set()) {
+  const cfg = contestConfigOf(lg.settings_json, lg.kind);
+  if (!cfg) return null;
+  const { data: ms } = await db().from('matchup').select('id, home_roster_id, away_roster_id, home_final, away_final, home_tb, away_tb, status')
+    .eq('league_id', lg.id).eq('week', week);
+  if (!ms?.length || !ms.every((m) => m.status === 'final' && m.home_final != null && m.away_final != null)) return null;
+  const { data: mems } = await db().from('league_membership').select('sleeper_roster_id, team_name, app_user_id, controller, enrolled').eq('league_id', lg.id);
+  const seats = new Map((mems ?? []).map((m) => [m.sleeper_roster_id, m]));
+  const ranked = rankWeek(cfg, ms, seats);
+  if (!ranked.length) return null;
+  let seasonLine = null;
+  if (lg.contest_week == null) {
+    const { data: fin } = await db().from('matchup').select('home_roster_id, away_roster_id, home_final, away_final, week')
+      .eq('league_id', lg.id).eq('status', 'final').lte('week', week);
+    const golf = cfg.contest === 'golf';
+    const tot = new Map(); const weeks = new Set();
+    const rec = new Map(); // roster → {w, l, t} (RECORDS, v0.670.0)
+    const bump = (rid, k) => { const r = rec.get(rid) ?? { w: 0, l: 0, t: 0 }; r[k] += 1; rec.set(rid, r); };
+    for (const m of fin ?? []) {
+      if (voids.has(Number(m.week))) continue;   // VOIDED (0474): not played, not counted
+      weeks.add(m.week);
+      const h = Number(m.home_final ?? 0), a = Number(m.away_final ?? 0);
+      tot.set(m.home_roster_id, (tot.get(m.home_roster_id) ?? 0) + h);
+      if (m.away_roster_id === m.home_roster_id) continue;
+      tot.set(m.away_roster_id, (tot.get(m.away_roster_id) ?? 0) + a);
+      if (h === a) { bump(m.home_roster_id, 't'); bump(m.away_roster_id, 't'); continue; }
+      const homeWon = golf ? h < a : h > a;
+      bump(homeWon ? m.home_roster_id : m.away_roster_id, 'w'); bump(homeWon ? m.away_roster_id : m.home_roster_id, 'l');
+    }
+    const byTotal = (a, b) => (golf ? a[1] - b[1] : b[1] - a[1]);
+    const top = cfg.format === 'h2h'
+      ? [...tot.entries()].sort((a, b) => ((rec.get(b[0])?.w ?? 0) - (rec.get(a[0])?.w ?? 0)) || ((rec.get(a[0])?.l ?? 0) - (rec.get(b[0])?.l ?? 0)) || byTotal(a, b))[0]
+      : [...tot.entries()].sort(byTotal)[0];
+    if (top) {
+      const r = rec.get(top[0]);
+      seasonLine = { leader: seats.get(top[0])?.team_name ?? `Seat ${top[0]}`, total: top[1], weeks: weeks.size,
+        record: cfg.format === 'h2h' && r ? `${r.w}–${r.l}${r.t ? `–${r.t}` : ''}` : null };
+    }
+  }
+  let next = null;
+  if (lg.contest_week == null) {
+    const { data: nk } = await db().from('nfl_slate').select('kickoff').eq('season', String(season)).eq('week', week + 1).not('kickoff', 'is', null).order('kickoff').limit(1);
+    if (nk?.[0]?.kickoff) next = { week: week + 1, lockMs: Date.parse(nk[0].kickoff) };   // v0.669.0: a contest player locks at kickoff
+  }
+  const body = recapBody(cfg, week, ranked, seasonLine, next);
+  const txn = { kind: 'contest_recap', week, contest: cfg.contest, top: ranked.slice(0, 3).map((r) => ({ team: r.team, score: r1(r.score) })) };
+  return { cfg, ranked, body, txn };
+}
+
+/** The voided weeks (0474) of these leagues: league id → Set of weeks. */
+async function voidedWeeks(leagueIds) {
+  const out = new Map();
+  if (!leagueIds.length) return out;
+  const { data } = await db().from('week_void').select('league_id, week').in('league_id', leagueIds);
+  for (const v of data ?? []) { if (!out.has(v.league_id)) out.set(v.league_id, new Set()); out.get(v.league_id).add(Number(v.week)); }
+  return out;
+}
+
 export async function postContestRecaps(week, season, opts = {}) {
   const now = opts.now ?? Date.now();
   if (!opts.force && now - (lastCheck.get(week) ?? 0) < RECHECK_MS) return 0;
@@ -99,56 +160,16 @@ export async function postContestRecaps(week, season, opts = {}) {
   const { data: done } = await db().from('league_message').select('league_id').in('league_id', live.map((l) => l.id))
     .eq('kind', 'txn').eq('txn->>kind', 'contest_recap').eq('txn->>week', String(week));
   for (const d of done ?? []) posted.add(`${d.league_id}:${week}`);
+  const voids = await voidedWeeks(live.map((l) => l.id));
   let n = 0;
   for (const lg of live) {
     if (posted.has(`${lg.id}:${week}`)) continue;
-    const cfg = contestConfigOf(lg.settings_json, lg.kind);
-    if (!cfg) continue;
-    const { data: ms } = await db().from('matchup').select('id, home_roster_id, away_roster_id, home_final, away_final, home_tb, away_tb, status')
-      .eq('league_id', lg.id).eq('week', week);
-    if (!ms?.length || !ms.every((m) => m.status === 'final' && m.home_final != null && m.away_final != null)) continue;
-    const { data: mems } = await db().from('league_membership').select('sleeper_roster_id, team_name, app_user_id, controller, enrolled').eq('league_id', lg.id);
-    const seats = new Map((mems ?? []).map((m) => [m.sleeper_roster_id, m]));
-    const ranked = rankWeek(cfg, ms, seats);
-    if (!ranked.length) continue;
-    let seasonLine = null;
-    if (lg.contest_week == null) {
-      const { data: fin } = await db().from('matchup').select('home_roster_id, away_roster_id, home_final, away_final, week')
-        .eq('league_id', lg.id).eq('status', 'final').lte('week', week);
-      const golf = cfg.contest === 'golf';
-      const tot = new Map(); const weeks = new Set();
-      const rec = new Map(); // roster → {w, l, t} (RECORDS, v0.670.0)
-      const bump = (rid, k) => { const r = rec.get(rid) ?? { w: 0, l: 0, t: 0 }; r[k] += 1; rec.set(rid, r); };
-      for (const m of fin ?? []) {
-        weeks.add(m.week);
-        const h = Number(m.home_final ?? 0), a = Number(m.away_final ?? 0);
-        tot.set(m.home_roster_id, (tot.get(m.home_roster_id) ?? 0) + h);
-        if (m.away_roster_id === m.home_roster_id) continue;
-        tot.set(m.away_roster_id, (tot.get(m.away_roster_id) ?? 0) + a);
-        if (h === a) { bump(m.home_roster_id, 't'); bump(m.away_roster_id, 't'); continue; }
-        const homeWon = golf ? h < a : h > a;
-        bump(homeWon ? m.home_roster_id : m.away_roster_id, 'w'); bump(homeWon ? m.away_roster_id : m.home_roster_id, 'l');
-      }
-      const byTotal = (a, b) => (golf ? a[1] - b[1] : b[1] - a[1]);
-      const top = cfg.format === 'h2h'
-        ? [...tot.entries()].sort((a, b) => ((rec.get(b[0])?.w ?? 0) - (rec.get(a[0])?.w ?? 0)) || ((rec.get(a[0])?.l ?? 0) - (rec.get(b[0])?.l ?? 0)) || byTotal(a, b))[0]
-        : [...tot.entries()].sort(byTotal)[0];
-      if (top) {
-        const r = rec.get(top[0]);
-        seasonLine = { leader: seats.get(top[0])?.team_name ?? `Seat ${top[0]}`, total: top[1], weeks: weeks.size,
-          record: cfg.format === 'h2h' && r ? `${r.w}–${r.l}${r.t ? `–${r.t}` : ''}` : null };
-      }
-    }
-    let next = null;
-    if (lg.contest_week == null) {
-      const { data: nk } = await db().from('nfl_slate').select('kickoff').eq('season', String(season)).eq('week', week + 1).not('kickoff', 'is', null).order('kickoff').limit(1);
-      if (nk?.[0]?.kickoff) next = { week: week + 1, lockMs: Date.parse(nk[0].kickoff) };   // v0.669.0: a contest player locks at kickoff
-    }
-    const body = recapBody(cfg, week, ranked, seasonLine, next);
-    const { error: mErr } = await db().from('league_message').insert({
-      league_id: lg.id, author_id: null, kind: 'txn', body, mentions: [],
-      txn: { kind: 'contest_recap', week, contest: cfg.contest, top: ranked.slice(0, 3).map((r) => ({ team: r.team, score: r1(r.score) })) },
-    });
+    // A VOIDED week (0474) gets no card: the commissioner struck it.
+    if (voids.get(lg.id)?.has(Number(week))) continue;
+    const card = await buildContestRecap(lg, week, season, voids.get(lg.id));
+    if (!card) continue;
+    const { cfg, ranked, body, txn } = card;
+    const { error: mErr } = await db().from('league_message').insert({ league_id: lg.id, author_id: null, kind: 'txn', body, mentions: [], txn });
     if (mErr) { log(lg.name, 'wk', week, 'card', mErr.message); continue; }
     posted.add(`${lg.id}:${week}`);
     n += 1;
@@ -168,4 +189,26 @@ export async function postContestRecaps(week, season, opts = {}) {
     log(lg.name, 'wk', week, '—', ranked[0].team, r1(ranked[0].score), word, `(${ranked.length} squads, ${pushes.length} pushes)`);
   }
   return n;
+}
+
+/** AFTER A RE-SCORE (0474): rebuild the week's card from the corrected finals
+ *  and replace the one in chat (post it if there was none). No pushes — the
+ *  re-score's own house line says which results moved. Returns 'rebuilt',
+ *  'posted', or null when the week has no card to build. */
+export async function repostContestRecap(league, week) {
+  const voids = (await voidedWeeks([league.id])).get(league.id);
+  const card = await buildContestRecap(league, week, league.season, voids);
+  if (!card) return null;
+  const { data: had } = await db().from('league_message').select('id').eq('league_id', league.id)
+    .eq('kind', 'txn').eq('txn->>kind', 'contest_recap').eq('txn->>week', String(week)).order('id', { ascending: false }).limit(1);
+  const id = had?.[0]?.id;
+  if (id != null) {
+    const { error } = await db().from('league_message').update({ body: card.body, txn: card.txn }).eq('id', id);
+    if (error) throw new Error(error.message);
+    return 'rebuilt';
+  }
+  const { error } = await db().from('league_message').insert({ league_id: league.id, author_id: null, kind: 'txn', body: card.body, mentions: [], txn: card.txn });
+  if (error) throw new Error(error.message);
+  posted.add(`${league.id}:${week}`);
+  return 'posted';
 }

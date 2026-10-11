@@ -22,6 +22,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.672.0 — The commissioner fixes a contest week
+
+> - Weekly squad leagues get a FIX A WEEK desk under COMMISH: void a finished week that shouldn't count (and restore it later), correct a player's points after a stat correction, set a member's squad past the kickoff locks, and re-score the week from the plays as they stand — preview first. Every fix is announced in the league chat with the reason.
+> - A voided week stays on the board, marked VOIDED, and drops out of the season standings, the records and the result card.
+
+- HANDOFF's second not-done item. Migration 0474: `week_void` (a row per
+  league-week, not a new matchup status — a voided week must still read
+  as played or the league would snap back to it), `commish_void_week`
+  (final weeks only; restore deletes; both tell the chat), `contest_week_list`
+  (the picker), contest_board/bullseye_my_weeks carry `void`/`voided` and
+  the season rows skip voided weeks. 0355's stat correction reaches a
+  contest league: the player check and the search read the week's priced
+  board (`pod_salary`) and `_txn_player` names a board player. The squad
+  rules are one function now, `_contest_squad_check`, called by
+  save_contest_entry (member: ruled-out rule and kickoff locks on top) and
+  by the new `commish_set_contest_squad` (past the locks; a reason; the
+  old and new squads to `lineup_edit_log`; the chat told who came in and
+  out; `rescore` when the week is stamped); `commish_contest_squad` reads
+  a seat's squad. 0353's re-score already resolved contest squads (classic
+  by game_mode); the worker's apply now rebuilds the contest RESULT CARD in
+  place (`repostContestRecap`) instead of a classic weekly report, and the
+  recap skips a voided week and leaves it out of the season line. Screens:
+  `ContestFixWeekPanel` / `ContestFixWeekCard` on the contest COMMISH card
+  (web, phone) reuse the classic console's RescoreBox and AdjustBox, with a
+  contest `SquadFixBox` (seat, a player per spot from the board, the spend
+  against the budget) in the lineup fix's slot; the league and MY WEEKS
+  mark a voided week. `scripts/db/scratch/flow16.sql` + `stub10.sql`;
+  recap and rescore checks grew cases. No iPhone build needed.
+
 ### v0.671.0 — Where am I on a big leaderboard, and find a team
 
 > - On a leaderboard too long to show whole, the standings now show your own stretch of the table — the five teams above you and the five below, with you in the middle — instead of a lone "You: #23,418" line under the top 100.

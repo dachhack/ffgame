@@ -64,11 +64,14 @@ const tables = {
   league: [
     { id: CL, name: 'Classic', season: '2026', settings_json: { game_mode: 'classic' } },
     { id: DR, name: 'Drip', season: '2026', settings_json: { game_mode: 'drip' } },
+    // A CONTEST LEAGUE (0474): classic by game_mode, its record the result card.
+    { id: 'CO', name: 'Bull', kind: 'dfs', season: '2026', settings_json: { game_mode: 'classic', contest: 'high', contest_format: 'board' } },
   ],
   matchup: [
     { id: 'm1', league_id: CL, week: 3, status: 'final', home_roster_id: 1, away_roster_id: 2, home_final: 100.0, away_final: 98.0 },
     { id: 'm2', league_id: CL, week: 3, status: 'final', home_roster_id: 3, away_roster_id: 4, home_final: 80.0, away_final: 90.0 },
     { id: 'd1', league_id: DR, week: 3, status: 'final', home_roster_id: 1, away_roster_id: 2, home_final: 50, away_final: 60 },
+    { id: 'c1', league_id: 'CO', week: 3, status: 'final', home_roster_id: 1, away_roster_id: 1, home_final: 30, away_final: 30 },
   ],
   league_membership: [
     { league_id: CL, sleeper_roster_id: 1, app_user_id: U1, team_name: 'Ones' },
@@ -91,9 +94,9 @@ const tables = {
 const { client, rpcs } = makeFakeDb(tables);
 __setClientForTest(client);
 
-const calls = { resolve: [], stamp: [], report: [], slate: [] };
+const calls = { resolve: [], stamp: [], report: [], slate: [], card: [] };
 // m1 flips (100–98 → 97–99.5); m2 unchanged.
-const NOW = { m1: { home: 97.0, away: 99.5 }, m2: { home: 80.0, away: 90.0 } };
+const NOW = { m1: { home: 97.0, away: 99.5 }, m2: { home: 80.0, away: 90.0 }, c1: { home: 36.5, away: 36.5 } };
 const deps = {
   installWeekSlate: async (w, s) => { calls.slate.push([w, s]); return w === 7 ? 0 : 16; },
   injectWeekPlays: async () => {},
@@ -114,6 +117,7 @@ const deps = {
   },
   buildLeagueReport: async (_l, week) => ({ headline: `week ${week}` }),
   postReport: async (l, week, _r, opts) => { calls.report.push({ league: l.id, week, force: opts.force }); },
+  repostContestRecap: async (l, week) => { calls.card.push({ league: l.id, week }); return 'rebuilt'; },
 };
 
 // ── 1. a preview, a drip refusal, and the one already running left alone ──
@@ -156,6 +160,17 @@ tables.rescore_request.push({ id: 5, league_id: CL, week: 3, apply: true, starte
 await sweepRescores(null, () => {}, deps);
 assert.equal(tables.rescore_request.find((r) => r.id === 5).result.changed, 0);
 assert.equal(calls.report.length, 1, 'no change, no second report');
+
+// ── 3b. a contest league's apply rebuilds its result card, not a weekly report (0474) ──
+tables.rescore_request.push({ id: 11, league_id: 'CO', week: 3, apply: true, started_at: null, done_at: null });
+n = await sweepRescores(null, () => {}, deps);
+assert.equal(n, 1);
+const co = tables.rescore_request.find((r) => r.id === 11);
+assert.equal(co.error, null, 'a contest league is re-scored (it is classic by game_mode)');
+assert.equal(co.result.changed, 1);
+assert.equal(co.result.report, 'rebuilt', 'the result card was rebuilt');
+assert.deepEqual(calls.card, [{ league: 'CO', week: 3 }], 'through the recap, for that league-week');
+assert.equal(calls.report.length, 1, 'and no weekly report was built for it');
 
 // ── 4. no slate, and a scorer that throws: closed with the reason, sweep goes on ──
 tables.matchup.push({ id: 'm7', league_id: CL, week: 7, status: 'final', home_roster_id: 1, away_roster_id: 2, home_final: 1, away_final: 2 });

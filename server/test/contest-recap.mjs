@@ -41,8 +41,9 @@ function builder(name, preds = [], order = null) {
     order: (col, o = {}) => builder(name, preds, { col, asc: o.ascending !== false }),
     limit: () => api,
     then: (res, rej) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
-    insert: (row) => { inserts.push({ table: name, row }); (T[name] ??= []).push(row); return Promise.resolve({ error: null }); },
+    insert: (row) => { inserts.push({ table: name, row }); (T[name] ??= []).push({ id: T[name].length + 1, ...row }); return Promise.resolve({ error: null }); },
     upsert: (list) => { inserts.push({ table: name, rows: list }); return Promise.resolve({ error: null }); },
+    update: (patch) => ({ eq: (c, v) => { for (const r of (T[name] ?? []).filter((x) => String(x[c]) === String(v))) Object.assign(r, patch); return Promise.resolve({ error: null }); } }),
   };
   return api;
 }
@@ -88,6 +89,23 @@ if (R2) { n = await R2.postContestRecaps(6, '2026', { force: true, now: Date.par
 T.matchup.push({ id: 'm9', league_id: 'L1', week: 7, status: 'live', home_roster_id: 1, away_roster_id: 2, home_final: null, away_final: null });
 n = await R.postContestRecaps(7, '2026', { force: true, now: Date.parse('2026-10-21T12:00:00Z') });
 ok('post: an unfinished week posts nothing', n === 0 && T.league_message.length === 1);
+
+// ── after a re-score, the card is rebuilt in place (0474) ───────────────────
+T.matchup.find((m) => m.id === 'm2').away_final = 160;   // Red Zone's corrected final
+let re = await R.repostContestRecap(L, 6);
+ok('repost: the card in chat is replaced, not doubled', re === 'rebuilt' && T.league_message.length === 1 && /🥇 Red Zone — 160 ring/.test(T.league_message[0].body), T.league_message.map((m) => m.body));
+ok('repost: no pushes the second time', (inserts.filter((i) => i.table === 'push_outbox').length) === 1);
+re = await R.repostContestRecap(L, 7);
+ok('repost: an unfinished week has no card to rebuild', re === null && T.league_message.length === 1);
+// ── a voided week (0474) ────────────────────────────────────────────────────
+T.week_void = [{ league_id: 'L1', week: 5 }];
+re = await R.repostContestRecap(L, 6);
+ok('void: a voided week drops out of the season line', re === 'rebuilt' && /after 1 week\./.test(T.league_message[0].body) && !/2 weeks/.test(T.league_message[0].body), T.league_message[0].body);
+T.week_void = [{ league_id: 'L1', week: 6 }];
+T.league_message.length = 0;
+const R3 = await import('../src/contestRecap.js?fresh=2').catch(() => null);
+if (R3) { n = await R3.postContestRecaps(6, '2026', { force: true, now: Date.parse('2026-10-14T12:20:00Z') }); ok('void: a voided week gets no card', n === 0 && T.league_message.length === 0); }
+T.week_void = [];
 
 // ── the lock reminder ───────────────────────────────────────────────────────
 const P = await import('../src/push.js');

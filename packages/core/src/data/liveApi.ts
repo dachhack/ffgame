@@ -878,10 +878,13 @@ export interface BullseyeLeagueBoard {
   near?: BullseyeBoardRow[];
   /** A team-name search's hits (0473), by rank; empty without a query. */
   found?: BullseyeBoardRow[];
+  /** VOIDED (0474): this week was struck by the commissioner, and every week that was. */
+  void?: boolean; voided?: number[];
   /** Season leagues only: ring totals summed over the stamped weeks. */
   season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null; near?: BullseyeSeasonRow[]; found?: BullseyeSeasonRow[] } | null;
 }
-export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number }
+export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number;
+  /** VOIDED (0474): the commissioner struck the week; it doesn't count. */ void?: boolean }
 /** WEEKLY LEAGUES (v0.662.0, founder: "maybe have another filter for weekly
  *  draft leagues"): the kinds where you build a fresh squad every week instead
  *  of drafting a season roster — pods, showdowns, DFS and Bullseye leagues.
@@ -947,6 +950,29 @@ export const saveContestEntry = (leagueId: string, week: number, slots: Record<s
   rpcOk<{ ok: boolean; error?: string; spent?: number; budget?: number }>('save_contest_entry', { p_league: leagueId, p_week: week, p_slots: slots, p_season: season });
 export const contestBoard = (leagueId: string, week?: number | null, limit = 100, near = 5, find: string | null = null) =>
   rpcOk<BullseyeLeagueBoard & { contest?: ContestKind }>('contest_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit, p_near: near, p_find: find || null });
+// ── THE COMMISSIONER FIXES A CONTEST WEEK (0474) ─────────────────────────────
+export interface ContestWeekRow { week: number; status: string; final: boolean; void: boolean; void_note: string | null; entries: number; stamped: number; matchups: number }
+/** Every week the league has a row for: final or not, voided or not, how many squads. */
+export const contestWeekList = (leagueId: string) =>
+  rpcOk<{ ok: boolean; error?: string; week?: number | null; weeks?: ContestWeekRow[] }>('contest_week_list', { p_league: leagueId });
+/** Void a final week (it stops counting; the league is told why), or restore it. */
+export const commishVoidWeek = (leagueId: string, week: number, on: boolean, note?: string | null) =>
+  tracked(rpcOk<{ ok: boolean; error?: string; void?: boolean; already?: boolean }>('commish_void_week', { p_league: leagueId, p_week: week, p_void: on, p_note: note ?? null }),
+    Ev.commishAction, { tool: on ? 'void_week' : 'restore_week' });
+export interface CommishContestSquad {
+  ok: boolean; error?: string; roster_id?: number; team?: string | null; week?: number; season?: string;
+  entry?: unknown; status?: string | null; stamped?: boolean;
+  slots?: (import('../engine/classic').SlotSpec & { slot: string })[]; budget?: number; min_spend?: number;
+}
+/** A seat's saved squad for a week, for the commissioner. */
+export const commishContestSquad = (leagueId: string, week: number, rosterId: number) =>
+  rpcOk<CommishContestSquad>('commish_contest_squad', { p_league: leagueId, p_week: week, p_roster: rosterId });
+/** Set a seat's squad past the kickoff locks, under every other rule; a
+ *  reason is required and the league is told. `rescore` says the week is
+ *  stamped and keeps its finals until re-scored. */
+export const commishSetContestSquad = (leagueId: string, week: number, rosterId: number, slots: Record<string, string | null>, note: string) =>
+  tracked(rpcOk<{ ok: boolean; error?: string; in?: string[]; out?: string[]; spent?: number; rescore?: boolean }>('commish_set_contest_squad',
+    { p_league: leagueId, p_week: week, p_roster: rosterId, p_slots: slots, p_note: note }), Ev.commishAction, { tool: 'contest_squad_fix' });
 /** The search alone (0473): the first 20 teams whose name contains `q`, by
  *  rank, on the week board and (season leagues) the standings. */
 export const contestBoardFind = (leagueId: string, week: number | null | undefined, q: string) =>

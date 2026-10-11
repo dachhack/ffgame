@@ -296,8 +296,9 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
       </Card>
       <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />
       <Card style={{ gap: 2 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${b.format === 'h2h' ? ' · HEAD-TO-HEAD' : ''}`}</Mono>
+        <Mono size={9} tone="faint" weight="700" track={0.1}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${b.format === 'h2h' ? ' · HEAD-TO-HEAD' : ''}${bd?.void ? ' · VOIDED' : ''}`}</Mono>
         {bd && !bd.started && <Mono size={9} tone="faint">Squads and scores show once the week’s first game locks.</Mono>}
+        {bd?.void && <Mono size={9} tone="warn">The commissioner voided this week — it doesn’t count in the standings.</Mono>}
         {big && <Field value={q} onChangeText={setQ} maxLength={30} placeholder="Find a team…" autoCorrect={false} style={{ marginTop: 4, marginBottom: 4 }} />}
         {hits && (
           <>
@@ -360,7 +361,7 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
     const golf = lg.bullseye?.contest === 'golf';
     let w = 0, l = 0, tt = 0;
     for (const x of weeks ?? []) {
-      if (x.status !== 'final' || x.opp == null || x.ring == null || x.opp_ring == null) continue;
+      if (x.status !== 'final' || x.void || x.opp == null || x.ring == null || x.opp_ring == null) continue;
       const a = Number(x.ring), bb = Number(x.opp_ring);
       if (a === bb) tt++; else if (golf ? a < bb : a > bb) w++; else l++;
     }
@@ -387,7 +388,7 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
           <Pressable key={w.week} onPress={() => { tap(); onOpenWeek(w.week); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
             <Mono size={11} tone="text" style={{ width: 64 }}>{`Week ${w.week}`}</Mono>
-            <Mono size={9} tone="faint" style={{ flex: 1 }} numberOfLines={1}>{`${w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}${w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : w.rank != null ? ` · #${w.rank} of ${n0(w.entries)}` : ''}`}</Mono>
+            <Mono size={9} tone="faint" style={{ flex: 1 }} numberOfLines={1}>{`${w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}${w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : w.rank != null ? ` · #${w.rank} of ${n0(w.entries)}` : ''}`}</Mono>
             <Mono size={11} weight="700" tone="text">{w.ring != null ? Number(w.ring).toFixed(1) : '—'}</Mono>
           </Pressable>
         ))}
