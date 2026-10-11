@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.680.2 — The phone scoreboard's cells stack
+
+> - On the phone, the contest table's scoreboard put each squad's points and its distance from the target side by side, and the two squads' labels ran into each other in the middle. Each side's cells now stack: points over the distance.
+
+Founder, with a screenshot of the Bullseye table: "Some label collision."
+The phone's `scoreboard` in `apps/mobile/src/screens/ContestMatchup.tsx`
+stacks the points cell over the ring cell (both labels may wrap to two
+lines); the web's row wraps when it must. Plain JS: no iPhone build.
+
 ### v0.680.1 — The contest table's scoreboard
 
 > - The top of the weekly contest table is now a scoreboard: each squad's points so far with where they project to land, and in a Bullseye league how far off the target they sit, with the projected distance beside it. The "closest ring wins" line is gone; the numbers say it.

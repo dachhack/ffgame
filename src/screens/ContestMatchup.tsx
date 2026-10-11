@@ -145,7 +145,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     return (
       <div style={{ display: 'grid', gap: 3, textAlign: edge, minWidth: 0 }}>
         <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: S.mine ? '#E9B959' : 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</span>
-        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexDirection: edge === 'left' ? 'row' : 'row-reverse' }}>
+        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap', flexDirection: edge === 'left' ? 'row' : 'row-reverse' }}>
           <div style={cell}>
             <span className="mono" style={{ ...big, color: t.points != null ? color : 'rgba(255,255,255,0.35)' }}>{fmt(t.points)}</span>
             <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}`}</span>
