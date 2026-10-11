@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.663.0 — The dev chat gets every chat tool, and @computer for everyone
+
+> - The dev chat now has every league chat tool: pictures, GIFs, polls, reactions, @mentions, edits and pins.
+> - It's one plain chat window, with no idea/bug buttons. Anyone in it can type @computer to send a question or bug straight to the developer.
+
+- Migration 0465: dev_room_message gains kind (text/poll/computer), poll,
+  mentions, caption, pinned, edited_at/by, fix. New tables dev_room_reaction
+  and dev_room_poll_vote. New RPCs dev_room_post (mentions + caption),
+  _post_poll, _poll_cast, _react, _edit, _pin; dev_room_messages returns pins,
+  last_read and unread. Storage policies cover dev/<room>/<author>/… in
+  chat-image. computer_ask takes source 'dev'.
+- LeagueChat (web and phone) runs on a ChatBackend; league chat's is the
+  default (no behaviour change), and DevChat/devChatBackend is the dev room's.
+  The dev room screens, the floating chip's panel and league chat's 🛠 DEV tab
+  all use it. The idea/bug chips are gone.
+- Worker: computer.js files @computer from any dev room member (COMPUTER_USERS
+  still gates league chat and DMs), replies in the room, and relays the fix
+  card. push.js pushes dev room @mentions. server/test/computer-dev.mjs covers
+  this.
+
 ### v0.662.0 — Dev chat: a floating chip and a roster; a WEEKLY filter instead of the Bullseye banner
 
 > - The dev chat is a floating 🛠 DEV chip at the bottom left of My Leagues.

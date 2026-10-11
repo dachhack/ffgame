@@ -1,25 +1,22 @@
-// THE DEV ROOM, native (v0.658.0, 0459) — the web twin's note
-// (src/screens/DevRoom.tsx): a chat that belongs to no league, joined by an
-// admin's invite code, where a message tagged 💡 idea or 🐞 bug is filed as a
-// public GitHub issue (no names) by the worker and comes back with its number.
+// THE DEV ROOM, native (v0.658.0, 0459; v0.663.0) — the web twin's note
+// (src/screens/DevRoom.tsx): a chat that belongs to no league. An admin
+// switches people in from the list of every registered player (0464); the
+// thread is league chat's own (ui/Chat.tsx DevChat) with every tool, and
+// @computer from any member is filed by the worker.
 //
-// Reached from the gear (everyone: a tester types their code there) and from
-// the leagues list (members and admins, with the unread count).
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+// Reached from the gear and from the floating 🛠 DEV chip on the leagues list.
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import {
-  devRoomsMine, devRoomCreate, devRoomMessages, devRoomPost, devRoomTag, devRoomDelete,
+  devRoomsMine, devRoomCreate,
   devRoomMembers, devRoomRemove, devRoomSetOpen, devRoomUsers, devRoomSetMember, friendlyError,
-  type DevRoom, type DevMessage, type DevMember, type DevTag, type DevUser,
+  type DevRoom, type DevMember, type DevUser,
 } from '@drip/core/data/liveApi';
-import { issueUrl, TAG_LABEL } from '@drip/core/data/devRoom';
 import { useTheme } from '../theme.native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DevChat } from '../ui/Chat';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, Mono } from '../ui/prims';
-
-const POLL_MS = 5000;
-const fmtAt = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
 
 /** The leagues list's door: a member of any room, or an admin. */
 export function DevRoomBanner({ onOpen }: { onOpen: (roomId: string | null) => void }) {
@@ -101,13 +98,6 @@ export function DevRoomPanel({ rooms }: { rooms: DevRoom[] }) {
   );
 }
 
-/** Rooms I'm in (an open room joins me on this read) — for the chat chip. */
-export function useDevRooms(): DevRoom[] {
-  const [rooms, setRooms] = useState<DevRoom[]>([]);
-  useEffect(() => { let alive = true; devRoomsMine().then((r) => { if (alive && r.ok) setRooms(r.rooms ?? []); }).catch(() => {}); return () => { alive = false; }; }, []);
-  return rooms;
-}
-
 export function DevRoomScreen({ roomId: initial, onBack }: { roomId: string | null; onBack: () => void }) {
   const t = useTheme();
   const [roomId, setRoomId] = useState<string | null>(initial);
@@ -170,110 +160,24 @@ function RoomList({ onPick }: { onPick: (id: string) => void }) {
 }
 
 function Room({ roomId, onLeft }: { roomId: string; onLeft: () => void }) {
-  const t = useTheme();
   const [tab, setTab] = useState<'chat' | 'people'>('chat');
   const [name, setName] = useState('');
-  const [msgs, setMsgs] = useState<DevMessage[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const [tag, setTag] = useState<DevTag | null>(null);
-  const [busy, setBusy] = useState(false);
   const [admin, setAdmin] = useState(false);
-  const scroller = useRef<ScrollView | null>(null);
-
-  const load = useCallback(async () => {
-    const r = await devRoomMessages(roomId);
-    if (!r.ok) { setErr(r.error ?? 'Couldn’t read the room.'); return; }
-    setErr(null); setName(r.name ?? ''); setMsgs([...(r.messages ?? [])].reverse());
-  }, [roomId]);
   useEffect(() => {
-    void load().catch((e) => setErr(friendlyError(e)));
+    devRoomsMine().then((r) => { if (r.ok) setName(r.rooms?.find((x) => x.id === roomId)?.name ?? ''); }).catch(() => {});
     devRoomMembers(roomId).then((r) => { if (r.ok) setAdmin(!!r.admin); }).catch(() => {});
-    const iv = setInterval(() => { void load().catch(() => {}); }, POLL_MS);
-    return () => clearInterval(iv);
-  }, [load, roomId]);
-
-  const send = async () => {
-    if (!draft.trim() || busy) return;
-    setBusy(true);
-    try {
-      const r = await devRoomPost(roomId, draft, tag);
-      if (!r.ok) { setErr(r.error ?? 'Didn’t send.'); return; }
-      setDraft(''); setTag(null); await load();
-    } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
-  };
-  const retag = async (m: DevMessage, next: DevTag | null) => {
-    const r = await devRoomTag(m.id, next).catch((e) => ({ ok: false, error: friendlyError(e) }));
-    if (!r.ok) setErr(r.error ?? 'Couldn’t tag it.'); else await load();
-  };
-  const del = (m: DevMessage) => Alert.alert('Delete this message?', undefined, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: async () => {
-      const r = await devRoomDelete(m.id).catch((e) => ({ ok: false, error: friendlyError(e) }));
-      if (!r.ok) setErr(r.error ?? 'Couldn’t delete it.'); else await load();
-    } },
-  ]);
-
+  }, [roomId]);
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingBottom: 6 }}>
         <Display size={17} style={{ flex: 1 }}>{name}</Display>
         <Chip small label="CHAT" on={tab === 'chat'} onPress={() => { tap(); setTab('chat'); }} />
-        <Chip small label={admin ? 'PEOPLE & INVITES' : 'PEOPLE'} on={tab === 'people'} onPress={() => { tap(); setTab('people'); }} />
+        <Chip small label={admin ? 'PEOPLE' : 'WHO’S HERE'} on={tab === 'people'} onPress={() => { tap(); setTab('people'); }} />
       </View>
-      {err && <Mono size={10} tone="warn" style={{ paddingHorizontal: 12 }}>{err}</Mono>}
       {tab === 'people' ? <People roomId={roomId} roomName={name} onLeft={onLeft} /> : (
-        <>
-          <ScrollView ref={scroller} style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12 }}
-            onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}>
-            {!msgs.length && <Mono size={10} tone="faint">Nothing yet. Say what you’d change — tag it 💡 or 🐞 to log it.</Mono>}
-            {msgs.map((m) => {
-              const open = !m.issue && !m.filing;
-              const canTag = open && (m.mine || admin);
-              return (
-                <View key={m.id} style={{ gap: 3 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <Mono size={9} weight="700" tone={m.mine ? 'you' : 'dim'}>{m.mine ? 'you' : m.author}</Mono>
-                    <Mono size={8.5} tone="faint">{fmtAt(m.at)}</Mono>
-                    {m.tag && <Mono size={8.5} weight="700" tone={m.tag === 'bug' ? 'warn' : 'you'}>{TAG_LABEL[m.tag]}</Mono>}
-                    {m.issue ? (
-                      <Pressable hitSlop={6} onPress={() => { tap(); void Linking.openURL(issueUrl(m.issue!)); }}>
-                        <Mono size={8.5} tone="you">{`logged #${m.issue} ↗`}</Mono>
-                      </Pressable>
-                    ) : m.tag ? <Mono size={8.5} tone="faint">{m.filing ? 'logging…' : 'queued to log'}</Mono> : null}
-                  </View>
-                  <Text selectable style={{ fontSize: 14, lineHeight: 20, color: t.text }}>{m.body}</Text>
-                  {(canTag || m.mine || admin) && (
-                    <View style={{ flexDirection: 'row', gap: 14 }}>
-                      {canTag && (['idea', 'bug'] as const).map((k) => (
-                        <Pressable key={k} hitSlop={6} onPress={() => { tap(); void retag(m, m.tag === k ? null : k); }}>
-                          <Mono size={8.5} tone={m.tag === k ? 'you' : 'faint'}>{m.tag === k ? `✓ ${TAG_LABEL[k]}` : `tag ${TAG_LABEL[k]}`}</Mono>
-                        </Pressable>
-                      ))}
-                      {(m.mine || admin) && (
-                        <Pressable hitSlop={6} onPress={() => { tap(); del(m); }}><Mono size={8.5} tone="faint">delete</Mono></Pressable>
-                      )}
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </ScrollView>
-          <View style={{ borderTopWidth: 1, borderTopColor: t.bd, padding: 10, gap: 8, backgroundColor: t.surface }}>
-            <Field value={draft} onChangeText={setDraft} maxLength={1000} multiline placeholder="A suggestion, a bug, a thought…" style={{ maxHeight: 120 }} />
-            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-              <Chip small label="JUST CHAT" on={tag === null} onPress={() => { tap(); setTag(null); }} />
-              <Chip small label={TAG_LABEL.idea} on={tag === 'idea'} onPress={() => { tap(); setTag('idea'); }} />
-              <Chip small label={TAG_LABEL.bug} on={tag === 'bug'} onPress={() => { tap(); setTag('bug'); }} />
-              <View style={{ flex: 1 }} />
-              <Chip label="SEND" on disabled={busy || !draft.trim()} onPress={() => { tap(); void send(); }} />
-            </View>
-            {/* THE PUBLIC LINE, where the tag is chosen (see the web twin). */}
-            <Mono size={8.5} tone="faint">
-              {tag ? 'Tagged messages are logged as public GitHub issues (your name isn’t included).' : 'Tag a message 💡 or 🐞 to log it as a public GitHub issue (no names).'}
-            </Mono>
-          </View>
-        </>
+        // EVERY CHAT TOOL (v0.663.0): league chat's own thread on the room's
+        // backend — pictures, GIFs, polls, reactions, @mentions, @computer.
+        <View style={{ flex: 1, paddingHorizontal: 12 }}><DevChat roomId={roomId} bottomPad={10} /></View>
       )}
     </View>
   );

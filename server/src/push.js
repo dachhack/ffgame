@@ -165,6 +165,25 @@ async function detectChat() {
       });
     }
   }
+  // THE DEV ROOM (v0.663.0, 0465): an @mention there pushes like one in
+  // league chat.
+  const { data: dev } = await db().from('dev_room_message')
+    .select('id, room_id, body, mentions, created_at')
+    .gt('created_at', sinceIso()).neq('mentions', '{}');
+  const roomIds = [...new Set((dev ?? []).map((m) => m.room_id))];
+  const { data: rooms } = roomIds.length ? await db().from('dev_room').select('id, name').in('id', roomIds) : { data: [] };
+  const roomName = new Map((rooms ?? []).map((r) => [r.id, r.name]));
+  for (const m of dev ?? []) {
+    for (const uid of m.mentions ?? []) {
+      rows.push({
+        app_user_id: uid, kind: 'chat',
+        title: `You were mentioned · ${roomName.get(m.room_id) ?? 'the dev room'}`,
+        body: String(m.body ?? '').slice(0, 140),
+        data: { room_id: m.room_id, open: 'devroom' },
+        dedupe_key: `dev:m${m.id}:${uid}`,
+      });
+    }
+  }
   // New polls (0152): the whole league hears about a question, not just the
   // mentioned. Author excluded — you asked it.
   const { data: polls } = await db().from('league_message')

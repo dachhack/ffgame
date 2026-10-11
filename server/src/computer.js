@@ -17,6 +17,11 @@
 // choice: names hidden), their @mentions are masked and their pictures are
 // left out; the asker's own lines and screenshots go in as posted.
 //
+// THE DEV ROOM (v0.663.0, 0465; founder: "allow at computer for everyone in
+// dev chat"): a third source. ANY member's dev room line that says @computer
+// is filed — COMPUTER_USERS gates league chat and DMs only — and the house
+// reply and the closing fix card post back into the room.
+//
 // Once-only: computer_ask (0363) is claimed BEFORE the issue is opened, and the
 // claim is released if GitHub refuses, so a sweep that overlaps the last one,
 // or a restart mid-window, can neither double-file nor drop a question.
@@ -77,6 +82,8 @@ export function contextSection(msgs, askerId) {
 export async function chatBefore(a) {
   const q = a.source === 'league'
     ? db().from('league_message').select('id, author_id, body, caption, kind, created_at').eq('league_id', a.league_id)
+    : a.source === 'dev'
+    ? db().from('dev_room_message').select('id, author_id, body, caption, kind, created_at').eq('room_id', a.room_id)
     : db().from('dm_message').select('id, author_id, body, caption, created_at').eq('thread_id', a.thread_id);
   const { data, error } = await q.lt('created_at', a.created_at)
     .order('created_at', { ascending: false }).limit(CONTEXT_N);
@@ -153,8 +160,8 @@ export async function postContext(n) {
   if (!process.env.GH_ISSUES_TOKEN) throw new Error('GH_ISSUES_TOKEN unset');
   const { data: ask } = await db().from('computer_ask').select('source, message_id').eq('issue', n).maybeSingle();
   if (!ask) throw new Error(`no chat ask filed as #${n}`);
-  const table = ask.source === 'league' ? 'league_message' : 'dm_message';
-  const cols = ask.source === 'league' ? 'id, league_id, author_id, created_at' : 'id, thread_id, author_id, created_at';
+  const table = ask.source === 'league' ? 'league_message' : ask.source === 'dev' ? 'dev_room_message' : 'dm_message';
+  const cols = ask.source === 'league' ? 'id, league_id, author_id, created_at' : ask.source === 'dev' ? 'id, room_id, author_id, created_at' : 'id, thread_id, author_id, created_at';
   const { data: m, error } = await db().from(table).select(cols).eq('id', ask.message_id).maybeSingle();
   if (error || !m) throw new Error(`the ask's message is gone (${error?.message ?? 'deleted'})`);
   const ctx = contextSection(await chatBefore({ ...m, source: ask.source }), m.author_id);
@@ -356,6 +363,12 @@ export async function relayFixes(now = Date.now()) {
           const { error: e } = await db().from('league_message').insert({ league_id: m.league_id, author_id: null, kind: 'computer', body: line, mentions: [], txn: { fix } });
           if (e) { log('relay failed', a.issue, e.message); continue; }
         }
+      } else if (a.source === 'dev') {
+        const { data: m } = await db().from('dev_room_message').select('room_id').eq('id', a.message_id).maybeSingle();
+        if (m?.room_id) {
+          const { error: e } = await db().from('dev_room_message').insert({ room_id: m.room_id, author_id: null, kind: 'computer', body: line, mentions: [], fix });
+          if (e) { log('relay failed', a.issue, e.message); continue; }
+        }
       } else {
         const { data: m } = await db().from('dm_message').select('author_id').eq('id', a.message_id).maybeSingle();
         if (m?.author_id) receipts.push({
@@ -377,23 +390,32 @@ let warned = false;
 /** One sweep. Returns push rows (a receipt to the asker) for the caller to enqueue. */
 export async function sweepComputer() {
   const who = askers();
-  if (!who.length) return [];
   if (!process.env.GH_ISSUES_TOKEN) {
     if (!warned) { log('GH_ISSUES_TOKEN unset — @computer is off'); warned = true; }
     return [];
   }
   const since = new Date(Date.now() - SCAN_MS).toISOString();
-  const [{ data: lm }, { data: dm }] = await Promise.all([
-    db().from('league_message').select('id, league_id, author_id, body, caption, created_at')
-      .gt('created_at', since).in('author_id', who),
-    db().from('dm_message').select('id, thread_id, author_id, body, caption, created_at')
-      .gt('created_at', since).in('author_id', who),
+  const none = Promise.resolve({ data: [] });
+  const [{ data: lm }, { data: dm }, { data: dv }] = await Promise.all([
+    who.length ? db().from('league_message').select('id, league_id, author_id, body, caption, created_at')
+      .gt('created_at', since).in('author_id', who) : none,
+    who.length ? db().from('dm_message').select('id, thread_id, author_id, body, caption, created_at')
+      .gt('created_at', since).in('author_id', who) : none,
+    // The dev room: everyone in it (v0.663.0), not just COMPUTER_USERS.
+    db().from('dev_room_message').select('id, room_id, author_id, body, caption, created_at')
+      .gt('created_at', since).eq('kind', 'text').not('author_id', 'is', null),
   ]);
+  const asked = (m) => isComputerAsk(m.body) || isComputerAsk(m.caption);
   const asks = [
-    ...(lm ?? []).filter((m) => isComputerAsk(m.body) || isComputerAsk(m.caption)).map((m) => ({ ...m, source: 'league' })),
-    ...(dm ?? []).filter((m) => isComputerAsk(m.body) || isComputerAsk(m.caption)).map((m) => ({ ...m, source: 'dm' })),
+    ...(lm ?? []).filter(asked).map((m) => ({ ...m, source: 'league' })),
+    ...(dm ?? []).filter(asked).map((m) => ({ ...m, source: 'dm' })),
+    ...(dv ?? []).filter(asked).map((m) => ({ ...m, source: 'dev' })),
   ];
   if (!asks.length) return [];
+  const roomIds = [...new Set(asks.filter((a) => a.source === 'dev').map((a) => a.room_id))];
+  const { data: rooms } = roomIds.length
+    ? await db().from('dev_room').select('id, name').in('id', roomIds) : { data: [] };
+  const roomName = new Map((rooms ?? []).map((r) => [r.id, r.name]));
 
   // Name the chat: the league for a league line, the league of the thread for a DM.
   const threadIds = [...new Set(asks.filter((a) => a.source === 'dm').map((a) => a.thread_id))];
@@ -414,7 +436,9 @@ export async function sweepComputer() {
     if (!claim?.length) continue;                     // already filed
 
     const lid = a.league_id ?? threadLeague.get(a.thread_id);
-    const where = `${a.source === 'dm' ? 'DM in ' : ''}${leagueName.get(lid) ?? 'a league'} (${lid ?? '?'})`;
+    const where = a.source === 'dev'
+      ? `the dev room "${roomName.get(a.room_id) ?? 'Dev room'}"`
+      : `${a.source === 'dm' ? 'DM in ' : ''}${leagueName.get(lid) ?? 'a league'} (${lid ?? '?'})`;
     const image = looksLikeUrl(a.body) ? a.body : null;   // an image post's body is its bare URL (0350)
     const text = image ? (a.caption ?? '') : a.body;
     try {
@@ -430,6 +454,12 @@ export async function sweepComputer() {
       if (a.source === 'league') {
         const { error: rErr } = await db().from('league_message').insert({
           league_id: a.league_id, author_id: null, kind: 'computer',
+          body: `${snarkFor(a.id)} (#${n})`, mentions: [],
+        });
+        if (rErr) log('reply failed', a.id, rErr.message);
+      } else if (a.source === 'dev') {
+        const { error: rErr } = await db().from('dev_room_message').insert({
+          room_id: a.room_id, author_id: null, kind: 'computer',
           body: `${snarkFor(a.id)} (#${n})`, mentions: [],
         });
         if (rErr) log('reply failed', a.id, rErr.message);

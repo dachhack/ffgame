@@ -11,15 +11,16 @@
 // matchup wire and chat doesn't need to be faster than the scoreboard.
 // Opening a surface marks it read server-side (fetching the latest page IS
 // the read); the badge poll never marks anything.
-import { DevRoomPanel, useDevRooms } from '../screens/DevRoom';
 import { Ev, track } from '@drip/core/analytics';
 import { mentionIds } from '@drip/core/data/mentions';
 import { catchUpOf, catchUpLabel, type CatchUp } from '@drip/core/data/chatCatchUp';
 import { CHAT_REACTIONS, orderedReactions, reactionLabel, type ChatReactionCount } from '@drip/core/data/chatReactions';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   chatPost, chatMessages, chatDelete, chatEdit, chatUnread, chatMembers, dmSend, dmThreads, dmMessages, dmEdit,
   chatPostPoll, pollCast, chatPin, chatReact, leagueReport, leagueWaiverRun,
+  devRoomsMine, devRoomMessages, devRoomMembers, devRoomPost, devRoomDelete, devRoomEdit, devRoomPin, devRoomReact,
+  devRoomPollCast, devRoomPostPoll, devImageFolder, type DevRoom, type DevMessage,
   leagueNote, friendlyError,
   type ChatMessage, type DmThreadRow, type DmMessage,
 } from '@drip/core/data/liveApi';
@@ -299,7 +300,7 @@ export function ReportSheet({ leagueId, week, onClose }: { leagueId: string; wee
   );
 }
 
-function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; onVoted: () => void }) {
+function PollView({ m, be, onVoted }: { m: ChatMessage; be: ChatBackend; onVoted: () => void }) {
   const p = m.poll;
   if (!p) return null;
   const total = p.total || 0;
@@ -309,7 +310,7 @@ function PollView({ m, leagueId, onVoted }: { m: ChatMessage; leagueId: string; 
         const on = p.mine === i;
         const pct = total ? Math.round((o.votes / total) * 100) : 0;
         return (
-          <button key={i} onClick={() => void pollCast(leagueId, m.id, i).then(onVoted).catch(() => {})}
+          <button key={i} onClick={() => void be.pollCast(m.id, i).then(onVoted).catch(() => {})}
             style={{ position: 'relative', display: 'block', width: '100%', textAlign: 'left', marginTop: 4, padding: '6px 9px', borderRadius: 6, cursor: 'pointer', background: 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, overflow: 'hidden' }}>
             <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${pct}%`, background: 'color-mix(in srgb, var(--you) 14%, transparent)' }} />
             <span style={{ position: 'relative', fontSize: 12, color: 'var(--text)', fontWeight: on ? 700 : 400 }}>{on ? '● ' : ''}{o.text}</span>
@@ -419,7 +420,7 @@ export function ChatPanel({ leagueId, onClose }: { leagueId: string; onClose: ()
         {tab === 'league'
           ? <LeagueChat leagueId={leagueId} canModerate={canModerate} />
           : tab === 'dev'
-            ? <div style={{ padding: 12, display: 'grid', gap: 10, overflowY: 'auto' }}><DevRoomPanel rooms={devRooms} /></div>
+            ? <DevRoomChats rooms={devRooms} />
             : <DmHome leagueId={leagueId} />}
       </div>
     </ModalBackdrop>
@@ -439,8 +440,10 @@ export function ChatPanel({ leagueId, onClose }: { leagueId: string; onClose: ()
  *  the reader has not seen. It shows only while that message is off the top
  *  of the pane, so a chat with two new lines in view carries no pill. Each
  *  message row wears `data-mid` so the pill can find its target. */
-function MessageScroll({ children, dep, onFile, catchUp }: {
+function MessageScroll({ children, dep, onFile, catchUp, height }: {
   children: React.ReactNode; dep: unknown; onFile?: (f: File | null) => void; catchUp?: CatchUp | null;
+  /** A fixed height, for a thread outside the chat card (the dev room). */
+  height?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -479,7 +482,7 @@ function MessageScroll({ children, dep, onFile, catchUp }: {
   };
   const pill = catchUp && !dismissed && above;
   return (
-    <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: height ? 'none' : 1, height, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
       <div ref={ref} onScroll={(e) => {
         const el = e.currentTarget;
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
@@ -695,8 +698,8 @@ function EditedNote({ m }: { m: { edited_at?: string | null; edited_by?: string 
  *  — a chat that reloads on every tap scrolls away from the thing you were
  *  reacting to. On failure the server's answer is simply not applied.
  */
-function Reactions({ m, leagueId, onChange }: {
-  m: ChatMessage; leagueId: string; onChange: (id: number, r: ChatReactionCount[]) => void;
+function Reactions({ m, be, onChange }: {
+  m: ChatMessage; be: ChatBackend; onChange: (id: number, r: ChatReactionCount[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -705,7 +708,7 @@ function Reactions({ m, leagueId, onChange }: {
     if (busy) return;
     setBusy(true); setOpen(false);
     try {
-      const r = await chatReact(leagueId, m.id, emoji);
+      const r = await be.react(m.id, emoji);
       if (r.ok && r.reactions) onChange(m.id, r.reactions);
     } catch { /* the counts simply do not move */ }
     finally { setBusy(false); }
@@ -745,7 +748,50 @@ function Reactions({ m, leagueId, onChange }: {
   );
 }
 
-function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: boolean }) {
+/** WHERE A CHAT'S MESSAGES LIVE (v0.663.0). League chat is the one chat with
+ *  every tool; the dev room (0465) got the same set in its own tables. Rather
+ *  than a second copy of this file's thread, LeagueChat talks to a backend —
+ *  league chat's RPCs by default, the dev room's when one is passed — and the
+ *  dev room's @computer lines are its own kind 'computer', drawn as here. */
+export interface ChatBackend {
+  load: () => Promise<{ ok: boolean; error?: string; messages?: ChatMessage[]; pins?: ChatMessage[]; last_read?: number; unread?: number }>;
+  members: () => Promise<{ id: string; name: string; me: boolean }[]>;
+  post: (body: string, mentions: string[], caption: string | null) => Promise<{ ok: boolean; error?: string }>;
+  del: (id: number) => Promise<{ ok: boolean; error?: string }>;
+  edit: (id: number, body: string, mentions: string[], caption: string | null) => Promise<{ ok: boolean; error?: string }>;
+  pin: (id: number, on: boolean) => Promise<{ ok: boolean; error?: string }>;
+  react: (id: number, emoji: string) => Promise<{ ok: boolean; reactions?: ChatReactionCount[] }>;
+  pollCast: (id: number, choice: number) => Promise<unknown>;
+  pollCreate: (question: string, options: string[]) => Promise<{ ok: boolean; error?: string }>;
+  /** The first folder of an uploaded picture's path: the league, or dev/<room>. */
+  imageFolder: string;
+  /** Who may post a poll (league: the commissioner; dev room: anyone). */
+  canPoll: boolean;
+  placeholder: string; empty: string; maxLength: number;
+}
+export function leagueChatBackend(leagueId: string, canModerate: boolean): ChatBackend {
+  return {
+    load: () => chatMessages(leagueId),
+    members: () => chatMembers(leagueId).then((r) => (r.ok && r.members ? r.members : [])),
+    post: (body, mentions, caption) => chatPost(leagueId, body, mentions, caption),
+    del: (id) => chatDelete(leagueId, id),
+    edit: (id, body, mentions, caption) => chatEdit(leagueId, id, body, mentions, caption),
+    pin: (id, on) => chatPin(leagueId, id, on),
+    react: (id, emoji) => chatReact(leagueId, id, emoji),
+    pollCast: (id, choice) => pollCast(leagueId, id, choice),
+    pollCreate: (q, opts) => chatPostPoll(leagueId, q, opts),
+    imageFolder: leagueId,
+    canPoll: canModerate,
+    placeholder: 'message the league… (@ to mention)', empty: 'Nothing yet — say hello to the league.', maxLength: 500,
+  };
+}
+
+export function LeagueChat({ leagueId, canModerate, backend, height }: {
+  leagueId: string; canModerate: boolean; backend?: ChatBackend;
+  /** Outside a sized panel (the dev room's own screens), the thread's height. */
+  height?: string;
+}) {
+  const be = useMemo(() => backend ?? leagueChatBackend(leagueId, canModerate), [backend, leagueId, canModerate]);
   const [msgs, setMsgs] = useState<ChatMessage[] | null>(null);
   const [pins, setPins] = useState<ChatMessage[]>([]);
   const [pinsOpen, setPinsOpen] = useState(false);
@@ -768,7 +814,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   // fetch itself advances the mark, so every poll after it finds nothing new.
   const [catchUp, setCatchUp] = useState<CatchUp | null>(null);
   const marked = useRef(false);
-  const load = () => chatMessages(leagueId)
+  const load = () => be.load()
     .then((r) => {
       if (r.ok && r.messages) {
         const list = [...r.messages].reverse();
@@ -779,11 +825,11 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
     .catch(() => {});
   useEffect(() => {
     void load();
-    chatMembers(leagueId).then((r) => { if (r.ok && r.members) setMembers(r.members); }).catch(() => {});
+    be.members().then(setMembers).catch(() => {});
     const id = setInterval(() => { if (!document.hidden) void load(); }, 8_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leagueId]);
+  }, [be]);
   const names = members.map((m) => m.name);
   const sendBody = async (body: string, caption: string | null = null): Promise<boolean> => {
     if (!body || busy) return false;
@@ -795,14 +841,14 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
       // 0350: a caption is where the @name usually is on a picture, so it is
       // read for mentions the same as the body.
       const mentions = mentionIds(caption ? `${body} ${caption}` : body, members);
-      const r = await chatPost(leagueId, body, mentions, caption);
+      const r = await be.post(body, mentions, caption);
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not send.')); return false; }
       setDraft(''); setGifOpen(false); await load();
       return true;
     } catch (x) { setErr(friendlyError(x)); return false; }
     finally { setBusy(false); }
   };
-  const img = useImagePost(leagueId, sendBody);
+  const img = useImagePost(be.imageFolder, sendBody);
   // Repaint ONE message's reactions in place (v0.329.0). Not `load()`: the
   // 8-second poll already refreshes the page, and refetching on every tap
   // would yank the scroll position away from the message being reacted to.
@@ -817,14 +863,14 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
   // ignores anything that is not ours.
   const del = async (m: ChatMessage) => {
     try {
-      const r = await chatDelete(leagueId, m.id);
+      const r = await be.del(m.id);
       if (!r.ok) { setErr(friendlyError(r.error ?? '')); return; }
       await removeChatImage(m.body);
       await load();
     } catch (x) { setErr(friendlyError(x)); }
   };
   const pin = async (id: number, on: boolean) => {
-    try { const r = await chatPin(leagueId, id, on); if (r.ok) await load(); else setErr(friendlyError(r.error ?? '')); }
+    try { const r = await be.pin(id, on); if (r.ok) await load(); else setErr(friendlyError(r.error ?? '')); }
     catch (x) { setErr(friendlyError(x)); }
   };
 
@@ -864,9 +910,9 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
           ))}
         </div>
       )}
-      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick} catchUp={catchUp}>
+      <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick} catchUp={catchUp} height={height}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
-        {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Nothing yet — say hello to the league.</div>}
+        {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>{be.empty}</div>}
         {msgs?.map((m) => (
           <div key={m.id} data-mid={m.id} style={{ marginBottom: 10, ...(m.mentions_me ? { background: 'color-mix(in srgb, var(--you) 8%, transparent)', borderRadius: 6, padding: '4px 6px', margin: '0 -6px 10px' } : {}) }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -892,7 +938,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
                   onSave={async (body, caption) => {
                     // The new words are where the @names are now, so mentions
                     // come off the edit rather than off what it replaced.
-                    const r = await chatEdit(leagueId, m.id, body,
+                    const r = await be.edit(m.id, body,
                       mentionIds([body, caption].filter(Boolean).join(' '), members), caption);
                     if (!r.ok) return friendlyError(r.error ?? 'Could not save that.');
                     setEditing(null); await load();
@@ -907,23 +953,23 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               : m.kind === 'poll'
               ? <>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>📊 {m.body}</div>
-                  <PollView m={m} leagueId={leagueId} onVoted={() => void load()} />
+                  <PollView m={m} be={be} onVoted={() => void load()} />
                 </>
               : <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
                   <Body body={m.body} names={names} />
                   {/* 0350: the words under the picture, mentions and all. */}
                   {!!m.caption && <div style={{ marginTop: 3 }}><Body body={m.caption} names={names} /></div>}
                 </div>}
-            <Reactions m={m} leagueId={leagueId} onChange={applyReactions} />
+            <Reactions m={m} be={be} onChange={applyReactions} />
           </div>
         ))}
       </MessageScroll>
-      {pollOpen && <PollComposer leagueId={leagueId} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
+      {pollOpen && <PollComposer be={be} onDone={() => { setPollOpen(false); void load(); }} onClose={() => setPollOpen(false)} />}
       {reportWeek != null && <ReportSheet leagueId={leagueId} week={reportWeek} onClose={() => setReportWeek(null)} />}
       {runAt != null && <WaiverRunSheet leagueId={leagueId} at={runAt} onClose={() => setRunAt(null)} />}
       {gifOpen && GIF && <GifPicker onPick={(url) => void sendBody(url)} onClose={() => setGifOpen(false)} />}
       {plusOpen && (
-        <PlusMenu canPoll={canModerate} canGif={!!GIF} onClose={() => setPlusOpen(false)}
+        <PlusMenu canPoll={be.canPoll} canGif={!!GIF} onClose={() => setPlusOpen(false)}
           onPick={(what) => {
             setPlusOpen(false); setPollOpen(false); setGifOpen(false);
             if (what === 'poll') setPollOpen(true);
@@ -969,10 +1015,10 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
               </button>
             );
           })()}
-          <input value={draft} maxLength={500} onChange={(e) => setDraft(e.target.value)}
+          <input value={draft} maxLength={be.maxLength} onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !sugg.length && !suggAll) void sendBody(draft.trim()); }}
             onPaste={(e) => { const f = pastedImage(e); if (f) { e.preventDefault(); void img.pick(f); } }}
-            placeholder="message the league… (@ to mention)" style={{ ...input, fontSize: 12.5 }} />
+            placeholder={be.placeholder} style={{ ...input, fontSize: 12.5 }} />
           <button onClick={() => void sendBody(draft.trim())} disabled={busy || !draft.trim()} className="mono"
             style={{ ...btn, padding: '9px 16px', opacity: busy || !draft.trim() ? 0.5 : 1 }}>➤</button>
         </div>
@@ -982,7 +1028,7 @@ function LeagueChat({ leagueId, canModerate }: { leagueId: string; canModerate: 
 }
 
 /** The commissioner's poll form: a question and 2–6 options. */
-function PollComposer({ leagueId, onDone, onClose }: { leagueId: string; onDone: () => void; onClose: () => void }) {
+function PollComposer({ be, onDone, onClose }: { be: ChatBackend; onDone: () => void; onClose: () => void }) {
   const [q, setQ] = useState('');
   const [opts, setOpts] = useState<string[]>(['', '']);
   const [busy, setBusy] = useState(false);
@@ -991,7 +1037,7 @@ function PollComposer({ leagueId, onDone, onClose }: { leagueId: string; onDone:
     if (busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await chatPostPoll(leagueId, q.trim(), opts.map((o) => o.trim()).filter(Boolean));
+      const r = await be.pollCreate(q.trim(), opts.map((o) => o.trim()).filter(Boolean));
       if (!r.ok) { setErr(friendlyError(r.error ?? 'Could not post the poll.')); return; }
       onDone();
     } catch (x) { setErr(friendlyError(x)); }
@@ -1211,6 +1257,72 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         placeholder={`message ${thread.peer}…`}
         image={{ pick: (f) => void img.pick(f), busy: img.busy, error: img.error,
           pending: img.pending, confirm: (c) => void img.confirm(c), cancel: img.cancel }} />
+    </>
+  );
+}
+
+
+// ── THE DEV ROOM'S CHAT (v0.663.0, 0465) ─────────────────────────────────────
+// Founder: "Let's have all chat tools in the dev chat, pics, gifs, polls,
+// reactions, @, etc." and "let's not have the chat/bug/suggestion
+// distinction. just a chat window. allow at computer for everyone in dev
+// chat." It is LeagueChat on the dev room's backend: one window, every tool,
+// and a line that says @computer is filed by the worker for any member
+// (server/src/computer.js), with Computer's reply and fix card in the room.
+
+/** The rooms I'm in (an open room seats me on this read) — the 🛠 DEV chip. */
+export function useDevRooms(): DevRoom[] {
+  const [rooms, setRooms] = useState<DevRoom[]>([]);
+  useEffect(() => { let alive = true; devRoomsMine().then((r) => { if (alive && r.ok) setRooms(r.rooms ?? []); }).catch(() => {}); return () => { alive = false; }; }, []);
+  return rooms;
+}
+
+const devAsChat = (m: DevMessage): ChatMessage => ({
+  ...m, kind: m.kind ?? 'text', pinned: !!m.pinned, mentions_me: !!m.mentions_me, reactions: m.reactions ?? [],
+} as unknown as ChatMessage);
+
+export function devChatBackend(roomId: string): ChatBackend {
+  return {
+    load: () => devRoomMessages(roomId).then((r) => ({ ...r, messages: (r.messages ?? []).map(devAsChat), pins: (r.pins ?? []).map(devAsChat) })),
+    members: () => devRoomMembers(roomId).then((r) => (r.members ?? []).map((m) => ({ id: m.user_id, name: m.name, me: m.me }))),
+    post: (body, mentions, caption) => devRoomPost(roomId, body, null, mentions, caption),
+    del: (id) => devRoomDelete(id),
+    edit: (id, body, mentions, caption) => devRoomEdit(id, body, mentions, caption),
+    pin: (id, on) => devRoomPin(id, on),
+    react: (id, emoji) => devRoomReact(id, emoji),
+    pollCast: (id, choice) => devRoomPollCast(id, choice),
+    pollCreate: (q, opts) => devRoomPostPoll(roomId, q, opts),
+    imageFolder: devImageFolder(roomId),
+    canPoll: true,
+    placeholder: 'say anything… (@ to mention, @computer to ask)', empty: 'Nothing yet. Say what you’d change — @computer files it.', maxLength: 1000,
+  };
+}
+
+/** One dev room's thread. `height` sizes it outside the chat card. */
+export function DevChat({ roomId, height }: { roomId: string; height?: string }) {
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => { devRoomMembers(roomId).then((r) => { if (r.ok) setAdmin(!!r.admin); }).catch(() => {}); }, [roomId]);
+  const be = useMemo(() => devChatBackend(roomId), [roomId]);
+  return <LeagueChat leagueId={roomId} canModerate={admin} backend={be} height={height} />;
+}
+
+/** League chat's 🛠 DEV tab: a chip per room when there's more than one. */
+function DevRoomChats({ rooms }: { rooms: DevRoom[] }) {
+  const [roomId, setRoomId] = useState<string | null>(rooms[0]?.id ?? null);
+  if (!roomId) return <div className="mono" style={{ padding: 14, fontSize: 10, color: 'var(--faint)' }}>You’re not in a dev room.</div>;
+  return (
+    <>
+      {rooms.length > 1 && (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', padding: '8px 14px 0' }}>
+          {rooms.map((r) => (
+            <button key={r.id} onClick={() => setRoomId(r.id)} className="mono"
+              style={{ fontSize: 9, fontWeight: 700, cursor: 'pointer', borderRadius: 999, padding: '3px 9px', color: r.id === roomId ? 'var(--on-accent)' : 'var(--dim)', background: r.id === roomId ? 'var(--you)' : 'var(--bg)', border: '1px solid var(--bd)' }}>
+              {r.name}{r.unread ? ` · ${r.unread}` : ''}
+            </button>
+          ))}
+        </div>
+      )}
+      <DevChat key={roomId} roomId={roomId} />
     </>
   );
 }
