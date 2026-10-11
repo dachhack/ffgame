@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.667.0 — Head coaches by name, scanned every week
+
+> - A HEAD COACH spot now shows the coach's name — "Liam Coen", not "JAX Head Coach" — on the pool, the draft, the matchup and the weekly squad board. The names are checked against the NFL's current staffs every day, so a mid-season change shows up on its own.
+
+- Founder: "The head coaches are just listed as Jaguars Head coach and Bears
+  Head coach. Can we get a scan for their names each week." Migration 0468:
+  `team_role` (slug → name; worker writes, signed-in reads) and
+  `sync_team_role_names()`, which renames the stored rows in every league
+  pool and every frozen salary board. `poll/coaches.js` reads ESPN's team
+  directory (32 teams, the season's coach record per team) on the daily
+  directory refresh in index.js; a short read (<16 names) is refused so a
+  feed outage can't blank the table. New boards and new pools carry the
+  name from the start (pods.js from the table; nativeLeague.ts from the
+  season list as a first guess). The unit stays `jax-hc` and its number
+  stays the team's, so a firing changes nothing but the name.
+  `check:coaches`. No iPhone build needed.
+
 ### v0.666.2 — The Team page and the matchup show the same week; one lineup set as intended
 
 > - The Team page and the matchup board now open on the same week and follow each other: change the week on one and the other shows it too, so your lineup reads the same in both places.
