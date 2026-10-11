@@ -14,9 +14,11 @@
 // the table walks the week's other matchups (every seat's squad on a
 // leaderboard); the week arrows live in the league frame.
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { contestMatchup, podSalaries, type ContestMatchupState, type PodSalaryRow } from '@drip/core/data/liveApi';
-import { contestSlotLabels, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
-import { classicSlotsFromSpec } from '@drip/core/engine/classic';
+import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
+import { contestSlotLabels, contestCard, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
+import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
+import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
+import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
@@ -47,10 +49,17 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const id = setInterval(read, 60_000);
     return () => { alive = false; clearInterval(id); };
   }, [leagueId, week, pick]);
-  useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); }, [week]);
+  const [slate, setSlate] = useState<Map<string, SlateSpot>>(new Map());
+  useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week]);
   const bySlug = useMemo(() => new Map(board.map((r) => [r.slug, r])), [board]);
   const slots = useMemo(() => classicSlotsFromSpec(st?.slots ?? null) ?? [], [st?.slots]);
   const labels = useMemo(() => contestSlotLabels(slots), [slots]);
+  // PROJECTIONS (v0.678.0): priced by the league's own scoring, as the builder prices them.
+  const catalog = useMemo(() => leagueCatalogOf({ scoring: (st?.scoring_classic ?? null) as Partial<ClassicScoring> | null, ppr: st?.ppr ?? null }), [st?.scoring_classic, st?.ppr]);
+  const projOf = (slug: string): number | null => { const r = bySlug.get(slug); return r ? leagueWeekProj(r, catalog, r.pos === 'HC' ? (slate.size ? slate.get(r.team) ?? null : undefined) : undefined) : null; };
+  const bull = st?.contest === 'bullseye';
+  const theCard = useMemo(() => (st?.contest === 'bullseye' && st.week != null && slots.length ? contestCard(leagueId, st.week, slots, catalog) : null), [leagueId, st?.contest, st?.week, slots, catalog]);
+  const isTotal = bull && st?.variant === 'total';
   if (!st) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!st.ok) return <div style={{ padding: 24 }}><div className="mono" style={{ color: 'var(--warn, #c66)', fontSize: 12 }}>{st.error}</div></div>;
   const m = st.matchup;
@@ -72,21 +81,39 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   });
   const L = side(left), R = side(right);
   const scoreOf = (s: 'home' | 'away', slot: string) => m.state?.slots?.find((x) => x.side === s && x.slot === slot)?.score ?? null;
-  const column = (s: 'home' | 'away', rows: Row[], mine: boolean) => rows.map((r, i) => {
+  // One card for a spot: yours deals in face up; another squad's turns face
+  // up — the reveal flip — once its player has kicked off (contest_matchup
+  // unseals him). Empty spots show a dashed outline.
+  const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
     const p = r.slug ? bySlug.get(r.slug) : null;
-    const bank = st.started ? scoreOf(s, r.slot) : null;
-    if (r.slug) {
-      // My own card deals in face up; another squad's turns face up — the
-      // reveal flip — once its player has kicked off (contest_matchup unseals him).
-      return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} slot={labels[r.slot] ?? r.slot} bank={bank} opp={!mine} idx={i} />;
-    }
+    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} slot={labels[r.slot] ?? r.slot} opp={!mine} idx={i} />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} />;
     return (
       <div key={`${s}-${r.slot}-empty`} className="ct-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed rgba(255,255,255,0.25)', borderRadius: 10 }}>
-        <span className="mono" style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em' }}>{`${labels[r.slot] ?? r.slot} · EMPTY`}</span>
+        <span className="mono" style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em' }}>EMPTY</span>
       </div>
     );
-  });
+  };
+  // THE NUMBERS (v0.678.0, founder: "the player score and projection to the
+  // inside of the card columns in larger numbers"): the spot, the score once
+  // his game is on, the projection under it; a Bullseye spot's target and how
+  // far off. A sealed pick shows nothing — a projection would give him away.
+  const numbersOf = (s: 'home' | 'away', r: Row, mine: boolean, edge: 'left' | 'right') => {
+    const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
+    const proj = r.slug ? projOf(r.slug) : null;
+    const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
+    const color = mine ? '#E9B959' : '#F08A93';
+    return (
+      <div style={{ display: 'grid', gap: 1, alignContent: 'center', textAlign: edge, padding: edge === 'left' ? '0 4px 0 10px' : '0 10px 0 4px', minWidth: 0 }}>
+        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.65)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</span>
+        <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'rgba(255,255,255,0.35)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
+        <span className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>
+          {proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}
+          {target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}
+        </span>
+      </div>
+    );
+  };
   const fmt = (n: number | null) => (n == null ? '—' : Number(n).toFixed(1));
   const status = m.status === 'final' ? 'FINAL' : st.started ? 'LIVE' : 'SQUADS LOCK AT EACH KICKOFF';
   const others = (st.matchups ?? []).filter((x) => x.id !== m.id);
@@ -112,15 +139,24 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         {!solo && !st.started && <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`${R.mine ? 'Your' : 'Their'} cards turn face up as each player's game kicks off.`}</span>}
       </div>
       <Felt>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', alignItems: 'flex-start', padding: '10px 4px' }}>
-          <div className="ct-col">{column(left, L.rows, L.mine)}</div>
-          {/* the kit's ct-mid pads 34px for the drip board's header row; here the labels sit level with the cards */}
-          {!solo && (
-            <div className="ct-mid" style={{ paddingTop: 0, gap: 9 }}>
-              {slots.map((d) => <div key={d.slot} className="mono" style={{ height: 150, display: 'flex', alignItems: 'center', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.7)' }}>{labels[d.slot] ?? d.slot}</div>)}
-            </div>
-          )}
-          {!solo && <div className="ct-col">{column(right, R.rows, R.mine)}</div>}
+        {bull && (
+          <div className="mono" style={{ textAlign: 'center', padding: '6px 0 10px', color: '#E9B959', fontSize: 12, fontWeight: 800, letterSpacing: '0.1em' }}>
+            {isTotal && theCard ? `🎯 TARGET ${theCard.total} · CLOSEST RING WINS` : '🎯 A TARGET PER SPOT · CLOSEST RING WINS'}
+          </div>
+        )}
+        {/* a row per spot: your card at the outer edge, the numbers inside, their numbers, their card at the far edge */}
+        <div style={{ display: 'grid', gap: 9, padding: '4px 2px' }}>
+          {slots.map((d, i) => {
+            const lr = L.rows[i], rr = R.rows[i];
+            return (
+              <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: solo ? '104px minmax(0,1fr)' : '104px minmax(0,1fr) minmax(0,1fr) 104px', alignItems: 'center', minHeight: 150 }}>
+                {cardOf(left, lr, L.mine, i)}
+                {numbersOf(left, lr, L.mine, 'left')}
+                {!solo && numbersOf(right, rr, R.mine, 'right')}
+                {!solo && cardOf(right, rr, R.mine, i)}
+              </div>
+            );
+          })}
         </div>
       </Felt>
       {others.length > 0 && st.format !== 'board' && (

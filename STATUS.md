@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.678.0 — The table: the target on top, the numbers inside, the cards outside
+
+> - On the card table, a Bullseye league's target now sits at the top (one number for ONE TEAM TOTAL; a target per spot otherwise). Each spot's row runs your card at the outer edge, your score and projection in big type next to it, then your opponent's, then their card at the far edge — with how far off the target each is.
+
+- Founder, on the first live deal: "get the target at the top and the
+  player score and projection to the inside of the card columns in larger
+  numbers. Move the cards to the outside." Migration 0480: `contest_matchup`
+  (0479's body) carries `scoring_classic` and `ppr`, so a projection is
+  priced by the league's own scoring (`leagueWeekProj` over the catalog, as
+  the builder prices it; a coach's by his game from the slate). Both
+  `ContestMatchup` screens: a row per spot — card, numbers, numbers, card
+  (`cardOf` / `numbersOf`); a sealed pick shows ◈ and no projection (a
+  projection would give him away); the Bullseye target line on top of the
+  felt, and a per-spot target with the distance under the score in the
+  SLOT TARGETS variant. The matchup and swaps probes reset their week's
+  kickoffs so they re-run on a used chain. No iPhone build needed.
+
 ### v0.677.1 — The site builds again
 
 > - A fix to the web build: v0.677.0's card table didn't compile on the site's deploy, so the site stayed on v0.670.1 while the app and the worker moved. This gets it through.
