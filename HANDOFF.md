@@ -70,8 +70,8 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
      seat through contest_state / save_contest_entry / bullseye_my_weeks /
      contest_swaps / contest_matchup, the board's `me` by my best seat; the
      seat switcher in both builders and MY TEAM; ENTRIES PER MEMBER on
-     COMMISH). The lock reminder still pages once per member, whichever
-     seat lacks a squad.
+     COMMISH). The lock reminder pages once per member and names the seats
+     without a squad (v0.682.3).
      ~~Swap history; sharing a squad card after squads unseal~~ — done in
      v0.676.0 (0478 `contest_swap` / `contest_swaps`; `squadCardText`).
 

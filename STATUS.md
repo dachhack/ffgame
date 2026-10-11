@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.682.3 — The lock reminder names the seat
+
+> - A member with several entries in a contest league gets one "no squad yet" push, and it now names the entries still without a squad ("No squad yet for Bees Two and Bees Three…"), so they know which to build. A member with one entry hears the same words as before.
+
+The loose end from v0.682.0. `contestLockRows` in `server/src/push.js`
+groups a league's human seats by member; a member with more than one seat
+is paged once per band, the body listing the seats not in `entered`
+("A and B", "A, B and C"), the push's `data.roster_id` the first of them.
+`detectContestLock` loads `team_name` for it. Four cases in
+`server/test/contest-recap.mjs`. Worker only: no iPhone build.
+
 ### v0.682.2 — The tie-breaker rides the card
 
 > - On the contest table and in the squad builder, a card's top-right corner no longer repeats its spot (RB1, WR2); the tie-breaker spot carries its number there instead, on a small gold chip. Tap the chip and a note says what it is: that spot's player aims at the number, and if the matchup ties on rings, the squad whose tie-breaker lands closer wins.

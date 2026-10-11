@@ -546,15 +546,30 @@ export function contestLockRows(league, week, band, lockMs, members, entered) {
   const tail = (late === 'cpu' ? 'the CPU builds one for you at lock, and you can still swap until each player’s game'
     : late === 'zero' ? 'a week without a squad scores zero' : 'a week without a squad scores nothing')
     + (cfg?.entryDeadline === 'first' ? ' — entries close at the first kickoff' : '');
-  const rows = [];
+  // PER SEAT (v0.682.3): a member with several entries (0481) is paged once,
+  // and the push names the seats still without a squad — "Bees Two and Bees
+  // Three have no week 7 squad yet" — so they know which to build.
+  const byUser = new Map();   // app_user_id → the member's human seats
   for (const m of members) {
-    if (!m.app_user_id || !m.enrolled || m.controller === 'ai' || entered.has(m.sleeper_roster_id)) continue;
+    if (!m.app_user_id || !m.enrolled || m.controller === 'ai') continue;
+    if (!byUser.has(m.app_user_id)) byUser.set(m.app_user_id, []);
+    byUser.get(m.app_user_id).push(m);
+  }
+  const list = (xs) => (xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+  const rows = [];
+  for (const [uid, seats] of byUser) {
+    const missing = seats.filter((m) => !entered.has(m.sleeper_roster_id));
+    if (!missing.length) continue;
+    const names = seats.length > 1 ? list(missing.map((m) => m.team_name ?? `Seat ${m.sleeper_roster_id}`)) : null;
+    const body = names
+      ? (band === 'last' ? `No squad yet for ${names} in ${league.name} for week ${week} — ${tail}.` : `${names} ${missing.length === 1 ? 'has' : 'have'} no week ${week} squad yet — ${tail}.`)
+      : (band === 'last' ? `No squad yet in ${league.name} for week ${week} — ${tail}.` : `You haven’t built a week ${week} squad yet — ${tail}.`);
     rows.push({
-      app_user_id: m.app_user_id, kind: 'lineup',
+      app_user_id: uid, kind: 'lineup',
       title: band === 'last' ? `⚠ Squads lock ${lockLabel} ET` : `🗓 ${league.name}: squads lock ${lockLabel} ET`,
-      body: band === 'last' ? `No squad yet in ${league.name} for week ${week} — ${tail}.` : `You haven’t built a week ${week} squad yet — ${tail}.`,
-      data: { league_id: league.id, open: 'league' },
-      dedupe_key: `contest-lock:${band}:${league.id}:${week}:${m.app_user_id}`,
+      body,
+      data: { league_id: league.id, open: 'league', roster_id: missing[0].sleeper_roster_id },
+      dedupe_key: `contest-lock:${band}:${league.id}:${week}:${uid}`,
     });
   }
   return rows;
@@ -632,7 +647,7 @@ async function detectContestLock() {
     for (const lg of leagues ?? []) {
       if (lg.contest_week != null && Number(lg.contest_week) !== week) continue;
       const [{ data: mems }, { data: have }] = await Promise.all([
-        db().from('league_membership').select('sleeper_roster_id, app_user_id, enrolled, controller').eq('league_id', lg.id),
+        db().from('league_membership').select('sleeper_roster_id, app_user_id, enrolled, controller, team_name').eq('league_id', lg.id),
         db().from('sleeper_lineup').select('roster_id').eq('league_id', lg.id).eq('week', week),
       ]);
       const entered = new Set((have ?? []).map((r) => r.roster_id));
