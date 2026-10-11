@@ -22,6 +22,8 @@ import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
 import { contestConfigOf, contestCard, contestAutoBuild } from '../../packages/core/src/engine/contest.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
+import { priceBoard } from '../../packages/core/src/engine/salaryPricing.ts';
+import { ruledOutSlugs } from './injuries.js';
 
 // ── Seeded RNG (mulberry32 over a string hash — mirrors the playtester) ──────
 function hashStr(s) {
@@ -114,6 +116,8 @@ async function sleeperWeekFor(season, week, idx) {
 
 /** ppg → DFS salary (deterministic, $100 steps, $3k floor). ~26 ppg ≈ $10,400;
  *  a 9-man cap of $50k averages $5,555/slot — stars-and-scrubs tension. */
+/** The pre-0.666 flat rate, $400 a projected point. Kept for the probes
+ *  that pin the old boards' numbers; a board is priced by priceBoard now. */
 export function salaryOf(ppg) {
   return Math.max(MIN_SALARY, Math.round((ppg * 400) / 100) * 100);
 }
@@ -151,7 +155,12 @@ export function buildSalaryBoard(idx, slateTeams, weekly, extras = new Set()) {
     if (extras.has('HC')) rows.push({ slug: `${t.toLowerCase()}-hc`, name: `${t} Head Coach`, pos: 'HC', team: t, salary: salaryOf(0), proj: 0, exp: null });
     if (extras.has('P')) rows.push({ slug: `${t.toLowerCase()}-p`, name: `${t} Punter`, pos: 'P', team: t, salary: salaryOf(0), proj: 0, exp: null });
   }
-  return rows;
+  // SCARCITY PRICING (v0.666.0, engine/salaryPricing.ts): value over the
+  // position's replacement, the rate calibrated so the all-studs nine lands
+  // just over the budget. The projection the price was set from rides along
+  // (priced_proj) and is frozen with it; `proj` is refreshed through the week.
+  const { priced } = priceBoard(rows);
+  return priced.map(({ row, salary }) => ({ ...row, salary, priced_proj: row.proj }));
 }
 
 /** The positions some contest league this season has unlocked (positions_extra). */
@@ -236,16 +245,21 @@ export async function ensurePods(week, season, idx) {
   // is made when they save an entry.)
   if (!pods?.length) return { pods: 0, dealt: 0, matchups: 0, tossed };
 
-  const { board, skipped } = await ensureSalaryBoard(season, week, idx);
+  const { board, skipped, kicks } = await ensureSalaryBoard(season, week, idx);
   if (skipped) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped };
   if (!board.length) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no board' };
+  // RULED OUT (v0.666.0): the injury report's O and IR, for the CPU's builds
+  // and the auto-sub below. A human's squad is theirs until his game locks.
+  const outs = await ruledOutSlugs().catch(() => new Set());
+  const playable = board.filter((r) => !outs.has(r.slug));
+  const teamLocked = (team) => { const k = kicks?.[String(team ?? '').toUpperCase()]; return Number.isFinite(k) && k - config.lockLeadMs <= Date.now(); };
 
   const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON).catch(() => null);
   // Same 1h-before-kickoff lead as league matchups (config.lockLeadMs).
   const lockAt = lockMs ? new Date(lockMs - config.lockLeadMs).toISOString() : null;
   const lockPassed = lockMs != null && lockMs - config.lockLeadMs <= Date.now();
 
-  let dealt = 0, made = 0;
+  let dealt = 0, made = 0, subbed = 0;
   for (const pod of pods) {
     const contest = pod.kind === 'dfs' || pod.kind === 'bullseye' ? contestConfigOf(pod.settings_json, pod.kind) : null;
     if (contest && contest.format === 'board') continue;
@@ -272,7 +286,7 @@ export async function ensurePods(week, season, idx) {
     if (need.length) {
       const rows = need.map((m) => {
         if (contest) {
-          const built = contestAutoBuild(board, contest, `${pod.id}|w${week}|aim${m.sleeper_roster_id}`, contestCardNow);
+          const built = contestAutoBuild(playable, contest, `${pod.id}|w${week}|aim${m.sleeper_roster_id}`, contestCardNow);
           return {
             league_id: pod.id, week, roster_id: m.sleeper_roster_id,
             starters_json: contest.slots.filter((d) => built[d.slot]).map((d) => ({ slot: d.slot, sleeper_id: null, player_slug: built[d.slot], pos: board.find((b) => b.slug === built[d.slot])?.pos ?? d.pos[0] })),
@@ -295,6 +309,35 @@ export async function ensurePods(week, season, idx) {
       dealt += rows.length;
     }
 
+    // THE CPU SWAPS A RULED-OUT MAN (v0.666.0). A DFS site gives a human
+    // nothing when his player is ruled out after lock, and lets him swap
+    // before it; a CPU seat nobody is watching gets the swap made for it —
+    // an Out/IR player whose game has not locked is replaced by the best
+    // affordable body for that spot, the rest of the squad kept. The hourly
+    // seat wire does the same job for a season roster.
+    if (contest && outs.size) {
+      const aiSeats = new Set((mems ?? []).filter((m) => m.controller === 'ai' || !m.app_user_id).map((m) => m.sleeper_roster_id));
+      if (aiSeats.size) {
+        const { data: entries } = await db().from('sleeper_lineup')
+          .select('roster_id, starters_json').eq('league_id', pod.id).eq('week', week).in('roster_id', [...aiSeats]);
+        const fixes = [];
+        for (const e of entries ?? []) {
+          const rowsE = Array.isArray(e.starters_json) ? e.starters_json : [];
+          const bySlug = new Map(board.map((b) => [b.slug, b]));
+          const hurt = rowsE.filter((r) => r?.player_slug && outs.has(r.player_slug) && !teamLocked(bySlug.get(r.player_slug)?.team));
+          if (!hurt.length) continue;
+          const keep = Object.fromEntries(contest.slots.map((d) => [d.slot, null]));
+          for (const r of rowsE) if (r?.slot in keep && r.player_slug && !hurt.includes(r)) keep[r.slot] = r.player_slug;
+          const built = contestAutoBuild(playable.filter((b) => !teamLocked(b.team)), contest, `${pod.id}|w${week}|sub${e.roster_id}|${hurt.map((h) => h.player_slug).join(',')}`, contestCardNow, keep);
+          const changed = contest.slots.some((d) => built[d.slot] !== keep[d.slot]);
+          if (!changed) continue;
+          fixes.push({ league_id: pod.id, week, roster_id: e.roster_id,
+            starters_json: contest.slots.filter((d) => built[d.slot]).map((d) => ({ slot: d.slot, sleeper_id: null, player_slug: built[d.slot], pos: bySlug.get(built[d.slot])?.pos ?? d.pos[0] })) });
+        }
+        if (fixes.length) { await db().from('sleeper_lineup').upsert(fixes, { onConflict: 'league_id,week,roster_id' }); subbed += fixes.length; }
+      }
+    }
+
     const { data: haveM } = await db().from('matchup')
       .select('id').eq('league_id', pod.id).eq('week', week).limit(1);
     if (!haveM?.length) {
@@ -306,7 +349,7 @@ export async function ensurePods(week, season, idx) {
       if (rows.length) { await db().from('matchup').upsert(rows, { onConflict: 'league_id,week,home_roster_id,away_roster_id' }); made += rows.length; }
     }
   }
-  return { pods: pods.length, dealt, matchups: made, tossed };
+  return { pods: pods.length, dealt, matchups: made, tossed, subbed };
 }
 
 /** The week's salary board: built and FROZEN on first sight of the week, then
@@ -314,15 +357,22 @@ export async function ensurePods(week, season, idx) {
  *  built against must not). Shared by the pods and the open Bullseye contest. */
 export async function ensureSalaryBoard(season, week, idx) {
   // Slate: prefer the synced nfl_slate rows; fall back to a live ESPN build.
-  let { data: slateRows } = await db().from('nfl_slate').select('home, away').eq('season', season).eq('week', week);
+  let { data: slateRows } = await db().from('nfl_slate').select('home, away, kickoff').eq('season', season).eq('week', week);
   if (!slateRows?.length) {
     try {
       const slate = await buildSlate(season, week, REGULAR_SEASON);
-      slateRows = slate.map((g) => ({ home: g.home, away: g.away }));
+      slateRows = slate.map((g) => ({ home: g.home, away: g.away, kickoff: g.kickoff }));
     } catch { slateRows = []; }
   }
   const slateTeams = new Set(slateRows.flatMap((g) => [g.home, g.away]).filter(Boolean));
   if (!slateTeams.size) return { board: [], skipped: 'no slate' };
+  // Each team's kickoff (ms), for the per-player lock the auto-sub honours.
+  const kicks = {};
+  for (const g of slateRows) {
+    const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
+    if (!Number.isFinite(ms)) continue;
+    for (const t of [g.home, g.away]) if (t) kicks[String(t).toUpperCase()] = Math.min(kicks[String(t).toUpperCase()] ?? Infinity, ms);
+  }
 
   // The week's salary board: build + freeze on first sight of the week, then
   // always read back the frozen rows (weekly projections drift; the board a
@@ -339,12 +389,54 @@ export async function ensureSalaryBoard(season, week, idx) {
     }
   } else {
     const { data: rows } = await db().from('pod_salary')
-      .select('slug, name, pos, team, salary, proj, exp').eq('season', season).eq('week', week).range(0, 4999);
+      .select('slug, name, pos, team, salary, proj, exp, priced_proj').eq('season', season).eq('week', week).range(0, 4999);
     board = rows ?? [];
     board = await topUpSalaryBoard(season, week, idx, slateTeams, board);
+    board = await refreshBoardProj(season, week, idx, board);
   }
-  if (!board.length) return { board, skipped: 'no board' };
-  return { board, skipped: null };
+  if (!board.length) return { board, skipped: 'no board', kicks };
+  return { board, skipped: null, kicks };
+}
+
+/** THE PROJECTION MOVES, THE PRICE DOESN'T (v0.666.0). The DFS rule: a
+ *  salary never changes after the board is out — that is the fairness to
+ *  whoever built on Tuesday — but the projection is news, and a teammate's
+ *  injury on Thursday is exactly what a builder wants to see on Friday. Once
+ *  every REFRESH_MS per process: re-read the weekly feed and write the new
+ *  `proj` where it moved by a tenth or more; `salary` and `priced_proj`
+ *  stay as they were. Rows the feed does not price (HC, P, a flyer) keep
+ *  their number. */
+const REFRESH_MS = 6 * 3600e3;
+const refreshedAt = new Map();
+export async function refreshBoardProj(season, week, idx, board, now = Date.now()) {
+  const key = `${season}|${week}`;
+  if (now - (refreshedAt.get(key) ?? 0) < REFRESH_MS || !board.length) return board;
+  refreshedAt.set(key, now);
+  try {
+    const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
+    if (!weekly) return board;
+    const writes = [];
+    for (const r of board) {
+      let p = null;
+      if (r.pos === 'K') p = weekly.kByTeam.get(r.team) ?? null;
+      else if (r.pos === 'DEF') p = weekly.defByTeam.get(r.team) ?? null;
+      else if (['QB', 'RB', 'WR', 'TE', 'FB'].includes(r.pos)) {
+        const sid = idx.metaForSlug(r.slug)?.sid;
+        p = sid != null ? weekly.bySid.get(String(sid)) ?? null : null;
+      }
+      if (p == null || !Number.isFinite(p)) continue;
+      const next = Math.round(p * 10) / 10;
+      if (Math.abs(next - Number(r.proj)) < 0.1) continue;
+      r.proj = next;
+      writes.push({ season, week, slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: next, exp: r.exp ?? null, priced_proj: r.priced_proj ?? null });
+    }
+    if (writes.length) await db().from('pod_salary').upsert(writes, { onConflict: 'season,week,slug' });
+    return board;
+  } catch (e) {
+    refreshedAt.delete(key);
+    console.log('salary board refresh', season, week, e?.message ?? e);
+    return board;
+  }
 }
 
 /** THE FROZEN BOARD LEARNS WHAT A CONTEST LEAGUE NEEDS (v0.665.2). Founder:
@@ -378,7 +470,7 @@ export async function topUpSalaryBoard(season, week, idx, slateTeams, board) {
       adds = buildSalaryBoard(idx, slateTeams, weekly, extras).filter((r) => !have.has(r.slug));
     }
     const writes = [
-      ...expFixes.map(({ r, exp }) => ({ season, week, slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: r.proj, exp })),
+      ...expFixes.map(({ r, exp }) => ({ season, week, slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: r.proj, exp, priced_proj: r.priced_proj ?? r.proj })),
       ...adds.map((r) => ({ season, week, ...r })),
     ];
     if (writes.length) await db().from('pod_salary').upsert(writes, { onConflict: 'season,week,slug' });

@@ -598,12 +598,15 @@ export async function joinDfs(code: string, teamName?: string): Promise<PodJoin>
 export const POD_SALARY_CAP = 50000;
 export interface PodSalaryRow { slug: string; name: string; pos: string; team: string; salary: number; proj: number;
   /** Years of NFL experience (0466), for a spot's tenure rule; null when unknown. */
-  exp?: number | null }
+  exp?: number | null;
+  /** The projection the salary was set from (0467) — frozen with it, while
+   *  `proj` follows the week's news. */
+  priced_proj?: number | null }
 
 /** The week's frozen salary board (public game data — priced weekly projections). */
 export async function podSalaries(week: number, season = '2026'): Promise<PodSalaryRow[]> {
   const { data } = await (await client()).from('pod_salary')
-    .select('slug, name, pos, team, salary, proj, exp')
+    .select('slug, name, pos, team, salary, proj, exp, priced_proj')
     .eq('season', season).eq('week', week)
     .order('salary', { ascending: false })
     .range(0, 4999);   // every position a contest league can start (0466) — past PostgREST's 1000-row page

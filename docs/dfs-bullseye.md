@@ -295,3 +295,44 @@ fun experience on web and app." The pure half is
   reserves each remaining spot's cheapest candidate, so a one-candidate spot
   can't be starved by a pricey pick before it.
 - **Saving** is unchanged: `save_contest_entry` re-checks everything.
+
+## 15. Pricing the board, and the injury rule (v0.666.0, 0467)
+
+Founder: "What's the process for updating the prices to make sure they align
+with how every position is likely to score? What's dfs best practice for
+injured players and changes in projections when team mates get injured?"
+
+- **One price sheet, priced on scarcity.** `engine/salaryPricing.ts`. A
+  player's salary is the floor ($3,000) plus a rate × his projection OVER
+  THE REPLACEMENT at his position — the body after a 12-team league's
+  starters (QB13, RB25, WR37, TE13, K13, DEF13). The rate is calibrated per
+  board so the all-studs default nine lands at 108% of $50,000: fillable,
+  never free of trade-offs. HC, P, FB and IDP have no weekly feed and sit at
+  the floor. The board is shared by every league that week (as a DFS site's
+  salary sheet is); the league's own scoring is its edge, below.
+- **The price freezes; the projection moves.** `pod_salary.priced_proj` is
+  the number the salary was set from, frozen with it. `proj` is refreshed
+  from the weekly feed every six hours (`refreshBoardProj`), so a teammate's
+  injury shows up as value on the sheet. The builder prints `proj 18.1 ↑2.7`
+  when the feed has moved half a point since pricing.
+- **The league's own projection.** `contestBuilder.leagueWeekProj` scales the
+  board's PPR number by the season projection under the league's catalog over
+  the same under stock PPR (bounded ½–2×), and for a body the feed does not
+  price (HC, P) uses the catalog's per-week number outright. Sorting by PROJ
+  and VALUE and the squad's projection all read the league's number.
+- **Injuries.** O or IR on the report: not a new pick — the builder says
+  "ruled out this week", FILL FOR ME skips him, and `save_contest_entry`
+  refuses him; one already in a saved squad stays, swappable until his game
+  locks (the DFS rule). After lock a human gets what the site gives: nothing.
+  A CPU seat gets the swap made for it (`ensurePods`): an Out/IR player whose
+  game has not locked is replaced by the best affordable body for the spot,
+  the rest of the squad kept. CPU builds never start from a ruled-out man.
+- **The weekly audit.** `node src/cli.js salary-audit <week>` (ops mode
+  `salary-audit`, read-only): per position the bodies, the replacement level,
+  the price range and $/point over replacement; the all-studs nine against
+  the budget; who moved since pricing; and once the week is final, realized
+  points per $1k and salary↔points correlation by position from the contest
+  leagues' stamped slot scores. Run it Tuesday on the new board and after the
+  finals; a position that systematically out-earns its price is the signal to
+  revisit its starters count.
+- Applies from the next board built; a frozen board keeps its prices.

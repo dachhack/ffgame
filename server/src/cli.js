@@ -795,6 +795,10 @@ async function main() {
         argv.push('seal-audit', need('week'));
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
+      } else if (req.mode === 'salary-audit') {
+        // v0.666.0: read-only — is the week's board priced right.
+        argv.push('salary-audit', need('week'));
+        if (req.season) argv.push(String(req.season));
       } else if (req.mode === 'seat-wire') {
         // v0.665.1: one seat works the wire now — the hourly sweep for one league/seat.
         argv.push('seat-wire', need('week'), `--league=${need('league')}`);
@@ -827,7 +831,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | offboard-sweep`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | offboard-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -904,6 +908,68 @@ async function main() {
       //   node src/cli.js shotgun-preview <league-uuid> [week]
       const { shotgunPreview } = await import('./shotgun.js');
       console.log(await shotgunPreview(args[0], args[1] ?? null));
+      break;
+    }
+    case 'salary-audit': {
+      // ▶ IS THE BOARD PRICED RIGHT? (v0.666.0) — read-only. Per position:
+      //   bodies, replacement level, the price range and $ per point over
+      //   replacement; the all-studs nine against the budget; how far the
+      //   live projection has moved from the priced one; and, once the week
+      //   is final, realized points per $1k by position from the contest
+      //   leagues' stamped slot scores. Run it Tuesday on the new board and
+      //   again after the finals.
+      //   node src/cli.js salary-audit <week> [season]
+      const { db } = await import('./supabase.js');
+      const { replacementLevels, studsCost, SALARY_BUDGET, DEFAULT_LINEUP } = await import('../../packages/core/src/engine/salaryPricing.ts');
+      const week = Number(args[0]);
+      const season = args[1] ?? config.season;
+      const { data: rows } = await db().from('pod_salary').select('slug, name, pos, team, salary, proj, priced_proj').eq('season', season).eq('week', week).range(0, 4999);
+      const board = rows ?? [];
+      if (!board.length) { console.log(`salary-audit: no board for ${season} week ${week}`); break; }
+      const repl = replacementLevels(board.map((r) => ({ slug: r.slug, pos: r.pos, proj: Number(r.priced_proj ?? r.proj) })));
+      const fmt = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
+      console.log(`SALARY BOARD ${season} week ${week} — ${board.length} rows`);
+      const byPos = new Map();
+      for (const r of board) { if (!byPos.has(r.pos)) byPos.set(r.pos, []); byPos.get(r.pos).push(r); }
+      for (const [pos, list] of [...byPos].sort()) {
+        const sal = list.map((r) => r.salary).sort((a, b) => a - b);
+        const rp = repl.get(pos) ?? 0;
+        const over = list.filter((r) => Number(r.priced_proj ?? r.proj) > rp);
+        const perPt = over.length ? over.reduce((s, r) => s + (r.salary - 3000) / (Number(r.priced_proj ?? r.proj) - rp), 0) / over.length : 0;
+        console.log(`  ${pos.padEnd(3)} ${String(list.length).padStart(3)} bodies · replacement ${rp.toFixed(1)} · ${fmt(sal[0])}–${fmt(sal[sal.length - 1])} (median ${fmt(sal[Math.floor(sal.length / 2)])}) · ${perPt ? fmt(perPt) : '—'}/pt over replacement`);
+      }
+      const studs = studsCost(board.map((r) => ({ row: { slug: r.slug, pos: r.pos, proj: Number(r.priced_proj ?? r.proj) }, salary: r.salary })), DEFAULT_LINEUP);
+      console.log(`  all-studs nine: ${fmt(studs)} = ${Math.round((studs / SALARY_BUDGET) * 100)}% of ${fmt(SALARY_BUDGET)} (target just over 100%)`);
+      const moved = board.filter((r) => r.priced_proj != null && Math.abs(Number(r.proj) - Number(r.priced_proj)) >= 0.5)
+        .sort((a, b) => Math.abs(Number(b.proj) - Number(b.priced_proj)) - Math.abs(Number(a.proj) - Number(a.priced_proj)));
+      console.log(`  projection moved since priced (≥0.5): ${moved.length}`);
+      for (const r of moved.slice(0, 12)) console.log(`    ${r.name} ${r.pos} ${r.team}: priced ${Number(r.priced_proj).toFixed(1)} → now ${Number(r.proj).toFixed(1)} at ${fmt(r.salary)}`);
+      // Realized, from the contest leagues' final matchups.
+      const { data: lgs } = await db().from('league').select('id').in('kind', ['dfs', 'bullseye']).eq('season', season);
+      const ids = (lgs ?? []).map((l) => l.id);
+      if (ids.length) {
+        const { data: ms } = await db().from('matchup').select('id').in('league_id', ids).eq('week', week).eq('status', 'final');
+        const mids = (ms ?? []).map((m) => m.id);
+        const { data: sts } = mids.length ? await db().from('matchup_state').select('slot_scores').in('matchup_id', mids).eq('game_window', 'wk') : { data: [] };
+        const bySlug = new Map(board.map((r) => [r.slug, r]));
+        const acc = new Map();
+        const seen = new Set();
+        for (const st of sts ?? []) for (const sc of st.slot_scores ?? []) {
+          const r = sc?.slug ? bySlug.get(sc.slug) : null;
+          if (!r || seen.has(sc.slug)) continue;
+          seen.add(sc.slug);
+          if (!acc.has(r.pos)) acc.set(r.pos, { n: 0, pts: 0, sal: 0, xy: 0, x: 0, y: 0, x2: 0, y2: 0 });
+          const a = acc.get(r.pos); const x = r.salary / 1000, y = Number(sc.score) || 0;
+          a.n++; a.pts += y; a.sal += r.salary; a.xy += x * y; a.x += x; a.y += y; a.x2 += x * x; a.y2 += y * y;
+        }
+        if (acc.size) {
+          console.log('  realized (players started in contest leagues, week final):');
+          for (const [pos, a] of [...acc].sort()) {
+            const corr = a.n > 2 ? (a.n * a.xy - a.x * a.y) / Math.sqrt(Math.max(1e-9, (a.n * a.x2 - a.x * a.x) * (a.n * a.y2 - a.y * a.y))) : NaN;
+            console.log(`    ${pos.padEnd(3)} ${String(a.n).padStart(3)} started · ${(a.pts / Math.max(1, a.sal / 1000)).toFixed(2)} pts per $1k · salary↔points r=${Number.isFinite(corr) ? corr.toFixed(2) : '—'}`);
+          }
+        } else console.log('  realized: no final contest matchups this week yet');
+      }
       break;
     }
     case 'seat-wire': {
