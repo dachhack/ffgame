@@ -3,7 +3,7 @@ import { SportSettings } from './SportSettings';
 import type { GameModeInfo } from '@drip/core/data/liveApi';
 import { VETO_RULES, DEADLINE_RULES, type VetoRule, type DeadlineRule } from '@drip/core/data/shotgunWedding';
 import { SportLineup } from './SportLineup';
-import { draftState } from '@drip/core/data/liveApi';
+import { draftState, isContestKind } from '@drip/core/data/liveApi';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
 import { commishOverview, leagueLastSeen, seenAgoLabel, leagueLiveBuffs, setLeagueLiveBuffs, leagueGameMode, setLeagueGameMode, setLeagueGolf, setLeagueBullseye, setLeagueShotgun, shotgunState, setLeagueClassicScoring, setLeagueClassicSlots, lineupSaveNote, setLeagueRosterShape, setLeaguePoolFilter, leagueIsCollegeCalendar, type AdminLeague, type LeagueSeenRow } from '@drip/core/data/liveApi';
 import { COLLEGE_TIERS, COLLEGE_CONFERENCES, collegeClassLabel } from '@drip/core/data/college';
@@ -108,6 +108,7 @@ function PosMultiSelect({ options, value, onChange, disabled, chip }: {
   );
 }
 import { LeagueRow, type LeagueTab } from './AdminPage';
+import { ContestCommishPanel } from './ContestCommish';
 import { card, linkBtn, mono, Muted, errMsg, RADIUS, TabBar, inp, btn } from './adminUi';
 import { ScoringEditor } from '../app/commishKit';
 import { notifyLeagueSettingsChanged } from '@drip/core/data/rosterBus';
@@ -175,7 +176,11 @@ export function CommishDash({ onBack, focusId, defaultTab, onDeleted }: {
             <LeagueRow l={l} reload={load} admin={false} mine defaultTab={defaultTab ?? 'members'} openSection={!!defaultTab}
               collapsible={shown.length > 1} defaultOpen={i === 0}
               panels={{
-                mode: <><LeagueIdentityPanel leagueId={l.league_id} name={l.name} avatar={l.avatar_url} reload={load} /><LeagueSettings leagueId={l.league_id} view="mode" /></>,
+                // A CONTEST LEAGUE (0466) keeps its name & crest and gains the
+                // CONTEST card; the drip/classic switch, golf and Bullseye-as-
+                // a-classic-setting are the contest's, set on that card.
+                ...(isContestKind(l.kind) ? { contest: <ContestCommishPanel leagueId={l.league_id} onChanged={() => void load()} /> } : {}),
+                mode: <><LeagueIdentityPanel leagueId={l.league_id} name={l.name} avatar={l.avatar_url} reload={load} />{!isContestKind(l.kind) && <LeagueSettings leagueId={l.league_id} view="mode" />}</>,
                 lineup: <LeagueSettings leagueId={l.league_id} view="lineup" />,
                 scoring: <LeagueSettings leagueId={l.league_id} view="scoring" />,
                 activity: <LastSeenPanel leagueId={l.league_id} />,

@@ -596,14 +596,17 @@ export async function joinDfs(code: string, teamName?: string): Promise<PodJoin>
 
 // ── DFS-style team building (migration 0092) ────────────────────────────────
 export const POD_SALARY_CAP = 50000;
-export interface PodSalaryRow { slug: string; name: string; pos: string; team: string; salary: number; proj: number; }
+export interface PodSalaryRow { slug: string; name: string; pos: string; team: string; salary: number; proj: number;
+  /** Years of NFL experience (0466), for a spot's tenure rule; null when unknown. */
+  exp?: number | null }
 
 /** The week's frozen salary board (public game data — priced weekly projections). */
 export async function podSalaries(week: number, season = '2026'): Promise<PodSalaryRow[]> {
   const { data } = await (await client()).from('pod_salary')
-    .select('slug, name, pos, team, salary, proj')
+    .select('slug, name, pos, team, salary, proj, exp')
     .eq('season', season).eq('week', week)
-    .order('salary', { ascending: false });
+    .order('salary', { ascending: false })
+    .range(0, 4999);   // every position a contest league can start (0466) — past PostgREST's 1000-row page
   return (data ?? []) as PodSalaryRow[];
 }
 
@@ -859,6 +862,8 @@ export const WEEKLY_KINDS = ['pod', 'weekly', 'dfs', 'bullseye'] as const;
 export const isWeeklyKind = (kind?: string | null): boolean => !!kind && (WEEKLY_KINDS as readonly string[]).includes(kind);
 /** One line on what a Bullseye league is, for the board and its header. */
 export function bullseyeLeagueLine(b: BullseyeInfo): string {
+  // Any contest league (0466) says what it is: its contest, format and budget.
+  if ((b as Partial<ContestInfo>).contest) return contestLeagueLine(b as ContestInfo);
   const span = b.span === 'week' ? `week ${b.week ?? '?'} only` : 'all season';
   // The retired weekly open contest (0462) has no real cap: just the count.
   const size = b.max_seats >= 1000000 ? `${b.seats_taken.toLocaleString('en-US')} in` : `${b.seats_taken.toLocaleString('en-US')} of ${b.max_seats.toLocaleString('en-US')} in`;
@@ -879,6 +884,63 @@ export const bullseyeMyWeeks = (leagueId: string) =>
 /** Commissioner: how many people the league holds (2–32, or 50,000 for a host). */
 export const setBullseyeSize = (leagueId: string, max: number) =>
   rpcOk<{ ok: boolean; error?: string; max_seats?: number }>('set_bullseye_size', { p_league: leagueId, p_max: max });
+
+// ── CONTEST LEAGUES (0466, docs/dfs-bullseye.md §13) ────────────────────────
+// Bullseye, highest-score and golf, one league type: a classic league whose
+// squads are rebuilt weekly from the board. The engine is engine/contest.ts.
+export type ContestKind = 'high' | 'golf' | 'bullseye';
+export type ContestFormat = 'h2h' | 'board';
+export interface ContestInfo extends BullseyeInfo { contest: ContestKind; format: ContestFormat; budget: number; spots: number }
+export interface ContestState {
+  ok: boolean; error?: string; on?: boolean; kind?: string; name?: string; week?: number; season?: string;
+  contest?: ContestKind; format?: ContestFormat; budget?: number;
+  /** The league's spots, S1…Sn, as the roster builder stores them plus `slot`. */
+  slots?: (import('../engine/classic').SlotSpec & { slot: string })[];
+  variant?: DfsVariant; radius?: number; positions_extra?: string[];
+  scoring_classic?: Record<string, unknown> | null; ppr?: number;
+  roster_id?: number | null; team?: string | null; started?: boolean;
+  entry?: unknown;
+  matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null } | null;
+  opponent?: { roster_id: number; team: string | null; entry: unknown } | null;
+  state?: { home: number; away: number; slots: DfsSlotScore[] } | null;
+}
+export interface ContestMyWeek extends BullseyeMyWeek { opp?: number | null; opp_team?: string | null; opp_ring?: number | null }
+export const createContestLeague = (o: { name: string; contest: ContestKind; format: ContestFormat; span: BullseyeSpan; max: number; budget: number; variant?: DfsVariant; radius?: number; teamName?: string | null }, season = '2026') =>
+  rpcOk<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; roster_id?: number; team?: string; bullseye?: ContestInfo }>('create_contest_league', {
+    p_name: o.name, p_contest: o.contest, p_format: o.format, p_span: o.span, p_max: o.max, p_budget: o.budget,
+    p_variant: o.variant ?? 'slots', p_radius: o.radius ?? 10, p_team_name: o.teamName ?? null, p_season: season });
+export const joinContest = (code: string, teamName?: string | null) =>
+  rpcOk<{ ok: boolean; error?: string; league_id?: string; league?: string; roster_id?: number; team?: string; already?: boolean }>('join_contest', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
+export const contestLeague = (leagueId: string) => rpcOk<BullseyeLeague & { kind?: string; bullseye?: ContestInfo }>('contest_league', { p_league: leagueId });
+export const contestState = (leagueId: string, week?: number | null, season = '2026') =>
+  rpcOk<ContestState>('contest_state', { p_league: leagueId, p_week: week ?? null, p_season: season });
+/** `slots`: every spot — {S1: slug, S2: slug, …}. */
+export const saveContestEntry = (leagueId: string, week: number, slots: Record<string, string>, season = '2026') =>
+  rpcOk<{ ok: boolean; error?: string; spent?: number; budget?: number }>('save_contest_entry', { p_league: leagueId, p_week: week, p_slots: slots, p_season: season });
+export const contestBoard = (leagueId: string, week?: number | null, limit = 100) =>
+  rpcOk<BullseyeLeagueBoard & { contest?: ContestKind }>('contest_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit });
+/** Commissioner: the contest, the format (before the first week), the budget. */
+export const setContestRules = (leagueId: string, o: { contest?: ContestKind | null; format?: ContestFormat | null; budget?: number | null }) =>
+  rpcOk<{ ok: boolean; error?: string; bullseye?: ContestInfo }>('set_contest_rules', { p_league: leagueId, p_contest: o.contest ?? null, p_format: o.format ?? null, p_budget: o.budget ?? null });
+/** One line on what a contest league is, for the board and its header. */
+export function contestLeagueLine(b: ContestInfo): string {
+  if (b.max_seats >= 1000000 && !b.format) return bullseyeLeagueLine(b);
+  const span = b.span === 'week' ? `week ${b.week ?? '?'} only` : 'all season';
+  const size = b.max_seats >= 1000000 ? `${b.seats_taken.toLocaleString('en-US')} in` : `${b.seats_taken.toLocaleString('en-US')} of ${b.max_seats.toLocaleString('en-US')} in`;
+  const what = b.contest === 'golf' ? '⛳ GOLF DFS · lowest score' : b.contest === 'bullseye' ? `🎯 BULLSEYE · ${b.variant === 'total' ? 'one team total' : 'slot targets'}` : '🏆 DFS · highest score';
+  const how = b.format === 'h2h' ? 'head-to-head' : 'leaderboard';
+  return `${what} · ${how} · ${span} · $${Math.round((b.budget ?? 50000) / 1000)}k budget · ${size}`;
+}
+/** The pitch under a contest league's board row: what you do each week. */
+export function contestPitch(b: Partial<ContestInfo>): string {
+  const c = b.contest ?? 'bullseye';
+  const base = c === 'golf' ? 'Each week you build a squad under the budget; the LOWEST score wins.'
+    : c === 'high' ? 'Each week you build a squad under the budget; the highest score wins.'
+    : `Each week you build a $${((b.budget ?? 50000) / 1000).toFixed(0)}k squad aimed at the week’s numbers; closest wins.`;
+  return `${base}${b.format === 'h2h' ? ' Head-to-head, one opponent a week.' : ''}${b.span === 'season' ? ' Season standings add up every week.' : ''}`;
+}
+/** Is this enrollment a contest league (opens the contest rooms)? */
+export const isContestKind = (kind?: string | null): boolean => kind === 'dfs' || kind === 'bullseye';
 
 // ── "Request a code" lead capture (migration 0016) ───────────────────────────────
 /** Pre-auth request to have a pilot code set up for the visitor's league. Routes
@@ -1581,7 +1643,7 @@ export async function revealedOppBuffs(matchupId: string, userId: string): Promi
 // ── Super admin ─────────────────────────────────────────────────────────────────
 export type Controller = 'human' | 'ai';
 export type LineupPolicy = 'best_lineup' | 'ai' | 'empty';
-export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; /** 0320: false for a co-commissioner (who cannot add, remove or hand over commissioners, or delete the league). */ primary?: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; /** Window Pot: the per-league flag (0 = off) + its ceiling, and how many pots are in flight right now. */ pot_ante?: number; pot_cap?: number; pot_open?: number; }
+export interface AdminLeague { league_id: string; sleeper_league_id: string; name: string; season: string; provider?: string; /** league.kind (0466): a contest league ('dfs' / 'bullseye') trims the commissioner's map. */ kind?: string; avatar_url?: string | null; commish_code: string; invite_code: string; commissioner: boolean; /** 0320: false for a co-commissioner (who cannot add, remove or hand over commissioners, or delete the league). */ primary?: boolean; rosters: number; enrolled: number; lineup_policy?: LineupPolicy; ai_teams?: number; weekly_budget?: number; test_live_at?: string | null; preseason_at?: string | null; /** Window Pot: the per-league flag (0 = off) + its ceiling, and how many pots are in flight right now. */ pot_ante?: number; pot_cap?: number; pot_open?: number; }
 export interface AdminUser { id: string; email: string | null; sleeper_username: string | null; sleeper_user_id: string | null; enrolled: number; created_at: string; }
 /** `drifted` (0117): this seat's occupant is no longer the roster's Sleeper owner
  *  — they left the league, it changed hands, or they unlinked. Sleeper leagues

@@ -20,6 +20,8 @@ import { REGULAR_SEASON } from './seasonType.js';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
+import { contestConfigOf, contestCard, contestAutoBuild } from '../../packages/core/src/engine/contest.ts';
+import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 
 // ── Seeded RNG (mulberry32 over a string hash — mirrors the playtester) ──────
 function hashStr(s) {
@@ -120,24 +122,45 @@ export function salaryOf(ppg) {
  *  slate-gated + floored on season relevance OR weekly projection; K/DST as
  *  the engine's team-keyed synthetics, priced from weekly K/DEF projections
  *  when available. `weekly` may be null (season-projection pricing only). */
-export function buildSalaryBoard(idx, slateTeams, weekly) {
+export function buildSalaryBoard(idx, slateTeams, weekly, extras = new Set()) {
   const rows = [];
+  // THE EXTRA POSITIONS (0466): a contest league's admin-unlocked spots (FB,
+  // the IDP three, HC, P — positions_extra) put those players on the board.
+  // No weekly projection prices them, so they sit at the floor ($3,000, proj
+  // 0 — a flyer); the season's production prices anyone it knows. IDP only
+  // with a stat line on file, or the board would be every backup linebacker.
+  const skill = new Set(['QB', 'RB', 'WR', 'TE']);
+  const more = new Set([...extras].filter((p) => ['FB', 'DL', 'LB', 'DB'].includes(p)));
   for (const p of idx.allSlugs()) {
-    if (!p.slug || !['QB', 'RB', 'WR', 'TE'].includes(p.pos)) continue;
+    if (!p.slug || !(skill.has(p.pos) || more.has(p.pos))) continue;
     if (!p.team || !slateTeams.has(p.team)) continue;
     const seasonPpg = dealPpg(p.slug, p.pos, p.sid);
     const weekPpg = weekly?.bySid.get(String(p.sid));
-    if (seasonPpg < MIN_DEAL_PPG && (weekPpg ?? 0) < MIN_DEAL_PPG) continue;
+    if (skill.has(p.pos)) {
+      if (seasonPpg < MIN_DEAL_PPG && (weekPpg ?? 0) < MIN_DEAL_PPG) continue;
+    } else if (['DL', 'LB', 'DB'].includes(p.pos) && !hasStatsForSlug(p.slug)) continue;
     const ppg = weekPpg ?? seasonPpg;
-    rows.push({ slug: p.slug, name: p.full, pos: p.pos, team: p.team, salary: salaryOf(ppg), proj: Math.round(ppg * 10) / 10 });
+    rows.push({ slug: p.slug, name: p.full, pos: p.pos, team: p.team, salary: salaryOf(ppg), proj: Math.round(ppg * 10) / 10, exp: p.exp ?? null });
   }
   for (const t of slateTeams) {
     const kPpg = weekly?.kByTeam.get(t) ?? 7.5;
     const dPpg = weekly?.defByTeam.get(t) ?? 7;
-    rows.push({ slug: `${t.toLowerCase()}-k`, name: `${t} Kicker`, pos: 'K', team: t, salary: salaryOf(kPpg), proj: Math.round(kPpg * 10) / 10 });
-    rows.push({ slug: `${t.toLowerCase()}-dst`, name: `${t} D/ST`, pos: 'DEF', team: t, salary: salaryOf(dPpg), proj: Math.round(dPpg * 10) / 10 });
+    rows.push({ slug: `${t.toLowerCase()}-k`, name: `${t} Kicker`, pos: 'K', team: t, salary: salaryOf(kPpg), proj: Math.round(kPpg * 10) / 10, exp: null });
+    rows.push({ slug: `${t.toLowerCase()}-dst`, name: `${t} D/ST`, pos: 'DEF', team: t, salary: salaryOf(dPpg), proj: Math.round(dPpg * 10) / 10, exp: null });
+    // The classic engine's team units (0171): the head coach and the punter.
+    if (extras.has('HC')) rows.push({ slug: `${t.toLowerCase()}-hc`, name: `${t} Head Coach`, pos: 'HC', team: t, salary: salaryOf(0), proj: 0, exp: null });
+    if (extras.has('P')) rows.push({ slug: `${t.toLowerCase()}-p`, name: `${t} Punter`, pos: 'P', team: t, salary: salaryOf(0), proj: 0, exp: null });
   }
   return rows;
+}
+
+/** The positions some contest league this season has unlocked (positions_extra). */
+async function contestExtraPositions(season) {
+  const { data } = await db().from('league').select('settings_json').in('kind', ['dfs', 'bullseye']).eq('season', season);
+  const out = new Set();
+  for (const l of data ?? []) for (const p of l.settings_json?.positions_extra ?? []) if (typeof p === 'string') out.add(p.toUpperCase());
+  if (out.has('IDP')) { out.add('DL'); out.add('LB'); out.add('DB'); }
+  return out;
 }
 
 /** PURE: seeded auto-build of a legal entry from the salary board — AI seats,
@@ -204,6 +227,9 @@ export async function ensurePods(week, season, idx) {
   }
   const pods = (all ?? []).filter((l) => l.kind === 'pod' || l.kind === 'dfs' || l.contest_week === week
     || (l.kind === 'bullseye' && l.contest_week == null));
+  // CONTEST LEAGUES (0466): kind dfs or bullseye — the league's own spots and
+  // budget shape the auto-builds, and only a head-to-head league is paired
+  // (a leaderboard seat scores on its own row, made when it saves a squad).
   // (A Bullseye league — this week's, or a season one — is in `pods` for one
   // reason: the week's salary board below must exist for it to be built
   // against. It has no AI seats and no pairing — each entrant's scoring row
@@ -221,9 +247,11 @@ export async function ensurePods(week, season, idx) {
 
   let dealt = 0, made = 0;
   for (const pod of pods) {
-    if (pod.kind === 'bullseye') continue;
+    const contest = pod.kind === 'dfs' || pod.kind === 'bullseye' ? contestConfigOf(pod.settings_json, pod.kind) : null;
+    if (contest && contest.format === 'board') continue;
+    const contestCardNow = contest?.contest === 'bullseye' ? contestCard(pod.id, week, contest.slots, leagueCatalogOf({ scoring: pod.settings_json?.scoring_classic ?? null, ppr: pod.settings_json?.ppr })) : null;
     // DFS Bullseye (0462): AI seats and no-shows AIM at the card instead.
-    const bullCfg = dfsBullseyeConfigOf(pod.settings_json);
+    const bullCfg = contest ? null : dfsBullseyeConfigOf(pod.settings_json);
     const card = bullCfg ? dfsCard(pod.id, week) : null;
     const { data: mems } = await db().from('league_membership')
       .select('sleeper_roster_id, enrolled, app_user_id, controller').eq('league_id', pod.id);
@@ -243,6 +271,13 @@ export async function ensurePods(week, season, idx) {
     });
     if (need.length) {
       const rows = need.map((m) => {
+        if (contest) {
+          const built = contestAutoBuild(board, contest, `${pod.id}|w${week}|aim${m.sleeper_roster_id}`, contestCardNow);
+          return {
+            league_id: pod.id, week, roster_id: m.sleeper_roster_id,
+            starters_json: contest.slots.filter((d) => built[d.slot]).map((d) => ({ slot: d.slot, sleeper_id: null, player_slug: built[d.slot], pos: board.find((b) => b.slug === built[d.slot])?.pos ?? d.pos[0] })),
+          };
+        }
         if (card) {
           const aimed = aimBuild(board, card, `${pod.id}|w${week}|aim${m.sleeper_roster_id}`);
           return {
@@ -297,14 +332,14 @@ export async function ensureSalaryBoard(season, week, idx) {
     .select('slug').eq('season', season).eq('week', week).limit(1);
   if (!haveSal?.length) {
     const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
-    board = buildSalaryBoard(idx, slateTeams, weekly);
+    board = buildSalaryBoard(idx, slateTeams, weekly, await contestExtraPositions(season).catch(() => new Set()));
     if (board.length) {
       await db().from('pod_salary').upsert(
         board.map((r) => ({ season, week, ...r })), { onConflict: 'season,week,slug' });
     }
   } else {
     const { data: rows } = await db().from('pod_salary')
-      .select('slug, name, pos, team, salary, proj').eq('season', season).eq('week', week);
+      .select('slug, name, pos, team, salary, proj, exp').eq('season', season).eq('week', week).range(0, 4999);
     board = rows ?? [];
   }
   if (!board.length) return { board, skipped: 'no board' };
@@ -315,7 +350,7 @@ export async function ensureSalaryBoard(season, week, idx) {
  *  or one made for that week (the SQL answers "the week about to be played"
  *  from the slate, which can run ahead of this worker's week on a Tuesday). */
 export async function ensureNextBullseyeBoard(season, week, idx) {
-  const { data: lg } = await db().from('league').select('id').eq('kind', 'bullseye').eq('season', season)
+  const { data: lg } = await db().from('league').select('id').in('kind', ['dfs', 'bullseye']).eq('season', season)
     .or(`contest_week.is.null,contest_week.eq.${Number(week)}`).limit(1);
   if (!lg?.length) return null;
   const { skipped } = await ensureSalaryBoard(season, week, idx);

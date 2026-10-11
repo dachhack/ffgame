@@ -10,8 +10,7 @@ import { crestInitial } from '@drip/core/data/crest';
 import {
   myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, setLeagueArchived,
   leagueDetailLine, leagueTypeLine, leagueLandingRoom, myLeagueSlate, isWeeklyKind,
-  type AdminLeague, type Enrollment, type WaitlistRow, type LeagueSlateRow,
-} from '@drip/core/data/liveApi';
+  type AdminLeague, type Enrollment, type WaitlistRow, type LeagueSlateRow, isContestKind } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, seatKey, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
@@ -300,7 +299,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
               // running, the hub when there is neither.
               const room = leagueLandingRoom(e);
               onOpen(e.league_id, e.sleeper_roster_id, lg?.name ?? 'League', lg?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id,
-                lg?.kind === 'bullseye' ? 'picks' : room === 'matchup' ? 'picks' : room, lg?.kind);
+                isContestKind(lg?.kind) ? 'picks' : room === 'matchup' ? 'picks' : room, lg?.kind);
             }}
             android_ripple={{ color: alpha(t.you, 16) }}
             // THE SPINE HAS TO EARN ITS PLACE — the web card carries the same
@@ -484,7 +483,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
         <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>→</Text>
       </Pressable>
 
-      {/* 🎯 BULLSEYE LEAGUES (0463): start one, or join one with its code. */}
+      {/* 🎯 CONTEST LEAGUES (0463/0466): start one, or join one with its code. */}
       {onBullseyeStart && (
         <Pressable
           onPress={() => { tap(); onBullseyeStart(); }}
@@ -499,8 +498,8 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
             <Text style={{ fontSize: 18 }}>🎯</Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>Bullseye league</Text>
-            <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>Start one · join with a code · a $50k squad aimed at the week’s numbers</Text>
+            <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>Weekly squad league</Text>
+            <Text style={{ fontSize: 11.5, color: t.mid, marginTop: 2 }}>Start one · join with a code · DFS, golf or Bullseye, a new squad every week</Text>
           </View>
           <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>→</Text>
         </Pressable>

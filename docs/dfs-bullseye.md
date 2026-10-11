@@ -204,3 +204,62 @@ contest is retired.
     still gates league chat and DMs.
   - Computer's reply, and when the issue closes, its fix card, post back into
     the room as kind `computer`.
+
+## 13. Contest leagues: DFS, golf and Bullseye, with every classic option (v0.664.0, 0466)
+
+Founder: "Let's get more commish options in for bullseye leagues — Rosters,
+budget, full scoped bonuses, lists, and eligible players, scoped positions, HC,
+FB, etc. all the classic league options. … In fact this is just a version of
+dfs, but with a target. Let's build regular highest score dfs and golf dfs while
+we are at it." Chosen: golf is the classic golf rule (lowest total wins, a
+spot's `zero_pts` pricing a scoreless spot); the commissioner picks
+head-to-head or leaderboard per league; COMMISH is the classic console,
+trimmed, with a CONTEST card.
+
+- **One league type.** A contest league is a classic league (`game_mode
+  classic`, kind `dfs` — `bullseye` for the ones made before 0466) whose squads
+  are rebuilt every week from the salary board. Its settings carry
+  `contest` (`high` | `golf` | `bullseye`), `contest_format` (`h2h` | `board`),
+  `budget` ($10,000–$500,000), `span`, `max_seats`, and `roster_slots` — the
+  classic roster builder's spot list (the DFS nine by default). A golf league
+  carries `golf: true`; a Bullseye one `dfs_bullseye`, `bullseye`,
+  `bullseye_radius`. Every league from before is backfilled.
+- **The engine is `packages/core/src/engine/contest.ts`.** `contestConfigOf`
+  reads the settings; `contestCard` deals the week's card over the league's
+  spots, anchored to its scoring catalog; `scoreContest` scores a week (HIGH
+  sums, GOLF sums with the zero-fill, BULLSEYE darts; a SOLO row scores both
+  sides alike); `contestTiebreak` picks one RB/WR spot; `contestAutoBuild`
+  fills a seat spot by spot under the budget, reserving the $3,000 minimum per
+  spot still to fill. Spots are `S1…Sn`; a squad saved before 0466 (DFS names)
+  fills them in order by position.
+- **Every classic option applies.** The roster builder (any spot: FLEX, HC,
+  FB, P, RET, IDP where the admin enables them; team, tenure and flag filters;
+  `zero_pts`), the scoring catalog and by-position scoring, scoped bonuses in
+  the commissioner's kit, the pool filter and seat rules. `save_contest_entry`
+  checks each spot (`_contest_spot_error`: position, the spot's filter, the
+  pool filter, the seat's rule), duplicates, the budget and per-player locks.
+  The salary board (`pod_salary`) now prices every position a spot can take,
+  with `exp` for tenure rules.
+- **Formats.** HEAD-TO-HEAD makes every seat at creation (an even count, at
+  most 32; the CPU plays a seat until someone takes it) and the worker pairs
+  them each week. LEADERBOARD seats people as they join (32, or 50,000 for a
+  host) and each squad is its own row. The format is set only before the
+  first week; the contest and budget change from the next week.
+- **Standings.** `contest_board(league, week)` ranks the way the contest ranks
+  — highest first, lowest first for golf, closest with the tie-break for
+  Bullseye — and sums a season league's finals. `bullseye_my_weeks` carries
+  the opponent and their score in a head-to-head league.
+- **The screens.** `ContestSquad` (web `src/screens/ContestSquad.tsx`, phone
+  `apps/mobile/src/screens/ContestSquad.tsx`) draws the league's own spots,
+  the budget and the card; the pick sheet filters by `contestSlotAllows` and
+  sorts the way the contest scores. The creation form picks the contest, the
+  format, the span, the budget, the size and (Bullseye) the card. COMMISH is
+  the classic console — web `CommishDash` with a CONTEST panel
+  (`src/screens/ContestCommish.tsx`), phone `CommishTools` with the CONTEST
+  card — trimmed of draft, waivers, trades, playoffs, contracts and coin.
+- **RPCs.** `create_contest_league`, `join_contest`, `contest_league`,
+  `contest_state`, `save_contest_entry`, `contest_board`, `set_contest_rules`;
+  the 0463 names (`create_bullseye_league`, `join_bullseye`, `bullseye_league`,
+  `bullseye_league_board`) are wrappers. `commish_overview` carries the kind.
+- **Next.** The rich squad builder on web and phone (position tabs, team
+  filter, value sort, a budget bar) is PR 2.

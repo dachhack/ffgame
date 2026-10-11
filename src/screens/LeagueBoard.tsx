@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   leagueBoard, leaguePreview, joinFromBoard, postLeagueListing, closeLeagueListing, leagueListingState,
   type LeagueIdentity,
-  commishOverview, friendlyError, bullseyeLeagueLine, isWeeklyKind,
+  commishOverview, friendlyError, bullseyeLeagueLine, contestPitch, isWeeklyKind,
   type BoardListing, type BoardPreview, type AdminLeague,
 } from '@drip/core/data/liveApi';
 
@@ -165,7 +165,7 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
                 <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
                 <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 3 }}>
                   {r.bullseye
-                    ? <>{r.seats_open.toLocaleString('en-US')} open spot{r.seats_open === 1 ? '' : 's'} of {r.seats_total.toLocaleString('en-US')} · no draft — a $50k squad each week</>
+                    ? <>{r.seats_open.toLocaleString('en-US')} open spot{r.seats_open === 1 ? '' : 's'} of {r.seats_total.toLocaleString('en-US')} · no draft — a squad each week</>
                     : <>{r.seats_open} open seat{r.seats_open === 1 ? '' : 's'} of {r.seats_total} · draft {r.draft_status} · {r.draft_mode}</>}
                   {r.mine && <span style={{ color: 'var(--you)' }}> · YOU’RE IN THIS ONE</span>}
                 </div>
@@ -234,7 +234,7 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
                 {preview.bullseye
                   ? <div className="mono" style={{ fontSize: 9.5, color: 'var(--you)', marginTop: 10, lineHeight: 1.6 }}>
                       {bullseyeLeagueLine(preview.bullseye)}<br />
-                      <span style={{ color: 'var(--dim)' }}>Each week you build a $50,000 squad aimed at the week’s numbers; closest wins.{preview.bullseye.span === 'season' ? ' Season standings add up every week.' : ''}</span>
+                      <span style={{ color: 'var(--dim)' }}>{contestPitch(preview.bullseye)}</span>
                     </div>
                   : preview.identity && <div className="mono" style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 10 }}>{identityLine(preview.identity)}</div>}
                 {preview.dues && <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', marginTop: 5 }}>💵 DUES: {preview.dues}</div>}

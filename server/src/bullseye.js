@@ -69,6 +69,7 @@ export async function publishBullseyeCards(week, log = () => {}) {
   if (!lgs?.length) return 0;
   let dealt = 0;
   for (const l of lgs) {
+    if (l.settings_json?.contest || l.settings_json?.dfs_bullseye === true) continue;   // a contest league (0466) deals its own card over its spots
     const mode = modeOfSettings(l.settings_json);
     const cfg = bullseyeCfgOf(mode);
     if (!cfg) continue;

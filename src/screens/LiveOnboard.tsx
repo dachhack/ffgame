@@ -9,7 +9,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, joinBullseye, isWeeklyKind, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, joinBullseye, isWeeklyKind, isContestKind, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
   inviteSeats, claimPlatformSeat, type InviteSeat,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
@@ -1143,7 +1143,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       onPodBuild={(leagueId, rosterId, week, name) => guard(() => {
         setHomeFor(null);
         // A Bullseye league (0463) builds in its own MATCHUP room.
-        if (enrollments?.find((x) => x.league_id === leagueId)?.league?.kind === 'bullseye') { setBullLeague(leagueId); setView('bleague'); return; }
+        if (isContestKind(enrollments?.find((x) => x.league_id === leagueId)?.league?.kind)) { setBullLeague(leagueId); setView('bleague'); return; }
         setTarget({ leagueId, rosterId, week, name }); setView('podbuild');
       })()}
       onManage={(id) => guard(() => { setHomeFor(null); setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
@@ -1154,7 +1154,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         if (!viewAs) void leagueTouch(e.league_id).catch(() => {});
         // A BULLSEYE LEAGUE (0463) has its own rooms — matchup, league, team,
         // chat, settings, commish — under one page.
-        if (e.league?.kind === 'bullseye') { setHomeFor(null); setBullLeague(e.league_id); setView('bleague'); return; }
+        if (isContestKind(e.league?.kind)) { setHomeFor(null); setBullLeague(e.league_id); setView('bleague'); return; }
         // WHERE THE LEAGUE IS IS WHERE YOU WANT TO BE (v0.356.16, founder):
         // the matchup once it has drafted, the draft room while it is
         // running, the hub when there is neither. `homeFor` is set either
@@ -1860,8 +1860,8 @@ function RoleChooser({ onPlayer, onCreate, onBullseye, onSleeper, onProvider, on
         )}
         {onBullseye && (
           <button onClick={onBullseye} style={{ ...choice, borderLeft: '3px solid var(--you)' }}>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>🎯 A Bullseye league →</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>Start one (up to 32 people, one week or the season) or join one with its code. Each week: a $50k squad aimed at the week’s numbers.</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--you)' }}>🎯 A weekly squad league →</div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 5, lineHeight: 1.5 }}>DFS, golf or Bullseye — a new squad under the budget every week, head-to-head or on a leaderboard. Start one (one week or the season) or join one with its code.</div>
           </button>
         )}
         {onSleeper && (

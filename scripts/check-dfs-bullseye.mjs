@@ -93,13 +93,13 @@ ok('sealed: and no zero penalty for him either', live.home === 7 * 20, live.home
 // ── the wiring ──────────────────────────────────────────────────────────────
 const read = (p) => fs.readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const resolve = read('server/src/resolve.js');
-ok('worker: the DFS branch comes before classic', resolve.indexOf('if (dfsCfg) {') > 0 && resolve.indexOf('if (dfsCfg) {') < resolve.indexOf("} else if (gameMode.mode === 'classic') {"));
+ok('worker: the contest branch comes before classic', resolve.indexOf('if (contestCfg) {') > 0 && resolve.indexOf('if (contestCfg) {') < resolve.indexOf("} else if (gameMode.mode === 'classic') {"));
 ok('worker: modeOfSettings carries dfs_bullseye', /dfs_bullseye: s\?\.dfs_bullseye === true/.test(resolve));
-ok('worker: scored under stock PPR with the slot position', /classicPoints\(player\(slug\), matchup\.week, 1, dfsSlotPos\(slot\)/.test(resolve));
+ok('worker: scored under the league\'s catalog, RET spots as RET', /classicPoints\(player\(slug\), matchup\.week, catalog, contestScoreAs\(def\), slot\)/.test(resolve));
 ok('lock: no drip auto-lineup for a Bullseye contest', /settings_json\?\.dfs_bullseye === true\) continue/.test(read('server/src/lock.js')));
 const pods = read('server/src/pods.js');
-ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods));
-ok('pods: the open contest is skipped in the seat loop', /if \(pod\.kind === 'bullseye'\) continue;/.test(pods));
+ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(board, contest,/.test(pods));
+ok('pods: a leaderboard contest is skipped in the seat loop', /if \(contest && contest\.format === 'board'\) continue;/.test(pods));
 const sql = read('supabase/migrations/0462_dfs_bullseye.sql');
 ok('sql: slot names match the engine', /array\['QB','RB1','RB2','WR1','WR2','WR3','TE','K','DEF'\]/.test(sql));
 ok('sql: the cap matches the engine', sql.includes('cap int := 50000') && DFS_CAP === 50000);
@@ -120,13 +120,79 @@ ok('sql: the open contest is found, never made', !/insert into league[^;]*'BULL-
 ok('sql: a season league takes a squad from the week in play on', sql2.includes("lg.contest_week is null and p_week < coalesce(_contest_week(lg.season), 1)"));
 ok('pods: no open contest made; season leagues get the board', !pods.includes('ensureBullseyeContest(') && pods.includes("(l.kind === 'bullseye' && l.contest_week == null)"));
 const web = read('src/screens/LiveOnboard.tsx');
-ok('web: a Bullseye league opens its own rooms', web.includes("e.league?.kind === 'bullseye'") && web.includes('<BullseyeLeaguePage'));
+ok('web: a contest league opens its own rooms', web.includes("isContestKind(e.league?.kind)") && web.includes('<BullseyeLeaguePage'));
 const app = read('apps/mobile/App.tsx');
-ok('phone: a Bullseye league opens its own rooms on the room bar', app.includes("open?.kind === 'bullseye' && view !== 'chat'") && app.includes('<BullseyeLeagueRoom'));
+ok('phone: a contest league opens its own rooms on the room bar', app.includes("open && isContestKind(open.kind) && view !== 'chat' && view !== 'commishtools'") && app.includes('<BullseyeLeagueRoom'));
 for (const f of ['src/screens/BullseyeLeague.tsx', 'apps/mobile/src/screens/BullseyeLeague.tsx']) {
   const src = read(f);
-  ok(`${f}: matchup, league, team, settings and commish rooms`, ['TeamRoom', 'LeagueRoom', 'SettingsRoom', 'CommishRoom', 'BullseyeSquad'].every((k) => src.includes(k)));
+  ok(`${f}: matchup, league, team and settings rooms on the contest squad`, ['TeamRoom', 'LeagueRoom', 'SettingsRoom', 'ContestSquad', 'contestLeague(', 'contestBoard('].every((k) => src.includes(k)));
 }
+// COMMISH is the classic console, trimmed, with the CONTEST card (v0.664.0).
+ok('web: the commish room is CommishDash, with the CONTEST panel', read('src/screens/BullseyeLeague.tsx').includes('<CommishDash focusId={leagueId}') && read('src/screens/CommishDash.tsx').includes('contest: <ContestCommishPanel'));
+ok('web: a contest league\'s map drops draft, waivers, playoffs, contracts and coin', /const navGroups: NavGroup<LeagueTab>\[\] = contest \? \[/.test(read('src/screens/AdminPage.tsx')));
+const tools = read('apps/mobile/src/screens/CommishTools.tsx');
+ok('phone: CommishTools takes `contest`, shows the CONTEST card and hides MODE', tools.includes("{ id: 'contest', label: '🏁 CONTEST', contestOnly: true }") && tools.includes("{ id: 'mode', label: 'MODE', notContest: true }") && tools.includes("section === 'contest' && <ContestCommishCard"));
+ok('phone: the commish room goes through CommishTools with the contest flag', app.includes('contest={isContestKind(open.kind)}'));
+
+// ── contest leagues (v0.664.0, 0466): one league type, three contests ────────
+const C = await import('../packages/core/src/engine/contest.ts');
+const { leagueSlotDefs } = await import('../packages/core/src/engine/classic.ts');
+ok('contest: a bullseye league with no `contest` key is a Bullseye contest, leaderboard, $50k, the DFS nine', (() => {
+  const c = C.contestConfigOf({ dfs_bullseye: true, bullseye: 'total', bullseye_radius: 12 }, 'bullseye');
+  return c?.contest === 'bullseye' && c.format === 'board' && c.budget === 50000 && c.slots.length === 9 && c.bullseye?.variant === 'total' && c.bullseye.radius === 12 && c.bullseye.deal === 'shared';
+})());
+ok('contest: a dfs league with no `contest` key is HIGH, head-to-head', C.contestConfigOf({}, 'dfs')?.contest === 'high' && C.contestConfigOf({}, 'dfs')?.format === 'h2h');
+ok('contest: not a contest without a kind or key', C.contestConfigOf({ game_mode: 'classic' }, 'league') === null);
+const cfgG = C.contestConfigOf({ contest: 'golf', contest_format: 'h2h', budget: 80000, roster_slots: [{ pos: ['QB'] }, { pos: ['RB', 'WR'], zero_pts: 25 }, { pos: ['HC'], label: 'COACH' }] }, 'dfs');
+ok('contest: the league\'s own spots, budget and labels', cfgG?.budget === 80000 && cfgG.slots.map((d) => d.slot).join() === 'S1,S2,S3' && C.contestSlotLabels(cfgG.slots).S2 === 'RB/WR' && C.contestSlotLabels(cfgG.slots).S3 === 'COACH');
+ok('contest: a repeated type numbers up (RB1, RB2, D/ST)', (() => { const l = C.contestSlotLabels(leagueSlotDefs({ slots: C.CONTEST_DEFAULT_SLOTS })); return l.S2 === 'RB1' && l.S3 === 'RB2' && l.S9 === 'D/ST' && l.S1 === 'QB'; })());
+const pts = { a: 20, b: 0, c: 5, d: 12, e: 0, f: 3 };
+const pointsOf = (slug) => pts[slug] ?? 0;
+const gRes = C.scoreContest({ home: { S1: 'a', S2: 'b', S3: 'c' }, away: { S1: 'd', S2: 'e', S3: 'f' } }, cfgG, pointsOf);
+ok('golf: a scoreless FLEX banks its zero_pts penalty', gRes.home === 50 && gRes.away === 40, [gRes.home, gRes.away]);
+const cfgH = C.contestConfigOf({ contest: 'high', contest_format: 'board', roster_slots: [{ pos: ['QB'] }, { pos: ['RB', 'WR'] }] }, 'dfs');
+const hRes = C.scoreContest({ home: { S1: 'a', S2: 'd' }, away: { S1: 'a', S2: 'd' } }, cfgH, pointsOf, { pending: (s) => s === 'd' });
+ok('high: a SOLO row scores the same squad both sides; a pending player is not scored yet', hRes.home === 20 && hRes.away === 20 && hRes.slots.length === 2);
+const cfgB = C.contestConfigOf({ contest: 'bullseye', bullseye: 'slots', bullseye_radius: 10, roster_slots: [{ pos: ['RB'] }, { pos: ['WR'] }] }, 'dfs');
+const cardB = C.contestCard('L', 3, cfgB.slots);
+ok('bullseye: a card over the league\'s spots, a multiple of 5 each', Object.keys(cardB.targets).join() === 'S1,S2' && Object.values(cardB.targets).every((t) => t % 5 === 0));
+const tbB = C.contestTiebreak('L', 3, 7, cardB, cfgB.slots);
+ok('bullseye: the tie-break is one RB/WR spot near its target', tbB != null && ['S1', 'S2'].includes(tbB.slot) && Math.abs(tbB.target - cardB.targets[tbB.slot]) <= 4);
+ok('bullseye: no RB/WR spot, no tie-break', C.contestTiebreak('L', 3, 7, cardB, [{ slot: 'S1', type: 'QB', pos: ['QB'] }]) === null);
+const exactB = { a: cardB.targets.S1, d: cardB.targets.S2 };
+const bRes = C.scoreContest({ home: { S1: 'a', S2: 'd' }, away: { S1: 'a', S2: null } }, cfgB, (s) => exactB[s] ?? 0, { card: cardB, tiebreak: { home: tbB, away: tbB } });
+ok('bullseye: two dead-on players bank 2 × (10 + 10); a dead-on and an empty spot bank 20 − 10', bRes.home === 40 && bRes.away === 10, [bRes.home, bRes.away]);
+ok('bullseye: tie-break distances stamped both sides', bRes.tiebreak.home != null && bRes.tiebreak.away != null);
+const boardC = [
+  { slug: 'qb1', pos: 'QB', team: 'KC', salary: 9000, proj: 22 }, { slug: 'qb2', pos: 'QB', team: 'BUF', salary: 5000, proj: 14 },
+  { slug: 'rb1', pos: 'RB', team: 'SF', salary: 8000, proj: 18, exp: 1 }, { slug: 'rb2', pos: 'RB', team: 'DAL', salary: 4000, proj: 9, exp: 7 }, { slug: 'rb3', pos: 'RB', team: 'DAL', salary: 3000, proj: 0, exp: 0 },
+  { slug: 'hc1', pos: 'HC', team: 'KC', salary: 3000, proj: 5 },
+];
+const cfgR = C.contestConfigOf({ contest: 'golf', budget: 16000, roster_slots: [{ pos: ['QB'] }, { pos: ['RB'], max_exp: 2 }, { pos: ['HC'] }] }, 'dfs');
+const bR = C.contestAutoBuild(boardC, cfgR, 'seed');
+ok('build: every spot filled under the budget, the tenure rule kept, golf taking the smallest real projection', bR.S1 === 'qb2' && bR.S2 === 'rb1' && bR.S3 === 'hc1' && C.contestSalary(bR, (s) => boardC.find((b) => b.slug === s).salary) <= 16000, bR);
+ok('allows: a RET spot takes a ball-carrier; a tenure rule refuses a veteran', C.contestSlotAllows({ slot: 'S1', type: 'RET', pos: ['RET'] }, { slug: 'rb2', pos: 'RB' }) && !C.contestSlotAllows(cfgR.slots[1], { slug: 'rb2', pos: 'RB', exp: 7 }));
+ok('squad: S-rows read by name, legacy DFS names fall into spots by position', (() => {
+  const s1 = C.contestSquadOf([{ slot: 'S2', player_slug: 'x' }], cfgB.slots);
+  const s2 = C.contestSquadOf([{ slot: 'WR1', player_slug: 'w', pos: 'WR' }, { slot: 'RB1', player_slug: 'r', pos: 'RB' }], cfgB.slots);
+  return s1.S2 === 'x' && s1.S1 === null && s2.S1 === 'r' && s2.S2 === 'w';
+})());
+const { contestLeagueLine, isContestKind, contestPitch } = await import('../packages/core/src/data/liveApi.ts');
+const cline = contestLeagueLine({ contest: 'golf', format: 'h2h', budget: 80000, spots: 9, variant: 'slots', radius: 10, span: 'season', week: null, max_seats: 12, seats_taken: 4 });
+ok('board line: contest, format, budget and size', cline.includes('GOLF') && cline.includes('head-to-head') && cline.includes('$80k') && cline.includes('4 of 12'), cline);
+ok('bullseyeLeagueLine defers to the contest line', bullseyeLeagueLine({ contest: 'high', format: 'board', budget: 50000, spots: 9, variant: 'slots', radius: 10, span: 'week', week: 5, max_seats: 32, seats_taken: 2 }).includes('highest score'));
+ok('kinds: dfs and bullseye are contest leagues', isContestKind('dfs') && isContestKind('bullseye') && !isContestKind('pod') && !isContestKind(null));
+ok('pitch: golf says lowest', contestPitch({ contest: 'golf', format: 'h2h' }).includes('LOWEST') && contestPitch({ contest: 'golf', format: 'h2h' }).includes('Head-to-head'));
+const sql3 = read('supabase/migrations/0466_contest_leagues.sql');
+ok('sql: the salary board prices every position a contest can start', /check \(pos in \('QB','RB','WR','TE','FB','K','DEF','DL','LB','DB','HC','P','RET'\)\)/.test(sql3) && sql3.includes('add column if not exists exp int'));
+ok('sql: a contest league is a classic league with its contest in settings', sql3.includes("'game_mode', 'classic', 'contest', p_contest, 'contest_format', p_format, 'budget'"));
+ok('sql: head-to-head needs an even count and makes every seat now', sql3.includes("a head-to-head league needs an even number of teams") && sql3.includes("'CON-AI-' || i"));
+ok('sql: an entry is checked spot by spot (position, filter, pool, seat rule) and against the budget', ['_contest_spot_error', 'seat_player_rule', 'pool_filter', 'over the budget'].every((k) => sql3.includes(k)) || ['_contest_spot_error', 'seat_player_rule', 'pool_filter', 'budget'].every((k) => sql3.includes(k)));
+ok('sql: the format is set only before the first week', sql3.includes("if p_format <> _contest_format_of(lg) and exists (select 1 from matchup where league_id = p_league)"));
+ok('sql: the commissioner\'s console knows the kind', sql3.includes("'avatar_url', l.avatar_url, 'kind', l.kind,"));
+ok('board read: every position, with exp, past the 1000-row page', (() => { const api = read('packages/core/src/data/liveApi.ts'); return api.includes("select('slug, name, pos, team, salary, proj, exp')") && /proj, exp'\)[\s\S]{0,200}\.range\(0, 4999\)/.test(api); })());
+ok('pods: the board carries exp and the extra positions', /expOf|exp:/.test(read('server/src/playerIndex.js')) && /contestExtraPositions/.test(pods));
+ok('bullseye cards: not published for a contest league (its card is dealt in the engine)', /settings_json\?\.contest|dfs_bullseye/.test(read('server/src/bullseye.js')));
 
 // ── weekly leagues are listings like any other (v0.662.0) ────────────────────
 const { isWeeklyKind } = await import('../packages/core/src/data/liveApi.ts');
