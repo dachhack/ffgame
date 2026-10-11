@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.676.0` · migrations through `0478`_
+_Last updated: 2026-10-11 · Build `v0.677.0` · migrations through `0479`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -41,6 +41,13 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
     dispatch is 403 from a cloud session). `scripts/db/team-role-probes.sql`
     is the read-only probe for the "Run a database query" workflow; or just
     open a league with a HEAD COACH spot and look for "Liam Coen".
+- **The card table (v0.677.0)**: the MATCHUP tab of a contest league deals
+  the week as cards (`ContestMatchup` on both clients; `contest_matchup`,
+  0479); the builder lives under MY TEAM now. First live look still to
+  have: the phone's `FlipCard` on a real device (Animated rotateY with
+  backfaceVisibility), the headshot art on the card faces, and a week with
+  a kickoff passing while the screen is open (the newly unsealed card
+  should turn on the next 60s poll).
 - **Not done, in the order I'd do them** (the founder has seen this list):
   1. ~~"Where am I" on a 50,000-seat leaderboard~~ — done in v0.671.0
      (0473: `near` + `found` on `contest_board`; the index 0001 already

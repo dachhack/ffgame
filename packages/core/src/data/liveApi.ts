@@ -985,6 +985,25 @@ export const commishContestSquad = (leagueId: string, week: number, rosterId: nu
 export const commishSetContestSquad = (leagueId: string, week: number, rosterId: number, slots: Record<string, string | null>, note: string) =>
   tracked(rpcOk<{ ok: boolean; error?: string; in?: string[]; out?: string[]; spent?: number; rescore?: boolean }>('commish_set_contest_squad',
     { p_league: leagueId, p_week: week, p_roster: rosterId, p_slots: slots, p_note: note }), Ev.commishAction, { tool: 'contest_squad_fix' });
+/** THE MATCHUP, AS CARDS (0479): any matchup of a week — mine by default, or
+ *  one by id or by a seat in it — both squads sealed per player until his
+ *  kickoff (my own open), the live/final scores, and the week's list. */
+export interface ContestMatchupRow { id: string; home: number; away: number; home_team: string; away_team: string; status: string; label: string | null; consolation: boolean; home_score: number | null; away_score: number | null; mine: boolean }
+export interface ContestMatchupState {
+  ok: boolean; error?: string; week?: number; started?: boolean; me?: number | null;
+  slots?: (import('../engine/classic').SlotSpec & { slot: string })[];
+  contest?: ContestKind; format?: ContestFormat; variant?: DfsVariant; radius?: number;
+  matchup?: {
+    id: string; status: string; home: number; away: number; home_team: string; away_team: string;
+    home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null;
+    playoff?: boolean; label?: string | null;
+    home_entry: unknown; away_entry: unknown;
+    state: { home: number; away: number; slots: DfsSlotScore[] } | null;
+  } | null;
+  matchups?: ContestMatchupRow[];
+}
+export const contestMatchup = (leagueId: string, week?: number | null, matchupId?: string | null, rosterId?: number | null) =>
+  rpcOk<ContestMatchupState>('contest_matchup', { p_league: leagueId, p_week: week ?? null, p_matchup: matchupId ?? null, p_roster: rosterId ?? null });
 /** SWAP HISTORY (0478): a seat's changes to a saved squad, newest first. Own
  *  seat any time; another's once the week's squads unseal; the commissioner's any. */
 export interface SwapRow { id: number; slot: string; kind: 'swap' | 'commish' | 'sub'; at: string; out: string | null; out_name: string | null; in: string | null; in_name: string | null }

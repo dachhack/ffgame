@@ -25,6 +25,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
+import { ContestMatchup } from './ContestMatchup';
 import { CommishDash } from './CommishDash';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
@@ -198,6 +199,9 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
   const wide = useWide(900);
   const load = useCallback(() => contestLeague(leagueId).then((r) => { setLg(r); return r; }), [leagueId]);
   useEffect(() => { void load().then((r) => { if (r.ok && r.week != null) setWeek((w) => w ?? r.week!); }).catch(() => {}); }, [load]);
+  // Each arrival at the matchup room is a new deal (the flips replay).
+  const [visit, setVisit] = useState(0);
+  useEffect(() => { if (room === 'matchup') setVisit((v) => v + 1); }, [room]);
   if (!lg) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!lg.ok || !lg.bullseye) return <div style={{ padding: 24 }}><div className="mono" style={errStyle}>{lg.error ?? 'Couldn’t open the league.'}</div></div>;
   const b = lg.bullseye;
@@ -232,18 +236,29 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
       </div>
 
       {room === 'matchup' && seated && (
-        // Two columns on a wide screen, as the hub: the squad, and the
-        // standings it is playing for.
+        // THE CARD TABLE (v0.677.0): the week's matchup as two columns of
+        // cards — yours face up, theirs turning over at each kickoff — with
+        // the standings beside it on a wide screen. Remounted on every visit
+        // (the key), so the reveal flips play again.
         <div style={{ display: 'grid', gridTemplateColumns: wide ? 'minmax(0, 3fr) minmax(0, 2fr)' : '1fr', gap: 12, alignItems: 'start' }}>
           <div style={{ display: 'grid', gap: 12 }}>
             <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-            {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} embedded onBack={() => setRoom('league')} />}
+            {week != null && <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week} />}
           </div>
           {wide && <div style={{ display: 'grid', gap: 12 }}><LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} compact /></div>}
         </div>
       )}
       {(room === 'league' || (room === 'matchup' && !seated) || (room === 'team' && !seated)) && <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} />}
-      {room === 'team' && seated && <TeamRoom leagueId={leagueId} lg={lg} onOpenWeek={(w) => { setWeek(w); setRoom('matchup'); }} onRenamed={() => void load()} />}
+      {room === 'team' && seated && (
+        // MY TEAM is where the weekly squad is built (v0.677.0, founder:
+        // "make my team the place where you select your weekly team"); the
+        // name and MY WEEKS sit under the builder.
+        <div style={{ display: 'grid', gap: 12 }}>
+          <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
+          {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} embedded onBack={() => setRoom('league')} />}
+          <TeamRoom leagueId={leagueId} lg={lg} onOpenWeek={(w) => { setWeek(w); setRoom('matchup'); }} onRenamed={() => void load()} />
+        </div>
+      )}
       {room === 'settings' && <SettingsRoom lg={lg} onLeft={onGone} />}
       {room === 'commish' && lg.commish && (
         // THE CLASSIC COMMISSIONER'S CONSOLE (v0.664.0, founder: "all the

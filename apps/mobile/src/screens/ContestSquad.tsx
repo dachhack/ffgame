@@ -94,7 +94,8 @@ function InjuryTag({ week, slug }: { week: number; slug: string }) {
   return <View accessibilityLabel={INJ_WORD[s]} style={{ borderWidth: 1, borderColor: c, borderRadius: 3, paddingHorizontal: 3, marginLeft: 5 }}><Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '800', color: c }}>{s}</Text></View>;
 }
 
-export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: string; week?: number; onBack: () => void }) {
+export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leagueId: string; week?: number; onBack: () => void;
+  /** Under the builder, inside its scroll (v0.677.0: MY TEAM's name and weeks). */ after?: React.ReactNode }) {
   const t = useTheme();
   const [st, setSt] = useState<ContestState | null>(null);
   const [board, setBoard] = useState<PodSalaryRow[] | null>(null);
@@ -424,6 +425,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
             })}
           </Card>
         )}
+        {after}
       </ScrollView>
 
       {/* THE PICK SHEET */}

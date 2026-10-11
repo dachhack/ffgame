@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.677.0 — The card table: a squad league's matchup as cards
+
+> - A weekly squad league's MATCHUP tab is now a card table: your squad face up down one column, your opponent's card backs down the other, each turning face up as its player's game kicks off. Come back to the screen and the reveal flips play again. Arrows walk the weeks, and chips above the table open the week's other matchups (on a leaderboard, any squad).
+> - MY TEAM is where you build the week's squad now, with your team name and MY WEEKS underneath.
+
+- Founder: "incorporate the card theme into the weekly contest leagues …
+  your cards down one column with your opponent's card backs down the
+  other side then they flip at kick off … make my team the place where you
+  select your weekly team … view different weeks and different matchups in
+  the smaller leagues in the matchup tab." Migration 0479:
+  `contest_matchup(league, week, matchup?, roster?)` — any matchup of a
+  week (mine by default), both squads through `_contest_sealed_entry` (a
+  player sealed until his kickoff unless the squad is the reader's own),
+  the live/final scores, the playoff label, and the week's list for the
+  picker; a leaderboard's rows are self-paired. Web
+  `src/screens/ContestMatchup.tsx` deals the drip board's card-table kit
+  (`PlayerCard` with the reveal flip for the other squad, `SealedCard`
+  backs, `Felt`); the phone had no cards, so `ui/ContestCards.tsx` is its
+  deck — `CardFace`, `CardBack` (the emerald lattice), `FlipCard` (a 3D
+  rotateY turn, played on mount when a card starts face up, staggered down
+  the column) and `screens/ContestMatchup.tsx`. Both league screens key the
+  table on a visit counter so each arrival remounts it; the builder
+  (`ContestSquad`) moved under MY TEAM (web: stacked with the team cards;
+  phone: the builder carries them through `after`). The builder's week
+  arrows stay. `scripts/db/contest-matchup-probes.sql` on the full chain,
+  wired into the runner. No iPhone build needed.
+
 ### v0.676.0 — Swap history, and a squad card to share
 
 > - Every change to a saved squad is remembered, spot by spot: who went out, who came in, when, and whether it was you, the commissioner, or the swap made for you when a player was ruled out. It shows under MY SQUAD; the rest of the league can see a seat's swaps once the week's squads unseal.

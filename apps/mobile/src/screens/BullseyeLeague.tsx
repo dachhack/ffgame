@@ -22,6 +22,7 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, Mono } from '../ui/prims';
 import { Playoffs } from '../ui/LeagueExtras';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
+import { ContestMatchup } from './ContestMatchup';
 import { CONTEST_BUDGETS, CONTEST_MIN_SPENDS, moneyChip } from './ContestCommish';
 
 export type BullseyeRoom = 'matchup' | 'league' | 'team' | 'settings' | 'commish';
@@ -177,15 +178,22 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
   const [week, setWeek] = useState<number | null>(null);
   const load = useCallback(() => contestLeague(leagueId).then((r) => { setLg(r); if (r.ok && r.week != null) setWeek((w) => w ?? r.week!); return r; }), [leagueId]);
   useEffect(() => { void load().catch(() => {}); }, [load]);
+  // Each arrival at the matchup room is a new deal (the flips replay).
+  const [visit, setVisit] = useState(0);
+  useEffect(() => { if (room === 'matchup') setVisit((v) => v + 1); }, [room]);
   if (!lg) return <View style={{ flex: 1, backgroundColor: t.bg }}><Mono size={10} tone="faint" style={{ padding: 16 }}>Loading…</Mono></View>;
   if (!lg.ok || !lg.bullseye) return <View style={{ flex: 1, backgroundColor: t.bg }}><Mono size={10} tone="warn" style={{ padding: 16 }}>{lg.error ?? 'Couldn’t open the league.'}</Mono></View>;
   const weeks = [...new Set([...(lg.weeks ?? []), ...(lg.week != null ? [lg.week] : [])])].sort((x, y) => x - y);
 
-  if (room === 'matchup' && lg.me) {
+  if (room === 'team' && lg.me) {
+    // MY TEAM is where the weekly squad is built (v0.677.0, founder: "make
+    // my team the place where you select your weekly team"); the name and
+    // MY WEEKS ride under the builder.
     return (
       <View style={{ flex: 1, backgroundColor: t.bg }}>
         <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-        {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} onBack={() => onRoom('league')} />}
+        {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} onBack={() => onRoom('league')}
+          after={<TeamRoom lg={lg} onOpenWeek={(w) => { setWeek(w); onRoom('matchup'); }} onRenamed={() => void load()} />} />}
       </View>
     );
   }
@@ -193,8 +201,14 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 90 }} keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); }} />}>
       <Mono size={9} tone="dim">{contestLeagueLine(lg.bullseye)}</Mono>
-      {room === 'team' && lg.me ? <TeamRoom lg={lg} onOpenWeek={(w) => { setWeek(w); onRoom('matchup'); }} onRenamed={() => void load()} />
-        : room === 'settings' ? <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />
+      {room === 'matchup' && lg.me && week != null ? (
+        // THE CARD TABLE (v0.677.0): the week's matchup as two columns of
+        // cards, remounted on every visit so the reveal flips play again.
+        <>
+          <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
+          <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week} />
+        </>
+      ) : room === 'settings' ? <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />
         : <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} onCommish={() => onRoom('commish')} onBack={onBack} />}
     </ScrollView>
   );
