@@ -1475,6 +1475,15 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   const illegalMine = !!issues[String(ros?.rosterId)];
   const canEdit = (slot: string): boolean =>
     !browsing && !illegalMine && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
+  /** WHY NOT (v0.666.1, refs #1204 — "Seems like I can't adjust my lineup"):
+   *  a spot that can't be changed used to be a dead click. It says why now. */
+  const whyNot = (slot: string): string | null => {
+    if (browsing || bb.has(slot)) return null;
+    if (illegalMine) return `lineup frozen — roster isn’t legal: ${issues[String(ros?.rosterId)]}`;
+    if (sealedSlots[slot]) return 'sealed — this spot is locked for the week';
+    if (kickedOff(effective.mine[slot])) return 'locked — his game has started; a spot whose game hasn’t started can still change';
+    return null;
+  };
 
   /** Write one or more spots in a single save. A MOVE touches two (the target
    *  and the spot the player left), and they have to travel together — writing
@@ -1809,9 +1818,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       if (e.state !== 'pre') return `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`;
       return `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed';
     };
-    const pill = (pos: string[], label: string, on: boolean, onClick: () => void, auto = false) => (
-      <button onClick={on ? onClick : undefined} disabled={!on} title={on ? `change ${label}` : label} aria-label={on ? `change ${label}` : label}
-        style={{ background: 'none', border: 'none', padding: 0, cursor: on ? 'pointer' : 'default', opacity: on ? 1 : 0.55, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+    const pill = (pos: string[], label: string, on: boolean, onClick: () => void, auto = false, why: string | null = null) => (
+      <button onClick={on ? onClick : why ? () => setSaveNote(why) : undefined} disabled={!on && !why} title={on ? `change ${label}` : why ?? label} aria-label={on ? `change ${label}` : why ?? label}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: on || why ? 'pointer' : 'default', opacity: on ? 1 : 0.55, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
         <SlotPill pos={pos} label={label} width={64} />
         {auto && <span className="mono" style={{ fontSize: 8, color: 'var(--you)' }}>🎯 AUTO</span>}
       </button>
@@ -1875,14 +1884,15 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           const settable = canEdit(r.slot) && !auto;
           const d = slotDefs.find((x) => x.slot === r.slot);
           const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
-          return row(`s-${r.slot}`, pill(r.pos, r.label, settable, () => setPickerSlot(r.slot), auto), r.home,
+          const why = settable || auto ? null : whyNot(r.slot);
+          return row(`s-${r.slot}`, pill(r.pos, r.label, settable, () => setPickerSlot(r.slot), auto, why), r.home,
             auto ? <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>🎯 BEST BALL</span>
               : settable ? (
                 <button onClick={() => setPickerSlot(r.slot)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'inherit' }}>
                   <span className="mono" style={{ fontSize: 11, color: 'var(--you)' }}>+ SET {r.label}</span>
                   {!!accepts && <div className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>takes {accepts}</div>}
                 </button>
-              ) : <span className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>Empty</span>);
+              ) : <button onClick={why ? () => setSaveNote(why) : undefined} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: why ? 'pointer' : 'default', color: 'inherit' }}><span className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>Empty</span></button>);
         })}
         {board.bench.home.length > 0 && label(`BENCH (${board.bench.home.length})`, 14)}
         {board.bench.home.map((e) => row(`b-${e.slug}`, pill([e.pos], 'BN', canBenchPick(e.slug), () => setBenchPick(e.slug)), e, null))}
