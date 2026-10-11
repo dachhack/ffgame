@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.665.2 — The week's salary board fills in the extra positions
+
+> - A weekly squad league's pick sheet now shows the players its roster asks for — head coaches, rookies for a rookie-only spot, and any position the commissioner unlocks — even when the week's board was built before the spot existed.
+
+- Founder: "I have a HC spot and a rookie only spot and the players are not
+  populating in the purchase flow." The week's salary board is built once and
+  frozen; this week's predates 0466, so its rows had no `exp` (every tenure
+  spot refused everyone) and no HC rows. `topUpSalaryBoard` (pods.js) runs
+  once per week per process on the frozen board: fills `exp` from the player
+  index and adds the rows a fresh build carries that the board lacks (HC, P,
+  FB, IDP — at today's price), never touching a frozen salary or projection.
+  server/test/salary-topup.mjs. No app change.
+
 ### v0.665.1 — CPU teams keep a player for every scoped spot
 
 > - A CPU-run team no longer drops the only player who fits a scoped spot (a rookie-only spot, a one-team spot), and when it has nobody for one it goes and gets one — that claim comes before any other move.

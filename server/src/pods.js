@@ -341,9 +341,54 @@ export async function ensureSalaryBoard(season, week, idx) {
     const { data: rows } = await db().from('pod_salary')
       .select('slug, name, pos, team, salary, proj, exp').eq('season', season).eq('week', week).range(0, 4999);
     board = rows ?? [];
+    board = await topUpSalaryBoard(season, week, idx, slateTeams, board);
   }
   if (!board.length) return { board, skipped: 'no board' };
   return { board, skipped: null };
+}
+
+/** THE FROZEN BOARD LEARNS WHAT A CONTEST LEAGUE NEEDS (v0.665.2). Founder:
+ *  "I have a HC spot and a rookie only spot and the players are not
+ *  populating." A week's board is built once and frozen — so a board built
+ *  before 0466 carries no `exp` (every tenure spot refuses everyone) and no
+ *  HC/P/FB rows (an HC spot has nobody to pick), and a position a
+ *  commissioner unlocks mid-week never appears. Once per week per process:
+ *  fill in `exp` where it is missing, and ADD the rows a fresh build would
+ *  carry that the frozen board lacks — at today's price, since nobody has
+ *  built against them yet. Frozen salaries and projections are never
+ *  touched. */
+const toppedUp = new Set();
+export async function topUpSalaryBoard(season, week, idx, slateTeams, board) {
+  const key = `${season}|${week}`;
+  if (toppedUp.has(key) || !board.length) return board;
+  toppedUp.add(key);
+  try {
+    const extras = await contestExtraPositions(season).catch(() => new Set());
+    const wantPos = new Set(['QB', 'RB', 'WR', 'TE', 'K', 'DEF', ...extras]);
+    const havePos = new Set(board.map((r) => r.pos));
+    const people = new Set(['QB', 'RB', 'WR', 'TE', 'FB', 'DL', 'LB', 'DB']);
+    const expFixes = board.filter((r) => r.exp == null && people.has(r.pos))
+      .map((r) => ({ r, exp: idx.metaForSlug(r.slug)?.exp ?? null })).filter((x) => x.exp != null);
+    const missingPos = [...wantPos].some((p) => !havePos.has(p));
+    if (!expFixes.length && !missingPos) return board;
+    let adds = [];
+    if (missingPos) {
+      const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
+      const have = new Set(board.map((r) => r.slug));
+      adds = buildSalaryBoard(idx, slateTeams, weekly, extras).filter((r) => !have.has(r.slug));
+    }
+    const writes = [
+      ...expFixes.map(({ r, exp }) => ({ season, week, slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: r.proj, exp })),
+      ...adds.map((r) => ({ season, week, ...r })),
+    ];
+    if (writes.length) await db().from('pod_salary').upsert(writes, { onConflict: 'season,week,slug' });
+    for (const { r, exp } of expFixes) r.exp = exp;
+    return board.concat(adds);
+  } catch (e) {
+    toppedUp.delete(key);   // try again next tick
+    console.log('salary board top-up', season, week, e?.message ?? e);
+    return board;
+  }
 }
 
 /** NEXT week's board, when a Bullseye league will play it — a season league,
