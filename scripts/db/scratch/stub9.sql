@@ -1,0 +1,1 @@
+create table if not exists injury_status (player_slug text primary key, status text not null, designation_date timestamptz, return_date date, comment text, team text, source text not null default 'espn', updated_at timestamptz not null default now());

@@ -440,3 +440,14 @@ first played week, offset per league; home and away swap each round; an odd
 seat count gives one seat a bye. Drip pods, built fresh each week, keep the
 seeded shuffle. The week's result card names the leader by record.
 
+## 22. The coach scoring preset (v0.670.1, 0472)
+
+Every coach knob in the default catalog is 0, so a HEAD COACH spot banked
+nothing until a commissioner found the knobs. Unlocking HC on a league whose
+catalog has never priced a coach now installs a preset: win 10, tie 5, loss
+0, 0.1 per point scored, and +1 to +6 by margin bracket; loss margins, downs
+and two-point conversions stay 0. Contest leagues already carrying HC with
+no coach scoring were backfilled once. A catalog with any coach value set is
+the commissioner's and is untouched. `HC_SCORING_PRESET` in engine/classic.ts
+mirrors the SQL; the matchup-aware weekly coach projection prices under it.
+
