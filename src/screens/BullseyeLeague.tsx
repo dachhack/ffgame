@@ -26,6 +26,7 @@ import {
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { ContestMatchup } from './ContestMatchup';
+import { ContestSettingsTiles } from './ContestSettings';
 import { CommishDash } from './CommishDash';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
@@ -259,7 +260,13 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
           <TeamRoom leagueId={leagueId} lg={lg} onOpenWeek={(w) => { setWeek(w); setRoom('matchup'); }} onRenamed={() => void load()} />
         </div>
       )}
-      {room === 'settings' && <SettingsRoom lg={lg} onLeft={onGone} />}
+      {room === 'settings' && (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <SettingsRoom lg={lg} onLeft={onGone} />
+          {/* THE SHEET (v0.679.0): the classic hub's tiles, for a squad league */}
+          {lg.me && <ContestSettingsTiles lg={lg} onGo={(r) => setRoom(r)} />}
+        </div>
+      )}
       {room === 'commish' && lg.commish && (
         // THE CLASSIC COMMISSIONER'S CONSOLE (v0.664.0, founder: "all the
         // classic league options"), trimmed by CommishDash/LeagueRow for a
