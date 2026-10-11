@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.679.1 — The cards turn over; no SEALED PICK ribbon
+
+> - On the phone's card table every card was staying on its back, yours included, even with the scores beside it — the turn wasn't landing. The cards now turn over as they should. The "SEALED ◈ PICK" ribbon is gone from the card backs on both the phone and the site.
+
+- Founder, from the first v0.679.0 deal: "We don't need the sealed pick
+  text" — and the screenshot showed nine backs with live scores next to
+  them. `FlipCard` drove its rotateY through the native animation driver;
+  on the device the timing never applied. It runs through the JS bridge
+  now (nine cards, half a second), its end state pinned when the timing
+  finishes, is cut short, or after a fallback tick. The phone's `CardBack`
+  loses its ribbon; the web kit's `SealedCard` takes a `tag` switch
+  (default on, for the drip board) that the contest table turns off. No
+  iPhone build needed.
+
 ### v0.679.0 — A squad league's settings, the way a classic league's are
 
 > - SETTINGS in a weekly squad league now carries the same sections a classic league's does, where they make sense: the league note, Teams & seats (who's in, who owns which seat, dues paid), Standings, League history, Scoring settings, Squad & rules (spots, budget, the lock, ruled-out, no-shows, entries, playoffs), Dues & prizes, Alerts, Recruit, API keys, and the Commissioner's door.

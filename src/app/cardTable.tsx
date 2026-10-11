@@ -866,7 +866,8 @@ export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel, onOver
 /** A face-down sealed pick — the opponent's card before its window kicks off.
  *  `mystery` swaps the deck gem for a big ? — the demo preview's opening beat
  *  ("who are they fielding?") before the card flips at the reveal. */
-export function SealedCard({ seed, idx = 0, mystery = false }: { seed: string; idx?: number; mystery?: boolean }) {
+export function SealedCard({ seed, idx = 0, mystery = false, tag = true }: { seed: string; idx?: number; mystery?: boolean;
+  /** The SEALED ◈ PICK ribbon; the contest table (v0.679.1) goes without. */ tag?: boolean }) {
   return (
     <div className="ct-wrap ct-dealin" style={{ animationDelay: `${idx * 90}ms` }}>
       <div className="ct-card" style={wobbleVars(seed)}>
@@ -875,7 +876,7 @@ export function SealedCard({ seed, idx = 0, mystery = false }: { seed: string; i
           {mystery
             ? <div className="ct-gem" style={{ fontSize: 38, fontWeight: 800, textShadow: '0 2px 0 #000, 0 0 14px rgba(0,0,0,0.35)' }}>?</div>
             : <div className="ct-gem">◈</div>}
-          <div className="ct-sealtag">SEALED ◈ PICK</div>
+          {tag && <div className="ct-sealtag">SEALED ◈ PICK</div>}
         </div>
       </div>
     </div>
