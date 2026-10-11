@@ -13,6 +13,7 @@ import {
 import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { RescoreBox, AdjustBox } from './CommishDesk';
+import { PlayoffPanel } from './AdminPage';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const chip = (on: boolean, dim = false): CSSProperties => ({
@@ -155,6 +156,13 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
         </div>
         {span === 'week' && <div className="mono" style={small}>A one-week league leaves the board once its week kicks off.</div>}
       </div>
+      {h2h && span === 'season' && (
+        <div style={{ ...card, display: 'grid', gap: 4 }}>
+          <div className="mono" style={label}>PLAYOFFS</div>
+          <div className="mono" style={small}>A season head-to-head league plays a bracket over its last weeks — four teams from week 15 unless you say otherwise, seeded by the regular-season standings; everyone else plays a consolation ladder. The round-robin stops where the bracket starts.</div>
+          <PlayoffPanel leagueId={leagueId} />
+        </div>
+      )}
       {played && <ContestFixWeekPanel leagueId={leagueId} />}
       {note && <div className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</div>}
     </div>

@@ -145,6 +145,15 @@ ok('contest: a bullseye league with no `contest` key is a Bullseye contest, lead
 })());
 ok('contest: a dfs league with no `contest` key is HIGH, head-to-head', C.contestConfigOf({}, 'dfs')?.contest === 'high' && C.contestConfigOf({}, 'dfs')?.format === 'h2h');
 ok('contest: not a contest without a kind or key', C.contestConfigOf({ game_mode: 'classic' }, 'league') === null);
+// PLAYOFFS (v0.674.0): a season head-to-head league plays the classic bracket by default
+{
+  const h2h = C.contestConfigOf({ contest_format: 'h2h' }, 'dfs'), board = C.contestConfigOf({ contest_format: 'board' }, 'dfs');
+  ok('playoffs: head-to-head over the season — four from week 15 by default', JSON.stringify(C.contestPlayoffs({}, h2h, null)) === '{"teams":4,"startWeek":15}');
+  ok('playoffs: the commissioner’s rules are read; off is 0', JSON.stringify(C.contestPlayoffs({ playoff_teams: 6, playoff_start_week: 14 }, h2h, null)) === '{"teams":6,"startWeek":14}' && C.contestPlayoffs({ playoff_teams: 0 }, h2h, null).teams === 0);
+  ok('playoffs: a leaderboard or a one-week league plays none', C.contestPlayoffs({}, board, null).teams === 0 && C.contestPlayoffs({}, h2h, 6).teams === 0);
+  const pods = read('server/src/pods.js');
+  ok('pods: the round-robin stops at the bracket and the SQL is poked', /week >= po\.startWeek/.test(pods) && /rpc\('generate_playoffs'/.test(pods) && /rpc\('advance_playoffs'/.test(pods));
+}
 // NO SQUAD BY LOCK and ENTRIES (v0.673.0)
 ok('late: head-to-head builds, a leaderboard sits out, entries open — by default', C.contestConfigOf({}, 'dfs')?.lateEntry === 'cpu' && C.contestConfigOf({ contest_format: 'board' }, 'dfs')?.lateEntry === 'drop' && C.contestConfigOf({}, 'dfs')?.entryDeadline === 'open');
 ok('late: the settings are read; drop on head-to-head falls back', C.contestConfigOf({ late_entry: 'zero', entry_deadline: 'first' }, 'dfs')?.lateEntry === 'zero' && C.contestConfigOf({ late_entry: 'zero' }, 'dfs')?.entryDeadline === 'open' && C.contestConfigOf({ late_entry: 'drop' }, 'dfs')?.lateEntry === 'cpu' && C.contestConfigOf({ late_entry: 'drop', contest_format: 'board' }, 'dfs')?.lateEntry === 'drop');

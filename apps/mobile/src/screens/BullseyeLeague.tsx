@@ -20,6 +20,7 @@ import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, Mono } from '../ui/prims';
+import { Playoffs } from '../ui/LeagueExtras';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { CONTEST_BUDGETS, CONTEST_MIN_SPENDS, moneyChip } from './ContestCommish';
 
@@ -312,6 +313,7 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
             : <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${n0(bd.me.rank)} · ${Number(bd.me.ring).toFixed(1)}`}</Mono>
         )}
       </Card>
+      {h2h && b.span === 'season' && <Playoffs leagueId={lg.league_id!} />}
       {bd?.season && (
         <Card style={{ gap: 2 }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>SEASON STANDINGS</Mono>
@@ -388,7 +390,7 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
           <Pressable key={w.week} onPress={() => { tap(); onOpenWeek(w.week); }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd }}>
             <Mono size={11} tone="text" style={{ width: 64 }}>{`Week ${w.week}`}</Mono>
-            <Mono size={9} tone="faint" style={{ flex: 1 }} numberOfLines={1}>{`${w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}${w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : w.rank != null ? ` · #${w.rank} of ${n0(w.entries)}` : ''}`}</Mono>
+            <Mono size={9} tone="faint" style={{ flex: 1 }} numberOfLines={1}>{`${w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}${w.playoff ? ` · ${w.label ?? 'playoffs'}` : ''}${w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : w.rank != null ? ` · #${w.rank} of ${n0(w.entries)}` : ''}`}</Mono>
             <Mono size={11} weight="700" tone="text">{w.ring != null ? Number(w.ring).toFixed(1) : '—'}</Mono>
           </Pressable>
         ))}

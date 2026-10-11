@@ -1,4 +1,4 @@
-# Scratch Postgres for the contest-league SQL (v0.664 → v0.673)
+# Scratch Postgres for the contest-league SQL (v0.664 → v0.674)
 
 A throwaway cluster that loads the contest migrations over stubs, so a
 migration's functions can be exercised before it ships. Nothing here is
@@ -37,5 +37,7 @@ psql -h /tmp -p 5499 -U postgres -d t -q -v ON_ERROR_STOP=1 -f scripts/db/scratc
   (0467); `flow12` cap/floor (0469); `flow13` auto-sub + kickoff lock
   (0470); `flow14` head-to-head records (0471); `flow15` "where am I" and
   the team search (0473); `flow16` the commissioner's week fixes (0474); `flow17` the no-show rule and
-  the entry deadline (0475).
+  the entry deadline (0475). The bracket (0476) leans on the classic playoff
+  stack, so it is probed on the full chain instead:
+  `scripts/db/contest-playoffs-probes.sql` in the runner.
 - The cluster is not persistent across sessions: re-run the recipe.

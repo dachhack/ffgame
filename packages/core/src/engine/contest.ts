@@ -91,6 +91,19 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null, lateEntry, entryDeadline };
 }
 
+/** PLAYOFFS (v0.674.0, 0476): a season head-to-head contest league plays the
+ *  classic bracket. These are the classic defaults (league_playoff_teams /
+ *  league_playoff_start): four teams from week 15; 0 teams = none. A
+ *  leaderboard or one-week league never has one. */
+export function contestPlayoffs(settings: Record<string, unknown> | null | undefined, cfg: ContestConfig | null, contestWeek: number | null | undefined): { teams: number; startWeek: number } {
+  if (!cfg || cfg.format !== 'h2h' || contestWeek != null) return { teams: 0, startWeek: 15 };
+  const s = settings ?? {};
+  const t = Number(s.playoff_teams);
+  const teams = Number.isFinite(t) && [0, 2, 4, 6, 8].includes(t) ? t : 4;
+  const w = Number(s.playoff_start_week);
+  return { teams, startWeek: Number.isFinite(w) && w >= 2 && w <= 18 ? w : 15 };
+}
+
 /** PURE (v0.673.0): what the worker writes at the week's first kickoff for the
  *  seats with no squad. A CPU seat is always built (any time, not just at
  *  lock). A human no-show gets the league's rule once the lock has passed:

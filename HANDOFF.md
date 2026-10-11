@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.673.0` · migrations through `0475`_
+_Last updated: 2026-10-11 · Build `v0.674.0` · migrations through `0476`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -52,7 +52,9 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
   3. ~~Entry deadline / late-entry policy~~ — done in v0.673.0 (0475:
      `late_entry` cpu | zero | drop, `entry_deadline` open | first; the
      worker's `noShowBuilds`; NO SQUAD BY LOCK and ENTRIES on COMMISH).
-  4. Playoffs for season head-to-head (a top-N bracket over the last weeks).
+  4. ~~Playoffs for season head-to-head~~ — done in v0.674.0 (0476: the
+     classic bracket stack opened to season head-to-head contest leagues;
+     four from week 15 by default; pods.js hands the last weeks to it).
   5. Prizes and dues on the settings and the board (the listing has a text
      field only).
   6. Multiple entries per user for the huge contests; swap history; sharing a

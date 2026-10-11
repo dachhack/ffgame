@@ -99,7 +99,7 @@ export async function buildContestRecap(lg, week, season, voids = new Set()) {
   if (!ranked.length) return null;
   let seasonLine = null;
   if (lg.contest_week == null) {
-    const { data: fin } = await db().from('matchup').select('home_roster_id, away_roster_id, home_final, away_final, week')
+    const { data: fin } = await db().from('matchup').select('home_roster_id, away_roster_id, home_final, away_final, week, is_playoff')
       .eq('league_id', lg.id).eq('status', 'final').lte('week', week);
     const golf = cfg.contest === 'golf';
     const tot = new Map(); const weeks = new Set();
@@ -107,6 +107,7 @@ export async function buildContestRecap(lg, week, season, voids = new Set()) {
     const bump = (rid, k) => { const r = rec.get(rid) ?? { w: 0, l: 0, t: 0 }; r[k] += 1; rec.set(rid, r); };
     for (const m of fin ?? []) {
       if (voids.has(Number(m.week))) continue;   // VOIDED (0474): not played, not counted
+      if (m.is_playoff) continue;                 // PLAYOFFS (0476): the bracket's, not the season's
       weeks.add(m.week);
       const h = Number(m.home_final ?? 0), a = Number(m.away_final ?? 0);
       tot.set(m.home_roster_id, (tot.get(m.home_roster_id) ?? 0) + h);

@@ -18,7 +18,7 @@
 //   COMMISH   the classic commissioner's console, trimmed, with a CONTEST card
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState, playoffState, type PlayoffState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
@@ -374,6 +374,7 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
         )}
       </div>
 
+      {h2h && b.span === 'season' && <ContestPlayoffs leagueId={lg.league_id!} />}
       {bd?.season && (
         <div style={{ ...card, display: 'grid', gap: 4 }}>
           <span className="mono" style={label}>SEASON STANDINGS</span>
@@ -391,6 +392,39 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
         </div>
       )}
     </>
+  );
+}
+
+// ── PLAYOFFS (0476): the bracket, round by round — the phone's Playoffs card ──
+function ContestPlayoffs({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<PlayoffState | null>(null);
+  useEffect(() => { playoffState(leagueId).then(setSt).catch(() => {}); }, [leagueId]);
+  if (!st || st.error || !st.ok || st.playoff_teams === 0) return null;
+  const teamOf = (rid: number) => st.standings.find((s) => s.roster_id === rid)?.team ?? `Team ${rid}`;
+  const seedOf = (rid: number) => { const i = (st.seeds ?? []).indexOf(rid); return i >= 0 ? `#${i + 1} ` : ''; };
+  const rounds = [...new Set(st.matchups.map((m) => m.round))].sort((a, b) => a - b);
+  return (
+    <div style={{ ...card, display: 'grid', gap: 4 }}>
+      <span className="mono" style={label}>{`PLAYOFFS · TOP ${st.playoff_teams} FROM WEEK ${st.playoff_start_week}`}</span>
+      {st.champion != null && <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--you)' }}>{`🏆 ${st.champion_team ?? teamOf(st.champion)} — league champion`}</span>}
+      {!st.matchups.length && <span className="mono" style={small}>No bracket yet — it’s seeded from the standings once the regular season is final.</span>}
+      {rounds.map((round) => (
+        <div key={round} style={{ display: 'grid', gap: 2 }}>
+          <span className="mono" style={{ ...small, paddingTop: 4 }}>{`ROUND ${round}`}</span>
+          {st.matchups.filter((m) => m.round === round).map((m) => (
+            <div key={m.id} className="mono" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: 'var(--text)' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: m.winner === m.home ? 700 : 400 }}>{`${seedOf(m.home)}${teamOf(m.home)}`}</span>{' vs '}<span style={{ fontWeight: m.winner === m.away ? 700 : 400 }}>{`${seedOf(m.away)}${teamOf(m.away)}`}</span>
+                <span style={{ color: 'var(--faint)' }}>{` · ${m.consolation ? 'consolation' : (m.label ?? `week ${m.week}`)}`}</span>
+              </span>
+              <span style={{ textAlign: 'right', fontWeight: 700, color: m.home_final != null ? 'var(--text)' : m.status === 'live' ? 'var(--you)' : 'var(--faint)' }}>
+                {m.home_final != null && m.away_final != null ? `${Number(m.home_final).toFixed(1)}–${Number(m.away_final).toFixed(1)}` : m.status.toUpperCase()}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -452,7 +486,7 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
           <button key={w.week} onClick={() => onOpenWeek(w.week)} className="mono"
             style={{ display: 'grid', gridTemplateColumns: '70px minmax(0,1fr) 110px 64px', gap: 8, fontSize: 12, padding: '6px 0', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', color: 'var(--text)', cursor: 'pointer', textAlign: 'left' }}>
             <span>{`Week ${w.week}`}</span>
-            <span style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}{w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : ''}</span>
+            <span style={{ color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.void ? 'voided' : w.status === 'final' ? 'final' : w.status === 'live' ? 'live' : 'squad set'}{w.playoff ? ` · ${w.label ?? 'playoffs'}` : ''}{w.opp != null ? ` · vs ${w.opp_team ?? `Team ${w.opp}`}${w.opp_ring != null ? ` ${Number(w.opp_ring).toFixed(1)}` : ''}` : ''}</span>
             <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{w.rank != null ? `#${w.rank} of ${n0(w.entries)}` : ''}</span>
             <span style={{ textAlign: 'right', fontWeight: 700 }}>{w.ring != null ? Number(w.ring).toFixed(1) : '—'}</span>
           </button>

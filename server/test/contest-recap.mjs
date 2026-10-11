@@ -106,6 +106,12 @@ T.league_message.length = 0;
 const R3 = await import('../src/contestRecap.js?fresh=2').catch(() => null);
 if (R3) { n = await R3.postContestRecaps(6, '2026', { force: true, now: Date.parse('2026-10-14T12:20:00Z') }); ok('void: a voided week gets no card', n === 0 && T.league_message.length === 0); }
 T.week_void = [];
+// ── a bracket week (0476) is not the season's ──
+T.matchup.push({ id: 'p1', league_id: 'L1', week: 4, status: 'final', home_roster_id: 1, away_roster_id: 3, home_final: 200, away_final: 10, is_playoff: true });
+re = await R.repostContestRecap(L, 6);
+// (the void case above emptied the chat, so this repost posts a fresh card)
+ok('playoffs: a playoff final stays out of the season line', re === 'posted' && /leads at 2–0 \(242\.3 ring\) after 2 weeks/.test(T.league_message[0].body), { re, body: T.league_message[0].body });
+T.matchup = T.matchup.filter((m) => m.id !== 'p1');
 
 // ── the lock reminder ───────────────────────────────────────────────────────
 const P = await import('../src/push.js');

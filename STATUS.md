@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.674.0 — Playoffs for a season head-to-head squad league
+
+> - A weekly squad league that plays head-to-head over the season now ends in a bracket: four teams from week 15 unless the commissioner says otherwise (PLAYOFFS under COMMISH — size, start week, seeding by hand), seeded by the regular-season standings, with everyone else on a consolation ladder. The league screen shows the bracket round by round and crowns the champion; MY WEEKS names the game ("Semifinal").
+> - The regular-season standings and records stop where the bracket starts.
+
+- HANDOFF's fourth not-done item, and not a second bracket: migration 0476
+  opens the classic playoff stack (0073/0162/0215/0246/0359) to a season
+  head-to-head contest league through `_bracket_league` (native, or such a
+  league) in the two functions that gated on is_native_league —
+  `set_playoff_rules` and `generate_playoffs_bracket` (0433's and 0249's
+  bodies, the gate swapped). The winner rule already reads `league_golf`,
+  which a golf contest sets; seeding is `league_standings` over the
+  regular season (the classic rule: wins, then points for — a contest's own
+  standings break a tie on losses, so the two can differ on a tie row;
+  noted, not changed). `league_playoff_teams`' default (4, from 15) applies
+  as it does to a classic league. contest_board's season rows and
+  bullseye_my_weeks (0474's bodies) skip / name bracket weeks; the recap's
+  season line skips them. Engine `contestPlayoffs(settings, cfg, week)`;
+  pods.js stops the round-robin at the playoff start and pokes
+  `generate_playoffs(auto)` / `advance_playoffs` (both idempotent and
+  self-guarding; `native_materialize` is a no-op off native). Screens: the
+  phone reuses `Playoffs` and `PlayoffControls` (ui/LeagueExtras); the web
+  reuses AdminPage's `PlayoffPanel` on the contest COMMISH card and gets a
+  compact bracket card on the league screen. `scripts/db/contest-playoffs-
+  probes.sql` on the full chain, wired into the runner; `check:dfsbullseye`
+  and `check:contestrecap` grew cases. No iPhone build needed.
+
 ### v0.673.0 — What a no-show gets, and when entries close
 
 > - Weekly squad leagues get two new rules under COMMISH. NO SQUAD BY LOCK says what a seat with no squad gets at the week's first kickoff: the CPU builds one (what head-to-head always did), it scores a zero, or — on a leaderboard — it sits the week out. ENTRIES says whether a new squad can still go in after the week's first game has kicked off, or only until then; a saved squad still swaps its unlocked players either way.

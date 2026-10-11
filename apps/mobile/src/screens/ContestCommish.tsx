@@ -16,6 +16,7 @@ import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Mono } from '../ui/prims';
 import { RescoreBox, AdjustBox } from '../ui/CommishDesk';
+import { PlayoffControls } from '../ui/LeagueExtras';
 
 const n0 = (n: number) => n.toLocaleString('en-US');
 export const CONTEST_BUDGETS = [0, 10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];   // 0 = NO CAP (0469)
@@ -150,6 +151,13 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
         </View>
         {b.span === 'week' && <Mono size={8.5} tone="faint">A one-week league leaves the board once its week kicks off.</Mono>}
       </Card>
+      {h2h && b.span === 'season' && (
+        <Card style={{ gap: 6 }}>
+          <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYOFFS</Mono>
+          <Mono size={8.5} tone="faint">A season head-to-head league plays a bracket over its last weeks — four teams from week 15 unless you say otherwise, seeded by the regular-season standings; everyone else plays a consolation ladder. The round-robin stops where the bracket starts.</Mono>
+          <PlayoffControls leagueId={leagueId} onChanged={() => void load()} />
+        </Card>
+      )}
       {played && <ContestFixWeekCard leagueId={leagueId} />}
       {note && <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'warn'}>{note}</Mono>}
     </View>

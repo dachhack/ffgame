@@ -20,7 +20,7 @@ import { REGULAR_SEASON } from './seasonType.js';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
-import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds, contestPlayoffs } from '../../packages/core/src/engine/contest.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { priceBoard } from '../../packages/core/src/engine/salaryPricing.ts';
 import { ruledOutSlugs } from './injuries.js';
@@ -396,6 +396,22 @@ export async function ensurePods(week, season, idx) {
       }
     }
 
+    // PLAYOFFS (v0.674.0): a season head-to-head contest league plays the
+    // classic bracket from its playoff start — the round-robin stops there,
+    // and the SQL that books and advances the bracket is poked instead (both
+    // idempotent and self-guarding: generate refuses until the regular season
+    // is final and never builds over a bracket; advance no-ops until a round
+    // is final). A playoff week's rows are the bracket's.
+    const po = contest ? contestPlayoffs(pod.settings_json, contest, pod.contest_week) : { teams: 0, startWeek: 15 };
+    if (contest && po.teams > 0 && week >= po.startWeek) {
+      try {
+        const { data: g } = await db().rpc('generate_playoffs', { p_league_id: pod.id, p_seeds: null, p_auto: true });
+        if (g?.bracket) made += 1;
+        const { data: a } = await db().rpc('advance_playoffs', { p_league_id: pod.id });
+        if (a?.advanced) made += 1;
+      } catch (e) { console.log(new Date().toISOString(), 'pods playoffs', pod.id, e.message); }
+      continue;
+    }
     const { data: haveM } = await db().from('matchup')
       .select('id').eq('league_id', pod.id).eq('week', week).limit(1);
     if (!haveM?.length) {

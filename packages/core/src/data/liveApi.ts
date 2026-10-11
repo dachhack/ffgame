@@ -884,7 +884,8 @@ export interface BullseyeLeagueBoard {
   season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null; near?: BullseyeSeasonRow[]; found?: BullseyeSeasonRow[] } | null;
 }
 export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number;
-  /** VOIDED (0474): the commissioner struck the week; it doesn't count. */ void?: boolean }
+  /** VOIDED (0474): the commissioner struck the week; it doesn't count. */ void?: boolean;
+  /** PLAYOFFS (0476): a bracket week, and its game's name ("Semifinal"). */ playoff?: boolean; label?: string | null }
 /** WEEKLY LEAGUES (v0.662.0, founder: "maybe have another filter for weekly
  *  draft leagues"): the kinds where you build a fresh squad every week instead
  *  of drafting a season roster — pods, showdowns, DFS and Bullseye leagues.
