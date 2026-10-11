@@ -1,25 +1,37 @@
-// THE CONTEST SQUAD, web (v0.664.0) — docs/dfs-bullseye.md §13.
+// THE CONTEST SQUAD, web (v0.664.0; the builder v0.665.0) —
+// docs/dfs-bullseye.md §13–14.
 //
 // One screen for every contest league: the builder before kickoff, the live
 // numbers after. The spots are the league's own roster builder spots (S1…Sn
 // from contest_state — a FLEX, an HC, a rookie-only RB are just spots), the
 // budget is the league's, and the pick sheet sorts the way the contest
-// scores: HIGH by projection, GOLF by the smallest real projection, BULLSEYE
-// by how close a projection lands to the spot's number. Saving goes through
-// save_contest_entry, which re-checks everything (position, the spot's
-// filter, the pool filter, the seat's rule, the budget, the locks).
+// scores. Saving goes through save_contest_entry, which re-checks everything.
+//
+// THE BUILDER (founder: "We want the budget and player selection to be a
+// rich, interactive, fun experience on web and app"): a budget bar that fills
+// as you pick, spot cards with the player's face, game and value, a pick
+// sheet with position tabs from the league's own spots, a team filter,
+// search, sort by projection / value / salary, every player's eligibility
+// said in words (the spot's filter, the pool filter, your seat's rule), FILL
+// FOR ME for the spots you haven't picked, and the week's injuries.
 //
 // The pre-0466 BullseyeSquad (BullseyeContest.tsx) stays for a salary-cap
 // league that merely plays Bullseye; this one is for contest leagues.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestState, saveContestEntry, podSalaries, weekGameLocks, friendlyError,
-  type ContestState, type PodSalaryRow,
+  contestState, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
+  type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
+import { injuryFor } from '@drip/core/data/injuries';
+import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
 import {
-  contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, contestSlotAllows, CONTEST_MIN_SALARY, CONTEST_WORD,
+  contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
   type ContestConfig,
 } from '@drip/core/engine/contest';
+import {
+  builderTabs, rankCandidates, fillOpenSpots, budgetLine, roomFor, posLabel, valueOf, BUILDER_SORTS,
+  type BuilderCtx, type BuilderPlayer, type BuilderSort, type PoolFilter,
+} from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicSlotDef, type ClassicScoring } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projectedRing, tiebreakDistance } from '@drip/core/engine/dfsBullseye';
@@ -27,14 +39,21 @@ import { ringLabel } from '@drip/core/engine/bullseye';
 import { PlayerImg } from '../app/ui';
 
 const fmt$ = (n: number) => `$${n.toLocaleString('en-US')}`;
+const fmtK = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : fmt$(n));
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const chip = (on: boolean, dim = false): CSSProperties => ({
   fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
   color: on ? 'var(--on-accent, var(--bg))' : dim ? 'var(--faint)' : 'var(--you)', background: on ? 'var(--you)' : 'transparent',
   border: `1px solid ${on ? 'var(--you)' : 'color-mix(in srgb, var(--you) 45%, var(--bd))'}`, borderRadius: 999, padding: '5px 12px',
 });
+const tabStyle = (on: boolean): CSSProperties => ({
+  fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', padding: '6px 10px',
+  color: on ? 'var(--you)' : 'var(--dim)', background: 'none', border: 'none', borderBottom: `2px solid ${on ? 'var(--you)' : 'transparent'}`,
+});
 const small: CSSProperties = { fontSize: 10, color: 'var(--faint)' };
 const head: CSSProperties = { fontSize: 10.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' };
+const input: CSSProperties = { fontSize: 13, padding: '7px 10px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 6, fontFamily: 'inherit', boxSizing: 'border-box' };
+const INJ_WORD: Record<string, string> = { O: 'OUT', D: 'DOUBTFUL', Q: 'QUESTIONABLE', IR: 'IR' };
 
 /** How this contest scores, in a sentence. */
 export function contestHowTo(cfg: ContestConfig): string {
@@ -63,17 +82,41 @@ function sealedRows(entry: unknown, slots: ClassicSlotDef[]): { slot: string; sl
   return slots.map((d) => ({ slot: d.slot, slug: bySlot.get(d.slot) ?? null }));
 }
 
+/** "vs KC · Sun 1:00p" / "@ KC · Mon 8:15p" / "BYE". */
+export function gameLine(team: string, slate: Map<string, SlateSpot>): string {
+  const g = slate.get(team);
+  if (!g) return slate.size ? 'BYE' : '';
+  const when = g.kickoff ? new Date(g.kickoff).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }).replace(', ', ' ').replace(' AM', 'a').replace(' PM', 'p') : '';
+  return `${g.home ? 'vs' : '@'} ${g.opp}${when ? ` · ${when}` : ''}`;
+}
+
+function InjuryTag({ week, slug }: { week: number; slug: string }) {
+  const s = injuryFor(week, slug);
+  if (!s) return null;
+  const bad = s === 'O' || s === 'IR';
+  return <span className="mono" title={INJ_WORD[s]} style={{ fontSize: 8.5, fontWeight: 800, color: bad ? 'var(--warn, #c66)' : '#D9A441', border: `1px solid ${bad ? 'var(--warn, #c66)' : '#D9A441'}`, borderRadius: 3, padding: '0 3px', marginLeft: 5 }}>{s}</span>;
+}
+
 export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { leagueId: string; week?: number; onBack: () => void;
   /** Inside the league's own frame: no back row, no outer padding. */
   embedded?: boolean }) {
   const [st, setSt] = useState<ContestState | null>(null);
   const [board, setBoard] = useState<PodSalaryRow[] | null>(null);
   const [locks, setLocks] = useState<Map<string, number>>(new Map());
+  const [slate, setSlate] = useState<Map<string, SlateSpot>>(new Map());
+  const [seatRule, setSeatRule] = useState<SeatRule | null>(null);
+  const [poolFilter, setPoolFilter] = useState<PoolFilter | null>(null);
   const [picks, setPicks] = useState<Record<string, string | null>>({});
-  const [active, setActive] = useState<string | null>(null);
+  const [saved, setSaved] = useState<Record<string, string | null>>({});
+  const [active, setActive] = useState<string | null | 'any'>(null);
+  const [tab, setTab] = useState('ALL');
+  const [team, setTeam] = useState('');
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<BuilderSort | null>(null);
+  const [eligibleOnly, setEligibleOnly] = useState(true);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [injTick, setInjTick] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
 
@@ -82,11 +125,18 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     setSt(s);
     if (!s.ok || s.week == null) return;
     const slots = classicSlotsFromSpec(s.slots ?? null) ?? [];
-    setPicks(contestSquadOf(s.entry, slots));
-    const [rows, lk] = await Promise.all([podSalaries(s.week).catch(() => []), weekGameLocks(s.week).catch(() => new Map<string, number>())]);
-    setBoard(rows); setLocks(lk);
+    const mine = contestSquadOf(s.entry, slots);
+    setPicks(mine); setSaved(mine);
+    const [rows, lk, sl] = await Promise.all([podSalaries(s.week).catch(() => []), weekGameLocks(s.week).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
+    setBoard(rows); setLocks(lk); setSlate(sl);
+    void loadLiveInjuries(s.week).then(() => setInjTick((n) => n + 1));
   }, [leagueId, weekProp]);
   useEffect(() => { void load().catch((e) => setNote(friendlyError(e))); }, [load]);
+  // The pool filter and my seat's rule: what greys a player out before I tap him.
+  useEffect(() => {
+    leagueGameMode(leagueId).then((g) => { if (g.ok) setPoolFilter(g.pool_filter ?? null); }).catch(() => {});
+    seatPlayerRules(leagueId).then((r) => { if (r.ok) setSeatRule((r.rules ?? []).find((x) => x.roster_id === r.mine) ?? null); }).catch(() => {});
+  }, [leagueId]);
   // Live numbers: re-read while the week is being played.
   useEffect(() => {
     if (!st?.started || st.matchup?.status === 'final') return;
@@ -95,23 +145,25 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   }, [st?.started, st?.matchup?.status, leagueId, weekProp]);
 
   const bySlug = useMemo(() => new Map((board ?? []).map((r) => [r.slug, r])), [board]);
+  const salaryOf = useCallback((slug: string) => bySlug.get(slug)?.salary ?? 0, [bySlug]);
   const setup = useMemo(() => (st?.ok ? contestSetupOf(st) : null), [st]);
   const theCard = useMemo(() => (setup?.cfg?.contest === 'bullseye' && st?.week != null ? contestCard(leagueId, st.week, setup.slots, setup.catalog) : null), [leagueId, st?.week, setup]);
-  const locked = (slug: string | null) => { if (!slug) return false; const t = locks.get(bySlug.get(slug)?.team ?? ''); return t != null && t <= now; };
-  const spent = Object.values(picks).reduce((s, slug) => s + (slug ? bySlug.get(slug)?.salary ?? 0 : 0), 0);
-  const filled = Object.values(picks).filter(Boolean).length;
-  const projTotal = Object.values(picks).reduce((s, slug) => s + (slug ? bySlug.get(slug)?.proj ?? 0 : 0), 0);
+  const ctx = useMemo<BuilderCtx | null>(() => (setup?.cfg ? { slots: setup.slots, cfg: setup.cfg, picks, seatRule, poolFilter, card: theCard } : null), [setup, picks, seatRule, poolFilter, theCard]);
+  const locked = useCallback((slug: string | null) => { if (!slug) return false; const t = locks.get(bySlug.get(slug)?.team ?? ''); return t != null && t <= now; }, [locks, bySlug, now]);
+  const players = useMemo<BuilderPlayer[]>(() => (board ?? []).map((r) => ({ slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: r.proj, exp: r.exp ?? null })), [board]);
+  const teams = useMemo(() => [...new Set(players.map((p) => p.team))].sort(), [players]);
+  const tabs = useMemo(() => (setup ? builderTabs(setup.slots) : ['ALL']), [setup]);
+  const dirty = useMemo(() => JSON.stringify(picks) !== JSON.stringify(saved), [picks, saved]);
 
   if (!st) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!st.ok) return <div style={{ padding: 24 }}><div className="mono" style={{ color: 'var(--warn, #c66)', fontSize: 12 }}>{st.error}</div><button onClick={onBack} style={{ marginTop: 10 }}>← BACK</button></div>;
-  if (!setup?.cfg || !setup.slots.length) return <div style={{ padding: 24 }}><div className="mono" style={small}>This league has no spots to fill yet — its commissioner sets the roster.</div><button onClick={onBack}>← BACK</button></div>;
+  if (!setup?.cfg || !setup.slots.length || !ctx) return <div style={{ padding: 24 }}><div className="mono" style={small}>This league has no spots to fill yet — its commissioner sets the roster.</div><button onClick={onBack}>← BACK</button></div>;
   const { slots, cfg, labels } = setup;
   const n = slots.length;
   const budget = cfg.budget;
   const bull = cfg.contest === 'bullseye';
   const isTotal = bull && cfg.bullseye?.variant === 'total';
   const radius = cfg.bullseye?.radius ?? 10;
-  const scoreWord = bull ? 'ring' : 'pts';
   const mySide: 'home' | 'away' = st.matchup && st.matchup.home !== st.roster_id ? 'away' : 'home';
   const live = st.state?.slots?.filter((r) => r.side === mySide) ?? [];
   const liveOf = (slot: string) => live.find((r) => r.slot === slot);
@@ -119,7 +171,6 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const theirScore = st.opponent && st.state ? (mySide === 'home' ? st.state.away : st.state.home) : null;
   const myPoints = live.reduce((s, r) => s + (r.score || 0), 0);
   const editable = st.matchup?.status !== 'final';
-  // THE TIE-BREAKER (v0.660.1), Bullseye only: my own spot and number, known before I build.
   const myTb = theCard && st.roster_id != null && st.week != null ? contestTiebreak(leagueId, st.week, st.roster_id, theCard, slots) : null;
   const tbLive = myTb ? liveOf(myTb.slot) : undefined;
   const myTbDist = st.matchup?.status === 'final'
@@ -127,29 +178,49 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     : tbLive && myTb ? tiebreakDistance(tbLive.score, myTb.target, radius) : null;
   const tieBroken = bull && st.matchup?.status === 'final' && st.opponent && myScore != null && theirScore != null && Math.abs(Number(myScore) - Number(theirScore)) < 0.0101 && Number(myScore) !== Number(theirScore);
   const theirSquad = st.opponent ? sealedRows(st.opponent.entry, slots) : [];
+  const bl = budgetLine(ctx, salaryOf);
+  const filled = n - bl.open;
+  const projTotal = Object.values(picks).reduce((s, slug) => s + (slug ? bySlug.get(slug)?.proj ?? 0 : 0), 0);
+  const week = st.week!;
 
   const save = async () => {
-    if (st.week == null) return;
     if (filled < n) { setNote(`Fill all ${n} spots first.`); return; }
     setBusy(true); setNote(null);
     try {
-      const r = await saveContestEntry(leagueId, st.week, picks as Record<string, string>);
+      const r = await saveContestEntry(leagueId, week, picks as Record<string, string>);
       setNote(r.ok ? '✓ squad saved' : (r.error ?? 'Didn’t save.'));
       if (r.ok) await load();
     } catch (e) { setNote(friendlyError(e)); } finally { setBusy(false); }
   };
-  const candidates = (slot: string) => {
-    const def = slots.find((d) => d.slot === slot)!;
-    const target = theCard?.targets[slot] ?? 0;
-    const taken = new Set(Object.entries(picks).filter(([s, v]) => s !== slot && v).map(([, v]) => v));
-    const room = budget - spent + (picks[slot] ? bySlug.get(picks[slot]!)?.salary ?? 0 : 0) - (n - filled - (picks[slot] ? 0 : 1)) * CONTEST_MIN_SALARY;
-    const needle = search.trim().toLowerCase();
-    return (board ?? [])
-      .filter((r) => contestSlotAllows(def, r) && !taken.has(r.slug) && (!needle || r.name.toLowerCase().includes(needle) || r.team.toLowerCase().includes(needle)))
-      .map((r) => ({ r, dist: Math.abs(r.proj - target), afford: r.salary <= room, lock: locked(r.slug) }))
-      .sort((a, b) => (bull && !isTotal ? a.dist - b.dist : cfg.contest === 'golf' ? (a.r.proj > 0 ? a.r.proj : 999) - (b.r.proj > 0 ? b.r.proj : 999) : b.r.proj - a.r.proj) || a.r.salary - b.r.salary);
+  const fill = () => {
+    const built = fillOpenSpots(players.filter((p) => !locked(p.slug)), ctx, `${leagueId}|w${week}|${st.roster_id}|${Date.now()}`);
+    const open = slots.filter((d) => !picks[d.slot]).length;
+    const got = slots.filter((d) => !picks[d.slot] && built[d.slot]).length;
+    setPicks(built);
+    setNote(got === open ? `✓ filled ${got} spot${got === 1 ? '' : 's'} — swap any you like, then save` : got ? `filled ${got} of ${open} — the rest don’t fit the budget; free some up` : 'nothing fits the budget — clear a pricey pick first');
   };
-  const sortedNote = bull && !isTotal ? 'Sorted by how close his projection lands to the number.' : cfg.contest === 'golf' ? 'Sorted by projection, lowest first — a zero is a penalty, not a score.' : 'Sorted by projection.';
+  const clearAll = () => {
+    const keep: Record<string, string | null> = {};
+    for (const d of slots) keep[d.slot] = locked(picks[d.slot]) ? picks[d.slot] : null;
+    setPicks(keep);
+  };
+  const openSheet = (slot: string | 'any') => {
+    setActive(slot); setSearch(''); setTeam('');
+    const d = slot === 'any' ? null : slots.find((x) => x.slot === slot);
+    setTab(d && d.pos.length === 1 ? d.pos[0] : 'ALL');
+  };
+  const put = (slug: string, slot: string | null) => {
+    if (!slot) return;
+    const next = { ...picks };
+    for (const [s, v] of Object.entries(next)) if (v === slug) next[s] = null;   // he moves, he doesn't double up
+    next[slot] = slug;
+    setPicks(next);
+    setActive(null);
+  };
+  const rows = active ? rankCandidates(players, ctx, { slot: active === 'any' ? null : active, tab, team: team || null, needle: search, sort: sort ?? undefined, locked, hideIneligible: eligibleOnly }, salaryOf) : [];
+  const sortNow: BuilderSort = sort ?? (bull && !isTotal ? 'aim' : 'proj');
+  const activeDef = active && active !== 'any' ? slots.find((d) => d.slot === active) ?? null : null;
+  const barPct = Math.min(100, Math.round((bl.spent / budget) * 100));
 
   return (
     <div style={embedded ? { display: 'grid', gap: 12 } : { maxWidth: 760, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
@@ -157,7 +228,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={onBack} className="mono" style={chip(false)}>← BACK</button>
           <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>{st.name ?? 'CONTEST'}</span>
-          <span className="mono" style={small}>{`Week ${st.week} · ${CONTEST_WORD[cfg.contest]}`}</span>
+          <span className="mono" style={small}>{`Week ${week} · ${CONTEST_WORD[cfg.contest]}`}</span>
         </div>
       )}
 
@@ -166,6 +237,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span className="mono" style={head}>{bull ? 'THIS WEEK’S CARD' : CONTEST_WORD[cfg.contest]}</span>
           {isTotal && theCard && <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--you)' }}>{theCard.total}</span>}
+          <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`WEEK ${week}`}</span>
         </div>
         {bull && !isTotal && theCard && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -177,6 +249,12 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
           </div>
         )}
         <div style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.45 }}>{contestHowTo(cfg)}</div>
+        {(seatRule || poolFilter?.teams?.length || poolFilter?.min_exp != null || poolFilter?.max_exp != null) && (
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
+            {seatRule && <span>⚑ Your seat takes <b style={{ color: 'var(--you)' }}>{seatRuleText(seatRule) || 'some players'}</b> only. </span>}
+            {poolFilter?.teams?.length ? <span>{`The pool is ${poolFilter.teams.length} teams. `}</span> : null}
+          </div>
+        )}
         {myTb && (
           <div className="mono" style={{ fontSize: 11, color: 'var(--dim)', borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
             ⚖️ TIE-BREAKER: your <b style={{ color: 'var(--you)' }}>{labels[myTb.slot]}</b> aims at <b style={{ color: 'var(--you)' }}>{myTb.target}</b> — it only counts if you tie, and closer wins.
@@ -200,58 +278,101 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
         </div>
       )}
 
-      {/* the squad */}
-      <div style={{ ...card, display: 'grid', gap: 2 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-          <span className="mono" style={head}>MY SQUAD</span>
-          <span className="mono" style={{ fontSize: 11, color: spent > budget ? 'var(--warn, #c66)' : 'var(--dim)' }}>
-            {`${fmt$(spent)} / ${fmt$(budget)}${!st.started ? ` · projects ${projTotal.toFixed(1)}${isTotal && theCard ? ` vs ${theCard.total}` : ''}` : ''}`}
-          </span>
+      {/* THE BUDGET BAR */}
+      <div style={{ ...card, display: 'grid', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <span className="mono" style={head}>BUDGET</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: bl.over ? 'var(--warn, #c66)' : 'var(--you)' }}>{fmt$(bl.left)}</span>
+          <span className="mono" style={small}>{bl.over ? `over by ${fmt$(-bl.left)}` : `left of ${fmt$(budget)}`}</span>
+          <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{bl.open ? `${bl.open} open · ${fmtK(bl.perSpot)} each` : 'every spot filled'}</span>
         </div>
-        {slots.map((d) => {
-          const slug = picks[d.slot];
-          const p = slug ? bySlug.get(slug) : null;
-          const target = theCard?.targets[d.slot];
-          const lv = liveOf(d.slot);
-          const isLocked = locked(slug);
-          return (
-            <div key={d.slot} style={{ display: 'grid', gridTemplateColumns: '64px minmax(0,1fr) 92px', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--bd)' }}>
-              <button onClick={() => { if (editable && !isLocked) { setActive(d.slot); setSearch(''); } }} disabled={!editable || isLocked} className="mono"
-                style={{ background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '6px 4px', cursor: editable && !isLocked ? 'pointer' : 'default', color: 'var(--text)' }}>
-                <div style={{ fontSize: 11, fontWeight: 700 }}>{labels[d.slot]}</div>
-                {bull && !isTotal && target != null && <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--you)' }}>{target}</div>}
-                {!bull && d.zeroPts != null && <div title="a scoreless spot banks this" style={{ fontSize: 9, color: 'var(--dim)' }}>{`0 → ${d.zeroPts}`}</div>}
-                {myTb?.slot === d.slot && <div title="tie-breaker" style={{ fontSize: 9, color: 'var(--dim)' }}>{`⚖️ ${myTb.target}`}</div>}
-              </button>
-              {p ? (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
-                  <PlayerImg playerId={p.slug} team={p.team} pos={p.pos} size={28} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}{isLocked ? ' 🔒' : ''}</div>
-                    <div className="mono" style={small}>{`${p.pos} · ${p.team} · ${fmt$(p.salary)} · proj ${p.proj.toFixed(1)}`}</div>
-                  </div>
-                </div>
-              ) : (
-                <button onClick={() => { if (editable) { setActive(d.slot); setSearch(''); } }} disabled={!editable} className="mono"
-                  style={{ background: 'none', border: 'none', textAlign: 'left', color: 'var(--you)', cursor: 'pointer', fontSize: 12 }}>+ PICK {labels[d.slot]}</button>
-              )}
-              <div className="mono" style={{ textAlign: 'right' }}>
-                {lv ? (
-                  <>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>{lv.score.toFixed(1)}</div>
-                    {lv.aim && <div style={{ fontSize: 9.5, color: lv.aim.ring > 0 ? 'var(--you)' : 'var(--faint)' }}>{`${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}`}</div>}
-                  </>
-                ) : p && bull && !isTotal && target != null ? (
-                  <div style={small}>{`aims ${projectedRing(p.proj, target, radius).toFixed(1)}`}</div>
-                ) : null}
-              </div>
+        <div style={{ height: 10, borderRadius: 999, background: 'var(--bg)', border: '1px solid var(--bd)', overflow: 'hidden', display: 'flex' }}>
+          {slots.map((d) => {
+            const slug = picks[d.slot];
+            if (!slug) return null;
+            const w = Math.max(0.5, (salaryOf(slug) / budget) * 100);
+            return <div key={d.slot} title={`${labels[d.slot]} · ${bySlug.get(slug)?.name ?? slug} · ${fmt$(salaryOf(slug))}`} style={{ width: `${w}%`, background: bl.over ? 'var(--warn, #c66)' : `color-mix(in srgb, var(--you) ${55 + (slots.indexOf(d) % 3) * 15}%, var(--bg))`, borderRight: '1px solid var(--surface)' }} />;
+          })}
+          {!bl.over && barPct < 100 && <div style={{ flex: 1 }} />}
+        </div>
+        <div className="mono" style={{ ...small, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <span>{`${fmt$(bl.spent)} spent`}</span>
+          {!st.started && <span>{`projects ${projTotal.toFixed(1)}${isTotal && theCard ? ` vs ${theCard.total}` : ''}`}</span>}
+          {filled > 0 && <span>{`value ${valueOf({ salary: bl.spent, proj: projTotal }).toFixed(2)} per $1k`}</span>}
+        </div>
+      </div>
+
+      {/* MY SQUAD: the spot cards */}
+      <div style={{ ...card, display: 'grid', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+          <span className="mono" style={head}>{`MY SQUAD · ${filled} OF ${n}`}</span>
+          {editable && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => openSheet('any')} className="mono" style={chip(false)}>＋ PLAYERS</button>
+              {bl.open > 0 && <button onClick={fill} className="mono" style={chip(false)}>✨ FILL FOR ME</button>}
+              {filled > 0 && <button onClick={clearAll} className="mono" style={chip(false, true)}>CLEAR</button>}
             </div>
-          );
-        })}
+          )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8 }}>
+          {slots.map((d) => {
+            const slug = picks[d.slot];
+            const p = slug ? bySlug.get(slug) : null;
+            const target = theCard?.targets[d.slot];
+            const lv = liveOf(d.slot);
+            const isLocked = locked(slug);
+            const canTap = editable && !isLocked;
+            const changed = slug !== saved[d.slot];
+            return (
+              <div key={d.slot} onClick={() => { if (canTap) openSheet(d.slot); }}
+                style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: 10, borderRadius: 8, cursor: canTap ? 'pointer' : 'default',
+                  background: 'var(--bg)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, opacity: isLocked && !lv ? 0.75 : 1 }}>
+                <div style={{ display: 'grid', justifyItems: 'center', gap: 2, minWidth: 52 }}>
+                  <span className="mono" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '2px 6px' }}>{labels[d.slot]}</span>
+                  {bull && !isTotal && target != null && <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--you)' }}>{target}</span>}
+                  {!bull && d.zeroPts != null && <span className="mono" title="a scoreless spot banks this" style={{ fontSize: 8.5, color: 'var(--dim)' }}>{`0 → ${d.zeroPts}`}</span>}
+                  {myTb?.slot === d.slot && <span className="mono" title="tie-breaker" style={{ fontSize: 8.5, color: 'var(--dim)' }}>{`⚖️ ${myTb.target}`}</span>}
+                </div>
+                {p ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+                    <PlayerImg playerId={p.slug} team={p.team} pos={p.pos} size={38} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}{isLocked ? ' 🔒' : ''}<InjuryTag key={injTick} week={week} slug={p.slug} /></div>
+                      <div className="mono" style={{ ...small, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}</div>
+                      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>{`${fmt$(p.salary)} · proj ${p.proj.toFixed(1)} · ${valueOf(p).toFixed(2)}/$1k`}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 11, border: '1px dashed var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 18 }}>+</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="mono" style={{ fontSize: 12, color: editable ? 'var(--you)' : 'var(--faint)', fontWeight: 700 }}>{editable ? `PICK ${labels[d.slot]}` : 'empty'}</div>
+                      <div className="mono" style={small}>{d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}`}</div>
+                    </div>
+                  </div>
+                )}
+                <div className="mono" style={{ textAlign: 'right', display: 'grid', gap: 4, justifyItems: 'end' }}>
+                  {lv ? (
+                    <>
+                      <div style={{ fontSize: 14, fontWeight: 800 }}>{lv.score.toFixed(1)}</div>
+                      {lv.aim && <div style={{ fontSize: 9.5, color: lv.aim.ring > 0 ? 'var(--you)' : 'var(--faint)' }}>{`${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}`}</div>}
+                    </>
+                  ) : p && bull && !isTotal && target != null ? (
+                    <div style={small}>{`aims ${projectedRing(p.proj, target, radius).toFixed(1)}`}</div>
+                  ) : null}
+                  {p && canTap && (
+                    <button onClick={(e) => { e.stopPropagation(); setPicks({ ...picks, [d.slot]: null }); }} title="clear this spot" className="mono"
+                      style={{ background: 'none', border: '1px solid var(--bd)', borderRadius: 999, color: 'var(--faint)', fontSize: 10, cursor: 'pointer', padding: '2px 7px' }}>✕</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
         {editable && (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => void save()} disabled={busy || filled < n || spent > budget} className="mono" style={chip(true)}>SAVE SQUAD</button>
-            <span className="mono" style={small}>{filled < n ? `${n - filled} to fill · ${fmt$(budget - spent)} left` : `${fmt$(budget - spent)} left`}</span>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+            <button onClick={() => void save()} disabled={busy || filled < n || bl.over || !dirty} className="mono" style={chip(true)}>{dirty ? 'SAVE SQUAD' : 'SAVED'}</button>
+            <span className="mono" style={small}>{filled < n ? `${n - filled} to fill` : bl.over ? 'over the budget' : dirty ? 'unsaved changes' : 'your squad is in'}</span>
             {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</span>}
           </div>
         )}
@@ -268,40 +389,80 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
               <div key={r.slot} className="mono" style={{ display: 'grid', gridTemplateColumns: '52px minmax(0,1fr) 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
                 <span style={{ color: 'var(--faint)' }}>{labels[r.slot]}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: r.slug ? 'var(--text)' : 'var(--faint)' }}>{r.slug ? (p?.name ?? r.slug) : '🔒 sealed until his game locks'}</span>
-                <span style={{ textAlign: 'right' }}>{lv ? `${lv.score.toFixed(1)}${bull ? '' : ` ${scoreWord}`}` : ''}</span>
+                <span style={{ textAlign: 'right' }}>{lv ? lv.score.toFixed(1) : ''}</span>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* the pick sheet */}
+      {/* THE PICK SHEET */}
       {active && (
         <div onClick={() => setActive(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 60, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(640px, 100%)', maxHeight: '80vh', overflowY: 'auto', borderRadius: '12px 12px 0 0', display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-              <span className="mono" style={{ fontSize: 12, fontWeight: 700 }}>{labels[active]}{bull && !isTotal && theCard ? ` · aim at ${theCard.targets[active]}` : ''}</span>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(760px, 100%)', height: 'min(88vh, 900px)', borderRadius: '12px 12px 0 0', display: 'grid', gridTemplateRows: 'auto auto auto auto minmax(0,1fr)', gap: 8, padding: '12px 14px' }}>
+            {/* which spot */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => openSheet('any')} className="mono" style={chip(active === 'any')}>ANY SPOT</button>
+              {slots.map((d) => (
+                <button key={d.slot} onClick={() => openSheet(d.slot)} disabled={locked(picks[d.slot])} className="mono" title={picks[d.slot] ? bySlug.get(picks[d.slot]!)?.name : 'open'}
+                  style={{ ...chip(active === d.slot, !!picks[d.slot]), padding: '4px 9px' }}>{labels[d.slot]}{picks[d.slot] ? ' ·' : ''}</button>
+              ))}
               <span style={{ flex: 1 }} />
-              {picks[active] && <button onClick={() => { setPicks({ ...picks, [active]: null }); setActive(null); }} className="mono" style={chip(false, true)}>CLEAR</button>}
+              <span className="mono" style={{ ...small, fontWeight: 700, color: bl.over ? 'var(--warn, #c66)' : 'var(--you)' }}>{`${fmt$(bl.left)} left`}</span>
               <button onClick={() => setActive(null)} className="mono" style={chip(false)}>✕</button>
             </div>
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search players or teams…"
-              style={{ fontSize: 13, padding: '7px 10px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 6 }} />
-            <div className="mono" style={small}>{sortedNote}</div>
-            {candidates(active).slice(0, 120).map(({ r, dist, afford, lock }) => (
-              <button key={r.slug} disabled={!afford || lock} onClick={() => { setPicks({ ...picks, [active]: r.slug }); setActive(null); }}
-                style={{ display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 8, alignItems: 'center', padding: '6px 2px', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', textAlign: 'left', color: 'var(--text)', cursor: afford && !lock ? 'pointer' : 'not-allowed', opacity: afford && !lock ? 1 : 0.45 }}>
-                <PlayerImg playerId={r.slug} team={r.team} pos={r.pos} size={26} />
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{r.name}</span>
-                  <span className="mono" style={{ ...small, marginLeft: 6 }}>{r.pos} · {r.team}{lock ? ' · locked' : !afford ? ' · over budget' : ''}</span>
-                </span>
-                <span className="mono" style={{ fontSize: 11, textAlign: 'right' }}>
-                  {`${fmt$(r.salary)} · ${r.proj.toFixed(1)}`}
-                  {bull && !isTotal && <span style={{ color: dist <= radius / 5 ? 'var(--you)' : 'var(--faint)' }}>{` · ${dist.toFixed(1)} off`}</span>}
-                </span>
-              </button>
-            ))}
+            {/* position tabs */}
+            <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--bd)', overflowX: 'auto' }}>
+              {tabs.map((tb) => <button key={tb} onClick={() => setTab(tb)} className="mono" style={tabStyle(tab === tb)}>{posLabel(tb)}</button>)}
+            </div>
+            {/* search, team, sort */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search players…" autoFocus style={{ ...input, flex: '1 1 160px', minWidth: 120 }} />
+              <select value={team} onChange={(e) => setTeam(e.target.value)} className="mono" style={{ ...input, width: 96, fontSize: 11 }}>
+                <option value="">ALL TEAMS</option>
+                {teams.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(bull && !isTotal ? [{ id: 'aim' as BuilderSort, label: 'CLOSEST' }, ...BUILDER_SORTS] : BUILDER_SORTS).map((s) => (
+                  <button key={s.id} onClick={() => setSort(s.id)} className="mono" style={{ ...chip(sortNow === s.id), padding: '3px 8px', fontSize: 9.5 }}>{s.label}</button>
+                ))}
+              </div>
+              <label className="mono" style={{ ...small, display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                <input type="checkbox" checked={eligibleOnly} onChange={(e) => setEligibleOnly(e.target.checked)} /> eligible only
+              </label>
+            </div>
+            <div className="mono" style={small}>
+              {activeDef ? `Picking ${labels[activeDef.slot]}${bull && !isTotal && theCard ? ` · aim at ${theCard.targets[activeDef.slot]}` : ''} · room ${fmt$(Math.max(0, roomFor(ctx, activeDef.slot, salaryOf)))}` : 'Any spot: each player lands in the tightest open spot that takes him.'}
+              {` · ${rows.length} shown`}
+            </div>
+            {/* the players */}
+            <div style={{ overflowY: 'auto', display: 'grid', gap: 2, alignContent: 'start' }}>
+              {rows.slice(0, 200).map(({ p, slot, fits, why, afford, over, lock, taken, dist, value }) => {
+                const ok = fits && afford && !lock && !taken;
+                const land = slot ? labels[slot] : null;
+                return (
+                  <button key={p.slug} disabled={!ok} onClick={() => put(p.slug, slot)}
+                    style={{ display: 'grid', gridTemplateColumns: '36px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '7px 6px', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', textAlign: 'left', color: 'var(--text)', cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : 0.5, borderRadius: 6 }}>
+                    <PlayerImg playerId={p.slug} team={p.team} pos={p.pos} size={34} />
+                    <span style={{ minWidth: 0, display: 'grid' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<InjuryTag key={injTick} week={week} slug={p.slug} /></span>
+                      <span className="mono" style={{ ...small, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}{active === 'any' && land && ok ? ` · → ${land}` : ''}</span>
+                      {(why || taken || lock || (fits && !afford)) && (
+                        <span className="mono" style={{ fontSize: 10, color: lock || taken ? 'var(--faint)' : 'var(--warn, #c66)' }}>
+                          {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? `over budget by ${fmt$(over)}`}
+                        </span>
+                      )}
+                    </span>
+                    <span className="mono" style={{ textAlign: 'right', display: 'grid', gap: 1, justifyItems: 'end' }}>
+                      <span style={{ fontSize: 13, fontWeight: 800 }}>{fmt$(p.salary)}</span>
+                      <span style={{ fontSize: 10.5, color: 'var(--dim)' }}>{`proj ${p.proj.toFixed(1)} · ${value.toFixed(2)}/$1k`}</span>
+                      {bull && !isTotal && dist != null && <span style={{ fontSize: 10, color: dist <= radius / 5 ? 'var(--you)' : 'var(--faint)' }}>{`${dist.toFixed(1)} off`}</span>}
+                    </span>
+                  </button>
+                );
+              })}
+              {!rows.length && <div className="mono" style={{ ...small, padding: 16, textAlign: 'center' }}>Nobody matches — widen the search or show ineligible players.</div>}
+            </div>
           </div>
         </div>
       )}

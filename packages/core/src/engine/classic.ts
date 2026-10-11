@@ -195,7 +195,7 @@ export const isRetSlot = (specPos: string[]): boolean => specPos.length === 1 &&
 
 // Positions whose "players" are team units — a tenure window is meaningless
 // for them, so they pass it (the 0171 pool-filter rule, kept per-slot).
-const TEAM_UNIT_POS = new Set(['K', 'DEF', 'HC', 'P']);
+export const TEAM_UNIT_POS = new Set(['K', 'DEF', 'HC', 'P']);
 
 /** May this player FILL this spot? Position eligibility plus the spot's own
  *  filter (0172): team whitelist applies to everyone (team units included);

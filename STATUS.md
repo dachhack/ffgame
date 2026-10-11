@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.665.0 — The squad builder: budget bar, player cards, filters, FILL FOR ME
+
+> - Building your weekly squad is a proper builder now, on web and app: a budget bar that fills as you pick, player cards with face, game time, salary, projection and value, and a pick sheet with position tabs, a team filter, search and sort.
+> - Players you can't take say why — the spot's rule, the league's pool, your seat's rule, over budget — and FILL FOR ME finishes the open spots for you.
+> - Injury tags show on every player.
+
+- Engine `packages/core/src/engine/contestBuilder.ts` (tabs, eligibility
+  words, ranking, room, fill, budget line); `contestAutoBuild` takes `keep`
+  and reserves each remaining spot's cheapest candidate. `weekSlateByTeam`
+  reads the week's games by team. docs/dfs-bullseye.md §14. No iPhone build
+  needed.
+
 ### v0.664.0 — Weekly squad leagues: DFS, golf and Bullseye, with every classic option
 
 > - Bullseye leagues are now one kind of weekly squad league, alongside plain DFS (highest score wins) and golf DFS (lowest score wins). Start one from your leagues page: pick how it wins, head-to-head or leaderboard, one week or the season, and the squad budget.

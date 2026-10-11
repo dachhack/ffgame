@@ -192,16 +192,26 @@ export interface ContestBoardPlayer extends BoardPlayer { exp?: number | null }
  *  still a real player (a zero is a no-show, and the zero-fill prices it);
  *  BULLSEYE the one landing closest to the spot's number. Seeded jitter keeps
  *  two seats from building alike. */
-export function contestAutoBuild(board: ContestBoardPlayer[], cfg: ContestConfig, seed: string, card?: BullseyeCard | null): Record<string, string | null> {
+export function contestAutoBuild(board: ContestBoardPlayer[], cfg: ContestConfig, seed: string, card?: BullseyeCard | null,
+  /** FILL FOR ME (v0.665.0): spots already picked stay as they are — their
+   *  salary is spent and their players are taken — and only the open spots
+   *  are built. Omitted: every spot is built. */
+  keep?: Record<string, string | null> | null): Record<string, string | null> {
   const rand = mulberry(seed);
-  const out: Record<string, string | null> = Object.fromEntries(cfg.slots.map((d) => [d.slot, null]));
+  const out: Record<string, string | null> = Object.fromEntries(cfg.slots.map((d) => [d.slot, keep?.[d.slot] ?? null]));
   const fits = (d: ClassicSlotDef) => board.filter((p) => contestSlotAllows(d, p));
-  const order = [...cfg.slots].sort((a, b) => fits(a).length - fits(b).length);
+  const open = cfg.slots.filter((d) => !out[d.slot]);
+  const order = [...open].sort((a, b) => fits(a).length - fits(b).length);
   const jitter = new Map(board.map((p) => [p.slug, (rand() - 0.5) * 1.5]));
-  const taken = new Set<string>();
-  let budget = cfg.budget;
+  const taken = new Set<string>(Object.values(out).filter((x): x is string => !!x));
+  let budget = cfg.budget - contestSalary(out, (slug) => board.find((p) => p.slug === slug)?.salary ?? 0);
+  // What each spot still to fill will need at the least: its cheapest
+  // candidate not yet taken (a one-candidate spot can't be starved by a
+  // pricey pick before it), else the board's floor.
+  const need = (d: ClassicSlotDef) => fits(d).filter((p) => !taken.has(p.slug)).reduce((m, p) => Math.min(m, p.salary), Infinity);
   order.forEach((d, i) => {
-    const maxSpend = budget - (order.length - i - 1) * CONTEST_MIN_SALARY;
+    const reserve = order.slice(i + 1).reduce((s, o) => { const x = need(o); return s + (Number.isFinite(x) ? x : CONTEST_MIN_SALARY); }, 0);
+    const maxSpend = budget - reserve;
     const pool = fits(d).filter((p) => !taken.has(p.slug) && p.salary <= maxSpend);
     const j = (p: BoardPlayer) => p.proj + (jitter.get(p.slug) ?? 0);
     let pick: BoardPlayer | undefined;
