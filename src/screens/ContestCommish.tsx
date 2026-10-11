@@ -96,6 +96,12 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
           <button disabled={busy || minSpend === (b.min_spend ?? 0)} onClick={() => void act(setContestRules(leagueId, { minSpend }), 'minimum spend changed')} className="mono" style={chip(true)}>SET</button>
           <span className="mono" style={small}>{b.contest === 'golf' ? 'Golf’s real constraint: a squad must spend at least this, so cheap no-names aren’t the whole game.' : 'A floor a squad must spend; mostly for golf.'}</span>
         </div>
+        <div className="mono" style={label}>RULED OUT</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { autoSub: true }), 'auto-sub on')} className="mono" style={chip(!!b.auto_sub)}>SWAP HIM FOR ME</button>
+          <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { autoSub: false }), 'auto-sub off')} className="mono" style={chip(!b.auto_sub)}>LEAVE IT TO ME</button>
+          <span className="mono" style={small}>Every player locks at his own kickoff, so a ruled-out pick can be swapped until then. SWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has; LEAVE IT TO ME banks the zero.</span>
+        </div>
       </div>
 
       {b.contest === 'bullseye' && (

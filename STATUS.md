@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.669.0 — A contest player locks at his kickoff; a ruled-out pick can be swapped for you
+
+> - In weekly squad leagues every player now locks at his own kickoff, not an hour before — so a player ruled out on Sunday morning can be swapped right up to his game, like any DFS site.
+> - When a player in your squad is ruled out, you get a push naming him and his kickoff. If the commissioner turns on SWAP HIM FOR ME, a ruled-out pick you haven't replaced is swapped for the best affordable player in the minutes before his game, and you're told who went in.
+
+- Founder, with Rico Dowdle ruled out at 12:06 for a 1:00 game: "Should I
+  be able to swap out dowdle since he was declared out?" He had locked at
+  noon — the drip engine's hour, inherited without a reason. Migration
+  0470: `_week_first_lock` = first kickoff; `_dfs_player_locked` and
+  save_contest_entry's per-player lock at kickoff; set_contest_rules
+  `p_auto_sub` (settings.auto_sub; `_bullseye_info.auto_sub`). Core:
+  ContestConfig.autoSub; liveApi weekGameLocks(week, season, leadMs) with
+  the builders passing 0. pods.js: contest leagues' matchup lock_at,
+  no-show build and CPU sub at kickoff (drip pods keep the hour); a kept
+  pick whose game has kicked off stays in the sub pool so his salary still
+  counts. `server/src/contestSubs.js` (own 5-min clock): `planSubs` swaps
+  a ruled-out human pick inside 20 min of his kickoff when auto_sub is on,
+  CPU seats any time before, pushes the owner. push.js `detectRuledOut`:
+  injury rows moved to O/IR in the last scan window × contest squads
+  holding him × a kickoff still to come → "⚠ X is OUT … swap him before
+  1:00 PM ET". Commish panel: RULED OUT → SWAP HIM FOR ME / LEAVE IT TO ME.
+  `check:contestsubs`; SQL flow on scratch Postgres. No iPhone build needed.
+
 ### v0.668.1 — The week's result in the chat; a nudge before squads lock
 
 > - When a contest week is settled, a result card lands in the league chat: the podium, the field, every head-to-head result, the season leader and when next week's squads lock. Everyone who played gets a push with their place.

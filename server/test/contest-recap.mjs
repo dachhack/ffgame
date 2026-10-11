@@ -64,11 +64,11 @@ const tied = R.rankWeek(golfCfg, [{ home_roster_id: 1, away_roster_id: 1, home_f
 ok('rank: a tie shares the rank', tied[0].rank === 1 && tied[1].rank === 1);
 
 // ── the card ────────────────────────────────────────────────────────────────
-const body = R.recapBody(cfg, 6, ranked, { leader: 'Farmer Casey', total: 242.3, weeks: 2 }, { week: 7, lockMs: Date.parse('2026-10-16T00:15:00Z') - 3_600_000 });
+const body = R.recapBody(cfg, 6, ranked, { leader: 'Farmer Casey', total: 242.3, weeks: 2 }, { week: 7, lockMs: Date.parse('2026-10-16T00:15:00Z') });
 ok('card: opens with the week and the contest', body.startsWith('🏁 WEEK 6 RESULT · 🎯 BULLSEYE'), body);
 ok('card: the podium, with the tie-break and the CPU tag', body.includes('🥇 Red Zone — 150.5 ring (tie-break 1 off)') && body.includes('🥉 Mud Dogs — 131 ring (tie-break 2.1 off) · CPU'), body);
 ok('card: the field, and the head-to-head results', body.includes('4 squads · 1 CPU') && body.includes('Head-to-head: Red Zone beat Blitz Brigade 150.5–120 · Farmer Casey beat Mud Dogs 142.3–131'), body);
-ok('card: the season leader and the next lock', body.includes('Season: Farmer Casey leads with 242.3 ring after 2 weeks.') && /Week 7's board is up — squads lock Thu 7:15 PM ET\./.test(body), body);
+ok('card: the season leader and the next lock', body.includes('Season: Farmer Casey leads with 242.3 ring after 2 weeks.') && /Week 7's board is up — squads lock Thu 8:15 PM ET\./.test(body), body);
 const gBody = R.recapBody(golfCfg, 6, gRanked, null, null);
 ok('card: golf speaks in pts and has no head-to-head line', gBody.includes('🥇 Blitz Brigade — 25 pts') && !gBody.includes('Head-to-head') && !gBody.includes('Season:'), gBody);
 
@@ -91,12 +91,12 @@ ok('post: an unfinished week posts nothing', n === 0 && T.league_message.length 
 // ── the lock reminder ───────────────────────────────────────────────────────
 const P = await import('../src/push.js');
 const kick = Date.parse('2026-10-16T00:15:00Z');
-ok('lock: the last call fires 55–65 min before lock (lock is 1h before kickoff)', P.contestLockBand(kick, kick - 3_600_000 - 60 * 60_000) === 'last' && P.contestLockBand(kick, kick - 3_600_000 - 70 * 60_000) === null);
-ok('lock: the day-before fires 24h ± 5 min before lock', P.contestLockBand(kick, kick - 3_600_000 - 24 * 3_600_000) === 'day' && P.contestLockBand(kick, kick - 3_600_000 - 24 * 3_600_000 - 10 * 60_000) === null);
-const rows = P.contestLockRows(L, 7, 'last', kick - 3_600_000, T.league_membership, new Set([3]));
+ok('lock: the last call fires 55–65 min before the first kickoff (a contest player locks at kickoff)', P.contestLockBand(kick, kick - 60 * 60_000) === 'last' && P.contestLockBand(kick, kick - 70 * 60_000) === null);
+ok('lock: the day-before fires 24h ± 5 min before the first kickoff', P.contestLockBand(kick, kick - 24 * 3_600_000) === 'day' && P.contestLockBand(kick, kick - 24 * 3_600_000 - 10 * 60_000) === null);
+const rows = P.contestLockRows(L, 7, 'last', kick, T.league_membership, new Set([3]));
 ok('lock: humans without a squad get the push; the CPU seat and the one who built don’t', rows.map((r) => r.app_user_id).sort().join() === 'u1,u4', rows.map((r) => r.app_user_id));
-ok('lock: the last call names the lock time and the head-to-head CPU rule', rows[0].title === '⚠ Squads lock Thu 7:15 PM ET' && /CPU builds one for you/.test(rows[0].body) && rows[0].kind === 'lineup' && rows[0].dedupe_key === 'contest-lock:last:L1:7:u1', rows[0]);
-const boardRows = P.contestLockRows({ ...L, settings_json: { contest: 'high', contest_format: 'board' } }, 7, 'day', kick - 3_600_000, T.league_membership, new Set());
+ok('lock: the last call names the lock time and the head-to-head CPU rule', rows[0].title === '⚠ Squads lock Thu 8:15 PM ET' && /CPU builds one for you/.test(rows[0].body) && rows[0].kind === 'lineup' && rows[0].dedupe_key === 'contest-lock:last:L1:7:u1', rows[0]);
+const boardRows = P.contestLockRows({ ...L, settings_json: { contest: 'high', contest_format: 'board' } }, 7, 'day', kick, T.league_membership, new Set());
 ok('lock: a leaderboard seat is told a missing squad scores nothing, the day before', /scores nothing/.test(boardRows[0].body) && boardRows[0].title.startsWith('🗓 Kickoff Bullseye: squads lock') && boardRows[0].dedupe_key.startsWith('contest-lock:day:'), boardRows[0]);
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');

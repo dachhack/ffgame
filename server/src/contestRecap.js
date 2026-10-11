@@ -128,7 +128,7 @@ export async function postContestRecaps(week, season, opts = {}) {
     let next = null;
     if (lg.contest_week == null) {
       const { data: nk } = await db().from('nfl_slate').select('kickoff').eq('season', String(season)).eq('week', week + 1).not('kickoff', 'is', null).order('kickoff').limit(1);
-      if (nk?.[0]?.kickoff) next = { week: week + 1, lockMs: Date.parse(nk[0].kickoff) - 3_600_000 };
+      if (nk?.[0]?.kickoff) next = { week: week + 1, lockMs: Date.parse(nk[0].kickoff) };   // v0.669.0: a contest player locks at kickoff
     }
     const body = recapBody(cfg, week, ranked, seasonLine, next);
     const { error: mErr } = await db().from('league_message').insert({

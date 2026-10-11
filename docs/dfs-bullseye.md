@@ -407,3 +407,21 @@ week's first lock and an hour before it. Head-to-head seats are told the CPU
 builds for them at lock; leaderboard seats that a missing squad scores
 nothing. Both ride the existing `lineup` push preference.
 
+## 20. The kickoff lock, and the swap made for you (v0.669.0, 0470)
+
+A contest player locks at his own kickoff. The hour before was the drip
+engine's cushion for sealing picks and never applied here; a DFS site locks
+at kickoff, and a player ruled out on Sunday morning should be swappable
+until his game. `_week_first_lock` is the week's first kickoff (it gates
+"started", the board's row lock and the no-show build); `_dfs_player_locked`
+and the save rule's per-player lock are at kickoff; the builders read the
+lock map with no lead. Drip pods keep their hour.
+
+The ruled-out push (`detectRuledOut`) fires when the injury report moves a
+player in a contest squad to O or IR with his kickoff still to come, naming
+him, the league and the time. With the league's AUTO-SUB on (commissioner:
+RULED OUT → SWAP HIM FOR ME), `contestSubs.js` swaps a ruled-out human pick
+for the best affordable unlocked body inside 20 minutes of his kickoff and
+pushes the owner; CPU seats are swapped any time before kickoff. Off, a
+ruled-out pick left in place banks what his spot banks.
+

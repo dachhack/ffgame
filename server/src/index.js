@@ -43,6 +43,7 @@ import { resolveMatchup, stampFinals, injectWeekPlays, prefetchTick } from './re
 import { sweepRescores } from './rescore.js';
 import { postWeekReports, sweepRequests } from './report.js';
 import { postContestRecaps } from './contestRecap.js';
+import { sweepContestSubs, contestSubsEveryMs } from './contestSubs.js';
 import { sweepScoreAsIs } from './scoreAsIs.js';
 import { syncAllLeagues, syncWeek } from './sync.js';
 import { syncCadenceAt } from '../../packages/core/src/data/syncCadence.ts';
@@ -1268,6 +1269,17 @@ async function main() {
   };
   await podTick().catch((e) => log('pod tick error', e.message));
   setInterval(() => podTick().catch((e) => log('pod tick error', e.message)), config.podCheckMs);
+  // THE SWAP MADE FOR YOU (v0.669.0): a ruled-out contest pick is swapped in
+  // the minutes before his kickoff (CPU seats any time before it). Its own
+  // five-minute clock — the hourly pod tick is too coarse for a kickoff window.
+  const subTick = async () => {
+    const season = config.season;
+    const week = await regularWeek(season);
+    const n = await sweepContestSubs(week, season);
+    if (n) log('contest subs:', n, 'week', week);
+  };
+  await subTick().catch((e) => log('contest sub error', e.message));
+  setInterval(() => subTick().catch((e) => log('contest sub error', e.message)), contestSubsEveryMs());
 }
 
 // Only when run as the entrypoint. `contextsFor` is exported for its test, and
