@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.661.1 — iPhones on TestFlight build 5 get updates again
+
+> - iPhones on the October 9 test build were stuck on v0.655.3; app updates now reach them again.
+
+- The founder's iPhone showed "runtime be78b4bc" and v0.655.3 built in. When
+  TestFlight build 5 was requested, CI recorded its runtime as 2f593a89… but
+  EAS's macOS builder stamped the app be78b4bc… (the same commit and native
+  code), so every update since went to the wrong runtime.
+- `ios-legacy-runtimes.txt` now takes `build <EAS build id>` lines, and
+  eas-update.yml asks Expo (`eas build:view --json`, runtime.version) for that
+  build's runtime and republishes each update to it.
+
 ### v0.661.0 — Bullseye leagues: start one, post it, play it like any league; the dev room for everyone
 
 > - Bullseye is now a league you start: up to 32 people, one week or the whole season, posted to the league board or shared by code. It shows in My Leagues with a matchup, standings, your team, chat, settings and commissioner tools.
