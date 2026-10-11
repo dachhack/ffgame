@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.670.0 — Head-to-head records, and a round-robin schedule
+
+> - Head-to-head contest leagues now keep a record: wins, losses and ties from every settled week, with the points total as the tiebreak. The season standings and the week's result card show it.
+> - The schedule is a round-robin: everyone plays everyone once before anyone twice, home and away alternating, instead of a fresh shuffle each week that could draw the same opponent three weeks running.
+
+- Founder: "Head-to-head records and a round-robin schedule next, one
+  PR." Migration 0471: contest_board's season rows carry `wins`, `losses`,
+  `ties` (a final head-to-head by the contest's rule; golf's lower score
+  wins; a board league's self-pairs are neither) and a head-to-head league
+  ranks by record, then total. pods.js `roundRobinPairs(leagueId, week,
+  seats, firstWeek)` (circle method; round from the league's first played
+  week offset by a hash of its id; home/away swap each round; an odd count
+  gives a bye) for contest leagues, the shuffle kept for drip pods.
+  liveApi `recordWord`; standings (web, phone) show "5–1" for head-to-head
+  with the total beside it; the recap's season line reads "leads at 5–1
+  (410.2 ring)". `check:contestschedule`; SQL flow on scratch Postgres.
+  No iPhone build needed.
+
 ### v0.669.0 — A contest player locks at his kickoff; a ruled-out pick can be swapped for you
 
 > - In weekly squad leagues every player now locks at his own kickoff, not an hour before — so a player ruled out on Sunday morning can be swapped right up to his game, like any DFS site.

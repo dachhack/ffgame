@@ -12,7 +12,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, Share, Switch, Text, Text
 import {
   contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
-  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, friendlyError,
+  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
@@ -281,11 +281,11 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
             <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
               <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
-              <Mono size={9} tone="faint">{`${r.weeks} wk${r.weeks === 1 ? '' : 's'}`}</Mono>
-              <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 60, textAlign: 'right' }}>{Number(r.total).toFixed(1)}</Mono>
+              <Mono size={9} tone="faint">{b.format === 'h2h' ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}`}</Mono>
+              <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 60, textAlign: 'right' }}>{b.format === 'h2h' ? recordWord(r) : Number(r.total).toFixed(1)}</Mono>
             </View>
           ))}
-          {bd.season.me && !bd.season.rows.some((r) => r.me) && <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${bd.season.me.rank} · ${Number(bd.season.me.total).toFixed(1)}`}</Mono>}
+          {bd.season.me && !bd.season.rows.some((r) => r.me) && <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${bd.season.me.rank} · ${b.format === 'h2h' ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</Mono>}
         </Card>
       )}
     </>

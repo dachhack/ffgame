@@ -209,6 +209,36 @@ export function aiSalaryEntry(leagueId, week, rosterId, board) {
   return squad;
 }
 
+/** PURE: THE ROUND-ROBIN (v0.670.0). Founder: "Head-to-head records and a
+ *  round-robin schedule." A contest league's head-to-head pairings used to
+ *  be a fresh seeded shuffle every week, so a seat could draw the same
+ *  opponent three weeks running and never meet another. The circle method:
+ *  seat one stays put, the rest rotate one place a round, so over n−1
+ *  rounds everyone plays everyone once; the rotation then repeats. Which
+ *  round a week is comes from the league's first played week, offset by a
+ *  hash of the league id so two leagues don't run in step. Home and away
+ *  swap each round. An odd count gives one seat a bye (paired with null). */
+export function roundRobinPairs(leagueId, week, seats, firstWeek = week) {
+  const s = [...new Set(seats)].sort((a, b) => a - b);
+  if (s.length < 2) return [];
+  if (s.length % 2) s.push(null);
+  const n = s.length, rounds = n - 1;
+  const rand = rng(`${leagueId}|robin`);
+  const offset = Math.floor(rand() * rounds);
+  const r = (((week - firstWeek) + offset) % rounds + rounds) % rounds;
+  const fixed = s[0];
+  const ring = s.slice(1);
+  const rot = ring.slice(rounds - r).concat(ring.slice(0, rounds - r));   // rotate right by r
+  const circle = [fixed, ...rot];
+  const pairs = [];
+  for (let i = 0; i < n / 2; i++) {
+    const a = circle[i], b = circle[n - 1 - i];
+    if (a == null || b == null) continue;                                  // the bye
+    pairs.push(r % 2 === 0 ? [a, b] : [b, a]);
+  }
+  return pairs;
+}
+
 /** PURE: seeded pairing of a pod's seats into head-to-heads (odd seat count
  *  would leave the last seat unpaired — pods are built with 6, so 3 games). */
 export function pairPodSeats(leagueId, week, seats) {
@@ -353,7 +383,15 @@ export async function ensurePods(week, season, idx) {
     const { data: haveM } = await db().from('matchup')
       .select('id').eq('league_id', pod.id).eq('week', week).limit(1);
     if (!haveM?.length) {
-      const pairs = pairPodSeats(pod.id, week, seats);
+      // A contest league plays the round-robin from its first week (v0.670.0);
+      // a drip pod is built fresh each week and keeps the shuffle.
+      let pairs;
+      if (contest) {
+        const { data: first } = await db().from('matchup').select('week').eq('league_id', pod.id).order('week').limit(1);
+        pairs = roundRobinPairs(pod.id, week, seats, first?.[0]?.week ?? week);
+      } else {
+        pairs = pairPodSeats(pod.id, week, seats);
+      }
       const rows = pairs.map(([home, away]) => ({
         league_id: pod.id, week, sleeper_matchup_id: null,
         home_roster_id: home, away_roster_id: away, status: 'scheduled', lock_at: lockAt,

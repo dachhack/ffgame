@@ -64,17 +64,18 @@ const tied = R.rankWeek(golfCfg, [{ home_roster_id: 1, away_roster_id: 1, home_f
 ok('rank: a tie shares the rank', tied[0].rank === 1 && tied[1].rank === 1);
 
 // ── the card ────────────────────────────────────────────────────────────────
-const body = R.recapBody(cfg, 6, ranked, { leader: 'Farmer Casey', total: 242.3, weeks: 2 }, { week: 7, lockMs: Date.parse('2026-10-16T00:15:00Z') });
+const body = R.recapBody(cfg, 6, ranked, { leader: 'Farmer Casey', total: 242.3, weeks: 2, record: '2–0' }, { week: 7, lockMs: Date.parse('2026-10-16T00:15:00Z') });
 ok('card: opens with the week and the contest', body.startsWith('🏁 WEEK 6 RESULT · 🎯 BULLSEYE'), body);
 ok('card: the podium, with the tie-break and the CPU tag', body.includes('🥇 Red Zone — 150.5 ring (tie-break 1 off)') && body.includes('🥉 Mud Dogs — 131 ring (tie-break 2.1 off) · CPU'), body);
 ok('card: the field, and the head-to-head results', body.includes('4 squads · 1 CPU') && body.includes('Head-to-head: Red Zone beat Blitz Brigade 150.5–120 · Farmer Casey beat Mud Dogs 142.3–131'), body);
-ok('card: the season leader and the next lock', body.includes('Season: Farmer Casey leads with 242.3 ring after 2 weeks.') && /Week 7's board is up — squads lock Thu 8:15 PM ET\./.test(body), body);
+ok('card: the season leader and the next lock', body.includes('Season: Farmer Casey leads at 2–0 (242.3 ring) after 2 weeks.') && /Week 7's board is up — squads lock Thu 8:15 PM ET\./.test(body), body);
 const gBody = R.recapBody(golfCfg, 6, gRanked, null, null);
 ok('card: golf speaks in pts and has no head-to-head line', gBody.includes('🥇 Blitz Brigade — 25 pts') && !gBody.includes('Head-to-head') && !gBody.includes('Season:'), gBody);
 
 // ── posting: once, with pushes, then never again ───────────────────────────
 let n = await R.postContestRecaps(6, '2026', { force: true, now: Date.parse('2026-10-14T12:00:00Z') });
 ok('post: one card for the league', n === 1 && T.league_message.length === 1 && T.league_message[0].kind === 'txn' && T.league_message[0].txn.kind === 'contest_recap' && T.league_message[0].txn.week === 6, T.league_message);
+ok('post: the card carries the head-to-head leader by record', /Season: Farmer Casey leads at 2–0 \(242\.3 ring\) after 2 weeks\./.test(T.league_message[0].body), T.league_message[0].body);
 const pushed = inserts.find((i) => i.table === 'push_outbox')?.rows ?? [];
 ok('post: a push per human with a squad, with their place', pushed.length === 3 && pushed.some((p) => p.app_user_id === 'u4' && p.title === '🏁 Week 6: 1st of 4 in Kickoff Bullseye') && pushed.some((p) => p.app_user_id === 'u3' && /Red Zone beat you/.test(p.body)), pushed.map((p) => p.title));
 ok('post: pushes are deduped per league-week-user', pushed.every((p) => /^contest-recap:L1:6:u\d$/.test(p.dedupe_key)));

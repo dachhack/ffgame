@@ -68,7 +68,7 @@ export function recapBody(cfg, week, ranked, season, next) {
     }
     if (results.length) lines.push(`Head-to-head: ${results.slice(0, 6).join(' · ')}${results.length > 6 ? ` · +${results.length - 6} more` : ''}`);
   }
-  if (season?.leader) lines.push(`Season: ${season.leader} leads with ${r1(season.total)} ${word} after ${season.weeks} week${season.weeks === 1 ? '' : 's'}.`);
+  if (season?.leader) lines.push(season.record ? `Season: ${season.leader} leads at ${season.record} (${r1(season.total)} ${word}) after ${season.weeks} week${season.weeks === 1 ? '' : 's'}.` : `Season: ${season.leader} leads with ${r1(season.total)} ${word} after ${season.weeks} week${season.weeks === 1 ? '' : 's'}.`);
   if (next?.lockMs) lines.push(`Week ${next.week}'s board is up — squads lock ${etStamp(next.lockMs)} ET.`);
   return lines.join('\n');
 }
@@ -115,15 +115,29 @@ export async function postContestRecaps(week, season, opts = {}) {
     if (lg.contest_week == null) {
       const { data: fin } = await db().from('matchup').select('home_roster_id, away_roster_id, home_final, away_final, week')
         .eq('league_id', lg.id).eq('status', 'final').lte('week', week);
+      const golf = cfg.contest === 'golf';
       const tot = new Map(); const weeks = new Set();
+      const rec = new Map(); // roster → {w, l, t} (RECORDS, v0.670.0)
+      const bump = (rid, k) => { const r = rec.get(rid) ?? { w: 0, l: 0, t: 0 }; r[k] += 1; rec.set(rid, r); };
       for (const m of fin ?? []) {
         weeks.add(m.week);
-        tot.set(m.home_roster_id, (tot.get(m.home_roster_id) ?? 0) + Number(m.home_final ?? 0));
-        if (m.away_roster_id !== m.home_roster_id) tot.set(m.away_roster_id, (tot.get(m.away_roster_id) ?? 0) + Number(m.away_final ?? 0));
+        const h = Number(m.home_final ?? 0), a = Number(m.away_final ?? 0);
+        tot.set(m.home_roster_id, (tot.get(m.home_roster_id) ?? 0) + h);
+        if (m.away_roster_id === m.home_roster_id) continue;
+        tot.set(m.away_roster_id, (tot.get(m.away_roster_id) ?? 0) + a);
+        if (h === a) { bump(m.home_roster_id, 't'); bump(m.away_roster_id, 't'); continue; }
+        const homeWon = golf ? h < a : h > a;
+        bump(homeWon ? m.home_roster_id : m.away_roster_id, 'w'); bump(homeWon ? m.away_roster_id : m.home_roster_id, 'l');
       }
-      const golf = cfg.contest === 'golf';
-      const top = [...tot.entries()].sort((a, b) => (golf ? a[1] - b[1] : b[1] - a[1]))[0];
-      if (top) seasonLine = { leader: seats.get(top[0])?.team_name ?? `Seat ${top[0]}`, total: top[1], weeks: weeks.size };
+      const byTotal = (a, b) => (golf ? a[1] - b[1] : b[1] - a[1]);
+      const top = cfg.format === 'h2h'
+        ? [...tot.entries()].sort((a, b) => ((rec.get(b[0])?.w ?? 0) - (rec.get(a[0])?.w ?? 0)) || ((rec.get(a[0])?.l ?? 0) - (rec.get(b[0])?.l ?? 0)) || byTotal(a, b))[0]
+        : [...tot.entries()].sort(byTotal)[0];
+      if (top) {
+        const r = rec.get(top[0]);
+        seasonLine = { leader: seats.get(top[0])?.team_name ?? `Seat ${top[0]}`, total: top[1], weeks: weeks.size,
+          record: cfg.format === 'h2h' && r ? `${r.w}–${r.l}${r.t ? `–${r.t}` : ''}` : null };
+      }
     }
     let next = null;
     if (lg.contest_week == null) {
