@@ -156,7 +156,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   // this league's catalog (leagueWeekProj) — the price is the shared sheet,
   // the projection is yours. `feedProj` keeps the feed's number for the
   // "↑ since priced" readout.
-  const players = useMemo<BuilderPlayer[]>(() => (board ?? []).map((r) => ({ slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: leagueWeekProj(r, setup?.catalog), feedProj: r.proj, priced: r.priced_proj ?? null, exp: r.exp ?? null })), [board, setup?.catalog]);
+  const players = useMemo<BuilderPlayer[]>(() => (board ?? []).map((r) => ({ slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: leagueWeekProj(r, setup?.catalog, r.pos === 'HC' ? (slate.size ? slate.get(r.team) ?? null : undefined) : undefined), feedProj: r.proj, priced: r.priced_proj ?? null, exp: r.exp ?? null })), [board, setup?.catalog, slate]);
   // RULED OUT (v0.666.0): O or IR on the report — not a new pick; one already
   // saved stays, swappable until his game locks (the server's rule too).
   const byPlayer = useMemo(() => new Map(players.map((p) => [p.slug, p])), [players]);
@@ -247,7 +247,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span className="mono" style={head}>{bull ? 'THIS WEEK’S CARD' : CONTEST_WORD[cfg.contest]}</span>
           {isTotal && theCard && <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--you)' }}>{theCard.total}</span>}
-          <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`WEEK ${week}`}</span>
+          {/* THE SQUAD'S TOTAL (v0.667.2, founder: "a total projected for
+              bullseye weekly leagues"): what the picks add up to, against
+              the card's sum — the whole aim of a Bullseye week in one line. */}
+          {!st.started && filled > 0 && (
+            <span className="mono" style={{ ...small, marginLeft: 'auto' }} title="what your picks project to add up to">
+              PROJECTS <b style={{ fontSize: 13, color: 'var(--text)' }}>{projTotal.toFixed(1)}</b>{bull && theCard ? ` · card ${theCard.total} (${projTotal - theCard.total >= 0 ? '+' : ''}${(projTotal - theCard.total).toFixed(1)})` : ''}
+            </span>
+          )}
+          <span className="mono" style={{ ...small, marginLeft: !st.started && filled > 0 ? 0 : 'auto' }}>{`WEEK ${week}`}</span>
         </div>
         {bull && !isTotal && theCard && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

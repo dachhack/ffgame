@@ -22,6 +22,50 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.667.2 — A coach's week is his matchup; the squad's projected total
+
+> - A HEAD COACH spot now projects by the week's game, not a flat slice of the season: who he's playing and where, turned into a win chance and a margin, paid under your league's coach scoring. A bye projects 0.
+> - The squad builder shows what your picks project to add up to — and in a Bullseye league, how far that sits from the card's total.
+
+- Founder: "Can we add coach weekly projections? And a total projected for
+  bullseye weekly leagues." `hcWeekPoints` / `hcGameOdds` in
+  engine/projScoring.ts (expected margin from both teams' projected
+  margin per game + 1.5 home edge, normal CDF at a 13.5-point game SD,
+  margin brackets via marginBracketShares); `leagueWeekProj(row, catalog,
+  game)` takes the coach's game from the week's slate (null = bye,
+  undefined = flat fallback). ContestSquad (web, phone): PROJECTS stat in
+  the card header, `· card N (±d)` for Bullseye. The board's stored HC
+  proj stays 0 (no league-free catalog); the builder prices it. Probes in
+  check:dfsbullseye. No iPhone build needed.
+
+### v0.667.1 — Credit where it's due: Bullseye's idea chip
+
+> - Bullseye leagues now carry a small "💡 IDEA · JON ACEVEDO" chip on the league page, in its settings and on the create form. Tap it and it says so: Bullseye was Jon Acevedo's idea.
+
+- Founder: "add a credit info chip to bullseye leagues and settings for
+  bullseye crediting Jon Acevedo for the idea." `CONTEST_CREDIT` /
+  `contestCredit(contest)` in engine/contest.ts (Bullseye only; HIGH and
+  GOLF carry none); `CreditChip` on web (toggles the line inline) and
+  phone (opens an alert) in BullseyeLeague.tsx; the settings room's rule
+  list ends with the line. No iPhone build needed.
+
+### v0.667.0 — Head coaches by name, scanned every week
+
+> - A HEAD COACH spot now shows the coach's name — "Liam Coen", not "JAX Head Coach" — on the pool, the draft, the matchup and the weekly squad board. The names are checked against the NFL's current staffs every day, so a mid-season change shows up on its own.
+
+- Founder: "The head coaches are just listed as Jaguars Head coach and Bears
+  Head coach. Can we get a scan for their names each week." Migration 0468:
+  `team_role` (slug → name; worker writes, signed-in reads) and
+  `sync_team_role_names()`, which renames the stored rows in every league
+  pool and every frozen salary board. `poll/coaches.js` reads ESPN's team
+  directory (32 teams, the season's coach record per team) on the daily
+  directory refresh in index.js; a short read (<16 names) is refused so a
+  feed outage can't blank the table. New boards and new pools carry the
+  name from the start (pods.js from the table; nativeLeague.ts from the
+  season list as a first guess). The unit stays `jax-hc` and its number
+  stays the team's, so a firing changes nothing but the name.
+  `check:coaches`. No iPhone build needed.
+
 ### v0.666.2 — The Team page and the matchup show the same week; one lineup set as intended
 
 > - The Team page and the matchup board now open on the same week and follow each other: change the week on one and the other shows it too, so your lineup reads the same in both places.

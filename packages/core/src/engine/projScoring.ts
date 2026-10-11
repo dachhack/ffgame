@@ -227,6 +227,59 @@ export function scoreHcLine(line: ProjHcLine, sc: ClassicScoring): number {
   return out;
 }
 
+// ── A COACH'S WEEK (v0.667.2) ───────────────────────────────────────────────
+// Founder: "Can we add coach weekly projections?" The season line prices a
+// coach at a flat seventeenth of his year, which makes every week the same
+// and every coach the same shape. A week is a GAME: this one against that
+// opponent, here or there. So the week's number is the season line's rates
+// (points, downs) with the RESULT re-estimated for the matchup — the two
+// teams' projected margins per game give an expected margin, the NFL's
+// game-to-game margin spread turns it into a win chance and a margin-bracket
+// ladder, and the catalog pays those exactly as `classicScorePlay` would.
+// Bye → 0. Not an HC line → null. Nothing in scoring reads this.
+const NFL_MARGIN_SD = 13.5;          // one game's margin, around its expectation
+const HOME_EDGE = 1.5;               // points, the modern home field
+const TIE_RATE = 0.003;              // ties per game, about one a season league-wide
+const normCdf = (z: number): number => {
+  // Abramowitz–Stegun 7.1.26, good to 1.5e-7 — plenty for a projection.
+  const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(z * z) / 2);
+  return 0.5 * (1 + (z < 0 ? -y : y));
+};
+export interface HcGame { opp: string; home: boolean }
+/** Expected margin and win chance for a coach's game, from the two teams'
+ *  projected margins per game. Exported for the probe. */
+export function hcGameOdds(slug: string, game: HcGame): { margin: number; win: number; loss: number; tie: number } | null {
+  const a = PROJ_HC[slug];
+  if (!a) return null;
+  const oppCode = normTeamCode(game.opp);
+  const b = PROJ_HC[`${oppCode}-hc`];
+  const margin = a.marginPg - (b?.marginPg ?? 0) + (game.home ? HOME_EDGE : -HOME_EDGE);
+  const win = Math.max(0, normCdf(margin / NFL_MARGIN_SD) - TIE_RATE / 2);
+  const loss = Math.max(0, 1 - win - TIE_RATE);
+  return { margin, win, loss, tie: TIE_RATE };
+}
+const normTeamCode = (t: string): string => {
+  const u = (t ?? '').toUpperCase();
+  return (u === 'LAR' || u === 'STL' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'AZ' ? 'ARI' : u).toLowerCase();
+};
+/** A head coach's WEEK under a catalog: null when the slug is not a coach,
+ *  0 on a bye (`game` null), else the matchup-aware number. */
+export function hcWeekPoints(slug: string, game: HcGame | null, sc: ClassicScoring): number | null {
+  const line = PROJ_HC[slug];
+  if (!line) return null;
+  if (!game) return 0;
+  const odds = hcGameOdds(slug, game)!;
+  const { win, loss } = marginBracketShares(odds.margin, NFL_MARGIN_SD);
+  const wm = [sc.hcWm1, sc.hcWm5, sc.hcWm10, sc.hcWm15, sc.hcWm20, sc.hcWm25];
+  const lm = [sc.hcLm1, sc.hcLm5, sc.hcLm10, sc.hcLm15, sc.hcLm20, sc.hcLm25];
+  let out = odds.win * sc.hcWin + odds.loss * sc.hcLoss + odds.tie * sc.hcTie
+    + (line.points / SEASON_GAMES) * sc.hcPts
+    + (line.thirdDown / SEASON_GAMES) * sc.hc3dc + (line.fourthDown / SEASON_GAMES) * sc.hc4dc;
+  for (let i = 0; i < 6; i++) out += odds.win * win[i] * wm[i] + odds.loss * loss[i] * lm[i];
+  return Math.round(out * 10) / 10;
+}
+
 /** The projected season points of a K or DST under one catalog, or null for
  *  anyone who is neither. */
 function scoreKdst(slug: string, sc: ClassicScoring, sleeperId?: string | null): number | null {

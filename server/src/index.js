@@ -17,6 +17,7 @@ import { pollCollegeAvailability } from './poll/collegeAvailability.js';
 import { sweepMembers } from './poll/members.js';
 import { syncTeamOverrides, installTeamOverrides } from './poll/teamOverrides.js';
 import { syncDepthChart } from './poll/depthChart.js';
+import { syncHeadCoaches } from './poll/coaches.js';
 import { pollRosters } from './poll/rosters.js';
 import { pollMarket } from './poll/market.js';
 import { sweepAdp } from './poll/adp.js';
@@ -1102,6 +1103,13 @@ async function main() {
       const d = await syncDepthChart(playerIndex);
       log(`depth chart: ${d.standing} ranked (${d.changed} changed, ${d.cleared} cleared)`);
     } catch (e) { log('depth chart sync', e.message); }
+    // WHO THE HEAD COACH IS (0468): ESPN's directory, on the same daily clock,
+    // so a HEAD COACH spot reads "Liam Coen" and a Monday firing shows by
+    // Tuesday. Names only — the unit's number is the team's.
+    try {
+      const c = await syncHeadCoaches(config.season);
+      log(`head coaches: ${c.scanned} scanned, ${c.changed} changed, ${c.pushed} names pushed${c.names.length ? ` (${c.names.join(', ')})` : ''}`);
+    } catch (e) { log('head coach scan', e.message); }
   };
   await pushTeams();
   // Refresh the player directory daily.

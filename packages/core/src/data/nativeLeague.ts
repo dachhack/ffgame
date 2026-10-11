@@ -19,6 +19,7 @@
 import { BAKED_SLUGS } from './bakedSlugs';
 import { STAT_PLAYERS, normName } from './players';
 import { NFL_CODES } from './kdst';
+import { TEAM_ROLE_NAME } from './projTeamRoles2026';
 import { ADP_2026, ADP_BY_SID, adpValue } from './adp2026';
 import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
@@ -110,7 +111,10 @@ function hcPuntEntries(positions: string[]): (DraftPoolEntry & { score: number }
   const out: (DraftPoolEntry & { score: number })[] = [];
   NFL_CODES.forEach((code, i) => {
     const t = code.toUpperCase();
-    if (positions.includes('HC')) out.push({ slug: `${code}-hc`, full: `${t} Head Coach`, pos: 'HC', team: t, score: BENCH_BASE + 400 + i * 0.01 });
+    // The coach's NAME, from the season list, so a fresh pool never reads
+    // "JAX Head Coach"; the worker's weekly scan (0468) renames the stored
+    // row when the person changes. The unit stays `jax-hc` either way.
+    if (positions.includes('HC')) out.push({ slug: `${code}-hc`, full: TEAM_ROLE_NAME[`${code}-hc`] ?? `${t} Head Coach`, pos: 'HC', team: t, score: BENCH_BASE + 400 + i * 0.01 });
     if (positions.includes('P')) out.push({ slug: `${code}-p`, full: `${t} Punter`, pos: 'P', team: t, score: BENCH_BASE + 500 + i * 0.01 });
   });
   return out;

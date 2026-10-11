@@ -126,7 +126,7 @@ export function salaryOf(ppg) {
  *  slate-gated + floored on season relevance OR weekly projection; K/DST as
  *  the engine's team-keyed synthetics, priced from weekly K/DEF projections
  *  when available. `weekly` may be null (season-projection pricing only). */
-export function buildSalaryBoard(idx, slateTeams, weekly, extras = new Set()) {
+export function buildSalaryBoard(idx, slateTeams, weekly, extras = new Set(), roleNames = new Map()) {
   const rows = [];
   // THE EXTRA POSITIONS (0466): a contest league's admin-unlocked spots (FB,
   // the IDP three, HC, P — positions_extra) put those players on the board.
@@ -152,7 +152,9 @@ export function buildSalaryBoard(idx, slateTeams, weekly, extras = new Set()) {
     rows.push({ slug: `${t.toLowerCase()}-k`, name: `${t} Kicker`, pos: 'K', team: t, salary: salaryOf(kPpg), proj: Math.round(kPpg * 10) / 10, exp: null });
     rows.push({ slug: `${t.toLowerCase()}-dst`, name: `${t} D/ST`, pos: 'DEF', team: t, salary: salaryOf(dPpg), proj: Math.round(dPpg * 10) / 10, exp: null });
     // The classic engine's team units (0171): the head coach and the punter.
-    if (extras.has('HC')) rows.push({ slug: `${t.toLowerCase()}-hc`, name: `${t} Head Coach`, pos: 'HC', team: t, salary: salaryOf(0), proj: 0, exp: null });
+    // The coach carries his NAME when the scan (0468) knows it — the unit
+    // is still `jax-hc`, the number still the team's.
+    if (extras.has('HC')) rows.push({ slug: `${t.toLowerCase()}-hc`, name: roleNames.get(`${t.toLowerCase()}-hc`) ?? `${t} Head Coach`, pos: 'HC', team: t, salary: salaryOf(0), proj: 0, exp: null });
     if (extras.has('P')) rows.push({ slug: `${t.toLowerCase()}-p`, name: `${t} Punter`, pos: 'P', team: t, salary: salaryOf(0), proj: 0, exp: null });
   }
   // SCARCITY PRICING (v0.666.0, engine/salaryPricing.ts): value over the
@@ -161,6 +163,14 @@ export function buildSalaryBoard(idx, slateTeams, weekly, extras = new Set()) {
   // (priced_proj) and is frozen with it; `proj` is refreshed through the week.
   const { priced } = priceBoard(rows);
   return priced.map(({ row, salary }) => ({ ...row, salary, priced_proj: row.proj }));
+}
+
+/** The scanned unit names (0468): `jax-hc` → "Liam Coen". Empty when the
+ *  table is missing or unreadable; the board then says "JAX Head Coach" and
+ *  the next scan's `sync_team_role_names` renames the stored row. */
+async function teamRoleNames() {
+  const { data } = await db().from('team_role').select('slug, name');
+  return new Map((data ?? []).map((r) => [r.slug, r.name]));
 }
 
 /** The positions some contest league this season has unlocked (positions_extra). */
@@ -382,7 +392,7 @@ export async function ensureSalaryBoard(season, week, idx) {
     .select('slug').eq('season', season).eq('week', week).limit(1);
   if (!haveSal?.length) {
     const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
-    board = buildSalaryBoard(idx, slateTeams, weekly, await contestExtraPositions(season).catch(() => new Set()));
+    board = buildSalaryBoard(idx, slateTeams, weekly, await contestExtraPositions(season).catch(() => new Set()), await teamRoleNames().catch(() => new Map()));
     if (board.length) {
       await db().from('pod_salary').upsert(
         board.map((r) => ({ season, week, ...r })), { onConflict: 'season,week,slug' });
@@ -467,7 +477,7 @@ export async function topUpSalaryBoard(season, week, idx, slateTeams, board) {
     if (missingPos) {
       const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
       const have = new Set(board.map((r) => r.slug));
-      adds = buildSalaryBoard(idx, slateTeams, weekly, extras).filter((r) => !have.has(r.slug));
+      adds = buildSalaryBoard(idx, slateTeams, weekly, extras, await teamRoleNames().catch(() => new Map())).filter((r) => !have.has(r.slug));
     }
     const writes = [
       ...expFixes.map(({ r, exp }) => ({ season, week, slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: r.proj, exp, priced_proj: r.priced_proj ?? r.proj })),

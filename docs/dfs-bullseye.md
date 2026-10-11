@@ -336,3 +336,35 @@ injured players and changes in projections when team mates get injured?"
   finals; a position that systematically out-earns its price is the signal to
   revisit its starters count.
 - Applies from the next board built; a frozen board keeps its prices.
+
+## 16. The coach by name (v0.667.0, 0468)
+
+A HEAD COACH spot is a team unit (`jax-hc`): the projection and the scoring
+are the team's, so a firing never touches a stored lineup. Only the name was
+ever stale — hand-typed once in `projTeamRoles2026.ts` and shown nowhere, so
+the board read "JAX Head Coach".
+
+`server/src/poll/coaches.js` scans ESPN's team directory (the 32 teams, then
+the season's coach record for each) on the worker's daily directory refresh
+and stores the result in `team_role`; `sync_team_role_names()` then renames
+the stored rows in every league pool (`league_pool.full_name`) and every
+frozen salary board (`pod_salary.name`). A read of fewer than 16 names is
+refused, so an outage keeps last week's names. New boards take the name from
+the table at build time; a pool built on the phone starts from the season
+list and is renamed by the next scan.
+
+## 17. A coach's week, and the squad's total (v0.667.2)
+
+The board stores a head coach at projection 0 (there is no league-free
+coach catalog), and the builder used to price him at a flat seventeenth of
+the season line under the league's catalog — every week the same. Now
+`leagueWeekProj` takes his game from the week's slate: `hcWeekPoints`
+turns both teams' projected margins per game (plus a 1.5-point home edge)
+into an expected margin, a win chance (normal CDF at the NFL's 13.5-point
+game SD) and a margin-bracket ladder, and pays them under the catalog the
+way `classicScorePlay` would; points and downs ride the season rate. A bye
+is 0; no slate falls back to the flat number.
+
+The builder's card header shows PROJECTS — the picks' projected sum — and,
+in a Bullseye league, the card's total with the gap.
+

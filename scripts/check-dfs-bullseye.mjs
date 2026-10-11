@@ -238,10 +238,28 @@ ok('builder: a ruled-out body says so, unless already saved', (() => {
   return rowsO.find((r) => r.p.slug === 'rb1')?.why === 'ruled out this week' && rowsS.find((r) => r.p.slug === 'rb1')?.fits === true;
 })());
 ok('builder: the priced delta reads the feed, half a point or more', B.pricedDelta({ proj: 9, feedProj: 18.1, priced: 15.4 })?.dir === '↑' && B.pricedDelta({ proj: 9, feedProj: 15.6, priced: 15.4 }) === null);
+// A COACH'S WEEK (v0.667.2): the matchup prices him, not a flat seventeenth.
+{
+  const P = await import('../packages/core/src/engine/projScoring.ts');
+  const sc = { hcWin: 10, hcLoss: -5, hcWm10: 2 };
+  const home = B.leagueWeekProj({ slug: 'det-hc', pos: 'HC', team: 'DET', proj: 0 }, sc, { opp: 'CAR', home: true });
+  const away = B.leagueWeekProj({ slug: 'det-hc', pos: 'HC', team: 'DET', proj: 0 }, sc, { opp: 'CAR', home: false });
+  const tough = B.leagueWeekProj({ slug: 'det-hc', pos: 'HC', team: 'DET', proj: 0 }, sc, { opp: 'KC', home: false });
+  const flat = B.leagueWeekProj({ slug: 'det-hc', pos: 'HC', team: 'DET', proj: 0 }, sc);
+  ok('coach week: a favourite at home projects more than the same coach away', home > away, { home, away });
+  ok('coach week: a tougher opponent projects less', tough < away, { tough, away });
+  ok('coach week: a bye projects 0', B.leagueWeekProj({ slug: 'det-hc', pos: 'HC', team: 'DET', proj: 0 }, sc, null) === 0);
+  ok('coach week: no slate falls back to the flat number', flat > 0 && flat !== home);
+  const odds = P.hcGameOdds('det-hc', { opp: 'CAR', home: true });
+  ok('coach week: win + loss + tie is one, and the favourite is over a coin flip', Math.abs(odds.win + odds.loss + odds.tie - 1) < 1e-9 && odds.win > 0.5, odds);
+  ok('coach week: the Rams resolve under LAR too', P.hcGameOdds('det-hc', { opp: 'LAR', home: true }).margin === P.hcGameOdds('det-hc', { opp: 'LA', home: true }).margin);
+  ok('coach week: not a coach → the ordinary path', B.leagueWeekProj({ slug: 'x', pos: 'WR', proj: 12 }, sc, { opp: 'CAR', home: true }) === 12);
+}
 ok('builder: a league that pays nothing for a position shows the feed number; HC gets the catalog\'s', B.leagueWeekProj({ slug: 'x', pos: 'WR', proj: 12 }, null) === 12 && B.leagueWeekProj({ slug: 'kc-hc', pos: 'HC', team: 'KC', proj: 0 }, { hcWin: 10 }) >= 0);
 for (const f of ['src/screens/ContestSquad.tsx', 'apps/mobile/src/screens/ContestSquad.tsx']) {
   const src = read(f);
-  ok(`${f}: the league projection, the priced delta and the ruled-out rule`, ['leagueWeekProj(r, setup?.catalog)', 'pricedDelta(', 'ruledOut, saved', ', ruledOut);'].every((k) => src.includes(k)));
+  ok(`${f}: the league projection, the priced delta and the ruled-out rule`, ['leagueWeekProj(r, setup?.catalog, r.pos === \'HC\'', 'pricedDelta(', 'ruledOut, saved', ', ruledOut);'].every((k) => src.includes(k)));
+  ok(`${f}: the squad's projected total against the card`, src.includes('PROJECTS') && src.includes('card ${theCard.total}'));
 }
 
 // ── weekly leagues are listings like any other (v0.662.0) ────────────────────
