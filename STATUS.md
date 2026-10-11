@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.661.2 — The Android app gets updates again
+
+> - The Android app was stuck on v0.655.3; app updates now reach it again (no reinstall needed).
+
+- The founder's phone (Android) showed runtime be78b4bc and v0.655.3 built in.
+  The APK's gradle build stamps `assets/fingerprint` = be78b4bcfa3d…, while CI's
+  fingerprint for the same native code is 3d455539…, and every Android update
+  was published to CI's. (v0.661.1 blamed iPhone build 5; Expo reports that
+  build's runtime as 2f593a89…, which updates already reach, so its line is gone.)
+- eas-update.yml now republishes each update, Android only, to the published
+  APK's own runtime (manifest `runtime`, else read from the APK), and only while
+  the APK's native code is today's (the manifest's gate fingerprint = this
+  checkout's). release-apk.yml records `runtime` in manifest.json from now on.
+  app.config.js takes ANDROID_RUNTIME_OVERRIDE for that publish only.
+
 ### v0.661.1 — iPhones on TestFlight build 5 get updates again
 
 > - iPhones on the October 9 test build were stuck on v0.655.3; app updates now reach them again.

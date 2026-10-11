@@ -93,11 +93,9 @@ jobs:
         working-directory: apps/mobile
         run: |
           msg=$(git log -1 --pretty=%s | cut -c1-180)
-          # A `build <EAS build id>` line names a build whose runtime the CI
-          # fingerprint got wrong (v0.661.1): EAS's macOS builder stamped
-          # TestFlight build 5 with be78b4bc… while CI computed 2f593a89… from
-          # the same commit, so no update ever reached it. Expo knows the
-          # runtime it actually built with; ask it.
+          # A `build <EAS build id>` line names an iPhone build by its id
+          # (v0.661.1): Expo knows the runtime it actually stamped, so ask it
+          # rather than trusting the fingerprint CI computed.
           extra=""
           for id in $(grep -oE '^build [0-9a-f-]{36}' ios-legacy-runtimes.txt | cut -d' ' -f2); do
             rt=$(npx -y eas-cli@latest build:view "$id" --json 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const b=JSON.parse(s);console.log((b.runtime&&b.runtime.version)||b.runtimeVersion||'')}catch{console.log('')}})")
@@ -115,3 +113,42 @@ jobs:
               --non-interactive
             echo "- also published for iOS runtime \`$rt\`" >> "$GITHUB_STEP_SUMMARY"
           done
+
+      # THE PUBLISHED APK'S OWN RUNTIME (v0.661.1). The founder's Android phone
+      # sat on v0.655.3 for two days with "You're on the newest update": the
+      # APK's gradle build stamps assets/fingerprint (be78b4bc…) while CI's
+      # fingerprint for the same native code is 3d455539…, and every Android
+      # update went to CI's. Republish, Android only, to the runtime the APK
+      # actually carries — but ONLY while the APK's native code is today's
+      # (the manifest's gate fingerprint equals this checkout's), so an update
+      # never reaches an APK whose native side it doesn't match.
+      - name: Republish to the published APK's runtime
+        if: steps.token.outputs.ok == 'true'
+        working-directory: apps/mobile
+        run: |
+          msg=$(git log -1 --pretty=%s | cut -c1-180)
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest"
+          man=$(curl -fsSL "$base/manifest.json?t=$(date +%s)" || echo '{}')
+          gate=$(echo "$man" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).fingerprint||'')}catch{console.log('')}})")
+          rt=$(echo "$man" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).runtime||'')}catch{console.log('')}})")
+          if [ -z "$rt" ]; then
+            # A manifest from before the runtime field: read it from the APK.
+            curl -fsSL -o "$RUNNER_TEMP/drip.apk" "$base/drip-fantasy.apk" \
+              && rt=$(unzip -p "$RUNNER_TEMP/drip.apk" assets/fingerprint 2>/dev/null | tr -d '[:space:]') || rt=""
+          fi
+          now=$(npx expo-updates fingerprint:generate --platform android | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).hash))")
+          echo "APK runtime: ${rt:-unknown} · APK native (gate): ${gate:-unknown} · today's native: $now"
+          if ! echo "$rt" | grep -qE '^[0-9a-f]{40}$'; then echo "::notice::could not read the APK's runtime — skipped"; exit 0; fi
+          if [ "$rt" = "$now" ]; then echo "the APK's runtime is today's — already published"; exit 0; fi
+          if [ "$gate" != "$now" ]; then
+            echo "::notice::the APK's native code is older than this checkout ($gate vs $now) — not republished; it needs a new APK"
+            echo "- APK runtime \`$rt\` NOT republished: its native code differs from today's" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          ANDROID_RUNTIME_OVERRIDE="$rt" npx -y eas-cli@latest update \
+            --channel production \
+            --environment production \
+            --platform android \
+            --message "$msg (Android runtime ${rt:0:8})" \
+            --non-interactive
+          echo "- also published for the APK's Android runtime \`$rt\`" >> "$GITHUB_STEP_SUMMARY"

@@ -94,6 +94,14 @@ module.exports = ({ config }) => {
   // never does.
   const iosRuntime = process.env.IOS_RUNTIME_OVERRIDE;
   const ios = iosRuntime ? { ...config.ios, runtimeVersion: iosRuntime } : config.ios;
+  // THE APK'S OWN RUNTIME (v0.661.1). The APK's gradle build stamps a
+  // fingerprint of its own (assets/fingerprint — be78b4bc… for v0.655.3's)
+  // that differs from the one CI computes before prebuild (3d455539…) for the
+  // same native code, so updates published to CI's never reached it. The OTA
+  // workflow republishes each update, Android only, to the published APK's
+  // runtime by setting this; nothing else sets it, and a build never does.
+  const androidRuntime = process.env.ANDROID_RUNTIME_OVERRIDE;
+  if (androidRuntime) android.runtimeVersion = androidRuntime;
   return {
     ...config,
     extra,
