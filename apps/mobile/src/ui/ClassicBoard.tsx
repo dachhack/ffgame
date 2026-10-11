@@ -1326,6 +1326,15 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
   const illegalMine = !!issues[String(seat)];
   const canEdit = (slot: string): boolean =>
     !browsing && !illegalMine && !sealedSlots[slot] && !bb.has(slot) && !kickedOff(effective.mine[slot]);
+  /** WHY NOT (v0.666.1, refs #1204 — "Seems like I can't adjust my lineup"):
+   *  a spot that can't be changed used to be a dead tap. It says why now. */
+  const whyNot = (slot: string): string | null => {
+    if (browsing || bb.has(slot)) return null;
+    if (illegalMine) return `lineup frozen — roster isn’t legal: ${issues[String(seat)]}`;
+    if (sealedSlots[slot]) return 'sealed — this spot is locked for the week';
+    if (kickedOff(effective.mine[slot])) return 'locked — his game has started; a spot whose game hasn’t started can still change';
+    return null;
+  };
 
   /** Write one or more spots in a single save. A MOVE touches two — the target
    *  and the spot the player left — and they must travel together, or the same
@@ -1680,9 +1689,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
       </View>
     );
     // The spot's pill IS the button, Sleeper's way: tap QB to change the QB.
-    const spotBadge = (slot: string, pos: string[], label: string, on: boolean, onPress: () => void) => (
-      <Pressable disabled={!on} hitSlop={4} onPress={() => { tap(); onPress(); }}
-        accessibilityRole="button" accessibilityLabel={on ? `change ${label}` : label}
+    const spotBadge = (slot: string, pos: string[], label: string, on: boolean, onPress: () => void, why: string | null = null) => (
+      <Pressable disabled={!on && !why} hitSlop={4} onPress={() => { tap(); if (on) onPress(); else if (why) setSaveNote(why); }}
+        accessibilityRole="button" accessibilityLabel={on ? `change ${label}` : why ?? label}
         style={{ alignItems: 'center', opacity: on ? 1 : 0.55 }}>
         <SlotPill pos={pos} label={label} />
         {bb.has(slot) && <Mono size={7} tone="you" numberOfLines={1}>🎯 AUTO</Mono>}
@@ -1728,12 +1737,13 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
           const settable = canEdit(r.slot) && !bb.has(r.slot);
           const d = slotDefs.find((x) => x.slot === r.slot);
           const accepts = d ? slotAcceptsLabel(d) || d.pos.join('/') : '';
+          const why = settable ? null : whyNot(r.slot);
           return row(`s-${r.slot}`,
-            spotBadge(r.slot, r.pos, r.label, settable, () => setPickerSlot(r.slot)),
+            spotBadge(r.slot, r.pos, r.label, settable, () => setPickerSlot(r.slot), why),
             r.home,
             bb.has(r.slot)
               ? <Mono size={10} tone="you">🎯 BEST BALL</Mono>
-              : <Pressable disabled={!settable} onPress={() => { tap(); setPickerSlot(r.slot); }}>
+              : <Pressable disabled={!settable && !why} onPress={() => { tap(); if (settable) setPickerSlot(r.slot); else if (why) setSaveNote(why); }}>
                   <Mono size={10} tone={settable ? 'you' : 'faint'}>{settable ? `+ SET ${r.label}` : 'Empty'}</Mono>
                   {settable && !!accepts && <Mono size={8} tone="faint" numberOfLines={1}>{`takes ${accepts}`}</Mono>}
                 </Pressable>);

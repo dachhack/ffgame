@@ -3615,7 +3615,8 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
   // The read-only FIT (assignSpots): a drip league's roster view, a rival's,
   // and the classic lineup's stand-in when there is no week to draw.
   const fitStarters = shown.length > 0 && slotDefs.length > 0 ? (<>
-    <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>STARTING SPOTS</div>
+    {/* A classic seat's FIT is a stand-in, not the lineup (v0.666.1, refs #1204). */}
+    <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', letterSpacing: 1, marginTop: 10 }}>{gm?.mode === 'classic' ? 'BEST FIT · NOT YOUR LINEUP — SET THAT ON MATCHUP' : 'STARTING SPOTS'}</div>
     {bySpot.starters.map((r, i) => (
       <RosterLine key={`spot-${i}`} badge={r.label} badgePos={r.pos[0]} p={r.player} busy={busy} inj={r.player ? injTags[r.player.slug] : null} />
     ))}

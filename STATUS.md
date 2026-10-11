@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.666.1 — A spot you can't change says why; the Team page's fit says what it is
+
+> - On the matchup board, tapping a spot that can't be changed now tells you why — his game has started, the spot is sealed, or your roster isn't legal (and what's wrong with it).
+> - The Team page's "starting spots" list is a best fit of your roster, not your saved lineup; it says so now, and points you to MATCHUP to set the lineup.
+
+- Refs #1204 (Kickoff League, from chat): "can't adjust my lineup … my
+  matchup lineup also doesn't match my team roster lineup … wanted to switch
+  Hampton in for Concepcion." Hampton is an RB, Concepcion a WR: the WR
+  spot's picker never offers him (the swap goes through FLEX), and a tap on a
+  dead spot gave nothing. Unconfirmed against the member's seat; the new
+  message names the reason next time. ClassicBoard (web, phone) `whyNot`;
+  Team.tsx / NativeLeague.tsx heading. No iPhone build needed.
+
 ### v0.666.0 — Salaries priced on scarcity; projections that move; the injury rule
 
 > - Weekly squad prices are now set the way DFS sites set them: by how much a player projects beyond the replacement at his position, calibrated so the all-stars lineup is just over the budget. Prices freeze when the board is published; projections keep moving with the news, and the builder shows "↑/↓ since priced".
