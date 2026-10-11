@@ -6,7 +6,7 @@
 //
 // Reached from the gear and from the floating 🛠 DEV chip on the leagues list.
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import {
   devRoomsMine, devRoomCreate,
   devRoomMembers, devRoomRemove, devRoomSetOpen, devRoomUsers, devRoomSetMember, friendlyError,
@@ -51,7 +51,13 @@ export function DevRoomBar({ onOpenFull }: { onOpenFull: (roomId: string | null)
   const [canCreate, setCanCreate] = useState(false);
   const [open, setOpen] = useState(false);
   const read = useCallback(() => devRoomsMine().then((r) => { if (r.ok) { setRooms(r.rooms ?? []); setCanCreate(!!r.can_create); } }).catch(() => {}), []);
-  useEffect(() => { void read(); const iv = setInterval(() => { void read(); }, 30_000); return () => clearInterval(iv); }, [read]);
+  // THE DOT (v0.663.1) — the web twin's note: re-read every 15s and on return.
+  useEffect(() => {
+    void read();
+    const iv = setInterval(() => { void read(); }, 15_000);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void read(); });
+    return () => { clearInterval(iv); sub.remove(); };
+  }, [read]);
   if (!rooms || (!rooms.length && !canCreate)) return null;
   const unread = rooms.reduce((n, r) => n + r.unread, 0);
   const bottom = 14 + insets.bottom;
@@ -70,13 +76,16 @@ export function DevRoomBar({ onOpenFull }: { onOpenFull: (roomId: string | null)
           <DevRoomPanel rooms={rooms} />
         </KeyboardAvoidingView>
       )}
-      <Pressable accessibilityRole="button" accessibilityLabel="Dev room"
+      <Pressable accessibilityRole="button" accessibilityLabel={unread > 0 ? `Dev room — ${unread} new` : 'Dev room'}
         onPress={() => { tap(); if (!rooms.length) { onOpenFull(null); return; } setOpen((o) => !o); if (open) void read(); }}
         style={{ position: 'absolute', left: 14, bottom, zIndex: 21, flexDirection: 'row', alignItems: 'center', gap: 6,
           backgroundColor: open ? t.you : t.surface, borderWidth: 1, borderColor: t.you, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9,
           shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}>
         <Mono size={11} weight="700" track={0.06} style={{ color: open ? t.bg : t.you }}>{rooms.length ? '🛠 DEV' : '🛠 DEV ROOM'}</Mono>
-        {unread > 0 && !open && <Mono size={9} weight="700" style={{ color: t.bg, backgroundColor: t.you, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' }}>{String(unread)}</Mono>}
+        {unread > 0 && !open && (
+          <View style={{ position: 'absolute', top: -3, right: -3, width: 13, height: 13, borderRadius: 7,
+            backgroundColor: t.opp, borderWidth: 2, borderColor: t.bg }} />
+        )}
       </Pressable>
     </>
   );

@@ -57,7 +57,15 @@ export function DevRoomBar({ onOpenFull }: { onOpenFull: (roomId: string | null)
   const [canCreate, setCanCreate] = useState(false);
   const [open, setOpen] = useState(false);
   const read = useCallback(() => devRoomsMine().then((r) => { if (r.ok) { setRooms(r.rooms ?? []); setCanCreate(!!r.can_create); } }).catch(() => {}), []);
-  useEffect(() => { void read(); const t = setInterval(() => { void read(); }, 30_000); return () => clearInterval(t); }, [read]);
+  // THE DOT (v0.663.1, founder: "a notification dot for new chats on the dev
+  // chat chip"): unread is re-read every 15s and whenever the tab comes back.
+  useEffect(() => {
+    void read();
+    const t = setInterval(() => { if (!document.hidden) void read(); }, 15_000);
+    const back = () => { if (!document.hidden) void read(); };
+    document.addEventListener('visibilitychange', back);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', back); };
+  }, [read]);
   if (!rooms || (!rooms.length && !canCreate)) return null;
   const unread = rooms.reduce((n, r) => n + r.unread, 0);
   const name = rooms.length === 1 ? rooms[0].name : 'Dev room';
@@ -75,13 +83,16 @@ export function DevRoomBar({ onOpenFull }: { onOpenFull: (roomId: string | null)
         </div>
       )}
       <button onClick={() => { if (!rooms.length) { onOpenFull(null); return; } setOpen((o) => !o); if (open) void read(); }} className="mono"
-        aria-label="Dev room"
+        aria-label={unread > 0 ? `Dev room — ${unread} new` : 'Dev room'}
         style={{ position: 'fixed', left: 16, bottom: 16, zIndex: 71, display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
           fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', color: open ? 'var(--on-accent, var(--bg))' : 'var(--you)',
           background: open ? 'var(--you)' : 'var(--surface)', border: '1px solid color-mix(in srgb, var(--you) 55%, var(--bd))',
           borderRadius: 999, padding: '9px 14px', boxShadow: '0 6px 18px rgba(0,0,0,0.25)' }}>
         🛠 {rooms.length ? 'DEV' : 'DEV ROOM'}
-        {unread > 0 && !open && <span style={{ fontSize: 10, color: 'var(--bg)', background: 'var(--you)', borderRadius: 999, padding: '1px 7px' }}>{unread}</span>}
+        {unread > 0 && !open && (
+          <span aria-hidden style={{ position: 'absolute', top: -3, right: -3, width: 12, height: 12, borderRadius: '50%',
+            background: 'var(--opp, #e5484d)', border: '2px solid var(--bg)' }} />
+        )}
       </button>
     </>
   );

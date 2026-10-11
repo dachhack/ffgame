@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.663.1 — A red dot on the dev chat chip for new messages
+
+> - The 🛠 DEV chip now shows a red dot when the dev chat has messages you haven't read.
+
+- Founder: "a notification dot for new chats on the dev chat chip". The unread
+  count that sat inside the chip's label is now a red dot on its corner (web
+  and phone), and the count goes to the screen reader. It refreshes every 15s
+  and when the app or tab comes back to the front.
+
 ### v0.663.0 — The dev chat gets every chat tool, and @computer for everyone
 
 > - The dev chat now has every league chat tool: pictures, GIFs, polls, reactions, @mentions, edits and pins.
