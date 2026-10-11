@@ -15,7 +15,10 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Mono } from '../ui/prims';
 
 const n0 = (n: number) => n.toLocaleString('en-US');
-export const CONTEST_BUDGETS = [10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];
+export const CONTEST_BUDGETS = [0, 10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];   // 0 = NO CAP (0469)
+/** The minimum spend (0469): golf's constraint. 0 = none. */
+export const CONTEST_MIN_SPENDS = [0, 10000, 20000, 30000, 40000, 45000, 50000, 60000, 75000, 100000];
+export const moneyChip = (v: number, none: string) => (v ? `$${Math.round(v / 1000)}k` : none);
 
 function Field(props: React.ComponentProps<typeof TextInput>) {
   const t = useTheme();
@@ -77,10 +80,17 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
         <Mono size={9} tone="faint" weight="700" track={0.1}>BUDGET</Mono>
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {[...new Set([...CONTEST_BUDGETS, b.budget])].sort((x, y) => x - y).map((v) => (
-            <Chip key={v} small on={b.budget === v} disabled={busy} label={`$${Math.round(v / 1000)}k`} onPress={() => { tap(); void act(setContestRules(leagueId, { budget: v }), 'budget changed'); }} />
+            <Chip key={v} small on={b.budget === v} disabled={busy} label={moneyChip(v, 'NO CAP')} onPress={() => { tap(); void act(setContestRules(leagueId, { budget: v }), 'budget changed'); }} />
           ))}
         </View>
-        <Mono size={8.5} tone="faint">Per squad, from the next week. Add or remove spots on ROSTER — a bigger squad wants a bigger budget.</Mono>
+        <Mono size={8.5} tone="faint">Per squad, from the next week. Add or remove spots on ROSTER — a bigger squad wants a bigger budget. NO CAP suits Bullseye: the card does the limiting.</Mono>
+        <Mono size={9} tone="faint" weight="700" track={0.1}>MIN SPEND</Mono>
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          {[...new Set([...CONTEST_MIN_SPENDS, b.min_spend ?? 0])].sort((x, y) => x - y).map((v) => (
+            <Chip key={v} small on={(b.min_spend ?? 0) === v} disabled={busy} label={moneyChip(v, 'NONE')} onPress={() => { tap(); void act(setContestRules(leagueId, { minSpend: v }), 'minimum spend changed'); }} />
+          ))}
+        </View>
+        <Mono size={8.5} tone="faint">{b.contest === 'golf' ? 'Golf’s real constraint: a squad must spend at least this, so cheap no-names aren’t the whole game.' : 'A floor a squad must spend; mostly for golf.'}</Mono>
       </Card>
 
       {b.contest === 'bullseye' && (

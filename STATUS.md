@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.668.0 — The cap is optional; golf gets a minimum spend
+
+> - A weekly squad league can now run with NO CAP: pick the players, not the prices. Bullseye keeps its budget by default, since the card does the limiting either way.
+> - Golf has a new rule: a MINIMUM SPEND. New golf leagues start with no cap and a $45,000 floor, so you must roster expensive players and bet on which stars have a quiet week. The commissioner sets both; the builder shows how far you are from the floor.
+
+- Founder: "Any reason to have a budget in bullseye or golf dfs leagues?
+  … Go ahead, do it as one PR. Let's add min spend as an adjustable option
+  in golf." Migration 0469: `budget` 0 = no cap; new `min_spend` (0 =
+  none, $5k–$500k, never above a cap); `_contest_min_spend`;
+  create_contest_league / set_contest_rules take `p_min_spend` (old
+  signatures dropped); save_contest_entry refuses "under the $X minimum
+  spend by $Y"; contest_state / _bullseye_info carry `min_spend`. Engine:
+  ContestConfig `capped` + `minSpend` (CONTEST_NO_CAP, CONTEST_MIN_SPEND_
+  DEFAULT); contestAutoBuild forces picks up to the floor only when the
+  spots left can't reach it (and never fails to fill); budgetLine →
+  `capped`, `floor`, `short`. liveApi `contestMoneyWord`. Create forms
+  (golf defaults to no cap + $45k; NO CAP on the budget menu; MIN SPEND
+  for golf), commish panel (both), builder bar (SPEND under no cap, "short
+  of the minimum", save blocked under it). Probes in check:dfsbullseye;
+  SQL flow on a scratch Postgres. No iPhone build needed.
+
 ### v0.667.3 — The credit is a tiny "i"
 
 > - The Bullseye credit is now a small "i" ring on the league page, its settings and the create form. Tap it for the line crediting Jon Acevedo.

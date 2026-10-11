@@ -12,24 +12,23 @@ import { Alert, Pressable, RefreshControl, ScrollView, Share, Switch, Text, Text
 import {
   contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
-  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, friendlyError,
+  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
-import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, contestCredit } from '@drip/core/engine/contest';
+import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, Mono } from '../ui/prims';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
-import { CONTEST_BUDGETS } from './ContestCommish';
+import { CONTEST_BUDGETS, CONTEST_MIN_SPENDS, moneyChip } from './ContestCommish';
 
 export type BullseyeRoom = 'matchup' | 'league' | 'team' | 'settings' | 'commish';
 type ContestLeague = BullseyeLeague & { kind?: string; bullseye?: ContestInfo };
 const n0 = (n: number) => n.toLocaleString('en-US');
-const fmt$ = (n: number) => `$${n0(n)}`;
 const CONTEST_BLURB: Record<ContestKind, string> = {
   high: 'Each week everyone builds a squad under the budget from the week’s salary board. Most points wins.',
-  golf: 'Each week everyone builds a squad under the budget. FEWEST points wins — but a scoreless spot banks a penalty, so no-shows are no bargain.',
+  golf: 'Each week everyone builds a squad that spends at least the minimum. FEWEST points wins — but a scoreless spot banks a penalty, so no-shows are no bargain.',
   bullseye: 'Each week everyone builds a squad aimed at the week’s numbers. Closest wins.',
 };
 
@@ -57,6 +56,12 @@ export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, n
   const [span, setSpan] = useState<BullseyeSpan>('season');
   const [variant, setVariant] = useState<DfsVariant>('slots');
   const [budget, setBudget] = useState(CONTEST_BUDGET_DEFAULT);
+  const [minSpend, setMinSpend] = useState(0);
+  // GOLF'S MONEY (v0.668.0): no cap, a minimum spend; the others cap and no floor.
+  const pickContest = (c: ContestKind) => {
+    setContest(c);
+    if (c === 'golf') { setBudget(0); setMinSpend(CONTEST_MIN_SPEND_DEFAULT); } else { setBudget((b) => (b || CONTEST_BUDGET_DEFAULT)); setMinSpend(0); }
+  };
   const [max, setMax] = useState('12');
   const [team, setTeam] = useState('');
   const [list, setList] = useState(true);
@@ -70,7 +75,7 @@ export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, n
     try {
       let n = Math.max(2, Math.min(top, Number(max) || 0));
       if (format === 'h2h') n -= n % 2;
-      const r = await createContestLeague({ name, contest, format, span, max: n, budget, variant, teamName: team || null });
+      const r = await createContestLeague({ name, contest, format, span, max: n, budget, minSpend, variant, teamName: team || null });
       if (!r.ok || !r.league_id) { warn(); setErr(r.error ?? 'Couldn’t make it.'); return; }
       if (list) await postLeagueListing(r.league_id, blurb.trim() || null, null).catch(() => {});
       commit(); onOpen(r.league_id, r.name ?? 'Contest', r.roster_id ?? 1);
@@ -98,7 +103,7 @@ export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, n
         <Mono size={9} tone="faint">WINS BY</Mono>
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {(['high', 'golf', 'bullseye'] as const).map((c) => (
-            <Chip key={c} small label={`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`} on={contest === c} onPress={() => { tap(); setContest(c); }} />
+            <Chip key={c} small label={`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`} on={contest === c} onPress={() => { tap(); pickContest(c); }} />
           ))}
         </View>
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -121,8 +126,17 @@ export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, n
         )}
         <Mono size={9} tone="faint">BUDGET PER SQUAD</Mono>
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {CONTEST_BUDGETS.map((v) => <Chip key={v} small label={`$${Math.round(v / 1000)}k`} on={budget === v} onPress={() => { tap(); setBudget(v); }} />)}
+          {CONTEST_BUDGETS.map((v) => <Chip key={v} small label={moneyChip(v, 'NO CAP')} on={budget === v} onPress={() => { tap(); setBudget(v); }} />)}
         </View>
+        {contest === 'golf' && (
+          <>
+            <Mono size={9} tone="faint">MIN SPEND</Mono>
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              {CONTEST_MIN_SPENDS.map((v) => <Chip key={v} small label={moneyChip(v, 'NONE')} on={minSpend === v} onPress={() => { tap(); setMinSpend(v); }} />)}
+            </View>
+            <Mono size={8.5} tone="faint">Golf’s real constraint: you must roster expensive players and bet on which stars have a quiet week.</Mono>
+          </>
+        )}
         <Mono size={8.5} tone="faint">The default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST) — change the roster in COMMISH.</Mono>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Mono size={9} tone="faint">{format === 'h2h' ? 'TEAMS (even, 2–32)' : `UP TO (2–${n0(cap)})`}</Mono>
@@ -352,9 +366,9 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
     contestState(lg.league_id!, lg.week).then((s) => {
       if (!s.ok) return;
       const { slots, labels } = contestSetupOf(s);
-      setSpotsLine(slots.length ? `A squad of ${slots.length} — ${slots.map((d) => labels[d.slot]).join(', ')} — under a ${fmt$(b.budget)} budget, from the week’s salary board.` : null);
+      setSpotsLine(slots.length ? `A squad of ${slots.length} — ${slots.map((d) => labels[d.slot]).join(', ')} — ${contestMoneyWord(b)}, from the week’s salary board.` : null);
     }).catch(() => {});
-  }, [lg.league_id, lg.week, b.budget]);
+  }, [lg.league_id, lg.week, b.budget, b.min_spend]);
   const leave = () => Alert.alert(`Leave ${lg.name}?`, 'Your squads stay in the standings.', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Leave', style: 'destructive', onPress: async () => {

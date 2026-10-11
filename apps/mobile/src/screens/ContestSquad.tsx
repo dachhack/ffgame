@@ -53,7 +53,7 @@ export function contestHowTo(cfg: ContestConfig): string {
 /** The league's spots and config from a contest_state read. */
 export function contestSetupOf(st: ContestState) {
   const slots = classicSlotsFromSpec(st.slots ?? null) ?? [];
-  const cfg = contestConfigOf({ contest: st.contest, contest_format: st.format, budget: st.budget, roster_slots: st.slots, bullseye: st.variant, bullseye_radius: st.radius }, st.kind);
+  const cfg = contestConfigOf({ contest: st.contest, contest_format: st.format, budget: st.budget, min_spend: st.min_spend ?? 0, roster_slots: st.slots, bullseye: st.variant, bullseye_radius: st.radius }, st.kind);
   const catalog = leagueCatalogOf({ scoring: (st.scoring_classic ?? null) as Partial<ClassicScoring> | null, ppr: st.ppr ?? null });
   return { slots, cfg, catalog, labels: contestSlotLabels(slots) };
 }
@@ -172,6 +172,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
   const { slots, cfg, labels } = setup;
   const n = slots.length;
   const budget = cfg.budget;
+  // NO CAP / THE FLOOR (v0.668.0): the bar fills against the cap, else the minimum spend.
+  const barBase = cfg.capped ? budget : cfg.minSpend > 0 ? cfg.minSpend : Math.max(1, cfg.slots.length * 3000);
   const bull = cfg.contest === 'bullseye';
   const isTotal = bull && cfg.bullseye?.variant === 'total';
   const radius = cfg.bullseye?.radius ?? 10;
@@ -282,16 +284,17 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
         {/* THE BUDGET BAR */}
         <Card style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <Mono size={9} tone="faint" weight="700" track={0.1}>BUDGET</Mono>
-            <Display size={18} tone={bl.over ? 'warn' : 'you'}>{fmt$(bl.left)}</Display>
-            <Mono size={9} tone="faint">{bl.over ? `over by ${fmt$(-bl.left)}` : `left of ${fmt$(budget)}`}</Mono>
-            <Mono size={9} tone="faint" style={{ marginLeft: 'auto' }}>{bl.open ? `${bl.open} open · ${fmtK(bl.perSpot)} each` : 'all filled'}</Mono>
+            <Mono size={9} tone="faint" weight="700" track={0.1}>{bl.capped ? 'BUDGET' : 'SPEND'}</Mono>
+            <Display size={18} tone={bl.over || (bl.short > 0 && filled >= n) ? 'warn' : 'you'}>{bl.capped ? fmt$(bl.left) : fmt$(bl.spent)}</Display>
+            <Mono size={9} tone="faint">{bl.capped ? (bl.over ? `over by ${fmt$(-bl.left)}` : `left of ${fmt$(budget)}`) : bl.floor > 0 ? (bl.short > 0 ? `${fmt$(bl.short)} short of the ${fmt$(bl.floor)} minimum` : `✓ past the ${fmt$(bl.floor)} minimum`) : 'no cap'}</Mono>
+            {bl.capped && bl.floor > 0 && <Mono size={9} tone="faint">{bl.short > 0 ? `· min ${fmt$(bl.floor)} (${fmt$(bl.short)} to go)` : `· ✓ min ${fmt$(bl.floor)}`}</Mono>}
+            <Mono size={9} tone="faint" style={{ marginLeft: 'auto' }}>{bl.open ? (bl.capped ? `${bl.open} open · ${fmtK(bl.perSpot)} each` : `${bl.open} open`) : 'all filled'}</Mono>
           </View>
           <View style={{ height: 10, borderRadius: 999, backgroundColor: t.bg, borderWidth: 1, borderColor: t.bd, overflow: 'hidden', flexDirection: 'row' }}>
             {slots.map((d, i) => {
               const slug = picks[d.slot];
               if (!slug) return null;
-              return <View key={d.slot} style={{ width: `${Math.max(0.5, (salaryOf(slug) / budget) * 100)}%`, backgroundColor: bl.over ? t.warn : t.you, opacity: 0.6 + (i % 3) * 0.15, borderRightWidth: 1, borderRightColor: t.surface }} />;
+              return <View key={d.slot} style={{ width: `${Math.max(0.5, (salaryOf(slug) / barBase) * 100)}%`, backgroundColor: bl.over ? t.warn : t.you, opacity: 0.6 + (i % 3) * 0.15, borderRightWidth: 1, borderRightColor: t.surface }} />;
             })}
           </View>
           <Mono size={8.5} tone="faint">{`${fmt$(bl.spent)} spent${!st.started ? ` · projects ${projTotal.toFixed(1)}${isTotal && theCard ? ` vs ${theCard.total}` : ''}` : ''}${filled ? ` · ${valueOf({ salary: bl.spent, proj: projTotal }).toFixed(2)}/$1k` : ''}`}</Mono>
@@ -343,7 +346,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
                     <View style={{ width: 36, height: 36, borderRadius: 11, borderWidth: 1, borderStyle: 'dashed', borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}><Mono size={16} tone="faint">+</Mono></View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Mono size={10.5} weight="700" tone={editable ? 'you' : 'faint'}>{editable ? `PICK ${labels[d.slot]}` : 'empty'}</Mono>
-                      <Mono size={8.5} tone="faint">{d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}`}</Mono>
+                      <Mono size={8.5} tone="faint">{d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price'}</Mono>
                     </View>
                   </>
                 )}
@@ -365,8 +368,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
           })}
           {editable && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
-              <Chip on label={dirty ? 'SAVE SQUAD' : 'SAVED'} disabled={busy || filled < n || bl.over || !dirty} onPress={() => { tap(); void save(); }} />
-              <Mono size={9} tone="faint">{filled < n ? `${n - filled} to fill` : bl.over ? 'over the budget' : dirty ? 'unsaved changes' : 'your squad is in'}</Mono>
+              <Chip on label={dirty ? 'SAVE SQUAD' : 'SAVED'} disabled={busy || filled < n || bl.over || bl.short > 0 || !dirty} onPress={() => { tap(); void save(); }} />
+              <Mono size={9} tone="faint">{filled < n ? `${n - filled} to fill` : bl.over ? 'over the budget' : bl.short > 0 ? `${fmt$(bl.short)} under the minimum spend` : dirty ? 'unsaved changes' : 'your squad is in'}</Mono>
             </View>
           )}
           {note && <Mono size={9.5} tone={note.startsWith('✓') ? 'you' : 'warn'} style={{ marginTop: 6 }}>{note}</Mono>}

@@ -21,7 +21,10 @@ const small: CSSProperties = { fontSize: 10, color: 'var(--faint)' };
 const label: CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' };
 const input: CSSProperties = { fontSize: 13, padding: '7px 10px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 6, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
 const n0 = (n: number) => n.toLocaleString('en-US');
-export const CONTEST_BUDGETS = [10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];
+export const CONTEST_BUDGETS = [0, 10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];   // 0 = NO CAP (0469)
+/** The minimum spend (0469): golf's constraint. 0 = none. */
+export const CONTEST_MIN_SPENDS = [0, 10000, 20000, 30000, 40000, 45000, 50000, 60000, 75000, 100000];
+export const moneyChip = (v: number, none: string) => (v ? `$${Math.round(v / 1000)}k` : none);
 
 export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string; onChanged?: () => void }) {
   const [b, setB] = useState<ContestInfo | null>(null);
@@ -30,6 +33,7 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
   const [cap, setCap] = useState(32);
   const [size, setSize] = useState(12);
   const [budget, setBudget] = useState(50000);
+  const [minSpend, setMinSpend] = useState(0);
   const [radius, setRadius] = useState(10);
   const [listed, setListed] = useState(false);
   const [blurb, setBlurb] = useState('');
@@ -38,7 +42,7 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
   const [busy, setBusy] = useState(false);
   const load = () => contestLeague(leagueId).then((r) => {
     if (!r.ok || !r.bullseye) { setNote(r.error ?? 'Couldn’t read the league.'); return; }
-    setB(r.bullseye); setSize(r.bullseye.max_seats); setBudget(r.bullseye.budget); setRadius(r.bullseye.radius);
+    setB(r.bullseye); setSize(r.bullseye.max_seats); setBudget(r.bullseye.budget); setMinSpend(r.bullseye.min_spend ?? 0); setRadius(r.bullseye.radius);
     setSpan(r.bullseye.span); setPlayed((r.weeks ?? []).length > 0); setListed(!!r.listed);
   }).catch((e) => setNote(friendlyError(e)));
   useEffect(() => {
@@ -79,10 +83,18 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
         <div className="mono" style={label}>BUDGET</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="mono" style={{ ...input, width: 130 }}>
-            {[...new Set([...CONTEST_BUDGETS, b.budget])].sort((x, y) => x - y).map((v) => <option key={v} value={v}>{`$${n0(v)}`}</option>)}
+            {[...new Set([...CONTEST_BUDGETS, b.budget])].sort((x, y) => x - y).map((v) => <option key={v} value={v}>{v ? `$${n0(v)}` : 'NO CAP'}</option>)}
           </select>
           <button disabled={busy || budget === b.budget} onClick={() => void act(setContestRules(leagueId, { budget }), 'budget changed')} className="mono" style={chip(true)}>SET</button>
-          <span className="mono" style={small}>per squad, from the next week. Add or remove spots on ROSTER — a bigger squad wants a bigger budget.</span>
+          <span className="mono" style={small}>per squad, from the next week. Add or remove spots on ROSTER — a bigger squad wants a bigger budget. NO CAP suits Bullseye: the card does the limiting.</span>
+        </div>
+        <div className="mono" style={label}>MIN SPEND</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={minSpend} onChange={(e) => setMinSpend(Number(e.target.value))} className="mono" style={{ ...input, width: 130 }}>
+            {[...new Set([...CONTEST_MIN_SPENDS, b.min_spend ?? 0])].sort((x, y) => x - y).map((v) => <option key={v} value={v}>{v ? `$${n0(v)}` : 'NONE'}</option>)}
+          </select>
+          <button disabled={busy || minSpend === (b.min_spend ?? 0)} onClick={() => void act(setContestRules(leagueId, { minSpend }), 'minimum spend changed')} className="mono" style={chip(true)}>SET</button>
+          <span className="mono" style={small}>{b.contest === 'golf' ? 'Golf’s real constraint: a squad must spend at least this, so cheap no-names aren’t the whole game.' : 'A floor a squad must spend; mostly for golf.'}</span>
         </div>
       </div>
 

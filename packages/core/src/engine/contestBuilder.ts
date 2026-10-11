@@ -219,10 +219,15 @@ export function fillOpenSpots(board: BuilderPlayer[], ctx: BuilderCtx, seed: str
   return contestAutoBuild(pool, ctx.cfg, seed, ctx.card ?? null, ctx.picks);
 }
 
-/** The budget bar's words: what's left, and per open spot. */
-export function budgetLine(ctx: BuilderCtx, salaryOf: (slug: string) => number): { spent: number; left: number; open: number; perSpot: number; over: boolean } {
+/** The budget bar's words: what's left, and per open spot. `capped` false
+ *  (v0.668.0) means there is no cap — `left` and `perSpot` are then just
+ *  large; `floor` is the minimum spend (0 = none) and `short` how far the
+ *  squad still is below it. */
+export function budgetLine(ctx: BuilderCtx, salaryOf: (slug: string) => number): { spent: number; left: number; open: number; perSpot: number; over: boolean; capped: boolean; floor: number; short: number } {
   const spent = builderSpent(ctx, salaryOf);
   const open = ctx.slots.filter((d) => !ctx.picks[d.slot]).length;
   const left = ctx.cfg.budget - spent;
-  return { spent, left, open, perSpot: open ? Math.floor(left / open / 100) * 100 : 0, over: left < 0 };
+  const floor = ctx.cfg.minSpend ?? 0;
+  return { spent, left, open, perSpot: open ? Math.floor(left / open / 100) * 100 : 0, over: ctx.cfg.capped !== false && left < 0,
+    capped: ctx.cfg.capped !== false, floor, short: floor > 0 ? Math.max(0, floor - spent) : 0 };
 }
