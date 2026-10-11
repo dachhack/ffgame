@@ -567,6 +567,13 @@ export const CLASSIC_SCORING_FIELDS: { key: keyof ClassicScoring; label: string;
 // a stat into points reads the merged table through `scoringFor`, the live
 // scorer and the projections alike, so the two can never disagree.
 export type ClassicByPos = Partial<Record<string, Partial<Record<keyof ClassicScoring, number>>>>;
+/** THE COACH SCORING PRESET (v0.670.1, 0472): what a league gets when HC is
+ *  unlocked and no coach knob was ever set. Mirrors `_hc_scoring_preset()`;
+ *  the probe pins the two together. */
+export const HC_SCORING_PRESET: Partial<ClassicScoring> = {
+  hcWin: 10, hcTie: 5, hcLoss: 0, hcPts: 0.1,
+  hcWm1: 1, hcWm5: 2, hcWm10: 3, hcWm15: 4, hcWm20: 5, hcWm25: 6,
+};
 export type ClassicScoringTable = ClassicScoring & { byPos?: ClassicByPos };
 
 /** Positions an override can name, and the catalog sections that mean

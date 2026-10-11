@@ -208,6 +208,18 @@ ok('build: every spot filled under the budget, the tenure rule kept, golf taking
     ok(`${f}: the commissioner can set the floor and drop the cap`, read(f).includes('minSpend') && read(f).includes("'NO CAP'"));
   }
 }
+// THE COACH SCORING PRESET (v0.670.1): SQL and core agree, and a coach's week prices under it.
+{
+  const { HC_SCORING_PRESET } = await import('../packages/core/src/engine/classic.ts');
+  const B = await import('../packages/core/src/engine/contestBuilder.ts');
+  const sql = read('supabase/migrations/0472_hc_scoring_preset.sql');
+  const m = /jsonb_build_object\(([^)]*)\)/.exec(sql.split('_hc_scoring_preset() returns jsonb')[1]);
+  const fromSql = Object.fromEntries([...m[1].matchAll(/'(hc\w+)',\s*([\d.]+)/g)].map(([, k, v]) => [k, Number(v)]));
+  ok('preset: the SQL preset and HC_SCORING_PRESET are the same ten knobs', JSON.stringify(fromSql) === JSON.stringify(HC_SCORING_PRESET), { fromSql, HC_SCORING_PRESET });
+  ok('preset: installed on unlock only when no coach knob is set, and backfilled for contest leagues with HC', sql.includes("cleaned @> '[\"HC\"]'::jsonb") && sql.includes('_hc_scoring_unset(settings_json -> \'scoring_classic\')') && sql.includes("kind in ('dfs', 'bullseye')"));
+  const wk = B.leagueWeekProj({ slug: 'det-hc', pos: 'HC', team: 'DET', proj: 0 }, HC_SCORING_PRESET, { opp: 'CAR', home: true });
+  ok('preset: a favourite at home projects a real number (about 10)', wk > 7 && wk < 16, wk);
+}
 ok('allows: a RET spot takes a ball-carrier; a tenure rule refuses a veteran', C.contestSlotAllows({ slot: 'S1', type: 'RET', pos: ['RET'] }, { slug: 'rb2', pos: 'RB' }) && !C.contestSlotAllows(cfgR.slots[1], { slug: 'rb2', pos: 'RB', exp: 7 }));
 ok('squad: S-rows read by name, legacy DFS names fall into spots by position', (() => {
   const s1 = C.contestSquadOf([{ slot: 'S2', player_slug: 'x' }], cfgB.slots);

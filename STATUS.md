@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.670.1 — Coaches score something out of the box
+
+> - A HEAD COACH spot now pays from the first week: when a league unlocks coaches and has never set coach scoring, a preset goes in — 10 for a win, 5 for a tie, 0.1 per point scored, and +1 to +6 by the margin of victory. Leagues already playing a coach spot with no coach scoring get it too. A commissioner who set their own coach values keeps them.
+
+- Founder: "add the coach scoring preset." Migration 0472:
+  `_hc_scoring_preset()`, `_hc_scoring_unset(sc)`;
+  set_league_position_access installs the preset when HC is switched on
+  and no coach knob is set (returns `hc_preset`); a one-time backfill for
+  contest leagues (dfs/bullseye) carrying HC with no coach scoring. Core
+  `HC_SCORING_PRESET` mirrors it; the probe pins the two together and
+  prices a coach's week under it. Loss margins, downs and two-point
+  conversions stay 0 (the downs barely belong to the coach). No iPhone
+  build needed.
+
 ### v0.670.0 — Head-to-head records, and a round-robin schedule
 
 > - Head-to-head contest leagues now keep a record: wins, losses and ties from every settled week, with the points total as the tiebreak. The season standings and the week's result card show it.
