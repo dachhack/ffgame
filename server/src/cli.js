@@ -795,6 +795,11 @@ async function main() {
         argv.push('seal-audit', need('week'));
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
+      } else if (req.mode === 'seat-wire') {
+        // v0.665.1: one seat works the wire now — the hourly sweep for one league/seat.
+        argv.push('seat-wire', need('week'), `--league=${need('league')}`);
+        if (req.seat != null) argv.push(`--seat=${req.seat}`);
+        if (req.season) argv.push(String(req.season));
       } else if (req.mode === 'shotgun-preview') {
         // v0.654.0: read-only — the 2-for-2 the CPU would hand each matchup.
         argv.push('shotgun-preview', need('league'));
@@ -822,7 +827,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | offboard-sweep`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | offboard-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -899,6 +904,26 @@ async function main() {
       //   node src/cli.js shotgun-preview <league-uuid> [week]
       const { shotgunPreview } = await import('./shotgun.js');
       console.log(await shotgunPreview(args[0], args[1] ?? null));
+      break;
+    }
+    case 'seat-wire': {
+      // ▶ ONE SEAT WORKS THE WIRE, NOW (v0.665.1). Founder: "have team 2 put
+      //   in waivers for tonight to run tomorrow." The hourly sweep, for one
+      //   league (and one seat), planning the given week:
+      //   node src/cli.js seat-wire <week> --league=<uuid> [--seat=<n>] [season]
+      //   The slate is the week's stored one (nfl_slate), so byes and kickoffs
+      //   read as the worker reads them. Writes only what the sweep writes.
+      const { sweepSeatWire } = await import('./seatWire.js');
+      const league = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      const seatArg = (args.find((a) => a.startsWith('--seat=')) ?? '').slice(7);
+      const pos = args.filter((a) => !a.startsWith('--'));
+      const week = Number(pos[0]);
+      const season = pos[1] ?? config.season;
+      if (!league || !Number.isFinite(week)) { console.error('usage: seat-wire <week> --league=<uuid> [--seat=<n>] [season]'); process.exitCode = 1; break; }
+      const { data: rows } = await db().from('nfl_slate').select('home,away,win,kickoff').eq('season', season).eq('week', week);
+      const slate = (rows ?? []).map((g) => ({ home: g.home, away: g.away, win: g.win, kickoff: g.kickoff }));
+      const n = await sweepSeatWire(week, slate, (...a) => console.log(...a), { leagueId: league, rosterId: seatArg ? Number(seatArg) : null });
+      console.log(`seat-wire: week ${week}, league ${league}, seat ${seatArg || '*'} — ${n} transaction(s)`);
       break;
     }
     case 'seal-audit': {

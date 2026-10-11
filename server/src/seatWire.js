@@ -95,7 +95,10 @@ const MAX_OPEN_SEAT_FILLS = 16;
  * `week` and `slate` come from the tick, exactly as `autoSlotClassicLineups`
  * takes them, so byes are proven from the same source the lineup fill uses.
  */
-export async function sweepSeatWire(week, slate = null, log = () => {}) {
+export async function sweepSeatWire(week, slate = null, log = () => {},
+  /** ONE SEAT, NOW (v0.665.1): the ops errand's filter — a league, and a
+   *  seat in it. The hourly sweep passes nothing and walks every seat. */
+  only = null) {
   // Only leagues that HAVE a seat the worker may act for are worth loading:
   // agent seats (seat_agent is server-only and small) and every seat on 🤖
   // auto-pilot (v0.432.3 — account or not: the founder's rule is that a seat
@@ -110,7 +113,10 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
   const seatRows = (agentRows ?? []).filter((r) => !aiSeat.has(`${r.league_id}:${r.roster_id}`))
     .map((r) => ({ league_id: r.league_id, roster_id: r.roster_id, kind: 'agent' }));
   for (const r of aiRows ?? []) seatRows.push({ league_id: r.league_id, roster_id: r.sleeper_roster_id, kind: 'ai' });
-  if (!seatRows.length) return 0;
+  const wanted = only ? seatRows.filter((r) => r.league_id === only.leagueId && (only.rosterId == null || r.roster_id === only.rosterId)) : seatRows;
+  if (only && !wanted.length) log('seat wire', only.leagueId, 'seat', only.rosterId ?? '*', 'is not an AI or agent seat — nothing to do');
+  if (!wanted.length) return 0;
+  seatRows.length = 0; seatRows.push(...wanted);
   const leagueIds = [...new Set(seatRows.map((r) => r.league_id))];
 
   const { data: lgs } = await db().from('league')
@@ -468,7 +474,10 @@ export async function sweepSeatWire(week, slate = null, log = () => {}) {
         // a hole.
         // Ranked by the season PLUS momentum (v0.642.0), so a trending body
         // makes the list even when the August line has not caught up with him.
-        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id) && !p.wait), (p) => rosValueOf(p) + momentumOf(p));
+        // …plus the best few bodies for every spot nobody on the roster can
+        // stand in (v0.665.1) — a rookie-only spot's rookies are rarely a
+        // position's top twelve.
+        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id) && !p.wait), (p) => rosValueOf(p) + momentumOf(p), undefined, { slots, roster });
 
         // Replacement level: the best FREE body at a position — what anyone
         // could sign for nothing this minute — so a claim is measured over
