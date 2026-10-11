@@ -118,18 +118,17 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     return (
       <View style={{ flex: 1, minWidth: 0, gap: 2, alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
         <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: S.mine ? '#E9B959' : 'rgba(255,255,255,0.8)' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</Text>
-        <View style={{ flexDirection: edge === 'left' ? 'row' : 'row-reverse', gap: 14, alignItems: 'flex-end' }}>
-          <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
-            <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : 'rgba(255,255,255,0.35)' }}>{fmt(x.points)}</Text>
-            <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
-          </View>
-          {bull && (
-            <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
-              <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? '#fff' : 'rgba(255,255,255,0.35)' }}>{fmt(x.ring)}</Text>
-              <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>{`OFF 🎯 ${isTotal && theCard ? theCard.total : 'PER SPOT'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)} off` : ''}`}</Text>
-            </View>
-          )}
+        {/* the cells stack (v0.680.2): side by side, two sides' labels met in the middle of a phone */}
+        <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%' }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : 'rgba(255,255,255,0.35)' }}>{fmt(x.points)}</Text>
+          <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
         </View>
+        {bull && (
+          <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%', marginTop: 4 }}>
+            <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? '#fff' : 'rgba(255,255,255,0.35)' }}>{fmt(x.ring)}</Text>
+            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`OFF 🎯 ${isTotal && theCard ? theCard.total : 'PER SPOT'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)} off` : ''}`}</Text>
+          </View>
+        )}
       </View>
     );
   };
