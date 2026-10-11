@@ -860,7 +860,9 @@ export const isWeeklyKind = (kind?: string | null): boolean => !!kind && (WEEKLY
 /** One line on what a Bullseye league is, for the board and its header. */
 export function bullseyeLeagueLine(b: BullseyeInfo): string {
   const span = b.span === 'week' ? `week ${b.week ?? '?'} only` : 'all season';
-  return `🎯 BULLSEYE · ${b.variant === 'total' ? 'one team total' : 'slot targets'} · ${span} · $50k cap · ${b.seats_taken.toLocaleString('en-US')} of ${b.max_seats.toLocaleString('en-US')} in`;
+  // The retired weekly open contest (0462) has no real cap: just the count.
+  const size = b.max_seats >= 1000000 ? `${b.seats_taken.toLocaleString('en-US')} in` : `${b.seats_taken.toLocaleString('en-US')} of ${b.max_seats.toLocaleString('en-US')} in`;
+  return `🎯 BULLSEYE · ${b.variant === 'total' ? 'one team total' : 'slot targets'} · ${span} · $50k cap · ${size}`;
 }
 /** The most people a Bullseye league can hold for this account. */
 export const bullseyeMaxSeats = (admin: boolean, features: Record<string, boolean>) => (admin || features.bullseye_host ? 50000 : 32);

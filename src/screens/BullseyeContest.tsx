@@ -129,7 +129,9 @@ export function SquadScreen(props: { leagueId: string; rosterId: number; week?: 
 }
 
 // ── the squad ──────────────────────────────────────────────────────────────
-export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: string; week?: number; onBack: () => void }) {
+export function BullseyeSquad({ leagueId, week: weekProp, onBack, embedded }: { leagueId: string; week?: number; onBack: () => void;
+  /** Inside a Bullseye league's own frame (v0.663.2): no back row, no outer padding. */
+  embedded?: boolean }) {
   const [st, setSt] = useState<DfsBullseyeState | null>(null);
   const [board, setBoard] = useState<PodSalaryRow[] | null>(null);
   const [locks, setLocks] = useState<Map<string, number>>(new Map());
@@ -209,12 +211,14 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
   };
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={onBack} className="mono" style={chip(false)}>← BACK</button>
-        <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>🎯 {st.name ?? 'BULLSEYE'}</span>
-        <span className="mono" style={small}>{`Week ${st.week} · ${VARIANT_WORD[cfg.variant]}`}</span>
-      </div>
+    <div style={embedded ? { display: 'grid', gap: 12 } : { maxWidth: 760, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
+      {!embedded && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={onBack} className="mono" style={chip(false)}>← BACK</button>
+          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>🎯 {st.name ?? 'BULLSEYE'}</span>
+          <span className="mono" style={small}>{`Week ${st.week} · ${VARIANT_WORD[cfg.variant]}`}</span>
+        </div>
+      )}
 
       {/* the card */}
       <div style={{ ...card, display: 'grid', gap: 8 }}>
@@ -329,7 +333,7 @@ export function BullseyeSquad({ leagueId, week: weekProp, onBack }: { leagueId: 
         </div>
       )}
 
-      {st.kind === 'bullseye' && <BullseyeLeaderboard leagueId={leagueId} />}
+      {st.kind === 'bullseye' && !embedded && <BullseyeLeaderboard leagueId={leagueId} />}
 
       {/* the pick sheet */}
       {active && (
