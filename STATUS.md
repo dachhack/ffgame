@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.663.2 — Bullseye leagues on the web look like every other league
+
+> - On the website, a Bullseye league now opens in the same full-width league layout as every other league, with the usual bottom bar (League · Matchup · My Team · Chat) and the ⚙ Settings button.
+
+- Founder: "Why does it have this skinny stripped down league view. Match the
+  other leagues please." The `bleague` view fell through to the 440px
+  onboarding column. It now gets the hub's 1080, and BullseyeLeaguePage wears
+  the hub's frame: crest, name, type line, COMMISH badge and ⚙ SETTINGS, plus
+  LeagueStrip's room bar (LEAGUE · MATCHUP · MY TEAM · CHAT, chat in the
+  league panel). On a wide screen the matchup shows the squad beside the
+  standings. BullseyeSquad takes `embedded` (no second header). The retired
+  open contest's line reads "N in", not "of 1,000,000".
+
+### v0.663.1 — A red dot on the dev chat chip for new messages
+
+> - The 🛠 DEV chip now shows a red dot when the dev chat has messages you haven't read.
+
+- Founder: "a notification dot for new chats on the dev chat chip". The unread
+  count that sat inside the chip's label is now a red dot on its corner (web
+  and phone), and the count goes to the screen reader. It refreshes every 15s
+  and when the app or tab comes back to the front.
+
 ### v0.663.0 — The dev chat gets every chat tool, and @computer for everyone
 
 > - The dev chat now has every league chat tool: pictures, GIFs, polls, reactions, @mentions, edits and pins.

@@ -23,7 +23,8 @@ import {
 } from '@drip/core/data/liveApi';
 import { DFS_SLOTS, dfsCard, dfsSlotLabel, dfsTiebreak } from '@drip/core/engine/dfsBullseye';
 import { BullseyeSquad } from './BullseyeContest';
-import { ChatPanel } from '../app/chat';
+import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
+import { useWide } from './adminUi';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const chip = (on: boolean, dim = false): CSSProperties => ({
@@ -39,7 +40,7 @@ const n0 = (n: number) => n.toLocaleString('en-US');
 const joinLink = (code: string) => `${typeof window !== 'undefined' ? window.location.origin : 'https://dripfantasy.com'}/?bullseye=${encodeURIComponent(code)}`;
 const copy = (s: string) => { try { void navigator.clipboard.writeText(s); } catch { /* ignore */ } };
 
-export type BullseyeRoom = 'matchup' | 'league' | 'team' | 'chat' | 'settings' | 'commish';
+export type BullseyeRoom = 'matchup' | 'league' | 'team' | 'settings' | 'commish';
 
 // ── start: make one, or join one ───────────────────────────────────────────
 export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: string; onOpen: (leagueId: string) => void; onBack: () => void }) {
@@ -125,7 +126,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
 }
 
 // ── the league ─────────────────────────────────────────────────────────────
-export function BullseyeLeaguePage({ leagueId, initialRoom, onBack, onGone }: {
+export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onGone }: {
   leagueId: string; initialRoom?: BullseyeRoom; onBack: () => void;
   /** Left or deleted: back to the leagues list, refreshed. */
   onGone: () => void;
@@ -133,41 +134,55 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack, onGone }: {
   const [lg, setLg] = useState<BullseyeLeague | null>(null);
   const [room, setRoom] = useState<BullseyeRoom>(initialRoom ?? 'matchup');
   const [week, setWeek] = useState<number | null>(null);
+  const wide = useWide(900);
   const load = useCallback(() => bullseyeLeague(leagueId).then((r) => { setLg(r); return r; }), [leagueId]);
   useEffect(() => { void load().then((r) => { if (r.ok && r.week != null) setWeek((w) => w ?? r.week!); }).catch(() => {}); }, [load]);
   if (!lg) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
-  if (!lg.ok || !lg.bullseye) return <div style={{ padding: 24 }}><div className="mono" style={errStyle}>{lg.error ?? 'Couldn’t open the league.'}</div><button onClick={onBack} className="mono" style={{ ...chip(false), marginTop: 10 }}>← BACK</button></div>;
+  if (!lg.ok || !lg.bullseye) return <div style={{ padding: 24 }}><div className="mono" style={errStyle}>{lg.error ?? 'Couldn’t open the league.'}</div></div>;
   const b = lg.bullseye;
   // The weeks this league has played, plus the one in play: the MATCHUP and
   // standings arrows walk these.
   const weeks = [...new Set([...(lg.weeks ?? []), ...(lg.week != null ? [lg.week] : [])])].sort((x, y) => x - y);
-  const rooms: [BullseyeRoom, string][] = [
-    ['matchup', '▦ MATCHUP'], ['league', '🏠 LEAGUE'], ['team', '⇄ MY TEAM'], ['chat', '💬 CHAT'], ['settings', '⚙ SETTINGS'],
-    ...(lg.commish ? [['commish', '⚑ COMMISH'] as [BullseyeRoom, string]] : []),
-  ];
   const seated = !!lg.me;
+  // THE LEAGUE'S OWN FRAME (v0.663.2, founder: "Why does it have this skinny
+  // stripped down league view. Match the other leagues please."): the hub's
+  // header — crest, name, type line, COMMISH badge, ⚙ SETTINGS — and the
+  // room bar every league has (LeagueStrip: LEAGUE · MATCHUP · MY TEAM ·
+  // CHAT), at the hub's width.
+  const strip: StripRoom | null = room === 'league' ? 'home' : room === 'matchup' ? 'matchup' : room === 'team' ? 'team' : null;
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={onBack} className="mono" style={chip(false)}>← MY LEAGUES</button>
-        <span style={{ fontSize: 19, fontWeight: 800, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🎯 {lg.name}</span>
-      </div>
-      <div className="mono" style={{ ...small, color: 'var(--dim)' }}>{bullseyeLeagueLine(b)}</div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {rooms.filter(([r]) => seated || (r !== 'matchup' && r !== 'team')).map(([r, l]) => (
-          <button key={r} onClick={() => setRoom(r)} className="mono" style={chip(room === r)}>{l}</button>
-        ))}
+    <div style={{ maxWidth: wide ? 1080 : 560, margin: '0 auto', display: 'grid', gap: 12, paddingBottom: 24 }}>
+      <LeagueStrip leagueId={leagueId} name={lg.name ?? 'Bullseye'} hideName rosterId={lg.me?.roster_id ?? null} native={false}
+        here={strip} onGo={(r) => setRoom(r === 'home' ? 'league' : r === 'team' ? 'team' : 'matchup')} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="grotesk" style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 24 }}>🎯</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lg.name}</div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2, letterSpacing: '0.06em' }}>{bullseyeLeagueLine(b)}</div>
+        </div>
+        {lg.commish && (
+          <button onClick={() => setRoom('commish')} className="mono" title="Commissioner tools"
+            style={{ flex: 'none', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: room === 'commish' ? 'var(--on-accent, var(--bg))' : 'var(--you)', background: room === 'commish' ? 'var(--you)' : 'transparent', border: '1px solid var(--you)', borderRadius: 5, padding: '4px 8px', cursor: 'pointer' }}>COMMISH</button>
+        )}
+        <button onClick={() => setRoom('settings')} className="mono" title="League settings & info"
+          style={{ flex: 'none', fontSize: 11, fontWeight: 700, color: room === 'settings' ? 'var(--you)' : 'var(--dim)', background: 'var(--bg)', border: `1px solid ${room === 'settings' ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '5px 12px', cursor: 'pointer' }}>
+          ⚙ SETTINGS
+        </button>
       </div>
 
       {room === 'matchup' && seated && (
-        <>
-          <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-          {week != null && <BullseyeSquad key={week} leagueId={leagueId} week={week} onBack={onBack} />}
-        </>
+        // Two columns on a wide screen, as the hub: the squad, and the
+        // standings it is playing for.
+        <div style={{ display: 'grid', gridTemplateColumns: wide ? 'minmax(0, 3fr) minmax(0, 2fr)' : '1fr', gap: 12, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
+            {week != null && <BullseyeSquad key={week} leagueId={leagueId} week={week} embedded onBack={() => setRoom('league')} />}
+          </div>
+          {wide && <div style={{ display: 'grid', gap: 12 }}><LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} compact /></div>}
+        </div>
       )}
-      {room === 'league' && <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} />}
+      {(room === 'league' || (room === 'matchup' && !seated) || (room === 'team' && !seated)) && <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} />}
       {room === 'team' && seated && <TeamRoom leagueId={leagueId} lg={lg} onOpenWeek={(w) => { setWeek(w); setRoom('matchup'); }} onRenamed={() => void load()} />}
-      {room === 'chat' && <ChatPanel leagueId={leagueId} onClose={() => setRoom('league')} />}
       {room === 'settings' && <SettingsRoom lg={lg} onLeft={onGone} />}
       {room === 'commish' && lg.commish && <CommishRoom lg={lg} onChanged={() => void load()} onDeleted={onGone} />}
     </div>
@@ -187,7 +202,9 @@ function WeekArrows({ weeks, week, current, onWeek }: { weeks: number[]; week: n
 }
 
 // ── LEAGUE: who's in, the week, the season ─────────────────────────────────
-function LeagueRoom({ lg, weeks, week, onWeek }: { lg: BullseyeLeague; weeks: number[]; week: number | null; onWeek: (w: number) => void }) {
+function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: BullseyeLeague; weeks: number[]; week: number | null; onWeek: (w: number) => void;
+  /** Beside the squad (wide matchup): just the standings, no arrows or invite. */
+  compact?: boolean }) {
   const [bd, setBd] = useState<BullseyeLeagueBoard | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => {
@@ -201,7 +218,7 @@ function LeagueRoom({ lg, weeks, week, onWeek }: { lg: BullseyeLeague; weeks: nu
   const flash = (k: string, s: string) => { copy(s); setCopied(k); setTimeout(() => setCopied(null), 1500); };
   return (
     <>
-      <div style={{ ...card, display: 'grid', gap: 8 }}>
+      {!compact && <div style={{ ...card, display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'baseline' }}>
           <span><span style={{ fontSize: 22, fontWeight: 800, color: 'var(--you)' }}>{n0(b.seats_taken)}</span><span className="mono" style={small}>{` of ${n0(b.max_seats)} in`}</span></span>
           <span className="mono" style={small}>{b.span === 'week' ? `Week ${b.week} only` : 'All season — every week’s ring total adds up'}</span>
@@ -215,9 +232,9 @@ function LeagueRoom({ lg, weeks, week, onWeek }: { lg: BullseyeLeague; weeks: nu
             <button onClick={() => flash('link', joinLink(lg.invite_code!))} className="mono" style={chip(false)}>{copied === 'link' ? '✓ COPIED' : 'COPY LINK'}</button>
           </div>
         )}
-      </div>
+      </div>}
 
-      <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />
+      {!compact && <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={onWeek} />}
       <div style={{ ...card, display: 'grid', gap: 4 }}>
         <span className="mono" style={label}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}`}</span>
         {bd && !bd.started && <span className="mono" style={small}>Squads and scores show once the week’s first game locks.</span>}
