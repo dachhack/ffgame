@@ -8,6 +8,7 @@
 // (matchup.lock_at) the lineup seals and the board turns into the live view:
 // your starters vs theirs, each scoring classicPoints off the same live play
 // stream the drip boards run on, refreshed every 60s.
+import { rememberedWeek, rememberWeek } from '@drip/core/data/viewWeek';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Pos } from '@drip/core/types';
 import { SimStrip } from './SimStrip';
@@ -591,7 +592,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   //    and back. A swipe action would be cool.") ──────────────────────────────
   // null means "whatever week the league is on" — the board's own default, and
   // what it opens on. A number is a week the manager asked for.
-  const [weekWanted, setWeekWanted] = useState<number | null>(null);
+  // The week the league's other screen was on, if any (v0.666.2): the Team
+  // page and the matchup open on the same week and follow each other.
+  const [weekWanted, setWeekWantedRaw] = useState<number | null>(() => (leagueId ? rememberedWeek(leagueId) : null));
+  const setWeekWanted = (w: number | null) => { const id = ros?.leagueId ?? leagueId; if (id) rememberWeek(id, w); setWeekWantedRaw(w); };
   // ── EVERY MATCHUP IN THE LEAGUE (v0.424.0, founder: "a chip that goes to
   //    the next matchup for that week") ─────────────────────────────────────
   // `viewRid` is the seat on the LEFT of the board; null is mine. `ros` (the

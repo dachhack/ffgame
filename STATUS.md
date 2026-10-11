@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.666.2 — The Team page and the matchup show the same week; one lineup set as intended
+
+> - The Team page and the matchup board now open on the same week and follow each other: change the week on one and the other shows it too, so your lineup reads the same in both places.
+
+- Refs #1204. Both screens draw the same board on the same stored picks;
+  the one thing that could differ was the week each was looking at (each
+  kept its own arrows). `data/viewWeek.ts` remembers the chosen week per
+  league for the session; both ClassicBoards (web, phone) read and write
+  it. CLI/ops `set-lineup` (confirm SET): one lineup change for a seat
+  through the app's own rows and rules (spot eligibility, per-player locks,
+  the FLEX swap when the vacated spot can't take the newcomer); ops/run/039
+  puts Hampton in for Concepcion on Farmer Casey's week — the founder's
+  call. No iPhone build needed.
+
 ### v0.666.1 — A spot you can't change says why; the Team page's fit says what it is
 
 > - On the matchup board, tapping a spot that can't be changed now tells you why — his game has started, the spot is sealed, or your roster isn't legal (and what's wrong with it).
