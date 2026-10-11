@@ -59,7 +59,7 @@ export const CONTEST_EMOJI: Record<ContestKind, string> = { high: '🏆', golf: 
  *  other contests carry none. */
 export const CONTEST_CREDIT: { who: string; chip: string; title: string; line: string } = {
   who: 'Jon Acevedo',
-  chip: '💡 IDEA · JON ACEVEDO',
+  chip: 'i',   // founder: "just a tiny i chip" — the name is behind the tap
   title: 'Credit where it’s due',
   line: 'Bullseye was Jon Acevedo’s idea: aim every spot at a number instead of chasing the biggest score. The whole league type is here because he asked for it.',
 };
