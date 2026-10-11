@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.679.0 — A squad league's settings, the way a classic league's are
+
+> - SETTINGS in a weekly squad league now carries the same sections a classic league's does, where they make sense: the league note, Teams & seats (who's in, who owns which seat, dues paid), Standings, League history, Scoring settings, Squad & rules (spots, budget, the lock, ruled-out, no-shows, entries, playoffs), Dues & prizes, Alerts, Recruit, API keys, and the Commissioner's door.
+
+- Founder: "mirror the options in classic leagues. Create all the sub
+  sections where they make sense." `ContestSettingsTiles` (web
+  `src/screens/ContestSettings.tsx`, phone
+  `apps/mobile/src/screens/ContestSettings.tsx`) under HOW THIS LEAGUE
+  PLAYS: the classic hub's tile list (LeagueHubPage / LeagueHome), each
+  tile opening a sheet. Reused as they are, every one member-gated and
+  none native-only: `LeagueHistory` / `LeagueHistoryView`,
+  `ScoringPanel` / `ScoringView`, `NotifPrefsCard` / `PushPrefs`,
+  `RecruitPanel` / `RecruitView`, `ApiKeysPanel` / `ApiKeysView`, the
+  league note (0141). The contest's own where the classic panel doesn't
+  apply (rosters, the draft room, the register, waivers): TEAMS & SEATS
+  (`league_dues` seats + `chat_members` owners; a CPU seat says so),
+  SQUAD & RULES (the spots, budget, min spend, the card, the lock,
+  ruled-out, no-show, entries, playoffs — read-only; COMMISH sets them),
+  DUES & PRIZES (the tracker and the list). STANDINGS points at LEAGUE,
+  which holds the table and the bracket. No iPhone build needed.
+
 ### v0.678.0 — The table: the target on top, the numbers inside, the cards outside
 
 > - On the card table, a Bullseye league's target now sits at the top (one number for ONE TEAM TOTAL; a target per spot otherwise). Each spot's row runs your card at the outer edge, your score and projection in big type next to it, then your opponent's, then their card at the far edge — with how far off the target each is.

@@ -23,6 +23,7 @@ import { Card, Chip, Display, Mono } from '../ui/prims';
 import { Playoffs } from '../ui/LeagueExtras';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { ContestMatchup } from './ContestMatchup';
+import { ContestSettingsTiles } from './ContestSettings';
 import { CONTEST_BUDGETS, CONTEST_MIN_SPENDS, moneyChip } from './ContestCommish';
 
 export type BullseyeRoom = 'matchup' | 'league' | 'team' | 'settings' | 'commish';
@@ -208,7 +209,13 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
           <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
           <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week} />
         </>
-      ) : room === 'settings' ? <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />
+      ) : room === 'settings' ? (
+        <>
+          <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />
+          {/* THE SHEET (v0.679.0): the classic hub's tiles, for a squad league */}
+          {lg.me && <ContestSettingsTiles lg={lg} onGo={(r) => onRoom(r)} />}
+        </>
+      )
         : <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} onCommish={() => onRoom('commish')} onBack={onBack} />}
     </ScrollView>
   );
