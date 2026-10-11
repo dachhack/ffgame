@@ -11,7 +11,7 @@ import { contestSlotLabels, contestCard, contestTiebreak, CONTEST_SCORE_WORD } f
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
-import { useTheme, MONO, fs } from '../theme.native';
+import { useTheme, MONO, fs, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Mono } from '../ui/prims';
 import { CardBack, CardFace, EmptyCard, FeltTable, FlipCard, CARD_H } from '../ui/ContestCards';
@@ -89,13 +89,13 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
     const tb = tbs[s]?.slot === r.slot ? tbs[s] : null;
-    const color = mine ? '#E9B959' : '#F08A93';
+    const color = mine ? t.you : t.opp;
     const align = edge === 'left' ? 'flex-start' : 'flex-end';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: align, paddingLeft: edge === 'left' ? 8 : 4, paddingRight: edge === 'right' ? 8 : 4, minWidth: 0 }}>
-        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.65)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${tb ? ` · ⚖️ ${tb.target}` : ''}`}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : 'rgba(255,255,255,0.35)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: 'rgba(255,255,255,0.65)' }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}${tb && score != null ? ` · ⚖️ ${Math.abs(score - tb.target).toFixed(1)} off` : ''}`}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${tb ? ` · ⚖️ ${tb.target}` : ''}`}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : alpha(t.text, 35) }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: alpha(t.text, 65) }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}${tb && score != null ? ` · ⚖️ ${Math.abs(score - tb.target).toFixed(1)} off` : ''}`}</Text>
       </View>
     );
   };
@@ -121,19 +121,19 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   };
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const x = tally(s, S);
-    const color = S.mine ? '#E9B959' : '#F08A93';
-    const dim = 'rgba(255,255,255,0.65)';
+    const color = S.mine ? t.you : t.opp;
+    const dim = alpha(t.text, 65);
     return (
       <View style={{ flex: 1, minWidth: 0, gap: 2, alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
-        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: S.mine ? '#E9B959' : 'rgba(255,255,255,0.8)' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</Text>
+        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: S.mine ? t.you : alpha(t.text, 80) }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</Text>
         {/* the cells stack (v0.680.2): side by side, two sides' labels met in the middle of a phone */}
         <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%' }}>
-          <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : 'rgba(255,255,255,0.35)' }}>{fmt(x.points)}</Text>
+          <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : alpha(t.text, 35) }}>{fmt(x.points)}</Text>
           <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
         </View>
         {bull && (
           <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%', marginTop: 4 }}>
-            <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? '#fff' : 'rgba(255,255,255,0.35)' }}>{fmt(x.ring)}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? t.text : alpha(t.text, 35) }}>{fmt(x.ring)}</Text>
             <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`OFF 🎯 ${isTotal && theCard ? theCard.total : 'PER SPOT'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)} off` : ''}`}</Text>
           </View>
         )}
@@ -158,7 +158,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       </Card>
       <FeltTable>
         {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}
-        <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 4, paddingBottom: 10, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)' }}>
+        <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 4, paddingBottom: 10, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: alpha(t.text, 12) }}>
           {scoreboard(left, L, 'left')}
           {!solo && scoreboard(right, R, 'right')}
         </View>

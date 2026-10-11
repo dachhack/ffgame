@@ -9,7 +9,8 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Image, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { useTheme, MONO, fs } from '../theme.native';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { useTheme, MONO, fs, mix, alpha } from '../theme.native';
 import { useCardSkin, CARD_BACKS, SKIN_FELT } from './cards';
 
 export const CARD_W = 96;
@@ -21,12 +22,33 @@ const INK = '#201C12';
 const SUIT: Record<string, string> = { QB: '#B23A48', RB: '#2C6E49', WR: '#2B5EA7', TE: '#8A5A2B', K: '#6B4E9C', DEF: '#444', DST: '#444', HC: '#9A7B16' };
 
 /** The felt: a dark green table with a soft vignette, behind any content. */
+/** Relative luminance of a #rrggbb; the light themes' grounds sit above 0.5. */
+const lum = (c: string) => { const m = /^#([0-9a-f]{6})$/i.exec(c.trim()); if (!m) return 0; const n = parseInt(m[1], 16); return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255; };
+let feltSeq = 0;
 export function FeltTable({ children }: { children: React.ReactNode }) {
-  // THE DECK (v0.680.0): the felt takes the chosen deck's colour.
-  const felt = SKIN_FELT[useCardSkin()];
+  // THE DECK (v0.680.0): the felt takes the chosen deck's colour — and THE
+  // COLOUR THEME (v0.682.1, founder: "vary the felt color with color scheme
+  // as well"): the web kit's recipe, ported. Dark themes: the deck's felt 80%
+  // over the theme's ground, with the YOU and OPP accents glowing in from two
+  // corners and a vignette at the edges. The light themes (daylight, arctic):
+  // the ground lifted toward white over the felt, the accents as a wash.
+  const t = useTheme();
+  const base = SKIN_FELT[useCardSkin()];
+  const light = lum(t.bg) > 0.5;
+  const ground = light ? mix(mix(t.bg, 72, '#FFFFFF'), 90, base) : mix(base, 80, t.bg);
+  const id = useRef(`felt${feltSeq++}`).current;
   return (
-    <View style={{ backgroundColor: felt, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: '#000', overflow: 'hidden' }}>
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: 0.25, borderRadius: 14, transform: [{ scale: 1.2 }] }]} />
+    <View style={{ backgroundColor: ground, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: light ? 'rgba(0,0,0,0.15)' : '#000', overflow: 'hidden' }}>
+      <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          <RadialGradient id={`${id}y`} cx="18%" cy="8%" r="60%"><Stop offset="0" stopColor={t.you} stopOpacity={light ? 0.2 : 0.4} /><Stop offset="1" stopColor={t.you} stopOpacity={0} /></RadialGradient>
+          <RadialGradient id={`${id}o`} cx="85%" cy="92%" r="55%"><Stop offset="0" stopColor={t.opp} stopOpacity={light ? 0.18 : 0.38} /><Stop offset="1" stopColor={t.opp} stopOpacity={0} /></RadialGradient>
+          <RadialGradient id={`${id}v`} cx="50%" cy="40%" r="80%"><Stop offset="0.6" stopColor={light ? '#3C2814' : '#000'} stopOpacity={0} /><Stop offset="1" stopColor={light ? '#3C2814' : '#000'} stopOpacity={light ? 0.16 : 0.35} /></RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}y)`} />
+        <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}o)`} />
+        <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}v)`} />
+      </Svg>
       {children}
     </View>
   );
@@ -126,8 +148,8 @@ export function FlipCard({ flipped, idx = 0, back, face }: { flipped: boolean; i
 export function EmptyCard({ label }: { label: string }) {
   const t = useTheme();
   return (
-    <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontFamily: MONO, fontSize: fs(7.5), color: 'rgba(255,255,255,0.6)', letterSpacing: 1 }}>{`${label.toUpperCase()} · EMPTY`}</Text>
+    <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: alpha(t.text, 30), alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 60), letterSpacing: 1 }}>{`${label.toUpperCase()} · EMPTY`}</Text>
       <Text style={{ color: t.faint, fontSize: 1 }}> </Text>
     </View>
   );

@@ -411,13 +411,13 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
               const canTap = editable && !isLocked;
               const changed = slug !== saved[d.slot];
               const hint = d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price';
-              const dim = 'rgba(255,255,255,0.75)';
+              const dim = 'color-mix(in srgb, var(--text) 75%, transparent)';
               return (
                 <div key={d.slot} style={{ width: 104, display: 'grid', gap: 4, justifyItems: 'center', alignContent: 'start' }}>
-                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? '#E9B959' : dim, whiteSpace: 'nowrap' }}>
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap' }}>
                     {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${myTb?.slot === d.slot ? ` · ⚖️ ${myTb.target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
                   </span>
-                  <div style={{ borderRadius: 12, outline: changed ? '2px solid #E9B959' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
+                  <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
                     {p
                       ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={labels[d.slot]} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} />
                       : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => openSheet(d.slot) : undefined} />}
@@ -430,7 +430,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
                   </span>
                   {p && canTap && (
                     <button onClick={(e) => { e.stopPropagation(); setPicks({ ...picks, [d.slot]: null }); }} title="clear this spot" className="mono"
-                      style={{ background: 'none', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 999, color: dim, fontSize: 10, cursor: 'pointer', padding: '2px 8px' }}>✕</button>
+                      style={{ background: 'none', border: '1px solid color-mix(in srgb, var(--text) 30%, transparent)', borderRadius: 999, color: dim, fontSize: 10, cursor: 'pointer', padding: '2px 8px' }}>✕</button>
                   )}
                 </div>
               );
@@ -514,8 +514,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
                       <div key={p.slug} onClick={() => { if (ok) put(p.slug, slot); }} title={`${p.name} · ${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}
                         style={{ width: 104, display: 'grid', gap: 3, justifyItems: 'center', alignContent: 'start', opacity: ok ? 1 : 0.45, cursor: ok ? 'pointer' : 'not-allowed' }}>
                         <PlayerCard slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} idx={Math.min(i, 12)} locked={lock} />
-                        <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: ok ? '#E9B959' : 'rgba(255,255,255,0.6)' }}>{fmt$(p.salary)}<InjuryTag key={injTick} week={week} slug={p.slug} /></span>
-                        <span className="mono" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 1.3 }}>
+                        <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: ok ? 'var(--you)' : 'color-mix(in srgb, var(--text) 60%, transparent)' }}>{fmt$(p.salary)}<InjuryTag key={injTick} week={week} slug={p.slug} /></span>
+                        <span className="mono" style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text) 70%, transparent)', textAlign: 'center', lineHeight: 1.3 }}>
                           {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? (fits && !afford ? `over budget by ${fmt$(over)}` : `proj ${projWord(p)} · ${value.toFixed(2)}/$1k${bull && !isTotal && dist != null ? ` · ${dist.toFixed(1)} off` : ''}`)}
                         </span>
                       </div>

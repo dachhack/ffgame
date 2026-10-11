@@ -32,7 +32,7 @@ import { classicSlotsFromSpec, type ClassicSlotDef, type ClassicScoring } from '
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projectedRing, tiebreakDistance } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
-import { useTheme, MONO, fs } from '../theme.native';
+import { useTheme, MONO, fs, alpha } from '../theme.native';
 import { FeltTable, CardBack, CardFace, FlipCard, CARD_W } from '../ui/ContestCards';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, ChipStrip, Display, Mono } from '../ui/prims';
@@ -371,14 +371,14 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
                 const canTap = editable && !isLocked;
                 const changed = slug !== saved[d.slot];
                 const hint = d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price';
-                const dim = 'rgba(255,255,255,0.75)';
+                const dim = alpha(t.text, 75);
                 const face = p ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={labels[d.slot]} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} /> : <View />;
                 return (
                   <View key={d.slot} style={{ width: CARD_W + 6, alignItems: 'center', gap: 3 }}>
-                    <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.8, color: changed ? '#E9B959' : dim }}>
+                    <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.8, color: changed ? t.you : dim }}>
                       {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${myTb?.slot === d.slot ? ` · ⚖️ ${myTb.target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
                     </Text>
-                    <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }} style={{ borderRadius: 13, borderWidth: 2, borderColor: changed ? '#E9B959' : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
+                    <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }} style={{ borderRadius: 13, borderWidth: 2, borderColor: changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
                       <FlipCard key={`${d.slot}-${slug ?? 'open'}`} flipped={!!p} idx={i} back={<CardBack seed={`${leagueId}|${d.slot}`} />} face={face} />
                       {!p && (
                         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center' }}>
@@ -395,7 +395,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
                       {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
                     </View>
                     {p && canTap && (
-                      <Pressable hitSlop={8} onPress={() => { tap(); setPicks({ ...picks, [d.slot]: null }); }} style={{ borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                      <Pressable hitSlop={8} onPress={() => { tap(); setPicks({ ...picks, [d.slot]: null }); }} style={{ borderWidth: 1, borderColor: alpha(t.text, 30), borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
                         <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>✕</Text>
                       </Pressable>
                     )}
@@ -469,7 +469,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
                         <Pressable key={p.slug} disabled={!ok} onPress={() => { tap(); put(p.slug, slot); }} style={{ width: CARD_W, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
                           <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} mine locked={lock} foot={fmt$(p.salary)} />
                           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(7.5), color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: fs(10), maxWidth: CARD_W }}>
+                            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 75), textAlign: 'center', lineHeight: fs(10), maxWidth: CARD_W }}>
                               {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? (fits && !afford ? `over budget by ${fmt$(over)}` : `proj ${projWord(p)} · ${value.toFixed(2)}/$1k${bull && !isTotal && dist != null ? ` · ${dist.toFixed(1)} off` : ''}`)}
                             </Text>
                             <InjuryTag key={injTick} week={week} slug={p.slug} />
