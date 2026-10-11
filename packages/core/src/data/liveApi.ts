@@ -851,6 +851,12 @@ export interface BullseyeLeagueBoard {
   season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null } | null;
 }
 export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number }
+/** WEEKLY LEAGUES (v0.662.0, founder: "maybe have another filter for weekly
+ *  draft leagues"): the kinds where you build a fresh squad every week instead
+ *  of drafting a season roster — pods, showdowns, DFS and Bullseye leagues.
+ *  My Leagues and the league board filter on it. */
+export const WEEKLY_KINDS = ['pod', 'weekly', 'dfs', 'bullseye'] as const;
+export const isWeeklyKind = (kind?: string | null): boolean => !!kind && (WEEKLY_KINDS as readonly string[]).includes(kind);
 /** One line on what a Bullseye league is, for the board and its header. */
 export function bullseyeLeagueLine(b: BullseyeInfo): string {
   const span = b.span === 'week' ? `week ${b.week ?? '?'} only` : 'all season';
@@ -3607,6 +3613,13 @@ export const devRoomInvites = (roomId: string) =>
   rpc<Ok & { invites?: DevInvite[] }>('dev_room_invites', { p_room: roomId });
 export const devRoomInviteRevoke = (code: string) =>
   rpc<Ok>('dev_room_invite_revoke', { p_code: code });
+/** THE ROSTER (0464): every registered account and whether it's in the room —
+ *  admin only. Toggling is the only way in (invite codes are retired). */
+export interface DevUser { user_id: string; name: string; email: string | null; joined: string; in: boolean; role: 'member' | 'admin' | null; me: boolean }
+export const devRoomUsers = (roomId: string, search?: string) =>
+  rpc<Ok & { users?: DevUser[]; total?: number }>('dev_room_users', { p_room: roomId, p_search: search?.trim() || null, p_limit: 200 });
+export const devRoomSetMember = (roomId: string, userId: string, on: boolean) =>
+  rpc<Ok & { in?: boolean }>('dev_room_set_member', { p_room: roomId, p_user: userId, p_in: on });
 /** Admin (0463): open the room to every signed-in account, or close it again. */
 export const devRoomSetOpen = (roomId: string, open: boolean) =>
   rpc<Ok & { open?: boolean }>('dev_room_set_open', { p_room: roomId, p_open: open });

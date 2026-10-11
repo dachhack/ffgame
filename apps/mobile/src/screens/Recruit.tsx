@@ -21,7 +21,7 @@ import {
   postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat, setupLeagueCollege, setLeagueDevyOpen,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
-  myEnrollments, type Enrollment, bullseyeLeagueLine,
+  myEnrollments, type Enrollment, bullseyeLeagueLine, isWeeklyKind,
 } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
@@ -126,6 +126,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<BoardListing[] | null>(null);
+  // ALL / SEASON / WEEKLY (v0.662.0): weekly = a fresh squad every week.
+  const [kindFilter, setKindFilter] = useState<'all' | 'season' | 'weekly'>('all');
   const [myLeagues, setMyLeagues] = useState<AdminLeague[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -707,6 +709,13 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       {node === 'browse' && (
         <>
       {/* BROWSE */}
+      {rows.some((r) => isWeeklyKind(r.kind)) && (
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {([['all', 'ALL'], ['season', 'SEASON'], ['weekly', 'WEEKLY']] as const).map(([k, l]) => (
+            <Chip key={k} small label={l} on={kindFilter === k} onPress={() => { tap(); setKindFilter(k); }} />
+          ))}
+        </View>
+      )}
       {rows.length === 0 && (
         <Card>
           <Display size={14}>Nothing posted right now</Display>
@@ -715,7 +724,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
           </Mono>
         </Card>
       )}
-      {rows.map((r) => (
+      {rows.filter((r) => kindFilter === 'all' || (kindFilter === 'weekly') === isWeeklyKind(r.kind)).map((r) => (
         <Card key={r.league_id} style={{ borderLeftWidth: 3, borderLeftColor: r.mine ? t.bd : t.you }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Crest url={r.avatar_url} name={r.name} />

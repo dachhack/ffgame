@@ -168,3 +168,19 @@ contest is retired.
   and the room opens in place; ⤢ opens the full room.
 - "Accessible as a chip in league chats": 🛠 DEV beside LEAGUE / DIRECT, for
   anyone in a room.
+
+## 11. The roster, the chip, and weekly listings (v0.662.0, 0464)
+
+- "Pull up the list of registered site users and toggle them in the dev chat.
+  No other form of invite." The room's PEOPLE tab gives an admin every account
+  (`dev_room_users`, newest first, searchable by name or email), with an IN/OUT
+  switch each (`dev_room_set_member`). OUT is remembered, so an EVERYONE room
+  doesn't seat them again. Invite codes are retired: all are revoked and none
+  can be made. The EVERYONE switch stays.
+- "Make it actually a floating chip pinned to the bottom left": 🛠 DEV floats
+  over the leagues page on web and phone. Tap it and the room opens in a panel
+  above it; ⤢ opens the full room.
+- "Get rid of the weekly bullseye banner … findable and accessible like any
+  other league listing. Maybe have another filter for weekly draft leagues."
+  The banner is gone. My Leagues and the league board have a WEEKLY filter
+  (`isWeeklyKind`: pods, showdowns, DFS and Bullseye leagues).

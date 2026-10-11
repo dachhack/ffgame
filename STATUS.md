@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.662.0 — Dev chat: a floating chip and a roster; a WEEKLY filter instead of the Bullseye banner
+
+> - The dev chat is a floating 🛠 DEV chip at the bottom left of My Leagues.
+> - Admins add people to the dev chat by switching them on in a list of everyone signed up. Invite codes are gone.
+> - The weekly Bullseye banner is gone. My Leagues and the league board have a WEEKLY filter for build-a-squad-each-week leagues.
+
+- Migration 0464: `dev_room_users` (admin-only list of every app_user with IN
+  status, searchable), `dev_room_set_member` (in/out; out is remembered via
+  dev_room_left). Every invite code is revoked, and `dev_room_invite_create`
+  now refuses. Spec: docs/dfs-bullseye.md §11.
+- `DevRoomBar` is now a floating chip (web: fixed bottom-left; phone: absolute
+  over the leagues view, above the safe area) that opens the room in a panel.
+- Banner removed (web `BullseyeContestCard`, phone `BullseyeContestBanner`).
+  `isWeeklyKind` (pod/weekly/dfs/bullseye) drives the WEEKLY chip on My
+  Leagues (web and phone) and ALL/SEASON/WEEKLY on the board.
+
 ### v0.661.2 — The Android app gets updates again
 
 > - The Android app was stuck on v0.655.3; app updates now reach it again (no reinstall needed).

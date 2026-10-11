@@ -67,5 +67,16 @@ ok('phone: the bar sits under the leagues list', src('apps/mobile/App.tsx').incl
 ok('web chat: a 🛠 DEV chip for people in a room', /devRooms\.length \? \(\['league', 'dm', 'dev'\]/.test(src('src/app/chat.tsx')));
 ok('phone chat: a 🛠 DEV chip for people in a room', /devRooms\.length \? \(\['league', 'dm', 'dev'\]/.test(src('apps/mobile/src/ui/Chat.tsx')));
 
+// ── the roster, the chip, no invites (v0.662.0, 0464) ──────────────────────
+const sql4 = src('supabase/migrations/0464_dev_room_roster.sql');
+ok('roster: admin-only list of every registered account', /dev_room_users[\s\S]*?_dev_room_admin\(p_room\)[\s\S]*?from app_user/.test(sql4));
+ok('roster: toggling out is remembered, in clears it', sql4.includes('insert into dev_room_left') && sql4.includes('delete from dev_room_left'));
+ok('no other form of invite: codes revoked, none can be made', sql4.includes('update dev_room_invite set revoked = true') && /invite codes are retired/.test(sql4));
+for (const f of ['src/screens/DevRoom.tsx', 'apps/mobile/src/screens/DevRoom.tsx']) {
+  const s = src(f);
+  ok(`${f}: the roster toggles people in, and no invite-code UI is left`, s.includes('devRoomSetMember(') && !s.includes('devRoomInviteCreate(') && !s.includes('HAVE AN INVITE CODE'));
+  ok(`${f}: the dev chip floats, bottom left`, /position: 'fixed', left: 16, bottom: 16|position: 'absolute', left: 14, bottom/.test(s));
+}
+
 if (fails) { console.log(`\n${fails} DEV-ROOM ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DEV-ROOM ASSERTIONS PASSED');

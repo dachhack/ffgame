@@ -128,5 +128,13 @@ for (const f of ['src/screens/BullseyeLeague.tsx', 'apps/mobile/src/screens/Bull
   ok(`${f}: matchup, league, team, settings and commish rooms`, ['TeamRoom', 'LeagueRoom', 'SettingsRoom', 'CommishRoom', 'BullseyeSquad'].every((k) => src.includes(k)));
 }
 
+// ── weekly leagues are listings like any other (v0.662.0) ────────────────────
+const { isWeeklyKind } = await import('../packages/core/src/data/liveApi.ts');
+ok('weekly: pods, showdowns, DFS and Bullseye; a season league is not', ['pod', 'weekly', 'dfs', 'bullseye'].every(isWeeklyKind) && !isWeeklyKind('league') && !isWeeklyKind(null));
+ok('no weekly-contest banner on the leagues page', !read('src/screens/LiveOnboard.tsx').includes('<BullseyeContestCard') && !read('apps/mobile/src/screens/Leagues.tsx').includes('<BullseyeContestBanner'));
+for (const f of ['src/screens/LiveOnboard.tsx', 'apps/mobile/src/screens/Leagues.tsx', 'src/screens/LeagueBoard.tsx', 'apps/mobile/src/screens/Recruit.tsx']) {
+  ok(`${f}: a WEEKLY filter`, read(f).includes('WEEKLY') && read(f).includes('isWeeklyKind('));
+}
+
 if (fails) { console.log(`\n${fails} DFS-BULLSEYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DFS-BULLSEYE ASSERTIONS PASSED');
