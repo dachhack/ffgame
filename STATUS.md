@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.676.0 — Swap history, and a squad card to share
+
+> - Every change to a saved squad is remembered, spot by spot: who went out, who came in, when, and whether it was you, the commissioner, or the swap made for you when a player was ruled out. It shows under MY SQUAD; the rest of the league can see a seat's swaps once the week's squads unseal.
+> - Once the week's games are on, SHARE on your squad makes a card — your picks and their points, your ring and place, the result, and the league's join link — for the share sheet, or copied to paste anywhere.
+
+- HANDOFF's sixth not-done item, its last two parts. Migration 0478:
+  `contest_swap` (a row per changed spot; `swap` | `commish` | `sub`),
+  `_log_contest_swaps` called by save_contest_entry (0475's body) and
+  commish_set_contest_squad (0474's body); the worker's auto-sub
+  (contestSubs.js) writes `sub` rows from the plan's new `swaps`.
+  `contest_swaps(league, week, roster)`: own seat any time, another's once
+  `_week_first_lock` has passed, the commissioner's any. Core
+  `data/squadCard.ts` `squadCardText` (pure; cases in check:dfsbullseye).
+  Both builders: a SWAPS fold under MY SQUAD and ↗ SHARE on the live/final
+  card (web: the share sheet when the browser has one, else the clipboard;
+  phone: Share). `scripts/db/contest-swaps-probes.sql` on the full chain,
+  wired into the runner. NOT done: multiple entries per user for the huge
+  contests — one seat per user per league is assumed by contest_state,
+  save_contest_entry, contest_board's `me`, bullseye_my_weeks, the lock
+  reminder and the recap pushes, and both builders; it wants its own PR
+  (a `max_entries` rule, a roster parameter through those RPCs, a seat
+  switcher in the builder). No iPhone build needed.
+
 ### v0.675.0 — Prizes and dues, on the settings and the board
 
 > - A league's commissioner can now set what the places win — 1st, 2nd, a weekly high, up to eight lines — next to the dues under COMMISH; the league hears the list in chat.

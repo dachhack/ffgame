@@ -985,6 +985,11 @@ export const commishContestSquad = (leagueId: string, week: number, rosterId: nu
 export const commishSetContestSquad = (leagueId: string, week: number, rosterId: number, slots: Record<string, string | null>, note: string) =>
   tracked(rpcOk<{ ok: boolean; error?: string; in?: string[]; out?: string[]; spent?: number; rescore?: boolean }>('commish_set_contest_squad',
     { p_league: leagueId, p_week: week, p_roster: rosterId, p_slots: slots, p_note: note }), Ev.commishAction, { tool: 'contest_squad_fix' });
+/** SWAP HISTORY (0478): a seat's changes to a saved squad, newest first. Own
+ *  seat any time; another's once the week's squads unseal; the commissioner's any. */
+export interface SwapRow { id: number; slot: string; kind: 'swap' | 'commish' | 'sub'; at: string; out: string | null; out_name: string | null; in: string | null; in_name: string | null }
+export const contestSwaps = (leagueId: string, week: number, rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; week?: number; swaps?: SwapRow[] }>('contest_swaps', { p_league: leagueId, p_week: week, p_roster: rosterId ?? null });
 /** The search alone (0473): the first 20 teams whose name contains `q`, by
  *  rank, on the week board and (season leagues) the standings. */
 export const contestBoardFind = (leagueId: string, week: number | null | undefined, q: string) =>

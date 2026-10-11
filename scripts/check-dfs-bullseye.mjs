@@ -145,6 +145,21 @@ ok('contest: a bullseye league with no `contest` key is a Bullseye contest, lead
 })());
 ok('contest: a dfs league with no `contest` key is HIGH, head-to-head', C.contestConfigOf({}, 'dfs')?.contest === 'high' && C.contestConfigOf({}, 'dfs')?.format === 'h2h');
 ok('contest: not a contest without a kind or key', C.contestConfigOf({ game_mode: 'classic' }, 'league') === null);
+// THE SQUAD CARD (v0.676.0)
+{
+  const SC = await import('../packages/core/src/data/squadCard.ts');
+  const slots = [{ slot: 'S1', type: 'QB', pos: ['QB'] }, { slot: 'S2', type: 'RB', pos: ['RB'] }];
+  const names = { hurts: 'Jalen Hurts', barkley: 'Saquon Barkley' };
+  const base = { league: 'Kickoff Bullseye', week: 6, contest: 'bullseye', slots, labels: { S1: 'QB', S2: 'RB' }, picks: { S1: 'hurts', S2: 'barkley' },
+    nameOf: (s) => names[s] ?? s, scoreOf: (slot) => (slot === 'S1' ? 22.4 : null), total: 142.3, rank: 2, entries: 12, opponent: { team: 'Mud Dogs', score: 131 }, link: 'https://www.dripfantasy.com/?bullseye=ABCD1234' };
+  const t = SC.squadCardText({ ...base, status: 'final' });
+  ok('card: the head, a line per spot with points once played, the ring and place, the result, the link',
+    t === '🎯 Kickoff Bullseye · Week 6 · FINAL\nQB: Jalen Hurts 22.4\nRB: Saquon Barkley\nRing 142.3 ring · 2nd of 12\nvs Mud Dogs 131.0 — won\nJoin: https://www.dripfantasy.com/?bullseye=ABCD1234', t);
+  const g = SC.squadCardText({ ...base, contest: 'golf', status: 'final', total: 40, opponent: { team: 'Mud Dogs', score: 55 }, link: null, rank: null });
+  ok('card: golf wins low, says Total, and leaves out what it lacks', /⛳ Kickoff Bullseye/.test(g) && /Total 40.0 pts\nvs Mud Dogs 55.0 — won$/.test(g) && !/Join:/.test(g), g);
+  const pre = SC.squadCardText({ ...base, status: null, total: null, opponent: null, scoreOf: () => null });
+  ok('card: before kickoff it says squad set and shows no points', /· squad set\nQB: Jalen Hurts\nRB: Saquon Barkley\nJoin:/.test(pre), pre);
+}
 // PLAYOFFS (v0.674.0): a season head-to-head league plays the classic bracket by default
 {
   const h2h = C.contestConfigOf({ contest_format: 'h2h' }, 'dfs'), board = C.contestConfigOf({ contest_format: 'board' }, 'dfs');

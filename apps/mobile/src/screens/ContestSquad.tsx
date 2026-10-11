@@ -10,12 +10,15 @@
 // filter, the pool filter, your seat's rule), FILL FOR ME for the open spots,
 // and the week's injuries. The engine is engine/contestBuilder.ts.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
   contestState, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
+  contestSwaps, contestBoard, contestLeague, type SwapRow,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
 import { injuryFor } from '@drip/core/data/injuries';
+import { squadCardText } from '@drip/core/data/squadCard';
+import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
 import {
@@ -160,6 +163,13 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
       <Mono size={10.5} tone="you" weight="700" track={0.1} style={{ flex: 1 }} numberOfLines={1}>{st?.name ?? 'CONTEST'}</Mono>
     </View>
   );
+  // SWAP HISTORY (0478): my seat's changes this week, newest first.
+  const [swaps, setSwaps] = useState<SwapRow[]>([]);
+  const [showSwaps, setShowSwaps] = useState(false);
+  useEffect(() => {
+    if (!st?.ok || st.roster_id == null || st.week == null) return;
+    contestSwaps(leagueId, st.week, st.roster_id).then((r) => { if (r.ok) setSwaps(r.swaps ?? []); }).catch(() => {});
+  }, [leagueId, st?.ok, st?.roster_id, st?.week, saved]);
   if (!st) return <View style={{ flex: 1, backgroundColor: t.bg }}>{header}</View>;
   if (!st.ok || !setup?.cfg || !setup.slots.length || !ctx) {
     return (
@@ -196,6 +206,20 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
   const projTotal = Object.values(picks).reduce((s, slug) => s + (slug ? byPlayer.get(slug)?.proj ?? 0 : 0), 0);
   const week = st.week!;
 
+  // THE SQUAD CARD (v0.676.0): share the squad once the week's games are on.
+  const share = async () => {
+    if (!st?.ok || st.week == null) return;
+    const [bd, lgInfo] = await Promise.all([contestBoard(leagueId, st.week, 1, 0).catch(() => null), contestLeague(leagueId).catch(() => null)]);
+    const text = squadCardText({
+      league: st.name ?? 'Contest', week: st.week, contest: cfg.contest, status: st.matchup?.status === 'final' ? 'final' : st.started ? 'live' : null,
+      slots, labels, picks, nameOf: (slug) => bySlug.get(slug)?.name ?? slug,
+      scoreOf: (slot) => { const r = live.find((x) => x.slot === slot); return r ? r.score : null; },
+      total: myScore != null ? Number(myScore) : null, rank: bd?.me?.rank ?? null, entries: bd?.entries ?? null,
+      opponent: st.opponent ? { team: st.opponent.team, score: theirScore != null ? Number(theirScore) : null } : null,
+      link: lgInfo?.invite_code ? `${SITE_ORIGIN}/?bullseye=${lgInfo.invite_code}` : null,
+    });
+    try { await Share.share({ message: text }); } catch { /* dismissed */ }
+  };
   const save = async () => {
     if (filled < n) { setNote(`Fill all ${n} spots first.`); return; }
     setBusy(true); setNote(null);
@@ -277,6 +301,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
             <Display size={24}>{myScore != null ? Number(myScore).toFixed(1) : '—'}</Display>
             {bull && <Mono size={9} tone="faint">{`${myPoints.toFixed(1)} pts${isTotal && theCard ? ` · ${Math.abs(myPoints - theCard.total).toFixed(1)} off ${theCard.total}` : ''}`}</Mono>}
             {st.opponent && <Mono size={9} tone="dim">{`vs ${st.opponent.team ?? 'opponent'} · ${theirScore != null ? Number(theirScore).toFixed(1) : '—'}`}</Mono>}
+            <Chip small label="↗ SHARE" onPress={() => { tap(); void share(); }} />
             {tieBroken && <Mono size={8.5} tone="faint" style={{ width: '100%' }}>{`Tied on rings — settled by the tie-breaker (${myTbDist?.toFixed(1) ?? '—'} off vs ${(mySide === 'home' ? st.matchup!.away_tb : st.matchup!.home_tb)?.toFixed(1) ?? '—'} off).`}</Mono>}
           </Card>
         )}
@@ -312,6 +337,14 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
               </View>
             )}
           </View>
+          {swaps.length > 0 && (
+            <View style={{ gap: 2 }}>
+              <Pressable onPress={() => { tap(); setShowSwaps((v) => !v); }}><Mono size={9} tone="dim">{`🔁 ${swaps.length} SWAP${swaps.length === 1 ? '' : 'S'} THIS WEEK ${showSwaps ? '▲' : '▼'}`}</Mono></Pressable>
+              {showSwaps && swaps.map((x) => (
+                <Mono key={x.id} size={8.5} tone="faint">{`${new Date(x.at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })} · ${labels[x.slot] ?? x.slot}: ${x.out_name ? `out ${x.out_name}` : 'filled'}${x.in_name ? `, in ${x.in_name}` : ', emptied'}${x.kind === 'commish' ? ' — by the commissioner' : x.kind === 'sub' ? ' — swapped for you (ruled out)' : ''}`}</Mono>
+              ))}
+            </View>
+          )}
           {slots.map((d) => {
             const slug = picks[d.slot];
             const p = slug ? byPlayer.get(slug) : null;

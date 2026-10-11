@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.675.0` · migrations through `0477`_
+_Last updated: 2026-10-11 · Build `v0.676.0` · migrations through `0478`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -58,8 +58,13 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
   5. ~~Prizes and dues on the settings and the board~~ — done in v0.675.0
      (0477: `set_league_prizes`; the money on `_bullseye_info` and
      `league_board`; DUES & PRIZES on the contest COMMISH card).
-  6. Multiple entries per user for the huge contests; swap history; sharing a
-     squad card after squads unseal.
+  6. Multiple entries per user for the huge contests — still open (one seat
+     per user per league is assumed by contest_state, save_contest_entry,
+     contest_board's `me`, bullseye_my_weeks, the lock reminder, the recap
+     pushes and both builders; it wants a `max_entries` rule, a roster
+     parameter through those RPCs and a seat switcher in the builder).
+     ~~Swap history; sharing a squad card after squads unseal~~ — done in
+     v0.676.0 (0478 `contest_swap` / `contest_swaps`; `squadCardText`).
 
 ### The branch workflow this session used
 

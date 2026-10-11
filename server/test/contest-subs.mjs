@@ -33,6 +33,7 @@ ok('config: auto_sub reads from the settings, off by default', cfgOn.autoSub ===
 // A human, auto-sub on, 15 minutes before Dowdle's kickoff: swapped.
 const t15 = KICK_1PM - 15 * 60_000;
 const p1 = planSubs({ league, cfg: cfgOn, board, entries: [squad(1)], seats, kicks, outs, card: null, now: t15 });
+ok('plan: the swap history rows name the spot, who went out and who came in (0478)', p1.length === 1 && p1[0].swaps.length >= 1 && p1[0].swaps.every((x) => x.slot && x.in_slug && x.out_slug && p1[0].out.some((o) => o.slug === x.out_slug) && p1[0].in.some((i) => i.slug === x.in_slug)), p1[0]?.swaps);
 ok('human in the window: Dowdle out, the best affordable unlocked RB in', p1.length === 1 && p1[0].out[0].slug === 'dowdle' && p1[0].in.length === 1 && p1[0].in[0].slug === 'kamara', p1);
 ok('the swap keeps the rest of the squad', p1[0].starters_json.map((r) => r.player_slug).join() === 'burrow,kamara,shipley', p1[0].starters_json);
 ok('the plan names the owner for the push', p1[0].uid === 'u1' && p1[0].cpu === false);
