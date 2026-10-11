@@ -28,6 +28,9 @@ export interface ContestConfig {
   budget: number;
   /** Is there a cap at all? (v0.668.0: a Bullseye league may drop it.) */
   capped: boolean;
+  /** AUTO-SUB (v0.669.0): the worker swaps a ruled-out human pick just before
+   *  his kickoff. Opt-in per league (settings.auto_sub). */
+  autoSub: boolean;
   /** THE FLOOR (v0.668.0, golf): a squad must spend at least this; 0 = none.
    *  Founder: "the lowest-projected players who still play are also the
    *  cheapest, so the cap never binds" — the floor is golf's real constraint. */
@@ -55,6 +58,7 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const b = Number(s.budget);
   const capped = !(Number.isFinite(b) && b === 0);          // 0 stored = no cap
   const budget = !capped ? CONTEST_NO_CAP : Number.isFinite(b) && b >= 10000 ? Math.round(b / 100) * 100 : CONTEST_BUDGET_DEFAULT;
+  const autoSub = s.auto_sub === true;
   const ms = Number(s.min_spend);
   const minSpend = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 100) * 100 : 0;
   const spec = Array.isArray(s.roster_slots) && s.roster_slots.length ? s.roster_slots as SlotSpec[] : CONTEST_DEFAULT_SLOTS;
@@ -62,7 +66,7 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const bullseye = contest === 'bullseye'
     ? (bullseyeConfigOf({ bullseye: (s.bullseye as string) ?? 'slots', bullseye_radius: (s.bullseye_radius as number) ?? null }) ?? bullseyeConfigOf({ bullseye: 'slots' }))
     : null;
-  return { contest, format, budget, capped, minSpend, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null };
+  return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null };
 }
 
 export const CONTEST_WORD: Record<ContestKind, string> = { high: 'HIGHEST SCORE', golf: 'GOLF · LOWEST SCORE', bullseye: 'BULLSEYE' };

@@ -262,17 +262,18 @@ export async function ensurePods(week, season, idx) {
   // and the auto-sub below. A human's squad is theirs until his game locks.
   const outs = await ruledOutSlugs().catch(() => new Set());
   const playable = board.filter((r) => !outs.has(r.slug));
-  const teamLocked = (team) => { const k = kicks?.[String(team ?? '').toUpperCase()]; return Number.isFinite(k) && k - config.lockLeadMs <= Date.now(); };
-
   const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON).catch(() => null);
-  // Same 1h-before-kickoff lead as league matchups (config.lockLeadMs).
-  const lockAt = lockMs ? new Date(lockMs - config.lockLeadMs).toISOString() : null;
-  const lockPassed = lockMs != null && lockMs - config.lockLeadMs <= Date.now();
 
   let dealt = 0, made = 0, subbed = 0;
   for (const pod of pods) {
     const contest = pod.kind === 'dfs' || pod.kind === 'bullseye' ? contestConfigOf(pod.settings_json, pod.kind) : null;
     if (contest && contest.format === 'board') continue;
+    // THE LOCK LEAD (v0.669.0): a drip pod seals picks an hour before kickoff;
+    // a contest player locks AT his kickoff, like any DFS site.
+    const lead = contest ? 0 : config.lockLeadMs;
+    const teamLocked = (team) => { const k = kicks?.[String(team ?? '').toUpperCase()]; return Number.isFinite(k) && k - lead <= Date.now(); };
+    const lockAt = lockMs ? new Date(lockMs - lead).toISOString() : null;
+    const lockPassed = lockMs != null && lockMs - lead <= Date.now();
     const contestCardNow = contest?.contest === 'bullseye' ? contestCard(pod.id, week, contest.slots, leagueCatalogOf({ scoring: pod.settings_json?.scoring_classic ?? null, ppr: pod.settings_json?.ppr })) : null;
     // DFS Bullseye (0462): AI seats and no-shows AIM at the card instead.
     const bullCfg = contest ? null : dfsBullseyeConfigOf(pod.settings_json);
@@ -338,7 +339,8 @@ export async function ensurePods(week, season, idx) {
           if (!hurt.length) continue;
           const keep = Object.fromEntries(contest.slots.map((d) => [d.slot, null]));
           for (const r of rowsE) if (r?.slot in keep && r.player_slug && !hurt.includes(r)) keep[r.slot] = r.player_slug;
-          const built = contestAutoBuild(playable.filter((b) => !teamLocked(b.team)), contest, `${pod.id}|w${week}|sub${e.roster_id}|${hurt.map((h) => h.player_slug).join(',')}`, contestCardNow, keep);
+          const keptSlugs = new Set(Object.values(keep).filter(Boolean));
+          const built = contestAutoBuild(playable.filter((b) => keptSlugs.has(b.slug) || !teamLocked(b.team)), contest, `${pod.id}|w${week}|sub${e.roster_id}|${hurt.map((h) => h.player_slug).join(',')}`, contestCardNow, keep);
           const changed = contest.slots.some((d) => built[d.slot] !== keep[d.slot]);
           if (!changed) continue;
           fixes.push({ league_id: pod.id, week, roster_id: e.roster_id,

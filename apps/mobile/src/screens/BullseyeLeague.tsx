@@ -387,7 +387,7 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
     `${CONTEST_EMOJI[b.contest]} ${CONTEST_WORD[b.contest]} · ${CONTEST_FORMAT_WORD[b.format]}${b.format === 'h2h' ? ' — paired against one opponent each week' : ' — everyone ranked each week'}.`,
     ...(spotsLine ? [spotsLine] : []),
     rule,
-    'Each player locks an hour before his own game. Until then you can swap him.',
+    `Each player locks at his own kickoff. Until then you can swap him — including one ruled out.${b.auto_sub ? ' If you don’t, a ruled-out player is swapped for you in the minutes before his game.' : ''}`,
     ...(b.format === 'h2h' ? ['Your opponent’s picks are sealed: each shows once his game locks.'] : []),
     ...(b.contest === 'bullseye' ? ['Ties are settled by your tie-breaker: one RB or WR spot with its own number, shown before you build. Closer wins.'] : []),
     b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`,
