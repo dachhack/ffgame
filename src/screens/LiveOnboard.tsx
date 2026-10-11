@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BullseyeContestCard, BullseyeSquad, SquadScreen } from './BullseyeContest';
+import { BullseyeSquad, SquadScreen } from './BullseyeContest';
 import { DevRoomBar, DevRoomScreen } from './DevRoom';
 import { BullseyeLeaguePage, BullseyeStart } from './BullseyeLeague';
 import { useStore } from '../app/store';
@@ -9,7 +9,7 @@ import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
   pendingAuthUrlError, clearAuthUrlError, authErrorMessage, type AuthUrlError,
   getSession, onAuth, ensureAppUser,
-  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, joinBullseye, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
+  previewLeague, redeemPreview, redeemInvite, joinLeague, nativeJoin, joinPod, joinWeekly, joinDfs, joinBullseye, isWeeklyKind, createDfsLeague, redeemSoloPass, myFeatures, myEnrollments, adminUserTeams, myLinkedSleeper, claimMyRosters, requestMemberSync, signupOpen,
   inviteSeats, claimPlatformSeat, type InviteSeat,
   redeemCommish, isAdmin, commishOverview, adminUserCommishLeagues, adminUserFeatures, friendlyError, deleteMockDraft, myWaitlist, adminUserWaitlist, type WaitlistRow,
   myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
@@ -1135,7 +1135,6 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
   return (
     <>
-    {!viewAs && <BullseyeContestCard onOpen={(leagueId, week) => { setBullTarget({ leagueId, week }); setView('bullseye'); }} />}
     <LeagueHome
       enrollments={enrollments}
       commishLeagues={commishLeagues}
@@ -1215,7 +1214,7 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
   /** league_id → the league's widget picture (v0.510.0): projected finals, or the drip lineup. */
   glance: Record<string, WidgetSnapshot>;
 }) {
-  const [filter, setFilter] = useState<'all' | 'commish'>('all');
+  const [filter, setFilter] = useState<'all' | 'commish' | 'weekly'>('all');
   // Which phone this is, for the app chips below — read once per mount.
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
   // How many seats you hold per league (v0.635.2): past one, each card names
@@ -1228,8 +1227,11 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
   const enrolledPlayer = enrollments.filter((e) => !commishIds.has(e.league_id));
   const total = enrollments.length + commishOnly.length;
   const commishCount = enrolledCommish.length + commishOnly.length;
+  // WEEKLY (v0.662.0): squad-every-week leagues — pods, showdowns, DFS, Bullseye.
+  const weekly = (e: Enrollment) => isWeeklyKind(e.league?.kind);
+  const weeklyCount = enrollments.filter(weekly).length;
 
-  const chip = (id: 'all' | 'commish', label: string, n: number) => (
+  const chip = (id: 'all' | 'commish' | 'weekly', label: string, n: number) => (
     <button onClick={() => setFilter(id)} className="mono" style={{
       fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
       color: filter === id ? 'var(--on-accent)' : 'var(--dim)', background: filter === id ? 'var(--you)' : 'var(--surface)',
@@ -1283,7 +1285,9 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
           button would disappear for exactly the people most likely to be adding
           a second league. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-        {isCommish && <>{chip('all', 'ALL', total)}{chip('commish', 'COMMISH', commishCount)}</>}
+        {(isCommish || weeklyCount > 0) && chip('all', 'ALL', total)}
+        {isCommish && chip('commish', 'COMMISH', commishCount)}
+        {weeklyCount > 0 && chip('weekly', 'WEEKLY', weeklyCount)}
         {/* FIND and ADD, the app's chips (v0.632.1, founder: "copy the app
             'add' and 'find' chips on the web version … so there is just one
             line under 'your leagues'"). The verbs carry it, as on the phone;
@@ -1318,12 +1322,12 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
       {total > 0 && <HeroesVillains snaps={Object.values(glance)} />}
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
-        {commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
-        {enrolledCommish.map((e) => e.league?.is_mock
+        {filter !== 'weekly' && commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
+        {enrolledCommish.filter((e) => filter !== 'weekly' || weekly(e)).map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
           : <LeagueCard key={enrollKey(e)} e={e} commish slate={slate[enrollKey(e)]} glance={glance[enrollKey(e)]} seats={seatsIn[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}
-        {filter === 'all' && enrolledPlayer.map((e) => e.league?.is_mock
+        {filter !== 'commish' && enrolledPlayer.filter((e) => filter !== 'weekly' || weekly(e)).map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
           : <LeagueCard key={enrollKey(e)} e={e} commish={false} slate={slate[enrollKey(e)]} glance={glance[enrollKey(e)]} seats={seatsIn[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
         )}

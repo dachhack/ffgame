@@ -4,13 +4,12 @@
 // this app had one screen — it picked `myRoster()`, the FIRST enrolled
 // membership, which is arbitrary the moment you're in more than one league, and
 // it gave you no way to reach the others.
-import { BullseyeContestBanner } from './BullseyeContest';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { crestInitial } from '@drip/core/data/crest';
 import {
   myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, setLeagueArchived,
-  leagueDetailLine, leagueTypeLine, leagueLandingRoom, myLeagueSlate,
+  leagueDetailLine, leagueTypeLine, leagueLandingRoom, myLeagueSlate, isWeeklyKind,
   type AdminLeague, type Enrollment, type WaitlistRow, type LeagueSlateRow,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
@@ -57,7 +56,7 @@ function Crest({ url, name, size }: { url?: string | null; name?: string | null;
   );
 }
 
-export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseye, onBullseyeStart }: {
+export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
   userId: string;
   /** rosterId is null for a league you commission WITHOUT a team — it opens
    *  into management (draft + team tools), not a lineup it doesn't have.
@@ -99,7 +98,8 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseye, onBullseye
   const [refreshing, setRefreshing] = useState(false);
   // ALL vs ⚑ COMMISH — same two-chip filter the web's league home has. Only
   // rendered when you actually commission something; a pure player never sees it.
-  const [filter, setFilter] = useState<'all' | 'commish'>('all');
+  const [filter, setFilter] = useState<'all' | 'commish' | 'weekly'>('all');
+  const weeklyN = (rows ?? []).filter((e) => !e.archived && isWeeklyKind(e.league?.kind)).length;
   // 0347 · THE SHELF SHOWS THE WEEK. Founder, with Sleeper's list open: "Matchup
   // summary per league and a notification for unread chats." One call for every
   // league's current fixture AND its unread counts — it replaced a `chat_unread`
@@ -210,7 +210,6 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseye, onBullseye
       </View>
 
       {/* 🛠 THE DEV ROOM moved to a bar along the bottom (v0.661.0) — App.tsx. */}
-      {onBullseye && <BullseyeContestBanner key={refreshing ? 'br' : 'bn'} onOpen={onBullseye} />}
 
       {/* cross-league chat inbox (0154 polish): every league with unread chat,
           one tap from anywhere to the conversation it belongs to. */}
@@ -257,10 +256,14 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseye, onBullseye
           safety net: a future label that outgrows the row should fold, not
           clip. */}
       <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4, flexWrap: 'wrap' }}>
-        {(commishIds.size > 0 || managed.length > 0) && (<>
+        {(commishIds.size > 0 || managed.length > 0 || weeklyN > 0) && (
           <Chip label={`ALL ${rows.filter((e) => !e.archived).length + managed.length}`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
+        )}
+        {(commishIds.size > 0 || managed.length > 0) && (
           <Chip label={`COMMISH ${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length}`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
-        </>)}
+        )}
+        {/* WEEKLY (v0.662.0): squad-every-week leagues — pods, showdowns, DFS, Bullseye. */}
+        {weeklyN > 0 && <Chip label={`WEEKLY ${weeklyN}`} on={filter === 'weekly'} onPress={() => { tap(); setFilter('weekly'); }} />}
         <Chip label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard('browse'); }} />
         <Chip label="ADD" a11y="Add a league" onPress={() => { tap(); onAdd(); }} />
       </View>
@@ -284,7 +287,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseye, onBullseye
         </Card>
       )}
 
-      {rows.filter((e) => !e.archived).filter((e) => filter === 'all' || commishIds.has(e.league_id)).map((e) => {
+      {rows.filter((e) => !e.archived).filter((e) => filter === 'all' || (filter === 'commish' ? commishIds.has(e.league_id) : isWeeklyKind(e.league?.kind))).map((e) => {
         const lg = e.league;
         const seat = seatKey(e.league_id, e.sleeper_roster_id);
         return (
@@ -384,7 +387,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseye, onBullseye
       {/* Leagues I run without playing in — the commissioner-without-a-team
           case. Amber accent instead of green: this is a management door, not a
           lineup to set. */}
-      {managed.map((l) => (
+      {filter !== 'weekly' && managed.map((l) => (
         <Pressable
           key={`mgmt-${l.league_id}`}
           onPress={() => { tap(); onOpen(l.league_id, null, l.name, l.provider === 'native', true); }}

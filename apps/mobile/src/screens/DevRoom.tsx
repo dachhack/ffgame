@@ -6,14 +6,15 @@
 // Reached from the gear (everyone: a tester types their code there) and from
 // the leagues list (members and admins, with the unread count).
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import {
-  devRoomsMine, devRoomCreate, devRoomJoin, devRoomMessages, devRoomPost, devRoomTag, devRoomDelete,
-  devRoomMembers, devRoomRemove, devRoomInviteCreate, devRoomInvites, devRoomInviteRevoke, devRoomSetOpen, friendlyError,
-  type DevRoom, type DevMessage, type DevMember, type DevInvite, type DevTag,
+  devRoomsMine, devRoomCreate, devRoomMessages, devRoomPost, devRoomTag, devRoomDelete,
+  devRoomMembers, devRoomRemove, devRoomSetOpen, devRoomUsers, devRoomSetMember, friendlyError,
+  type DevRoom, type DevMessage, type DevMember, type DevTag, type DevUser,
 } from '@drip/core/data/liveApi';
-import { devRoomInviteMessage, cleanDevCode, issueUrl, TAG_LABEL } from '@drip/core/data/devRoom';
+import { issueUrl, TAG_LABEL } from '@drip/core/data/devRoom';
 import { useTheme } from '../theme.native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Display, Mono } from '../ui/prims';
 
@@ -42,46 +43,45 @@ export function DevRoomBanner({ onOpen }: { onOpen: (roomId: string | null) => v
   );
 }
 
-/** THE BAR (v0.661.0) — the web twin's note: "dev chat live as a bar at the
- *  bottom of the my leagues page for people in dev." Pinned under the leagues
- *  list; tap it and the room rises over the bottom of the screen. */
+/** THE CHIP (v0.662.0) — the web twin's note: "a floating chip pinned to the
+ *  bottom left". It floats over the leagues list; tap it and the room rises
+ *  in a panel above it, ⤢ opens the full room. Absolute inside the shell's
+ *  leagues view, so it never covers a league's own room bar. */
 export function DevRoomBar({ onOpenFull }: { onOpenFull: (roomId: string | null) => void }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
   const [rooms, setRooms] = useState<DevRoom[] | null>(null);
   const [canCreate, setCanCreate] = useState(false);
   const [open, setOpen] = useState(false);
-  const [last, setLast] = useState<DevMessage | null>(null);
   const read = useCallback(() => devRoomsMine().then((r) => { if (r.ok) { setRooms(r.rooms ?? []); setCanCreate(!!r.can_create); } }).catch(() => {}), []);
   useEffect(() => { void read(); const iv = setInterval(() => { void read(); }, 30_000); return () => clearInterval(iv); }, [read]);
-  const first = rooms?.[0]?.id ?? null;
-  useEffect(() => {
-    // The newest line for the folded bar — only with nothing unread, since
-    // reading the latest page marks the room read.
-    if (!first || open || (rooms?.[0]?.unread ?? 0) > 0) return;
-    devRoomMessages(first).then((r) => { if (r.ok) setLast(r.messages?.[0] ?? null); }).catch(() => {});
-  }, [first, open, rooms]);
   if (!rooms || (!rooms.length && !canCreate)) return null;
   const unread = rooms.reduce((n, r) => n + r.unread, 0);
+  const bottom = 14 + insets.bottom;
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: t.bd, backgroundColor: t.surface }}>
+    <>
       {open && rooms.length > 0 && (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ height: 420, paddingTop: 8 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ position: 'absolute', left: 10, right: 10, bottom: bottom + 52, height: 460, zIndex: 20,
+            backgroundColor: t.surface, borderWidth: 1, borderColor: t.bd, borderRadius: 14, paddingTop: 10, overflow: 'hidden',
+            shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingBottom: 6 }}>
+            <Mono size={10.5} tone="you" weight="700" track={0.08} style={{ flex: 1 }}>{`🛠 ${rooms.length === 1 ? rooms[0].name.toUpperCase() : 'DEV ROOM'}`}</Mono>
+            <Chip small label="⤢" a11y="Open the full room" onPress={() => { tap(); setOpen(false); onOpenFull(rooms.length === 1 ? rooms[0].id : null); }} />
+            <Chip small label="✕" a11y="Close" onPress={() => { tap(); setOpen(false); void read(); }} />
+          </View>
           <DevRoomPanel rooms={rooms} />
         </KeyboardAvoidingView>
       )}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
-        <Pressable accessibilityRole="button" style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-          onPress={() => { tap(); if (!rooms.length) { onOpenFull(null); return; } setOpen((o) => !o); if (open) void read(); }}>
-          <Mono size={10.5} tone="you" weight="700" track={0.08}>{`🛠 ${rooms.length === 1 ? rooms[0].name.toUpperCase() : 'DEV ROOM'}`}</Mono>
-          <Mono size={9} tone="faint" numberOfLines={1} style={{ flex: 1 }}>
-            {!rooms.length ? 'make one and invite testers' : open ? 'tap to fold away' : unread > 0 ? `${unread} new` : last ? `${last.mine ? 'you' : last.author}: ${last.body}` : 'say what you’d change — 💡 or 🐞 logs it'}
-          </Mono>
-          {!open && unread > 0 && <Mono size={9} weight="700" style={{ color: t.bg, backgroundColor: t.you, borderRadius: 9, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' }}>{unread}</Mono>}
-          <Mono size={10} tone="faint">{open ? '▾' : '▴'}</Mono>
-        </Pressable>
-        {rooms.length > 0 && <Chip small label="⤢" a11y="Open the full room" onPress={() => { tap(); onOpenFull(rooms.length === 1 ? rooms[0].id : null); }} />}
-      </View>
-    </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Dev room"
+        onPress={() => { tap(); if (!rooms.length) { onOpenFull(null); return; } setOpen((o) => !o); if (open) void read(); }}
+        style={{ position: 'absolute', left: 14, bottom, zIndex: 21, flexDirection: 'row', alignItems: 'center', gap: 6,
+          backgroundColor: open ? t.you : t.surface, borderWidth: 1, borderColor: t.you, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9,
+          shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}>
+        <Mono size={11} weight="700" track={0.06} style={{ color: open ? t.bg : t.you }}>{rooms.length ? '🛠 DEV' : '🛠 DEV ROOM'}</Mono>
+        {unread > 0 && !open && <Mono size={9} weight="700" style={{ color: t.bg, backgroundColor: t.you, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' }}>{String(unread)}</Mono>}
+      </Pressable>
+    </>
   );
 }
 
@@ -132,7 +132,6 @@ function Field(props: React.ComponentProps<typeof TextInput>) {
 function RoomList({ onPick }: { onPick: (id: string) => void }) {
   const [rooms, setRooms] = useState<DevRoom[]>([]);
   const [canCreate, setCanCreate] = useState(false);
-  const [code, setCode] = useState('');
   const [name, setName] = useState('Drip Dev');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -155,14 +154,7 @@ function RoomList({ onPick }: { onPick: (id: string) => void }) {
           </Card>
         </Pressable>
       ))}
-      <Card style={{ gap: 8 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>HAVE AN INVITE CODE?</Mono>
-        <Mono size={9} tone="faint">The dev room is invite-only. Enter the code you were sent.</Mono>
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Field value={code} onChangeText={setCode} placeholder="ABCD1234" autoCapitalize="characters" autoCorrect={false} style={{ flex: 1 }} />
-          <Chip label="JOIN" on disabled={busy || cleanDevCode(code).length < 8} onPress={() => { tap(); void run(() => devRoomJoin(cleanDevCode(code))); }} />
-        </View>
-      </Card>
+      {!rooms.length && !canCreate && <Mono size={10} tone="faint">The dev room is by invitation: an admin switches you on.</Mono>}
       {canCreate && (
         <Card style={{ gap: 8 }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>MAKE A ROOM (ADMIN)</Mono>
@@ -287,16 +279,14 @@ function Room({ roomId, onLeft }: { roomId: string; onLeft: () => void }) {
   );
 }
 
-function People({ roomId, roomName, onLeft }: { roomId: string; roomName: string; onLeft: () => void }) {
+function People({ roomId, onLeft }: { roomId: string; roomName: string; onLeft: () => void }) {
   const [members, setMembers] = useState<DevMember[]>([]);
   const [admin, setAdmin] = useState(false);
-  const [invites, setInvites] = useState<DevInvite[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const load = useCallback(async () => {
     const r = await devRoomMembers(roomId);
     if (!r.ok) { setErr(r.error ?? 'Couldn’t read the members.'); return; }
     setMembers(r.members ?? []); setAdmin(!!r.admin);
-    if (r.admin) { const i = await devRoomInvites(roomId); if (i.ok) setInvites(i.invites ?? []); }
   }, [roomId]);
   useEffect(() => { void load().catch((e) => setErr(friendlyError(e))); }, [load]);
   const act = async (p: Promise<{ ok: boolean; error?: string }>) => {
@@ -304,61 +294,86 @@ function People({ roomId, roomName, onLeft }: { roomId: string; roomName: string
     if (!r.ok) setErr(r.error ?? 'That didn’t work.'); else { setErr(null); await load(); }
     return r.ok;
   };
-  const share = async (code: string) => {
-    try { await Share.share({ message: devRoomInviteMessage({ room: roomName, code }) }); } catch (e) { setErr(friendlyError(e)); }
-  };
   const confirm = (title: string, verb: string, go: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Cancel', style: 'cancel' }, { text: verb, style: 'destructive', onPress: go }]);
   const me = members.find((m) => m.me);
-  // OPEN TO EVERYONE (0463): "Let me turn it on for platform registered users."
+  // OPEN TO EVERYONE (0463).
   const [openAll, setOpenAll] = useState<boolean | null>(null);
   useEffect(() => { devRoomsMine().then((r) => { if (r.ok) setOpenAll(!!r.rooms?.find((x) => x.id === roomId)?.open); }).catch(() => {}); }, [roomId]);
   const setOpen = async (on: boolean) => { if (await act(devRoomSetOpen(roomId, on))) setOpenAll(on); };
   return (
-    <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 60 }}>
+    <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
       {err && <Mono size={10} tone="warn">{err}</Mono>}
       {admin && openAll !== null && (
         <Card style={{ gap: 8 }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>WHO’S IN</Mono>
-          <Mono size={10} tone="dim">{openAll ? 'Everyone signed in — anyone who leaves stays out until invited back.' : 'Invited people only.'}</Mono>
+          <Mono size={10} tone="dim">{openAll ? 'Everyone signed in — anyone you take out stays out.' : 'Only the people you switch on below.'}</Mono>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Chip small label="INVITE ONLY" on={!openAll} onPress={() => { tap(); void setOpen(false); }} />
+            <Chip small label="PICKED" on={!openAll} onPress={() => { tap(); void setOpen(false); }} />
             <Chip small label="EVERYONE" on={openAll} onPress={() => { tap(); confirm('Open this room to every signed-in player? Tagged lines become public GitHub issues.', 'Open it', () => void setOpen(true)); }} />
           </View>
         </Card>
       )}
-      {admin && (
+      {admin ? <Roster roomId={roomId} onChanged={() => void load()} /> : (
         <Card style={{ gap: 8 }}>
-          <Mono size={9} tone="faint" weight="700" track={0.1}>INVITE PEOPLE</Mono>
-          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <Chip label="＋ ONE-PERSON CODE" on onPress={() => { tap(); void act(devRoomInviteCreate(roomId, 1)); }} />
-            <Chip label="＋ REUSABLE CODE" onPress={() => { tap(); void act(devRoomInviteCreate(roomId, null)); }} />
-          </View>
-          {invites.map((i) => (
-            <View key={i.code} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 6 }}>
-              <Mono size={12} weight="700" track={0.1} tone="text">{i.code}</Mono>
-              <Mono size={8.5} tone="faint" style={{ flex: 1 }}>{i.max_uses == null ? `used ${i.uses}× · reusable` : `${i.uses}/${i.max_uses} used`}</Mono>
-              <Chip small label="SHARE" onPress={() => { tap(); void share(i.code); }} />
-              <Chip small dim label="REVOKE" onPress={() => { tap(); confirm(`Revoke ${i.code}?`, 'Revoke', () => void act(devRoomInviteRevoke(i.code))); }} />
+          <Mono size={9} tone="faint" weight="700" track={0.1}>{`MEMBERS (${members.length})`}</Mono>
+          {members.map((m) => (
+            <View key={m.user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Display size={13} style={{ flex: 1 }}>{`${m.name}${m.me ? ' (you)' : ''}`}</Display>
+              {m.role === 'admin' && <Mono size={8.5} tone="you">ADMIN</Mono>}
             </View>
           ))}
         </Card>
       )}
-      <Card style={{ gap: 8 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>{`MEMBERS (${members.length})`}</Mono>
-        {members.map((m) => (
-          <View key={m.user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Display size={13} style={{ flex: 1 }}>{`${m.name}${m.me ? ' (you)' : ''}`}</Display>
-            {m.role === 'admin' && <Mono size={8.5} tone="you">ADMIN</Mono>}
-            {admin && !m.me && (
-              <Chip small dim label="REMOVE" onPress={() => { tap(); confirm(`Remove ${m.name}?`, 'Remove', () => void act(devRoomRemove(roomId, m.user_id))); }} />
-            )}
-          </View>
-        ))}
-      </Card>
-      {me && (
-        <Chip dim label="LEAVE THE ROOM" onPress={() => { tap(); confirm('Leave the dev room? You’ll need a new invite to come back.', 'Leave', async () => { if (await act(devRoomRemove(roomId, me.user_id))) onLeft(); }); }} />
+      {me && !admin && (
+        <Chip dim label="LEAVE THE ROOM" onPress={() => { tap(); confirm('Leave the dev room? An admin can add you back.', 'Leave', async () => { if (await act(devRoomRemove(roomId, me.user_id))) onLeft(); }); }} />
       )}
     </ScrollView>
+  );
+}
+
+/** THE ROSTER (v0.662.0) — the web twin's note: every registered account, a
+ *  switch each; the only way into the room. */
+function Roster({ roomId, onChanged }: { roomId: string; onChanged: () => void }) {
+  const t = useTheme();
+  const [users, setUsers] = useState<DevUser[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = useCallback(async (search: string) => {
+    const r = await devRoomUsers(roomId, search);
+    if (!r.ok) { setErr(r.error ?? 'Couldn’t read the accounts.'); return; }
+    setErr(null); setUsers(r.users ?? []); setTotal(r.total ?? 0);
+  }, [roomId]);
+  useEffect(() => { const h = setTimeout(() => { void load(q).catch((e) => setErr(friendlyError(e))); }, 250); return () => clearTimeout(h); }, [load, q]);
+  const flip = async (u: DevUser) => {
+    setBusy(u.user_id);
+    const r = await devRoomSetMember(roomId, u.user_id, !u.in).catch((e) => ({ ok: false, error: friendlyError(e) }));
+    setBusy(null);
+    if (!r.ok) { setErr(r.error ?? 'That didn’t work.'); return; }
+    setUsers((list) => (list ?? []).map((x) => (x.user_id === u.user_id ? { ...x, in: !u.in } : x)));
+    onChanged();
+  };
+  const inCount = (users ?? []).filter((u) => u.in).length;
+  return (
+    <Card style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+        <Mono size={9} tone="faint" weight="700" track={0.1} style={{ flex: 1 }}>REGISTERED PLAYERS</Mono>
+        <Mono size={9} tone="faint">{`${inCount} in · ${total} accounts`}</Mono>
+      </View>
+      <Field value={q} onChangeText={setQ} placeholder="Search a name or email…" autoCapitalize="none" autoCorrect={false} />
+      {err && <Mono size={10} tone="warn">{err}</Mono>}
+      {!users && <Mono size={9} tone="faint">Loading…</Mono>}
+      {(users ?? []).map((u) => (
+        <View key={u.user_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: t.bd, paddingTop: 7 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={{ fontSize: 14, color: t.text, fontWeight: u.in ? '700' : '400' }}>{`${u.name}${u.me ? ' (you)' : ''}${u.role === 'admin' ? ' · admin' : ''}`}</Text>
+            {!!u.email && <Mono size={8.5} tone="faint" numberOfLines={1}>{u.email}</Mono>}
+          </View>
+          <Chip small on={u.in} disabled={busy === u.user_id || (u.me && u.in)} label={u.in ? 'IN' : 'OUT'} onPress={() => { tap(); void flip(u); }} />
+        </View>
+      ))}
+    </Card>
   );
 }

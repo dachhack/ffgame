@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   leagueBoard, leaguePreview, joinFromBoard, postLeagueListing, closeLeagueListing, leagueListingState,
   type LeagueIdentity,
-  commishOverview, friendlyError, bullseyeLeagueLine,
+  commishOverview, friendlyError, bullseyeLeagueLine, isWeeklyKind,
   type BoardListing, type BoardPreview, type AdminLeague,
 } from '@drip/core/data/liveApi';
 
@@ -59,6 +59,8 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
   const [postFor, setPostFor] = useState<AdminLeague | null>(null);
   const [blurbDraft, setBlurbDraft] = useState('');
   const [duesDraft, setDuesDraft] = useState('');
+  // ALL / SEASON / WEEKLY (v0.662.0): weekly = a fresh squad every week.
+  const [kindFilter, setKindFilter] = useState<'all' | 'season' | 'weekly'>('all');
 
   const load = useCallback(async () => {
     setErr(null);
@@ -135,6 +137,16 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
         </div>
       )}
 
+      {rows.some((r) => isWeeklyKind(r.kind)) && (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 12 }}>
+          {([['all', 'ALL'], ['season', 'SEASON'], ['weekly', 'WEEKLY']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setKindFilter(k)} className="mono" style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', borderRadius: 999, padding: '5px 11px',
+              color: kindFilter === k ? 'var(--on-accent)' : 'var(--dim)', background: kindFilter === k ? 'var(--you)' : 'var(--surface)',
+              border: `1px solid ${kindFilter === k ? 'var(--you)' : 'var(--bd)'}` }}>{l}</button>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {rows.length === 0 && (
           <div style={{ ...card, textAlign: 'center' }}>
@@ -143,7 +155,7 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
             </div>
           </div>
         )}
-        {rows.map((r) => (
+        {rows.filter((r) => kindFilter === 'all' || (kindFilter === 'weekly') === isWeeklyKind(r.kind)).map((r) => (
           <div key={r.league_id} style={card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {r.avatar_url
