@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.682.1 — The felt follows the colour theme
+
+> - The phone's contest card table now colours its felt the way the web does: the chosen deck's felt blended into your colour theme's ground, with the YOU and OPP accents glowing in from two corners. On the light themes (Feeling Lucky, Arctic Journey) the table goes pale, as the web's does.
+> - The numbers and labels on the felt, on both the web and the phone, now take the theme's own text and accent colours instead of fixed white, gold and pink, so they read on every theme.
+
+Founder: "Can we vary the felt color with color scheme as well? Do we have
+colors picked for drip leagues?" The web's kit already did (`cardTable.tsx`:
+`--ct-felt` 80% over `--bg`, the blobs tinted `--you` / `--opp`, and the
+`data-card-light` pale ground), so the contest table there only needed its
+text moved onto the theme's properties. The phone's `FeltTable`
+(`ui/ContestCards.tsx`) ports the recipe with `mix` / `alpha` from
+`theme.native` and three `react-native-svg` radial gradients (the two accent
+glows and the vignette), light themes detected by the ground's luminance.
+Both `ContestMatchup` and `ContestSquad` screens drop their hardcoded
+on-felt colours for `t.text` / `t.you` / `t.opp` (phone) and `var(--text)`
+/ `var(--you)` / `var(--opp)` (web). react-native-svg was already in the
+app: no iPhone build.
+
 ### v0.682.0 — Multiple entries per member
 
 > - A leaderboard contest can let one member field more than one squad: the commissioner sets ENTRIES PER MEMBER (1–50) on the COMMISH card. Head-to-head stays one, since an opponent is a person.

@@ -96,8 +96,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} slot={labels[r.slot] ?? r.slot} opp={!mine} idx={i} />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={false} />;
     return (
-      <div key={`${s}-${r.slot}-empty`} className="ct-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed rgba(255,255,255,0.25)', borderRadius: 10 }}>
-        <span className="mono" style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em' }}>EMPTY</span>
+      <div key={`${s}-${r.slot}-empty`} className="ct-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed color-mix(in srgb, var(--text) 25%, transparent)', borderRadius: 10 }}>
+        <span className="mono" style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text) 50%, transparent)', letterSpacing: '0.08em' }}>EMPTY</span>
       </div>
     );
   };
@@ -110,12 +110,12 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
     const tb = tbs[s]?.slot === r.slot ? tbs[s] : null;
-    const color = mine ? '#E9B959' : '#F08A93';
+    const color = mine ? 'var(--you)' : 'var(--opp)';
     return (
       <div style={{ display: 'grid', gap: 1, alignContent: 'center', textAlign: edge, padding: edge === 'left' ? '0 4px 0 10px' : '0 10px 0 4px', minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.65)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${tb ? ` · ⚖️ ${tb.target}` : ''}`}</span>
-        <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'rgba(255,255,255,0.35)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
-        <span className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>
+        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${tb ? ` · ⚖️ ${tb.target}` : ''}`}</span>
+        <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
+        <span className="mono" style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>
           {proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}
           {target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}
           {tb && score != null ? ` · ⚖️ ${Math.abs(score - tb.target).toFixed(1)} off` : ''}
@@ -147,21 +147,21 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   };
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const t = tally(s, S);
-    const color = S.mine ? '#E9B959' : '#F08A93';
-    const dim = 'rgba(255,255,255,0.65)';
+    const color = S.mine ? 'var(--you)' : 'var(--opp)';
+    const dim = 'color-mix(in srgb, var(--text) 65%, transparent)';
     const big = { fontSize: 30, fontWeight: 800, lineHeight: 1.05 } as const;
     const cell = { display: 'grid', gap: 1, textAlign: edge } as const;
     return (
       <div style={{ display: 'grid', gap: 3, textAlign: edge, minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: S.mine ? '#E9B959' : 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</span>
+        <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: S.mine ? 'var(--you)' : 'color-mix(in srgb, var(--text) 80%, transparent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</span>
         <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap', flexDirection: edge === 'left' ? 'row' : 'row-reverse' }}>
           <div style={cell}>
-            <span className="mono" style={{ ...big, color: t.points != null ? color : 'rgba(255,255,255,0.35)' }}>{fmt(t.points)}</span>
+            <span className="mono" style={{ ...big, color: t.points != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.points)}</span>
             <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}`}</span>
           </div>
           {bull && (
             <div style={cell}>
-              <span className="mono" style={{ ...big, color: t.ring != null ? '#fff' : 'rgba(255,255,255,0.35)' }}>{fmt(t.ring)}</span>
+              <span className="mono" style={{ ...big, color: t.ring != null ? 'var(--text)' : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.ring)}</span>
               <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`OFF 🎯 ${isTotal && theCard ? theCard.total : 'PER SPOT'}${t.ringProjected != null ? ` · proj ${t.ringProjected.toFixed(1)} off` : ''}`}</span>
             </div>
           )}
@@ -191,7 +191,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       </div>
       <Felt>
         {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}
-        <div style={{ display: 'grid', gridTemplateColumns: solo ? '1fr' : 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: '4px 8px 12px', borderBottom: '1px solid rgba(255,255,255,0.12)', marginBottom: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: solo ? '1fr' : 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: '4px 8px 12px', borderBottom: '1px solid color-mix(in srgb, var(--text) 12%, transparent)', marginBottom: 8 }}>
           {scoreboard(left, L, 'left')}
           {!solo && scoreboard(right, R, 'right')}
         </div>
