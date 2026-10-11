@@ -914,6 +914,7 @@ async function main() {
       //   The slate is the week's stored one (nfl_slate), so byes and kickoffs
       //   read as the worker reads them. Writes only what the sweep writes.
       const { sweepSeatWire } = await import('./seatWire.js');
+      const { db } = await import('./supabase.js');
       const league = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
       const seatArg = (args.find((a) => a.startsWith('--seat=')) ?? '').slice(7);
       const pos = args.filter((a) => !a.startsWith('--'));
