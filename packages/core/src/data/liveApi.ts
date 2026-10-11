@@ -993,6 +993,7 @@ export interface ContestMatchupState {
   ok: boolean; error?: string; week?: number; started?: boolean; me?: number | null;
   slots?: (import('../engine/classic').SlotSpec & { slot: string })[];
   contest?: ContestKind; format?: ContestFormat; variant?: DfsVariant; radius?: number;
+  /** 0480: the league's scoring, for pricing a projection. */ scoring_classic?: Record<string, unknown> | null; ppr?: number;
   matchup?: {
     id: string; status: string; home: number; away: number; home_team: string; away_team: string;
     home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null;

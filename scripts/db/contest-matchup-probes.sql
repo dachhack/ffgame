@@ -25,6 +25,7 @@ begin
   r := create_contest_league('CM Board', 'high', 'board', 'season', 12, 50000); perform assert_ok(r, 'cm0b'); g := (r ->> 'league_id')::uuid; gcode := r ->> 'invite_code';
   perform probe_as('b'); perform assert_ok(join_contest(code, 'Bees'), 'cm0c'); perform assert_ok(join_contest(gcode, 'Bees B'), 'cm0d');
   insert into nfl_slate (season, week, home, away, win, kickoff) values ('2026', wk, 'PHI', 'DAL', '', now() + interval '3 days'), ('2026', wk, 'SF', 'KC', '', now() + interval '3 days'), ('2026', wk, 'NYJ', 'BUF', '', now() + interval '3 days') on conflict do nothing;
+  update nfl_slate set kickoff = now() + interval '3 days' where season = '2026' and week = wk;   -- re-runnable: a past run moved a kickoff
   insert into pod_salary (season, week, slug, name, pos, team, salary, proj) values
     ('2026', wk, 'cm-qb1', 'Q One', 'QB', 'PHI', 7000, 20), ('2026', wk, 'cm-rb1', 'R One', 'RB', 'PHI', 6000, 14), ('2026', wk, 'cm-rb2', 'R Two', 'RB', 'SF', 5500, 13),
     ('2026', wk, 'cm-wr1', 'W One', 'WR', 'NYJ', 6000, 14), ('2026', wk, 'cm-wr2', 'W Two', 'WR', 'SF', 5500, 13), ('2026', wk, 'cm-wr3', 'W Three', 'WR', 'KC', 5000, 12),

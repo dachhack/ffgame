@@ -5,11 +5,13 @@
 // afresh on every visit, so the turns replay. The picker walks the week's
 // other matchups; the week arrows live in the league frame.
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { contestMatchup, podSalaries, type ContestMatchupState, type PodSalaryRow } from '@drip/core/data/liveApi';
-import { contestSlotLabels, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
-import { classicSlotsFromSpec } from '@drip/core/engine/classic';
-import { useTheme } from '../theme.native';
+import { ScrollView, Text, View } from 'react-native';
+import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
+import { contestSlotLabels, contestCard, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
+import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
+import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
+import { leagueCatalogOf } from '@drip/core/engine/projScoring';
+import { useTheme, MONO, fs } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, Mono } from '../ui/prims';
 import { CardBack, CardFace, EmptyCard, FeltTable, FlipCard, CARD_H } from '../ui/ContestCards';
@@ -34,10 +36,17 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const id = setInterval(read, 60_000);
     return () => { alive = false; clearInterval(id); };
   }, [leagueId, week, pick]);
-  useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); }, [week]);
+  const [slate, setSlate] = useState<Map<string, SlateSpot>>(new Map());
+  useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week]);
   const bySlug = useMemo(() => new Map(board.map((r) => [r.slug, r])), [board]);
   const slots = useMemo(() => classicSlotsFromSpec(st?.slots ?? null) ?? [], [st?.slots]);
   const labels = useMemo(() => contestSlotLabels(slots), [slots]);
+  // PROJECTIONS (v0.678.0): priced by the league's own scoring, as the builder prices them.
+  const catalog = useMemo(() => leagueCatalogOf({ scoring: (st?.scoring_classic ?? null) as Partial<ClassicScoring> | null, ppr: st?.ppr ?? null }), [st?.scoring_classic, st?.ppr]);
+  const projOf = (slug: string): number | null => { const r = bySlug.get(slug); return r ? leagueWeekProj(r, catalog, r.pos === 'HC' ? (slate.size ? slate.get(r.team) ?? null : undefined) : undefined) : null; };
+  const bull = st?.contest === 'bullseye';
+  const theCard = useMemo(() => (st?.contest === 'bullseye' && st.week != null && slots.length ? contestCard(leagueId, st.week, slots, catalog) : null), [leagueId, st?.contest, st?.week, slots, catalog]);
+  const isTotal = bull && st?.variant === 'total';
   if (!st) return <Card><Mono size={9} tone="faint">Loading…</Mono></Card>;
   if (!st.ok) return <Card><Mono size={10} tone="warn">{st.error}</Mono></Card>;
   const m = st.matchup;
@@ -56,19 +65,32 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   });
   const L = side(left), R = side(right);
   const scoreOf = (s: 'home' | 'away', slot: string) => m.state?.slots?.find((x) => x.side === s && x.slot === slot)?.score ?? null;
-  const column = (s: 'home' | 'away', rows: Row[], mine: boolean) => (
-    <View style={{ gap: 8, alignItems: 'center' }}>
-      {rows.map((r, i) => {
-        const p = r.slug ? bySlug.get(r.slug) : null;
-        const pts = st.started ? scoreOf(s, r.slot) : null;
-        if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} />;
-        const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} slot={labels[r.slot] ?? r.slot} points={pts} mine={mine} locked={!mine && !!r.slug} /> : <View />;
-        // Your own cards sit face up; another squad's start on their backs and
-        // turn as each player kicks off (he arrives unsealed, so the card flips).
-        return <FlipCard key={`${s}-${r.slot}`} flipped={mine || !!r.slug} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={face} />;
-      })}
-    </View>
-  );
+  // One card for a spot: yours sits face up; another squad's starts on its
+  // back and turns as its player kicks off (he arrives unsealed, so it flips).
+  const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
+    const p = r.slug ? bySlug.get(r.slug) : null;
+    if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} />;
+    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} slot={labels[r.slot] ?? r.slot} mine={mine} locked={!mine && !!r.slug} /> : <View />;
+    return <FlipCard key={`${s}-${r.slot}`} flipped={mine || !!r.slug} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={face} />;
+  };
+  // THE NUMBERS (v0.678.0, founder: "the player score and projection to the
+  // inside of the card columns in larger numbers"): the spot, the score once
+  // his game is on, the projection under it; a Bullseye spot's target and how
+  // far off. A sealed pick shows nothing — a projection would give him away.
+  const numbersOf = (s: 'home' | 'away', r: Row, mine: boolean, edge: 'left' | 'right') => {
+    const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
+    const proj = r.slug ? projOf(r.slug) : null;
+    const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
+    const color = mine ? '#E9B959' : '#F08A93';
+    const align = edge === 'left' ? 'flex-start' : 'flex-end';
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: align, paddingLeft: edge === 'left' ? 8 : 4, paddingRight: edge === 'right' ? 8 : 4, minWidth: 0 }}>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.65)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : 'rgba(255,255,255,0.35)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: 'rgba(255,255,255,0.65)' }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}`}</Text>
+      </View>
+    );
+  };
   const fmt = (n: number | null) => (n == null ? '—' : Number(n).toFixed(1));
   const status = m.status === 'final' ? 'FINAL' : st.started ? 'LIVE' : 'LOCKS AT EACH KICKOFF';
   return (
@@ -88,14 +110,24 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         {!solo && !st.started && <Mono size={8.5} tone="faint" style={{ width: '100%' }}>{`${R.mine ? 'Your' : 'Their'} cards turn face up as each player's game kicks off.`}</Mono>}
       </Card>
       <FeltTable>
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 10 }}>
-          {column(left, L.rows, L.mine)}
-          {!solo && (
-            <View style={{ width: 44, alignItems: 'center', gap: 8 }}>
-              {slots.map((d) => <View key={d.slot} style={{ height: CARD_H, justifyContent: 'center' }}><Mono size={8} weight="700" track={0.08} style={{ color: 'rgba(255,255,255,0.7)' }}>{labels[d.slot] ?? d.slot}</Mono></View>)}
-            </View>
-          )}
-          {!solo && column(right, R.rows, R.mine)}
+        {bull && (
+          <Text style={{ textAlign: 'center', paddingBottom: 8, color: '#E9B959', fontFamily: MONO, fontSize: fs(10.5), fontWeight: '800', letterSpacing: 1 }}>
+            {isTotal && theCard ? `🎯 TARGET ${theCard.total} · CLOSEST RING WINS` : '🎯 A TARGET PER SPOT · CLOSEST RING WINS'}
+          </Text>
+        )}
+        {/* a row per spot: your card at the outer edge, the numbers inside, theirs, their card at the far edge */}
+        <View style={{ gap: 8 }}>
+          {slots.map((d, i) => {
+            const lr = L.rows[i], rr = R.rows[i];
+            return (
+              <View key={d.slot} style={{ flexDirection: 'row', alignItems: 'center', minHeight: CARD_H }}>
+                {cardOf(left, lr, L.mine, i)}
+                {numbersOf(left, lr, L.mine, 'left')}
+                {!solo && numbersOf(right, rr, R.mine, 'right')}
+                {!solo && cardOf(right, rr, R.mine, i)}
+              </View>
+            );
+          })}
         </View>
       </FeltTable>
       <Mono size={8.5} tone="faint" style={{ color: t.faint }}>{st.format === 'board' ? 'Every squad on the board, one at a time — pick one above.' : 'Pick another matchup above to watch it.'}</Mono>

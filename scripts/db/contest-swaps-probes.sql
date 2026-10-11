@@ -34,6 +34,7 @@ begin
   wk := 40;
   insert into nfl_slate (season, week, home, away, win, kickoff) values ('2026', wk, 'PHI', 'DAL', '', now() + interval '3 days'), ('2026', wk, 'SF', 'KC', '', now() + interval '3 days'), ('2026', wk, 'NYJ', 'BUF', '', now() + interval '3 days')
     on conflict do nothing;
+  update nfl_slate set kickoff = now() + interval '3 days' where season = '2026' and week = wk;   -- re-runnable: a past run moved a kickoff
   insert into pod_salary (season, week, slug, name, pos, team, salary, proj) values
     ('2026', wk, 'sw-qb1', 'Q One', 'QB', 'PHI', 7000, 20), ('2026', wk, 'sw-qb2', 'Q Two', 'QB', 'SF', 6000, 18),
     ('2026', wk, 'sw-rb1', 'R One', 'RB', 'PHI', 6000, 14), ('2026', wk, 'sw-rb2', 'R Two', 'RB', 'SF', 5500, 13), ('2026', wk, 'sw-rb3', 'R Three', 'RB', 'KC', 5000, 12),
