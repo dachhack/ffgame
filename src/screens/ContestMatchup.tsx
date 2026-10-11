@@ -115,6 +115,51 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     );
   };
   const fmt = (n: number | null) => (n == null ? '—' : Number(n).toFixed(1));
+  // THE SCOREBOARD (v0.680.1, founder: "the current/projected score and
+  // target/diff from target next to each other and prominent"): a side's
+  // points so far and where they project to land (every spot's score, or its
+  // projection until his game is on), and for Bullseye the ring — how far
+  // off the target — with the projected ring beside it. A squad with a sealed
+  // pick has no projection: adding his number would give him away.
+  const tally = (s: 'home' | 'away', S: typeof L) => {
+    let pts = 0, proj = 0, ringProj = 0, known = true;
+    for (const r of S.rows) {
+      const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
+      if (score != null) pts += score;
+      if (r.sealed) { known = false; continue; }
+      const v = score ?? (r.slug ? projOf(r.slug) : null) ?? 0;
+      proj += v;
+      if (bull && !isTotal) { const tg = theCard?.targets[r.slot]; if (tg != null) ringProj += Math.abs(v - tg); }
+    }
+    const points = !bull ? S.score : st.started ? pts : null;
+    const projected = known ? proj : null;
+    const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
+    return { points, projected, ring: bull ? S.score : null, ringProjected };
+  };
+  const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
+    const t = tally(s, S);
+    const color = S.mine ? '#E9B959' : '#F08A93';
+    const dim = 'rgba(255,255,255,0.65)';
+    const big = { fontSize: 30, fontWeight: 800, lineHeight: 1.05 } as const;
+    const cell = { display: 'grid', gap: 1, textAlign: edge } as const;
+    return (
+      <div style={{ display: 'grid', gap: 3, textAlign: edge, minWidth: 0 }}>
+        <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: S.mine ? '#E9B959' : 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</span>
+        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexDirection: edge === 'left' ? 'row' : 'row-reverse' }}>
+          <div style={cell}>
+            <span className="mono" style={{ ...big, color: t.points != null ? color : 'rgba(255,255,255,0.35)' }}>{fmt(t.points)}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}`}</span>
+          </div>
+          {bull && (
+            <div style={cell}>
+              <span className="mono" style={{ ...big, color: t.ring != null ? '#fff' : 'rgba(255,255,255,0.35)' }}>{fmt(t.ring)}</span>
+              <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`OFF 🎯 ${isTotal && theCard ? theCard.total : 'PER SPOT'}${t.ringProjected != null ? ` · proj ${t.ringProjected.toFixed(1)} off` : ''}`}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   const status = m.status === 'final' ? 'FINAL' : st.started ? 'LIVE' : 'SQUADS LOCK AT EACH KICKOFF';
   const others = (st.matchups ?? []).filter((x) => x.id !== m.id);
   return (
@@ -132,18 +177,15 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       )}
       <div style={{ ...card, display: 'flex', gap: 16, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>{m.label ? `${m.label.toUpperCase()} · ${status}` : status}</span>
-        <span className="mono" style={{ fontSize: 12 }}>
-          <b style={{ color: L.mine ? 'var(--you)' : 'var(--text)' }}>{L.team}</b>{` ${fmt(L.score)} ${word}`}
-          {!solo && <>{' · '}<b style={{ color: R.mine ? 'var(--you)' : 'var(--text)' }}>{R.team}</b>{` ${fmt(R.score)} ${word}`}</>}
-        </span>
+        {!solo && <span className="mono" style={small}>{`${L.team} v ${R.team}`}</span>}
         {!solo && !st.started && <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`${R.mine ? 'Your' : 'Their'} cards turn face up as each player's game kicks off.`}</span>}
       </div>
       <Felt>
-        {bull && (
-          <div className="mono" style={{ textAlign: 'center', padding: '6px 0 10px', color: '#E9B959', fontSize: 12, fontWeight: 800, letterSpacing: '0.1em' }}>
-            {isTotal && theCard ? `🎯 TARGET ${theCard.total} · CLOSEST RING WINS` : '🎯 A TARGET PER SPOT · CLOSEST RING WINS'}
-          </div>
-        )}
+        {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}
+        <div style={{ display: 'grid', gridTemplateColumns: solo ? '1fr' : 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: '4px 8px 12px', borderBottom: '1px solid rgba(255,255,255,0.12)', marginBottom: 8 }}>
+          {scoreboard(left, L, 'left')}
+          {!solo && scoreboard(right, R, 'right')}
+        </div>
         {/* a row per spot: your card at the outer edge, the numbers inside, their numbers, their card at the far edge */}
         <div style={{ display: 'grid', gap: 9, padding: '4px 2px' }}>
           {slots.map((d, i) => {

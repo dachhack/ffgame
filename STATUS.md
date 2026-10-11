@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.680.1 — The contest table's scoreboard
+
+> - The top of the weekly contest table is now a scoreboard: each squad's points so far with where they project to land, and in a Bullseye league how far off the target they sit, with the projected distance beside it. The "closest ring wins" line is gone; the numbers say it.
+> - A squad with a sealed pick shows no projection until he's revealed, so the number can't give him away.
+
+Founder: "Let's make sure the current/projected score and target/diff from
+target are next to each other and prominent. We don't need anything about
+closest ring, it's just whoever is closest." Both `ContestMatchup` screens
+gain `tally` (a side's points = the spots' scores so far; projected = each
+spot's score, or its projection until his game is on; for Bullseye the ring
+is the server's own `home/away` state and the projected ring is the same sum
+against the target — the total for a total-target league, per spot
+otherwise; any sealed pick blanks both projections) and `scoreboard` (the
+team, the big points number with `proj` under it, and beside it the big
+ring number with `OFF 🎯 <target>` and its projection). It sits at the top
+of the felt, left side yours; the status card keeps the label, the pairing
+and the face-up hint. Plain JS: no iPhone build.
+
 ### v0.680.0 — The weekly contest table deals from your deck
 
 > - The card table in a weekly squad league now uses the card deck you picked for drip mode: the felt takes the deck's colour and your opponent's sealed cards show its back. Change it any time under ⚙ → Cards → CARD DECK on the phone, or ⚙ → CARD DECK on the web.

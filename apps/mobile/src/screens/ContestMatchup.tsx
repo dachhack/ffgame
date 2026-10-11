@@ -92,6 +92,47 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     );
   };
   const fmt = (n: number | null) => (n == null ? '—' : Number(n).toFixed(1));
+  // THE SCOREBOARD (v0.680.1): a side's points so far and where they project
+  // to land, and for Bullseye the ring — how far off the target — with the
+  // projected ring beside it. A sealed pick leaves the projection blank: his
+  // number would give him away. Mirrors the web (src/screens/ContestMatchup.tsx).
+  const tally = (s: 'home' | 'away', S: typeof L) => {
+    let pts = 0, proj = 0, ringProj = 0, known = true;
+    for (const r of S.rows) {
+      const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
+      if (score != null) pts += score;
+      if (r.sealed) { known = false; continue; }
+      const v = score ?? (r.slug ? projOf(r.slug) : null) ?? 0;
+      proj += v;
+      if (bull && !isTotal) { const tg = theCard?.targets[r.slot]; if (tg != null) ringProj += Math.abs(v - tg); }
+    }
+    const points = !bull ? S.score : st.started ? pts : null;
+    const projected = known ? proj : null;
+    const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
+    return { points, projected, ring: bull ? S.score : null, ringProjected };
+  };
+  const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
+    const x = tally(s, S);
+    const color = S.mine ? '#E9B959' : '#F08A93';
+    const dim = 'rgba(255,255,255,0.65)';
+    return (
+      <View style={{ flex: 1, minWidth: 0, gap: 2, alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
+        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: S.mine ? '#E9B959' : 'rgba(255,255,255,0.8)' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</Text>
+        <View style={{ flexDirection: edge === 'left' ? 'row' : 'row-reverse', gap: 14, alignItems: 'flex-end' }}>
+          <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
+            <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : 'rgba(255,255,255,0.35)' }}>{fmt(x.points)}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
+          </View>
+          {bull && (
+            <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
+              <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? '#fff' : 'rgba(255,255,255,0.35)' }}>{fmt(x.ring)}</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>{`OFF 🎯 ${isTotal && theCard ? theCard.total : 'PER SPOT'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)} off` : ''}`}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
   const status = m.status === 'final' ? 'FINAL' : st.started ? 'LIVE' : 'LOCKS AT EACH KICKOFF';
   return (
     <View style={{ gap: 10 }}>
@@ -105,16 +146,15 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       )}
       <Card style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
         <Mono size={9} tone="you" weight="700" track={0.1}>{m.label ? `${m.label.toUpperCase()} · ${status}` : status}</Mono>
-        <Mono size={11} tone={L.mine ? 'you' : 'text'} weight="700">{`${L.team} ${fmt(L.score)}`}</Mono>
-        {!solo && <Mono size={11} tone={R.mine ? 'you' : 'text'} weight="700">{`${R.team} ${fmt(R.score)} ${word}`}</Mono>}
+        {!solo && <Mono size={9} tone="faint">{`${L.team} v ${R.team}`}</Mono>}
         {!solo && !st.started && <Mono size={8.5} tone="faint" style={{ width: '100%' }}>{`${R.mine ? 'Your' : 'Their'} cards turn face up as each player's game kicks off.`}</Mono>}
       </Card>
       <FeltTable>
-        {bull && (
-          <Text style={{ textAlign: 'center', paddingBottom: 8, color: '#E9B959', fontFamily: MONO, fontSize: fs(10.5), fontWeight: '800', letterSpacing: 1 }}>
-            {isTotal && theCard ? `🎯 TARGET ${theCard.total} · CLOSEST RING WINS` : '🎯 A TARGET PER SPOT · CLOSEST RING WINS'}
-          </Text>
-        )}
+        {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}
+        <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 4, paddingBottom: 10, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)' }}>
+          {scoreboard(left, L, 'left')}
+          {!solo && scoreboard(right, R, 'right')}
+        </View>
         {/* a row per spot: your card at the outer edge, the numbers inside, theirs, their card at the far edge */}
         <View style={{ gap: 8 }}>
           {slots.map((d, i) => {
