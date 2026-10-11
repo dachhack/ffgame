@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.674.0` · migrations through `0476`_
+_Last updated: 2026-10-11 · Build `v0.675.0` · migrations through `0477`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -55,8 +55,9 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
   4. ~~Playoffs for season head-to-head~~ — done in v0.674.0 (0476: the
      classic bracket stack opened to season head-to-head contest leagues;
      four from week 15 by default; pods.js hands the last weeks to it).
-  5. Prizes and dues on the settings and the board (the listing has a text
-     field only).
+  5. ~~Prizes and dues on the settings and the board~~ — done in v0.675.0
+     (0477: `set_league_prizes`; the money on `_bullseye_info` and
+     `league_board`; DUES & PRIZES on the contest COMMISH card).
   6. Multiple entries per user for the huge contests; swap history; sharing a
      squad card after squads unseal.
 

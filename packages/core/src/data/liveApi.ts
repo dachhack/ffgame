@@ -924,7 +924,16 @@ export type ContestKind = 'high' | 'golf' | 'bullseye';
 export type ContestFormat = 'h2h' | 'board';
 export interface ContestInfo extends BullseyeInfo { contest: ContestKind; format: ContestFormat; /** 0 = no cap (0469). */ budget: number; /** The minimum spend (0469); 0 = none. */ min_spend?: number; /** AUTO-SUB (0470): the worker swaps a ruled-out pick before his kickoff. */ auto_sub?: boolean;
   /** NO SQUAD BY LOCK (0475): cpu | zero | drop. */ late_entry?: import('../engine/contest').ContestLateEntry;
-  /** ENTRIES (0475): open | first (close at the week's first kickoff). */ entry_deadline?: import('../engine/contest').ContestEntryDeadline; spots: number }
+  /** ENTRIES (0475): open | first (close at the week's first kickoff). */ entry_deadline?: import('../engine/contest').ContestEntryDeadline;
+  /** THE MONEY (0477): the dues setting (0320) and the prize list. */ dues_amount?: number | null; dues_note?: string | null; prizes?: PrizeRow[]; spots: number }
+/** A place and what it wins (0477): free text both — "1st" / "$150", "Weekly high" / "a hat". */
+export interface PrizeRow { label: string; prize: string }
+/** Commissioner: the league's prize list (up to eight; [] clears). The league hears the list in chat. */
+export const setLeaguePrizes = (leagueId: string, prizes: PrizeRow[]) =>
+  tracked(rpcOk<{ ok: boolean; error?: string; prizes?: PrizeRow[] }>('set_league_prizes', { p_league_id: leagueId, p_prizes: prizes }), Ev.commishAction, { tool: 'prizes' });
+/** "1st $150 · 2nd $50" — the prize list in a line, or null. */
+export const prizesWord = (rows: PrizeRow[] | null | undefined): string | null =>
+  rows?.length ? rows.map((r) => `${r.label} ${r.prize}`).join(' · ') : null;
 export interface ContestState {
   ok: boolean; error?: string; on?: boolean; kind?: string; name?: string; week?: number; season?: string;
   contest?: ContestKind; format?: ContestFormat; budget?: number; min_spend?: number;
@@ -5061,6 +5070,8 @@ export interface BoardListing {
   /** The commissioner's word on money ("$50 — Venmo before the draft"); the
    *  platform prints it, it never collects it. */
   dues?: string | null;
+  /** 0477: the league's prize list, when its commissioner set one. */
+  prizes?: PrizeRow[] | null;
   identity?: LeagueIdentity;
   /** 0463: 'bullseye' for a Bullseye league, with its variant, span and size. */
   kind?: string; bullseye?: BullseyeInfo | null;

@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.675.0 — Prizes and dues, on the settings and the board
+
+> - A league's commissioner can now set what the places win — 1st, 2nd, a weekly high, up to eight lines — next to the dues under COMMISH; the league hears the list in chat.
+> - Both show on the league's SETTINGS page and on the league board: a board card carries the prizes, and the dues setting when the posting has no dues line of its own.
+
+- HANDOFF's fifth not-done item. Migration 0477: `set_league_prizes`
+  (commissioner; a list of `{label, prize}`, trimmed, blanks dropped, up
+  to eight, `[]` clears; a house line "🏆 Prizes: 1st — $150 · 2nd — $50"),
+  `_league_prizes`, `_league_dues_word`; `_bullseye_info` (0475's body)
+  carries `dues_amount`, `dues_note`, `prizes`; `league_board` (0463's
+  body) carries `prizes` and falls back to the dues setting for `dues`.
+  The dues model is 0320's (any commissioner's already; the phone's
+  commissioner map marks DUES native-only, but a contest league reaches
+  it from its own card). liveApi `setLeaguePrizes`, `PrizeRow`,
+  `prizesWord`. Screens: DUES & PRIZES on the contest COMMISH card (web,
+  phone) reusing DuesPanel / DuesCard with a PrizesEditor; THE MONEY on
+  the contest SETTINGS room; a PRIZES line on the board cards (web
+  LeagueBoard, phone Recruit). `scripts/db/contest-prizes-probes.sql` on the
+  full chain, wired into the runner. No iPhone build needed.
+
 ### v0.674.0 — Playoffs for a season head-to-head squad league
 
 > - A weekly squad league that plays head-to-head over the season now ends in a bracket: four teams from week 15 unless the commissioner says otherwise (PLAYOFFS under COMMISH — size, start week, seeding by hand), seeded by the regular-season standings, with everyone else on a consolation ladder. The league screen shows the bracket round by round and crowns the champion; MY WEEKS names the game ("Semifinal").

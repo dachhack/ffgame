@@ -533,6 +533,15 @@ function SettingsRoom({ lg, onLeft }: { lg: ContestLeague; onLeft: () => void })
         <li>{b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`}</li>
         {contestCredit(b.contest) && <li>{`💡 ${contestCredit(b.contest)!.line}`}</li>}
       </ul>
+      {(b.dues_amount != null || (b.prizes?.length ?? 0) > 0) && (
+        <>
+          <div className="mono" style={label}>THE MONEY</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--dim)', lineHeight: 1.6 }}>
+            {b.dues_amount != null && <li>{`💵 Dues: $${n0(b.dues_amount)}${b.dues_note ? ` — ${b.dues_note}` : ''}. The platform prints it, never collects it.`}</li>}
+            {(b.prizes ?? []).map((p, i) => <li key={i}>{`🏆 ${p.label}: ${p.prize}`}</li>)}
+          </ul>
+        </>
+      )}
       {lg.me && !lg.commish && (
         <button onClick={() => void leave()} className="mono" style={{ ...chip(false, true), justifySelf: 'start' }}>LEAVE THE LEAGUE</button>
       )}

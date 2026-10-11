@@ -7,15 +7,15 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import {
   contestLeague, setContestRules, setDfsBullseye, setBullseyeSize, postLeagueListing, closeLeagueListing, leagueListingState,
   isAdmin, myFeatures, bullseyeMaxSeats, friendlyError,
-  contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries,
-  type ContestInfo, type ContestKind, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow,
+  contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries, setLeaguePrizes,
+  type ContestInfo, type ContestKind, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow, type PrizeRow,
 } from '@drip/core/data/liveApi';
 import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Mono } from '../ui/prims';
-import { RescoreBox, AdjustBox } from '../ui/CommishDesk';
+import { RescoreBox, AdjustBox, DuesCard } from '../ui/CommishDesk';
 import { PlayoffControls } from '../ui/LeagueExtras';
 
 const n0 = (n: number) => n.toLocaleString('en-US');
@@ -151,6 +151,12 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
         </View>
         {b.span === 'week' && <Mono size={8.5} tone="faint">A one-week league leaves the board once its week kicks off.</Mono>}
       </Card>
+      <Card style={{ gap: 6 }}>
+        <Mono size={9} tone="faint" weight="700" track={0.1}>DUES & PRIZES</Mono>
+        <Mono size={8.5} tone="faint">What a seat costs and what the places win. The platform prints it and never collects it; both show on the league’s SETTINGS and on the league board.</Mono>
+        <DuesCard leagueId={leagueId} />
+        <PrizesEditor leagueId={leagueId} prizes={b.prizes ?? []} onSaved={() => void load()} />
+      </Card>
       {h2h && b.span === 'season' && (
         <Card style={{ gap: 6 }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYOFFS</Mono>
@@ -160,6 +166,42 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
       )}
       {played && <ContestFixWeekCard leagueId={leagueId} />}
       {note && <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'warn'}>{note}</Mono>}
+    </View>
+  );
+}
+
+// ── 🏆 PRIZES (0477) — the web PrizesEditor's twin ───────────────────────────
+function PrizesEditor({ leagueId, prizes, onSaved }: { leagueId: string; prizes: PrizeRow[]; onSaved: () => void }) {
+  const [rows, setRows] = useState<PrizeRow[]>(prizes.length ? prizes : [{ label: '1st', prize: '' }]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => { setRows(prizes.length ? prizes : [{ label: '1st', prize: '' }]); }, [prizes]);
+  const set = (i: number, k: keyof PrizeRow, v: string) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    const r = await setLeaguePrizes(leagueId, rows.filter((x) => x.label.trim() && x.prize.trim())).catch((e) => ({ ok: false, error: friendlyError(e) }));
+    setBusy(false);
+    if (r.ok) commit(); else warn();
+    setMsg(r.ok ? '✓ prizes saved — the league was told' : (r.error ?? 'That didn’t work.'));
+    if (r.ok) onSaved();
+  };
+  return (
+    <View style={{ gap: 6, marginTop: 6 }}>
+      <Mono size={9} weight="700" tone="dim">🏆 PRIZES</Mono>
+      {rows.map((r, i) => (
+        <View key={i} style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Field value={r.label} onChangeText={(v) => set(i, 'label', v)} maxLength={40} placeholder="1st" style={{ width: 90 }} />
+          <Field value={r.prize} onChangeText={(v) => set(i, 'prize', v)} maxLength={60} placeholder="$150 — or a hat" style={{ flex: 1 }} />
+          <Chip small dim label="✕" onPress={() => { tap(); setRows((x) => x.filter((_, j) => j !== i)); }} />
+        </View>
+      ))}
+      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {rows.length < 8 && <Chip small label="+ A PLACE" onPress={() => { tap(); setRows((x) => [...x, { label: x.length === 1 ? '2nd' : x.length === 2 ? '3rd' : '', prize: '' }]); }} />}
+        <Chip small on disabled={busy} label="SAVE PRIZES" onPress={() => { tap(); void save(); }} />
+      </View>
+      <Mono size={8.5} tone="faint">Leave the list empty and save to clear it.</Mono>
+      {msg && <Mono size={9} tone={msg.startsWith('✓') ? 'you' : 'warn'}>{msg}</Mono>}
     </View>
   );
 }

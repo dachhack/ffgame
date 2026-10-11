@@ -7,12 +7,12 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import {
   contestLeague, setContestRules, setDfsBullseye, setBullseyeSize, postLeagueListing, closeLeagueListing, leagueListingState,
   isAdmin, myFeatures, bullseyeMaxSeats, friendlyError,
-  contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries,
-  type ContestInfo, type ContestKind, type ContestFormat, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow,
+  contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries, setLeaguePrizes,
+  type ContestInfo, type ContestKind, type ContestFormat, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow, type PrizeRow,
 } from '@drip/core/data/liveApi';
 import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
-import { RescoreBox, AdjustBox } from './CommishDesk';
+import { RescoreBox, AdjustBox, DuesPanel } from './CommishDesk';
 import { PlayoffPanel } from './AdminPage';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
@@ -156,6 +156,12 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
         </div>
         {span === 'week' && <div className="mono" style={small}>A one-week league leaves the board once its week kicks off.</div>}
       </div>
+      <div style={{ ...card, display: 'grid', gap: 4 }}>
+        <div className="mono" style={label}>DUES & PRIZES</div>
+        <div className="mono" style={small}>What a seat costs and what the places win. The platform prints it and never collects it; both show on the league’s SETTINGS and on the league board.</div>
+        <DuesPanel leagueId={leagueId} />
+        <PrizesEditor leagueId={leagueId} prizes={b.prizes ?? []} onSaved={() => void load()} />
+      </div>
       {h2h && span === 'season' && (
         <div style={{ ...card, display: 'grid', gap: 4 }}>
           <div className="mono" style={label}>PLAYOFFS</div>
@@ -165,6 +171,41 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
       )}
       {played && <ContestFixWeekPanel leagueId={leagueId} />}
       {note && <div className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</div>}
+    </div>
+  );
+}
+
+// ── 🏆 PRIZES (0477) — a place and what it wins, up to eight ────────────────
+function PrizesEditor({ leagueId, prizes, onSaved }: { leagueId: string; prizes: PrizeRow[]; onSaved: () => void }) {
+  const [rows, setRows] = useState<PrizeRow[]>(prizes.length ? prizes : [{ label: '1st', prize: '' }]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => { setRows(prizes.length ? prizes : [{ label: '1st', prize: '' }]); }, [prizes]);
+  const set = (i: number, k: keyof PrizeRow, v: string) => setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    const r = await setLeaguePrizes(leagueId, rows.filter((x) => x.label.trim() && x.prize.trim())).catch((e) => ({ ok: false, error: friendlyError(e) }));
+    setBusy(false);
+    setMsg(r.ok ? '✓ prizes saved — the league was told' : (r.error ?? 'That didn’t work.'));
+    if (r.ok) onSaved();
+  };
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid var(--bd)', paddingTop: 10, display: 'grid', gap: 6 }}>
+      <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)' }}>🏆 PRIZES</div>
+      {rows.map((r, i) => (
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px minmax(0,1fr) 32px', gap: 6, alignItems: 'center' }}>
+          <input value={r.label} onChange={(e) => set(i, 'label', e.target.value)} maxLength={40} placeholder="1st" style={input} />
+          <input value={r.prize} onChange={(e) => set(i, 'prize', e.target.value)} maxLength={60} placeholder="$150 — or a trophy, a hat, bragging rights" style={input} />
+          <button onClick={() => setRows((x) => x.filter((_, j) => j !== i))} className="mono" title="Remove" style={{ ...chip(false, true), padding: '5px 8px' }}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {rows.length < 8 && <button onClick={() => setRows((x) => [...x, { label: x.length === 1 ? '2nd' : x.length === 2 ? '3rd' : '', prize: '' }])} className="mono" style={chip(false)}>+ A PLACE</button>}
+        <button onClick={() => void save()} disabled={busy} className="mono" style={chip(true)}>SAVE PRIZES</button>
+        <span className="mono" style={small}>Leave the list empty and save to clear it.</span>
+      </div>
+      {msg && <div className="mono" style={{ fontSize: 11, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{msg}</div>}
     </div>
   );
 }

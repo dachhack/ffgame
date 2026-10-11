@@ -14,8 +14,7 @@ import {
   leagueBoard, leaguePreview, joinFromBoard, postLeagueListing, closeLeagueListing, leagueListingState,
   type LeagueIdentity,
   commishOverview, friendlyError, bullseyeLeagueLine, contestPitch, isWeeklyKind,
-  type BoardListing, type BoardPreview, type AdminLeague,
-} from '@drip/core/data/liveApi';
+  type BoardListing, type BoardPreview, type AdminLeague, prizesWord } from '@drip/core/data/liveApi';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 16 };
 const label: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' };
@@ -181,6 +180,7 @@ export function LeagueBoard({ onJoined, onBack }: { onJoined: () => void; onBack
               ? <div className="mono" style={{ fontSize: 9, color: 'var(--you)', marginTop: 7 }}>{bullseyeLeagueLine(r.bullseye)}</div>
               : r.identity && <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 7 }}>{identityLine(r.identity)}</div>}
             {r.dues && <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--warn)', marginTop: 4 }}>💵 DUES: {r.dues}</div>}
+            {!!r.prizes?.length && <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--you)', marginTop: 4 }}>🏆 PRIZES: {prizesWord(r.prizes)}</div>}
             {r.blurb && <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 9, lineHeight: 1.5 }}>{r.blurb}</div>}
           </div>
         ))}

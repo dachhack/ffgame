@@ -435,10 +435,17 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
     b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`,
     ...(contestCredit(b.contest) ? [`💡 ${contestCredit(b.contest)!.line}`] : []),
   ];
+  // THE MONEY (0477): the dues setting and the prize list, when set.
+  const money = [
+    ...(b.dues_amount != null ? [`💵 Dues: $${n0(b.dues_amount)}${b.dues_note ? ` — ${b.dues_note}` : ''}. The platform prints it, never collects it.`] : []),
+    ...(b.prizes ?? []).map((p) => `🏆 ${p.label}: ${p.prize}`),
+  ];
   return (
     <Card style={{ gap: 8 }}>
       <Mono size={9} tone="faint" weight="700" track={0.1}>HOW THIS LEAGUE PLAYS</Mono>
       {rules.map((r, i) => <Text key={i} style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`• ${r}`}</Text>)}
+      {money.length > 0 && <Mono size={9} tone="faint" weight="700" track={0.1} style={{ marginTop: 6 }}>THE MONEY</Mono>}
+      {money.map((r, i) => <Text key={`m${i}`} style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`• ${r}`}</Text>)}
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
         {lg.commish && <Chip label="⚑ COMMISSIONER" onPress={() => { tap(); onCommish(); }} />}
         {lg.me && !lg.commish && <Chip dim label="LEAVE THE LEAGUE" onPress={() => { tap(); leave(); }} />}
