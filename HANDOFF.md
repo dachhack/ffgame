@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.672.0` · migrations through `0474`_
+_Last updated: 2026-10-11 · Build `v0.673.0` · migrations through `0475`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -49,7 +49,9 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
      restore, the stat correction on the board, `commish_set_contest_squad`,
      the re-score rebuilding the result card; FIX A WEEK on the contest
      COMMISH card, web and phone).
-  3. Entry deadline / late-entry policy (CPU build, zero, or week dropped).
+  3. ~~Entry deadline / late-entry policy~~ — done in v0.673.0 (0475:
+     `late_entry` cpu | zero | drop, `entry_deadline` open | first; the
+     worker's `noShowBuilds`; NO SQUAD BY LOCK and ENTRIES on COMMISH).
   4. Playoffs for season head-to-head (a top-N bracket over the last weeks).
   5. Prizes and dues on the settings and the board (the listing has a text
      field only).

@@ -10,7 +10,7 @@ import {
   contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries,
   type ContestInfo, type ContestKind, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow,
 } from '@drip/core/data/liveApi';
-import { CONTEST_WORD, CONTEST_EMOJI, contestSquadOf, contestSlotLabels } from '@drip/core/engine/contest';
+import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -99,6 +99,20 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
           <Chip small on={!!b.auto_sub} disabled={busy} label="SWAP HIM FOR ME" onPress={() => { tap(); void act(setContestRules(leagueId, { autoSub: true }), 'auto-sub on'); }} />
           <Chip small on={!b.auto_sub} disabled={busy} label="LEAVE IT TO ME" onPress={() => { tap(); void act(setContestRules(leagueId, { autoSub: false }), 'auto-sub off'); }} />
         </View>
+        <Mono size={9} tone="faint" weight="700" track={0.1}>NO SQUAD BY LOCK</Mono>
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          {(h2h ? ['cpu', 'zero'] as ContestLateEntry[] : ['cpu', 'zero', 'drop'] as ContestLateEntry[]).map((v) => (
+            <Chip key={v} small on={(b.late_entry ?? contestLateEntryDefault(b.format)) === v} disabled={busy} label={CONTEST_LATE_WORD[v]} onPress={() => { tap(); void act(setContestRules(leagueId, { lateEntry: v }), `a no-show ${CONTEST_LATE_WORD[v].toLowerCase()}`); }} />
+          ))}
+        </View>
+        <Mono size={8.5} tone="faint">{`A seat with no squad at the week’s first kickoff: ${h2h ? 'the CPU builds one so its opponent has a game, or it forfeits with a zero' : 'the CPU builds one, it scores a zero, or it sits the week out with no row at all'}.${b.contest === 'golf' ? ' In golf a scoreless squad is the best score, so SCORES ZERO needs every spot’s 0 → penalty set on ROSTER.' : ''}`}</Mono>
+        <Mono size={9} tone="faint" weight="700" track={0.1}>ENTRIES</Mono>
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          {(['open', 'first'] as ContestEntryDeadline[]).map((v) => (
+            <Chip key={v} small on={(b.entry_deadline ?? 'open') === v} disabled={busy} label={CONTEST_DEADLINE_WORD[v]} onPress={() => { tap(); void act(setContestRules(leagueId, { entryDeadline: v }), v === 'first' ? 'entries close at the first kickoff' : 'entries open until each player’s game'); }} />
+          ))}
+        </View>
+        <Mono size={8.5} tone="faint">A new squad can go in until its players kick off, or not at all once the week’s first game has — a saved squad still swaps its unlocked players either way.</Mono>
         <Mono size={8.5} tone="faint">Every player locks at his own kickoff, so a ruled-out pick can be swapped until then. SWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has; LEAVE IT TO ME banks the zero.</Mono>
       </Card>
 

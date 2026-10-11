@@ -39,7 +39,24 @@ export interface ContestConfig {
   slots: ClassicSlotDef[];
   /** The dart, for a Bullseye contest; null otherwise. Always a shared card. */
   bullseye: BullseyeConfig | null;
+  /** NO SQUAD BY LOCK (v0.673.0, settings.late_entry): what a seat with no
+   *  squad gets at the week's first kickoff — the CPU builds one (every
+   *  head-to-head seat has an opponent waiting; the default there), an EMPTY
+   *  squad that scores zero (a forfeit), or nothing at all — the seat sits the
+   *  week out (a leaderboard's default: no row, no score, no week). */
+  lateEntry: ContestLateEntry;
+  /** ENTRIES (v0.673.0, settings.entry_deadline): `open` — a squad can be
+   *  entered any time its players haven't kicked off (each locks at his own
+   *  game); `first` — a seat with no squad at the week's first kickoff is
+   *  closed out, and the no-show rule above decides its week. */
+  entryDeadline: ContestEntryDeadline;
 }
+export type ContestLateEntry = 'cpu' | 'zero' | 'drop';
+export type ContestEntryDeadline = 'open' | 'first';
+/** The no-show rule a format plays by unless the commissioner says otherwise. */
+export const contestLateEntryDefault = (format: ContestFormat): ContestLateEntry => (format === 'h2h' ? 'cpu' : 'drop');
+export const CONTEST_LATE_WORD: Record<ContestLateEntry, string> = { cpu: 'THE CPU BUILDS ONE', zero: 'SCORES ZERO', drop: 'SITS THE WEEK OUT' };
+export const CONTEST_DEADLINE_WORD: Record<ContestEntryDeadline, string> = { open: 'UNTIL EACH PLAYER’S GAME', first: 'CLOSE AT THE FIRST KICKOFF' };
 
 export const CONTEST_DEFAULT_SLOTS: SlotSpec[] = [
   { pos: ['QB'] }, { pos: ['RB'] }, { pos: ['RB'] }, { pos: ['WR'] }, { pos: ['WR'] }, { pos: ['WR'] }, { pos: ['TE'] }, { pos: ['K'] }, { pos: ['DEF'] },
@@ -59,6 +76,11 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const capped = !(Number.isFinite(b) && b === 0);          // 0 stored = no cap
   const budget = !capped ? CONTEST_NO_CAP : Number.isFinite(b) && b >= 10000 ? Math.round(b / 100) * 100 : CONTEST_BUDGET_DEFAULT;
   const autoSub = s.auto_sub === true;
+  // NO SQUAD BY LOCK / ENTRIES (v0.673.0). A head-to-head league can't have a
+  // seat sit out — its opponent is waiting — so `drop` there reads as the default.
+  const lateEntry: ContestLateEntry = s.late_entry === 'cpu' || s.late_entry === 'zero' || (s.late_entry === 'drop' && format === 'board')
+    ? s.late_entry : contestLateEntryDefault(format);
+  const entryDeadline: ContestEntryDeadline = s.entry_deadline === 'first' ? 'first' : 'open';
   const ms = Number(s.min_spend);
   const minSpend = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 100) * 100 : 0;
   const spec = Array.isArray(s.roster_slots) && s.roster_slots.length ? s.roster_slots as SlotSpec[] : CONTEST_DEFAULT_SLOTS;
@@ -66,7 +88,31 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const bullseye = contest === 'bullseye'
     ? (bullseyeConfigOf({ bullseye: (s.bullseye as string) ?? 'slots', bullseye_radius: (s.bullseye_radius as number) ?? null }) ?? bullseyeConfigOf({ bullseye: 'slots' }))
     : null;
-  return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null };
+  return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null, lateEntry, entryDeadline };
+}
+
+/** PURE (v0.673.0): what the worker writes at the week's first kickoff for the
+ *  seats with no squad. A CPU seat is always built (any time, not just at
+ *  lock). A human no-show gets the league's rule once the lock has passed:
+ *  `cpu` a built squad, `zero` an empty one, `drop` nothing. Golf's zero is
+ *  the BEST score, so an empty squad there only forfeits when every spot
+ *  prices a scoreless player (zero_pts); otherwise the CPU builds instead. */
+export function noShowBuilds(
+  cfg: ContestConfig,
+  members: { sleeper_roster_id: number; enrolled?: boolean | null; app_user_id?: string | null; controller?: string | null }[],
+  have: Set<number>, lockPassed: boolean,
+): { roster_id: number; how: 'cpu' | 'zero' }[] {
+  const golfSafe = cfg.contest !== 'golf' || cfg.slots.every((d) => d.zeroPts != null && d.zeroPts > 0);
+  const out: { roster_id: number; how: 'cpu' | 'zero' }[] = [];
+  for (const m of members) {
+    if (have.has(m.sleeper_roster_id)) continue;
+    const isAi = m.controller === 'ai' || !m.app_user_id;
+    if (isAi) { out.push({ roster_id: m.sleeper_roster_id, how: 'cpu' }); continue; }
+    if (!lockPassed || m.enrolled === false) continue;
+    if (cfg.lateEntry === 'drop') continue;
+    out.push({ roster_id: m.sleeper_roster_id, how: cfg.lateEntry === 'zero' && golfSafe ? 'zero' : 'cpu' });
+  }
+  return out;
 }
 
 export const CONTEST_WORD: Record<ContestKind, string> = { high: 'HIGHEST SCORE', golf: 'GOLF · LOWEST SCORE', bullseye: 'BULLSEYE' };

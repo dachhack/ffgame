@@ -24,6 +24,7 @@
 //             took your team, or a vampire fed on you. Both are rare and
 //             high-stakes, and both had only ever been a banner you had to
 //             open the app to find.
+import { contestConfigOf } from '../../packages/core/src/engine/contest.ts';
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
@@ -538,8 +539,13 @@ export function contestLockBand(firstKickMs, now) {
 /** PURE: the push rows for one league's members without a squad. */
 export function contestLockRows(league, week, band, lockMs, members, entered) {
   const lockLabel = new Date(lockMs).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
-  const h2h = (league.settings_json?.contest_format ?? (league.kind === 'bullseye' ? 'board' : 'h2h')) === 'h2h';
-  const tail = h2h ? 'the CPU builds one for you at lock, and you can still swap until each player’s game' : 'a week without a squad scores nothing';
+  // NO SQUAD BY LOCK (v0.673.0): the league's own rule for a no-show, and
+  // whether entries close at the first kickoff.
+  const cfg = contestConfigOf(league.settings_json, league.kind);
+  const late = cfg?.lateEntry ?? 'cpu';
+  const tail = (late === 'cpu' ? 'the CPU builds one for you at lock, and you can still swap until each player’s game'
+    : late === 'zero' ? 'a week without a squad scores zero' : 'a week without a squad scores nothing')
+    + (cfg?.entryDeadline === 'first' ? ' — entries close at the first kickoff' : '');
   const rows = [];
   for (const m of members) {
     if (!m.app_user_id || !m.enrolled || m.controller === 'ai' || entered.has(m.sleeper_roster_id)) continue;

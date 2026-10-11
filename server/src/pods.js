@@ -20,7 +20,7 @@ import { REGULAR_SEASON } from './seasonType.js';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
-import { contestConfigOf, contestCard, contestAutoBuild } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds } from '../../packages/core/src/engine/contest.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { priceBoard } from '../../packages/core/src/engine/salaryPricing.ts';
 import { ruledOutSlugs } from './injuries.js';
@@ -297,7 +297,10 @@ export async function ensurePods(week, season, idx) {
   let dealt = 0, made = 0, subbed = 0;
   for (const pod of pods) {
     const contest = pod.kind === 'dfs' || pod.kind === 'bullseye' ? contestConfigOf(pod.settings_json, pod.kind) : null;
-    if (contest && contest.format === 'board') continue;
+    // A LEADERBOARD league (v0.673.0) is here for its no-shows only: a seat
+    // scores on its own row, made when it saves a squad — or, under the
+    // league's NO SQUAD BY LOCK rule, made for it below. No AI seats, no pairs.
+    const boardLeague = !!contest && contest.format === 'board';
     // THE LOCK LEAD (v0.669.0): a drip pod seals picks an hour before kickoff;
     // a contest player locks AT his kickoff, like any DFS site.
     const lead = contest ? 0 : config.lockLeadMs;
@@ -315,40 +318,53 @@ export async function ensurePods(week, season, idx) {
     if (!seats.length || !hasHuman) continue;
 
     // Entries: AI seats auto-build immediately; human seats build their own
-    // via save_pod_entry, but an entry-less human gets the auto-build at lock.
+    // via save_pod_entry, but an entry-less human gets the auto-build at lock
+    // — or, in a contest league (v0.673.0), whatever its NO SQUAD BY LOCK rule
+    // says: a built squad, an empty one that scores zero, or nothing.
     const { data: have } = await db().from('sleeper_lineup')
       .select('roster_id').eq('league_id', pod.id).eq('week', week);
     const haveSet = new Set((have ?? []).map((r) => r.roster_id));
-    const need = (mems ?? []).filter((m) => {
-      if (haveSet.has(m.sleeper_roster_id)) return false;
-      const isAi = m.controller === 'ai' || !m.app_user_id;
-      return isAi || lockPassed;
-    });
+    const need = contest
+      ? noShowBuilds(contest, mems ?? [], haveSet, lockPassed)
+      : (mems ?? []).filter((m) => {
+          if (haveSet.has(m.sleeper_roster_id)) return false;
+          const isAi = m.controller === 'ai' || !m.app_user_id;
+          return isAi || lockPassed;
+        }).map((m) => ({ roster_id: m.sleeper_roster_id, how: 'cpu' }));
     if (need.length) {
-      const rows = need.map((m) => {
+      const rows = need.map(({ roster_id, how }) => {
         if (contest) {
-          const built = contestAutoBuild(playable, contest, `${pod.id}|w${week}|aim${m.sleeper_roster_id}`, contestCardNow);
+          if (how === 'zero') return { league_id: pod.id, week, roster_id, starters_json: [] };
+          const built = contestAutoBuild(playable, contest, `${pod.id}|w${week}|aim${roster_id}`, contestCardNow);
           return {
-            league_id: pod.id, week, roster_id: m.sleeper_roster_id,
+            league_id: pod.id, week, roster_id,
             starters_json: contest.slots.filter((d) => built[d.slot]).map((d) => ({ slot: d.slot, sleeper_id: null, player_slug: built[d.slot], pos: board.find((b) => b.slug === built[d.slot])?.pos ?? d.pos[0] })),
           };
         }
         if (card) {
-          const aimed = aimBuild(board, card, `${pod.id}|w${week}|aim${m.sleeper_roster_id}`);
+          const aimed = aimBuild(board, card, `${pod.id}|w${week}|aim${roster_id}`);
           return {
-            league_id: pod.id, week, roster_id: m.sleeper_roster_id,
+            league_id: pod.id, week, roster_id,
             starters_json: DFS_SLOT_NAMES.filter((sl) => aimed[sl]).map((sl) => ({ slot: sl, sleeper_id: null, player_slug: aimed[sl], pos: dfsSlotPos(sl) })),
           };
         }
-        const squad = aiSalaryEntry(pod.id, week, m.sleeper_roster_id, board);
+        const squad = aiSalaryEntry(pod.id, week, roster_id, board);
         return {
-          league_id: pod.id, week, roster_id: m.sleeper_roster_id,
+          league_id: pod.id, week, roster_id,
           starters_json: squad.map((p, i) => ({ slot: i, sleeper_id: null, player_slug: p.slug, pos: p.pos })),
         };
       });
       await db().from('sleeper_lineup').upsert(rows, { onConflict: 'league_id,week,roster_id' });
       dealt += rows.length;
+      // A leaderboard seat's scoring row is its own (save_contest_entry makes
+      // it on a save); the worker's write for a no-show makes it the same way.
+      if (boardLeague) {
+        await db().from('matchup').upsert(need.map(({ roster_id }) => ({
+          league_id: pod.id, week, sleeper_matchup_id: null, home_roster_id: roster_id, away_roster_id: roster_id, status: 'scheduled', lock_at: lockAt,
+        })), { onConflict: 'league_id,week,home_roster_id,away_roster_id' });
+      }
     }
+    if (boardLeague) continue;
 
     // THE CPU SWAPS A RULED-OUT MAN (v0.666.0). A DFS site gives a human
     // nothing when his player is ruled out after lock, and lets him swap

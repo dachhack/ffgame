@@ -117,6 +117,8 @@ ok('lock: humans without a squad get the push; the CPU seat and the one who buil
 ok('lock: the last call names the lock time and the head-to-head CPU rule', rows[0].title === '⚠ Squads lock Thu 8:15 PM ET' && /CPU builds one for you/.test(rows[0].body) && rows[0].kind === 'lineup' && rows[0].dedupe_key === 'contest-lock:last:L1:7:u1', rows[0]);
 const boardRows = P.contestLockRows({ ...L, settings_json: { contest: 'high', contest_format: 'board' } }, 7, 'day', kick, T.league_membership, new Set());
 ok('lock: a leaderboard seat is told a missing squad scores nothing, the day before', /scores nothing/.test(boardRows[0].body) && boardRows[0].title.startsWith('🗓 Kickoff Bullseye: squads lock') && boardRows[0].dedupe_key.startsWith('contest-lock:day:'), boardRows[0]);
+const zeroRows = P.contestLockRows({ ...L, settings_json: { ...L.settings_json, late_entry: 'zero', entry_deadline: 'first' } }, 7, 'last', kick, T.league_membership, new Set());
+ok('lock: the reminder follows the league’s no-show rule and the deadline (v0.673.0)', /scores zero — entries close at the first kickoff/.test(zeroRows[0].body) && !/CPU builds/.test(zeroRows[0].body), zeroRows[0].body);
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

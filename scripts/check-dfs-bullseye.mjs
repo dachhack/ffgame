@@ -99,7 +99,9 @@ ok('worker: scored under the league\'s catalog, RET spots as RET', /classicPoint
 ok('lock: no drip auto-lineup for a Bullseye contest', /settings_json\?\.dfs_bullseye === true\) continue/.test(read('server/src/lock.js')));
 const pods = read('server/src/pods.js');
 ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(playable, contest,/.test(pods));
-ok('pods: a leaderboard contest is skipped in the seat loop', /if \(contest && contest\.format === 'board'\) continue;/.test(pods));
+// v0.673.0: a leaderboard league takes the no-show block (its NO SQUAD BY LOCK
+// rule) and then leaves the loop — no AI seats to sub, no pairs to make.
+ok('pods: a leaderboard contest gets its no-shows, then leaves the seat loop', /noShowBuilds\(contest, mems \?\? \[\], haveSet, lockPassed\)/.test(pods) && /if \(boardLeague\) continue;/.test(pods) && !/if \(contest && contest\.format === 'board'\) continue;/.test(pods));
 const sql = read('supabase/migrations/0462_dfs_bullseye.sql');
 ok('sql: slot names match the engine', /array\['QB','RB1','RB2','WR1','WR2','WR3','TE','K','DEF'\]/.test(sql));
 ok('sql: the cap matches the engine', sql.includes('cap int := 50000') && DFS_CAP === 50000);
@@ -143,6 +145,26 @@ ok('contest: a bullseye league with no `contest` key is a Bullseye contest, lead
 })());
 ok('contest: a dfs league with no `contest` key is HIGH, head-to-head', C.contestConfigOf({}, 'dfs')?.contest === 'high' && C.contestConfigOf({}, 'dfs')?.format === 'h2h');
 ok('contest: not a contest without a kind or key', C.contestConfigOf({ game_mode: 'classic' }, 'league') === null);
+// NO SQUAD BY LOCK and ENTRIES (v0.673.0)
+ok('late: head-to-head builds, a leaderboard sits out, entries open — by default', C.contestConfigOf({}, 'dfs')?.lateEntry === 'cpu' && C.contestConfigOf({ contest_format: 'board' }, 'dfs')?.lateEntry === 'drop' && C.contestConfigOf({}, 'dfs')?.entryDeadline === 'open');
+ok('late: the settings are read; drop on head-to-head falls back', C.contestConfigOf({ late_entry: 'zero', entry_deadline: 'first' }, 'dfs')?.lateEntry === 'zero' && C.contestConfigOf({ late_entry: 'zero' }, 'dfs')?.entryDeadline === 'open' && C.contestConfigOf({ late_entry: 'drop' }, 'dfs')?.lateEntry === 'cpu' && C.contestConfigOf({ late_entry: 'drop', contest_format: 'board' }, 'dfs')?.lateEntry === 'drop');
+{
+  const mems = [{ sleeper_roster_id: 1, enrolled: true, app_user_id: 'u1', controller: 'human' }, { sleeper_roster_id: 2, enrolled: true, app_user_id: null, controller: 'ai' }, { sleeper_roster_id: 3, enrolled: true, app_user_id: 'u3', controller: 'human' }];
+  const have = new Set([3]);
+  const h2h = C.contestConfigOf({ contest_format: 'h2h' }, 'dfs');
+  ok('noShow: before lock only the CPU seat is built', JSON.stringify(C.noShowBuilds(h2h, mems, have, false)) === '[{"roster_id":2,"how":"cpu"}]', C.noShowBuilds(h2h, mems, have, false));
+  ok('noShow: at lock a head-to-head no-show gets a CPU squad by default', JSON.stringify(C.noShowBuilds(h2h, mems, have, true)) === '[{"roster_id":1,"how":"cpu"},{"roster_id":2,"how":"cpu"}]', C.noShowBuilds(h2h, mems, have, true));
+  const zero = C.contestConfigOf({ contest_format: 'h2h', late_entry: 'zero' }, 'dfs');
+  ok('noShow: SCORES ZERO writes an empty squad for the human, still builds the CPU', JSON.stringify(C.noShowBuilds(zero, mems, have, true)) === '[{"roster_id":1,"how":"zero"},{"roster_id":2,"how":"cpu"}]', C.noShowBuilds(zero, mems, have, true));
+  const board = C.contestConfigOf({ contest_format: 'board' }, 'dfs');
+  ok('noShow: a leaderboard no-show sits out by default', C.noShowBuilds(board, mems.filter((m) => m.app_user_id), have, true).length === 0);
+  const boardCpu = C.contestConfigOf({ contest_format: 'board', late_entry: 'cpu' }, 'dfs');
+  ok('noShow: …unless the league says the CPU builds', JSON.stringify(C.noShowBuilds(boardCpu, mems.filter((m) => m.app_user_id), have, true)) === '[{"roster_id":1,"how":"cpu"}]');
+  const golfZero = C.contestConfigOf({ contest: 'golf', contest_format: 'h2h', late_entry: 'zero' }, 'dfs');
+  ok('noShow: golf with no zero penalty builds instead of a zero (a scoreless squad would win)', C.noShowBuilds(golfZero, mems, have, true)[0].how === 'cpu');
+  const golfPen = C.contestConfigOf({ contest: 'golf', contest_format: 'h2h', late_entry: 'zero', roster_slots: [{ pos: ['QB'], zero_pts: 30 }, { pos: ['RB'], zero_pts: 25 }] }, 'dfs');
+  ok('noShow: golf with every spot priced takes the zero', C.noShowBuilds(golfPen, mems, have, true)[0].how === 'zero');
+}
 const cfgG = C.contestConfigOf({ contest: 'golf', contest_format: 'h2h', budget: 80000, roster_slots: [{ pos: ['QB'] }, { pos: ['RB', 'WR'], zero_pts: 25 }, { pos: ['HC'], label: 'COACH' }] }, 'dfs');
 ok('contest: the league\'s own spots, budget and labels', cfgG?.budget === 80000 && cfgG.slots.map((d) => d.slot).join() === 'S1,S2,S3' && C.contestSlotLabels(cfgG.slots).S2 === 'RB/WR' && C.contestSlotLabels(cfgG.slots).S3 === 'COACH');
 ok('contest: a repeated type numbers up (RB1, RB2, D/ST)', (() => { const l = C.contestSlotLabels(leagueSlotDefs({ slots: C.CONTEST_DEFAULT_SLOTS })); return l.S2 === 'RB1' && l.S3 === 'RB2' && l.S9 === 'D/ST' && l.S1 === 'QB'; })());

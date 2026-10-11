@@ -10,7 +10,7 @@ import {
   contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries,
   type ContestInfo, type ContestKind, type ContestFormat, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow,
 } from '@drip/core/data/liveApi';
-import { CONTEST_WORD, CONTEST_EMOJI, contestSquadOf, contestSlotLabels } from '@drip/core/engine/contest';
+import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { RescoreBox, AdjustBox } from './CommishDesk';
 
@@ -104,6 +104,20 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
           <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { autoSub: true }), 'auto-sub on')} className="mono" style={chip(!!b.auto_sub)}>SWAP HIM FOR ME</button>
           <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { autoSub: false }), 'auto-sub off')} className="mono" style={chip(!b.auto_sub)}>LEAVE IT TO ME</button>
           <span className="mono" style={small}>Every player locks at his own kickoff, so a ruled-out pick can be swapped until then. SWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has; LEAVE IT TO ME banks the zero.</span>
+        </div>
+        <div className="mono" style={label}>NO SQUAD BY LOCK</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {(h2h ? ['cpu', 'zero'] as ContestLateEntry[] : ['cpu', 'zero', 'drop'] as ContestLateEntry[]).map((v) => (
+            <button key={v} disabled={busy} onClick={() => void act(setContestRules(leagueId, { lateEntry: v }), `a no-show ${CONTEST_LATE_WORD[v].toLowerCase()}`)} className="mono" style={chip((b.late_entry ?? contestLateEntryDefault(b.format)) === v)}>{CONTEST_LATE_WORD[v]}</button>
+          ))}
+          <span className="mono" style={small}>{`A seat with no squad at the week’s first kickoff: ${h2h ? 'the CPU builds one so its opponent has a game, or it forfeits with a zero' : 'the CPU builds one, it scores a zero, or it sits the week out with no row at all'}.${b.contest === 'golf' ? ' In golf a scoreless squad is the best score, so SCORES ZERO needs every spot’s 0 → penalty set on ROSTER.' : ''}`}</span>
+        </div>
+        <div className="mono" style={label}>ENTRIES</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {(['open', 'first'] as ContestEntryDeadline[]).map((v) => (
+            <button key={v} disabled={busy} onClick={() => void act(setContestRules(leagueId, { entryDeadline: v }), v === 'first' ? 'entries close at the first kickoff' : 'entries open until each player’s game')} className="mono" style={chip((b.entry_deadline ?? 'open') === v)}>{CONTEST_DEADLINE_WORD[v]}</button>
+          ))}
+          <span className="mono" style={small}>A new squad can go in until its players kick off, or not at all once the week’s first game has — a saved squad still swaps its unlocked players either way.</span>
         </div>
       </div>
 

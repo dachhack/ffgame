@@ -921,7 +921,9 @@ export const setBullseyeSize = (leagueId: string, max: number) =>
 // squads are rebuilt weekly from the board. The engine is engine/contest.ts.
 export type ContestKind = 'high' | 'golf' | 'bullseye';
 export type ContestFormat = 'h2h' | 'board';
-export interface ContestInfo extends BullseyeInfo { contest: ContestKind; format: ContestFormat; /** 0 = no cap (0469). */ budget: number; /** The minimum spend (0469); 0 = none. */ min_spend?: number; /** AUTO-SUB (0470): the worker swaps a ruled-out pick before his kickoff. */ auto_sub?: boolean; spots: number }
+export interface ContestInfo extends BullseyeInfo { contest: ContestKind; format: ContestFormat; /** 0 = no cap (0469). */ budget: number; /** The minimum spend (0469); 0 = none. */ min_spend?: number; /** AUTO-SUB (0470): the worker swaps a ruled-out pick before his kickoff. */ auto_sub?: boolean;
+  /** NO SQUAD BY LOCK (0475): cpu | zero | drop. */ late_entry?: import('../engine/contest').ContestLateEntry;
+  /** ENTRIES (0475): open | first (close at the week's first kickoff). */ entry_deadline?: import('../engine/contest').ContestEntryDeadline; spots: number }
 export interface ContestState {
   ok: boolean; error?: string; on?: boolean; kind?: string; name?: string; week?: number; season?: string;
   contest?: ContestKind; format?: ContestFormat; budget?: number; min_spend?: number;
@@ -978,8 +980,10 @@ export const commishSetContestSquad = (leagueId: string, week: number, rosterId:
 export const contestBoardFind = (leagueId: string, week: number | null | undefined, q: string) =>
   contestBoard(leagueId, week, 1, 0, q).then((r) => ({ ok: r.ok, error: r.error, found: r.found ?? [], season: r.season?.found ?? [] }));
 /** Commissioner: the contest, the format (before the first week), the budget. */
-export const setContestRules = (leagueId: string, o: { contest?: ContestKind | null; format?: ContestFormat | null; budget?: number | null; minSpend?: number | null; autoSub?: boolean | null }) =>
-  rpcOk<{ ok: boolean; error?: string; bullseye?: ContestInfo }>('set_contest_rules', { p_league: leagueId, p_contest: o.contest ?? null, p_format: o.format ?? null, p_budget: o.budget ?? null, p_min_spend: o.minSpend ?? null, p_auto_sub: o.autoSub ?? null });
+export const setContestRules = (leagueId: string, o: { contest?: ContestKind | null; format?: ContestFormat | null; budget?: number | null; minSpend?: number | null; autoSub?: boolean | null;
+  lateEntry?: import('../engine/contest').ContestLateEntry | null; entryDeadline?: import('../engine/contest').ContestEntryDeadline | null }) =>
+  rpcOk<{ ok: boolean; error?: string; bullseye?: ContestInfo }>('set_contest_rules', { p_league: leagueId, p_contest: o.contest ?? null, p_format: o.format ?? null, p_budget: o.budget ?? null, p_min_spend: o.minSpend ?? null, p_auto_sub: o.autoSub ?? null,
+    p_late_entry: o.lateEntry ?? null, p_entry_deadline: o.entryDeadline ?? null });
 /** The money rule in a few words: "$50k budget", "no cap", "min $45k" (0469). */
 export function contestMoneyWord(b: { budget?: number | null; min_spend?: number | null }): string {
   const cap = b.budget ?? 50000;

@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.673.0 — What a no-show gets, and when entries close
+
+> - Weekly squad leagues get two new rules under COMMISH. NO SQUAD BY LOCK says what a seat with no squad gets at the week's first kickoff: the CPU builds one (what head-to-head always did), it scores a zero, or — on a leaderboard — it sits the week out. ENTRIES says whether a new squad can still go in after the week's first game has kicked off, or only until then; a saved squad still swaps its unlocked players either way.
+> - The lock reminder now says which rule your league plays by.
+
+- HANDOFF's third not-done item. Migration 0475: `late_entry`
+  (cpu | zero | drop; head-to-head can't drop — an opponent is waiting;
+  golf can't take zero until every spot prices a scoreless player, since
+  a scoreless golf squad would win) and `entry_deadline` (open | first) on
+  `set_contest_rules` (two parameters on; old overload dropped), both in
+  `_bullseye_info`; `save_contest_entry` refuses a NEW squad after the
+  week's first kickoff under `first` (an empty no-show squad counts as
+  none; the commissioner's squad fix steps past it). Engine:
+  `ContestConfig.lateEntry/entryDeadline`, `contestLateEntryDefault`, and
+  the pure `noShowBuilds(cfg, members, have, lockPassed)` the worker
+  writes from at lock — a built squad, an empty one, or nothing; a
+  leaderboard league now takes that block too (and the worker makes its
+  self-paired scoring row, as a save would) before leaving the seat loop.
+  `contestLockRows` words the reminder by the rule. Commissioner cards
+  (web, phone): NO SQUAD BY LOCK and ENTRIES chips. `check:dfsbullseye`
+  and `check:contestrecap` grew cases; `scripts/db/scratch/flow17.sql`.
+  No iPhone build needed.
+
 ### v0.672.0 — The commissioner fixes a contest week
 
 > - Weekly squad leagues get a FIX A WEEK desk under COMMISH: void a finished week that shouldn't count (and restore it later), correct a player's points after a stat correction, set a member's squad past the kickoff locks, and re-score the week from the plays as they stand — preview first. Every fix is announced in the league chat with the reason.
