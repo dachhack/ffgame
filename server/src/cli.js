@@ -795,6 +795,12 @@ async function main() {
         argv.push('seal-audit', need('week'));
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
+      } else if (req.mode === 'set-lineup') {
+        // v0.666.2: one lineup change for a seat, as the app would make it. `confirm: "SET"` — this writes a member's lineup.
+        if (req.confirm !== 'SET') throw new Error('set-lineup needs "confirm": "SET" — this writes a member\'s lineup');
+        argv.push('set-lineup', `--league=${need('league')}`, `--team=${need('team')}`, `--add=${need('add')}`, `--out=${need('out')}`);
+        if (req.week != null) argv.push(`--week=${req.week}`);
+        if (req.dry) argv.push('--dry');
       } else if (req.mode === 'salary-audit') {
         // v0.666.0: read-only — is the week's board priced right.
         argv.push('salary-audit', need('week'));
@@ -831,7 +837,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | offboard-sweep`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | set-lineup | offboard-sweep`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -908,6 +914,83 @@ async function main() {
       //   node src/cli.js shotgun-preview <league-uuid> [week]
       const { shotgunPreview } = await import('./shotgun.js');
       console.log(await shotgunPreview(args[0], args[1] ?? null));
+      break;
+    }
+    case 'set-lineup': {
+      // ▶ ONE LINEUP CHANGE FOR A SEAT (v0.666.2, refs #1204). Founder: "Keep
+      //   farmer Casey's line up as he intended it to be." Puts `add` in for
+      //   `out` on a classic seat's weekly lineup through the same rows the
+      //   app writes (sealed_pick, game_window wk), under the same rules: the
+      //   spot must take him, neither player's game may have locked. When the
+      //   spot `out` holds can't take `add` (an RB for a WR), `add` goes to a
+      //   spot that can and that spot's occupant moves to the vacated one —
+      //   the FLEX swap the app would have made.
+      //   node src/cli.js set-lineup --league=<uuid> --team=<name> --add=<slug|name> --out=<slug|name> [--week=<n>] [--dry]
+      const { db } = await import('./supabase.js');
+      const { modeOfSettings } = await import('./resolve.js');
+      const { leagueSlotDefs, slotAllows } = await import('../../packages/core/src/engine/classic.ts');
+      const { normName } = await import('../../packages/core/src/data/players.ts');
+      const opt = (k) => (args.find((a) => a.startsWith(`--${k}=`)) ?? '').slice(k.length + 3) || null;
+      const league = opt('league'), teamQ = opt('team'), addQ = opt('add'), outQ = opt('out'), dry = args.includes('--dry');
+      if (!league || !teamQ || !addQ || !outQ) { console.error('usage: set-lineup --league=<uuid> --team=<name> --add=<slug|name> --out=<slug|name> [--week=<n>] [--dry]'); process.exitCode = 1; break; }
+      const { data: lg } = await db().from('league').select('id,name,season,settings_json').eq('id', league).maybeSingle();
+      if (!lg) throw new Error('no such league');
+      const mode = modeOfSettings(lg.settings_json);
+      if (mode?.mode !== 'classic') throw new Error('set-lineup is for a classic league');
+      const slots = leagueSlotDefs(mode);
+      const { data: mems } = await db().from('league_membership').select('sleeper_roster_id,team_name,app_user_id').eq('league_id', league);
+      const seat = (mems ?? []).find((m) => normName(m.team_name ?? '') === normName(teamQ)) ?? (mems ?? []).find((m) => normName(m.team_name ?? '').includes(normName(teamQ)));
+      if (!seat) throw new Error(`no seat named like "${teamQ}" — seats: ${(mems ?? []).map((m) => m.team_name).join(' | ')}`);
+      if (!seat.app_user_id) throw new Error(`seat "${seat.team_name}" has no account to write picks as`);
+      const week = Number(opt('week')) || (await (async () => {
+        const { data: ms } = await db().from('matchup').select('week,status').eq('league_id', league).neq('status', 'final').order('week').limit(1);
+        return ms?.[0]?.week ?? null;
+      })());
+      if (!week) throw new Error('no open week');
+      const { data: m } = await db().from('matchup').select('id,week,status,home_roster_id,away_roster_id').eq('league_id', league).eq('week', week)
+        .or(`home_roster_id.eq.${seat.sleeper_roster_id},away_roster_id.eq.${seat.sleeper_roster_id}`).maybeSingle();
+      if (!m) throw new Error(`seat ${seat.sleeper_roster_id} has no week ${week} matchup`);
+      if (m.status === 'final') throw new Error('that week is final');
+      const { data: pool } = await db().from('league_pool').select('slug,full_name,pos,team,exp').eq('league_id', league).range(0, 2999);
+      const find = (q) => (pool ?? []).find((p) => p.slug === q) ?? (pool ?? []).find((p) => normName(p.full_name) === normName(q));
+      const add = find(addQ), out = find(outQ);
+      if (!add) throw new Error(`"${addQ}" is not in this league's pool`);
+      if (!out) throw new Error(`"${outQ}" is not in this league's pool`);
+      const { data: picks } = await db().from('sealed_pick').select('id,roster_slot,player_slug,locked').eq('matchup_id', m.id).eq('app_user_id', seat.app_user_id).eq('game_window', 'wk');
+      const lineup = Object.fromEntries((picks ?? []).map((r) => [r.roster_slot, r.player_slug]));
+      const lockedSlots = new Set((picks ?? []).filter((r) => r.locked).map((r) => r.roster_slot));
+      const outSlot = Object.entries(lineup).find(([, v]) => v === out.slug)?.[0] ?? null;
+      if (!outSlot) throw new Error(`${out.full_name} is not in the week ${week} lineup (${JSON.stringify(lineup)})`);
+      if (Object.values(lineup).includes(add.slug)) throw new Error(`${add.full_name} is already in the lineup`);
+      // Locks: the per-player rule the app and the worker both keep.
+      const { data: games } = await db().from('nfl_slate').select('home,away,kickoff').eq('season', lg.season).eq('week', week);
+      const kick = (team) => { const g = (games ?? []).find((x) => [x.home, x.away].includes(team)); return g?.kickoff ? Date.parse(g.kickoff) - config.lockLeadMs : null; };
+      const locked = (p, slot) => lockedSlots.has(slot) || (kick(p.team) != null && kick(p.team) <= Date.now());
+      if (locked(out, outSlot)) throw new Error(`${out.full_name}'s game has locked — he can't be moved`);
+      if (kick(add.team) != null && kick(add.team) <= Date.now()) throw new Error(`${add.full_name}'s game has locked — he can't be added`);
+      const allows = (slot, p) => { const d = slots.find((x) => x.slot === slot); return !!d && slotAllows(d, { id: p.slug, pos: p.pos, team: p.team, exp: p.exp ?? null }); };
+      const writes = [];
+      if (allows(outSlot, add)) {
+        writes.push({ roster_slot: outSlot, player_slug: add.slug });
+      } else {
+        // The FLEX swap: a spot that takes `add` whose occupant can stand where `out` stood (or is empty).
+        let done = false;
+        for (const d of slots) {
+          if (d.slot === outSlot || lockedSlots.has(d.slot) || !allows(d.slot, add)) continue;
+          const occ = lineup[d.slot] ? find(lineup[d.slot]) : null;
+          if (occ && (locked(occ, d.slot) || !allows(outSlot, occ))) continue;
+          writes.push({ roster_slot: d.slot, player_slug: add.slug }, { roster_slot: outSlot, player_slug: occ ? occ.slug : null });
+          done = true; break;
+        }
+        if (!done) throw new Error(`no spot can take ${add.full_name} (${add.pos}) with ${out.full_name} out — nothing written`);
+      }
+      const words = writes.map((w) => `${w.roster_slot} ← ${w.player_slug ? find(w.player_slug)?.full_name ?? w.player_slug : '(empty)'}`).join(', ');
+      console.log(`set-lineup: ${lg.name} · ${seat.team_name} (seat ${seat.sleeper_roster_id}) · week ${week}: ${words}${dry ? ' [dry]' : ''}`);
+      if (dry) break;
+      const payload = writes.map((w) => ({ matchup_id: m.id, app_user_id: seat.app_user_id, game_window: 'wk', roster_slot: w.roster_slot, player_slug: w.player_slug, metric_id: null }));
+      const { error } = await db().from('sealed_pick').upsert(payload, { onConflict: 'matchup_id,app_user_id,game_window,roster_slot' });
+      if (error) throw new Error(error.message);
+      console.log('set-lineup: written');
       break;
     }
     case 'salary-audit': {

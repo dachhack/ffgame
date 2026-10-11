@@ -4,6 +4,7 @@
 // storage: sealed_pick rows under the 'wk' pseudo-window, sealed at the
 // week's first kickoff (matchup.lock_at), scored by core's classicPoints off
 // the same live play stream, refreshed every 60s.
+import { rememberedWeek, rememberWeek } from '@drip/core/data/viewWeek';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Image, Pressable, RefreshControl, ScrollView, Text, View, PanResponder } from 'react-native';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slotAllows, isRetSlot, slotDisplayNames, slotAcceptsLabel, slotFilterLabel, planSpotMove, autoSlotPlan, slateAwareProj, CLASSIC_WIN, classicPoints, bestballFillBy, type ClassicPick, type ClassicScoring, type ClassicSlotDef, type SlotSpec } from '@drip/core/engine/classic';
@@ -493,7 +494,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
   // ── WALKING THE SEASON (v0.299.1) ─────────────────────────────────────────
   // null = whatever week the league is on. A number is a week asked for, by
   // the arrows or by a swipe.
-  const [weekWanted, setWeekWanted] = useState<number | null>(null);
+  // The week the league's other screen was on, if any (v0.666.2): the Team
+  // page and the matchup open on the same week and follow each other.
+  const [weekWanted, setWeekWantedRaw] = useState<number | null>(() => rememberedWeek(leagueId));
+  const setWeekWanted = (w: number | null) => { rememberWeek(leagueId, w); setWeekWantedRaw(w); };
   const [lastRegWeek, setLastRegWeek] = useState<number | null>(null);
   // ── EVERY MATCHUP IN THE LEAGUE (v0.424.0, founder: "a chip that goes to
   //    the next matchup for that week") ─────────────────────────────────────
