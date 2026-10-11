@@ -29,6 +29,7 @@ import {
   contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
   type ContestConfig,
 } from '@drip/core/engine/contest';
+import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
 import { squadCardText } from '@drip/core/data/squadCard';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import {
@@ -39,7 +40,6 @@ import { classicSlotsFromSpec, type ClassicSlotDef, type ClassicScoring } from '
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projectedRing, tiebreakDistance } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
-import { PlayerImg } from '../app/ui';
 
 const fmt$ = (n: number) => `$${n.toLocaleString('en-US')}`;
 /** "18.1 ↑2.7" when the feed has moved since the price was set. */
@@ -267,6 +267,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
 
   return (
     <div style={embedded ? { display: 'grid', gap: 12 } : { maxWidth: 760, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
+      <CardTableCss />
       {!embedded && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={onBack} className="mono" style={chip(false)}>← BACK</button>
@@ -375,61 +376,47 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
             ))}
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8 }}>
-          {slots.map((d) => {
-            const slug = picks[d.slot];
-            const p = slug ? byPlayer.get(slug) : null;
-            const target = theCard?.targets[d.slot];
-            const lv = liveOf(d.slot);
-            const isLocked = locked(slug);
-            const canTap = editable && !isLocked;
-            const changed = slug !== saved[d.slot];
-            return (
-              <div key={d.slot} onClick={() => { if (canTap) openSheet(d.slot); }}
-                style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: 10, borderRadius: 8, cursor: canTap ? 'pointer' : 'default',
-                  background: 'var(--bg)', border: `1px solid ${changed ? 'var(--you)' : 'var(--bd)'}`, opacity: isLocked && !lv ? 0.75 : 1 }}>
-                <div style={{ display: 'grid', justifyItems: 'center', gap: 2, minWidth: 52 }}>
-                  <span className="mono" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 5, padding: '2px 6px' }}>{labels[d.slot]}</span>
-                  {bull && !isTotal && target != null && <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--you)' }}>{target}</span>}
-                  {!bull && d.zeroPts != null && <span className="mono" title="a scoreless spot banks this" style={{ fontSize: 8.5, color: 'var(--dim)' }}>{`0 → ${d.zeroPts}`}</span>}
-                  {myTb?.slot === d.slot && <span className="mono" title="tie-breaker" style={{ fontSize: 8.5, color: 'var(--dim)' }}>{`⚖️ ${myTb.target}`}</span>}
-                </div>
-                {p ? (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
-                    <PlayerImg playerId={p.slug} team={p.team} pos={p.pos} size={38} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}{isLocked ? ' 🔒' : ''}<InjuryTag key={injTick} week={week} slug={p.slug} /></div>
-                      <div className="mono" style={{ ...small, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}</div>
-                      <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)' }}>{`${fmt$(p.salary)} · proj ${projWord(p)} · ${valueOf(p).toFixed(2)}/$1k`}</div>
-                    </div>
+        {/* THE DEAL (v0.681.0, founder: "incorporate the card theme into the
+            purchase interaction"): a spot is a card on the felt — yours face
+            up, an open one the deck's back with ＋ PICK on it; buying a player
+            deals him in. The numbers sit under each card. */}
+        <Felt>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', padding: '4px 0' }}>
+            {slots.map((d, i) => {
+              const slug = picks[d.slot];
+              const p = slug ? byPlayer.get(slug) : null;
+              const target = theCard?.targets[d.slot];
+              const lv = liveOf(d.slot);
+              const isLocked = locked(slug);
+              const canTap = editable && !isLocked;
+              const changed = slug !== saved[d.slot];
+              const hint = d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price';
+              const dim = 'rgba(255,255,255,0.75)';
+              return (
+                <div key={d.slot} style={{ width: 104, display: 'grid', gap: 4, justifyItems: 'center', alignContent: 'start' }}>
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? '#E9B959' : dim, whiteSpace: 'nowrap' }}>
+                    {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${myTb?.slot === d.slot ? ` · ⚖️ ${myTb.target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
+                  </span>
+                  <div style={{ borderRadius: 12, outline: changed ? '2px solid #E9B959' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
+                    {p
+                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={labels[d.slot]} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} />
+                      : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => openSheet(d.slot) : undefined} />}
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
-                    <div style={{ width: 38, height: 38, borderRadius: 11, border: '1px dashed var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 18 }}>+</div>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="mono" style={{ fontSize: 12, color: editable ? 'var(--you)' : 'var(--faint)', fontWeight: 700 }}>{editable ? `PICK ${labels[d.slot]}` : 'empty'}</div>
-                      <div className="mono" style={small}>{d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price'}</div>
-                    </div>
-                  </div>
-                )}
-                <div className="mono" style={{ textAlign: 'right', display: 'grid', gap: 4, justifyItems: 'end' }}>
-                  {lv ? (
-                    <>
-                      <div style={{ fontSize: 14, fontWeight: 800 }}>{lv.score.toFixed(1)}</div>
-                      {lv.aim && <div style={{ fontSize: 9.5, color: lv.aim.ring > 0 ? 'var(--you)' : 'var(--faint)' }}>{`${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}`}</div>}
-                    </>
-                  ) : p && bull && !isTotal && target != null ? (
-                    <div style={small}>{`aims ${projectedRing(p.proj, target, radius).toFixed(1)}`}</div>
-                  ) : null}
+                  <span className="mono" style={{ fontSize: 9.5, color: dim, textAlign: 'center', lineHeight: 1.3, minHeight: 25 }}>
+                    {p
+                      ? (lv ? `${lv.score.toFixed(1)}${lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}` : `${fmt$(p.salary)} · proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ''}`)
+                      : hint}
+                    {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
+                  </span>
                   {p && canTap && (
                     <button onClick={(e) => { e.stopPropagation(); setPicks({ ...picks, [d.slot]: null }); }} title="clear this spot" className="mono"
-                      style={{ background: 'none', border: '1px solid var(--bd)', borderRadius: 999, color: 'var(--faint)', fontSize: 10, cursor: 'pointer', padding: '2px 7px' }}>✕</button>
+                      style={{ background: 'none', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 999, color: dim, fontSize: 10, cursor: 'pointer', padding: '2px 8px' }}>✕</button>
                   )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </Felt>
         {editable && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
             <button onClick={() => void save()} disabled={busy || filled < n || blocked || !dirty} className="mono" style={chip(true)}>{dirty ? 'SAVE SQUAD' : 'SAVED'}</button>
@@ -496,32 +483,26 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
               {activeDef ? `Picking ${labels[activeDef.slot]}${bull && !isTotal && theCard ? ` · aim at ${theCard.targets[activeDef.slot]}` : ''} · room ${fmt$(Math.max(0, roomFor(ctx, activeDef.slot, salaryOf)))}` : 'Any spot: each player lands in the tightest open spot that takes him.'}
               {` · ${rows.length} shown`}
             </div>
-            {/* the players */}
-            <div style={{ overflowY: 'auto', display: 'grid', gap: 2, alignContent: 'start' }}>
-              {rows.slice(0, 200).map(({ p, slot, fits, why, afford, over, lock, taken, dist, value }) => {
-                const ok = fits && afford && !lock && !taken;
-                const land = slot ? labels[slot] : null;
-                return (
-                  <button key={p.slug} disabled={!ok} onClick={() => put(p.slug, slot)}
-                    style={{ display: 'grid', gridTemplateColumns: '36px minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '7px 6px', background: 'none', border: 'none', borderTop: '1px solid var(--bd)', textAlign: 'left', color: 'var(--text)', cursor: ok ? 'pointer' : 'not-allowed', opacity: ok ? 1 : 0.5, borderRadius: 6 }}>
-                    <PlayerImg playerId={p.slug} team={p.team} pos={p.pos} size={34} />
-                    <span style={{ minWidth: 0, display: 'grid' }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<InjuryTag key={injTick} week={week} slug={p.slug} /></span>
-                      <span className="mono" style={{ ...small, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}{active === 'any' && land && ok ? ` · → ${land}` : ''}</span>
-                      {(why || taken || lock || (fits && !afford)) && (
-                        <span className="mono" style={{ fontSize: 10, color: lock || taken ? 'var(--faint)' : 'var(--warn, #c66)' }}>
-                          {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? `over budget by ${fmt$(over)}`}
+            {/* the players, dealt as cards (v0.681.0): the price under each; tap to buy */}
+            <div style={{ overflowY: 'auto' }}>
+              <Felt>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+                  {rows.slice(0, 120).map(({ p, slot, fits, why, afford, over, lock, taken, dist, value }, i) => {
+                    const ok = fits && afford && !lock && !taken;
+                    const land = slot ? labels[slot] : null;
+                    return (
+                      <div key={p.slug} onClick={() => { if (ok) put(p.slug, slot); }} title={`${p.name} · ${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}
+                        style={{ width: 104, display: 'grid', gap: 3, justifyItems: 'center', alignContent: 'start', opacity: ok ? 1 : 0.45, cursor: ok ? 'pointer' : 'not-allowed' }}>
+                        <PlayerCard slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} idx={Math.min(i, 12)} locked={lock} />
+                        <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: ok ? '#E9B959' : 'rgba(255,255,255,0.6)' }}>{fmt$(p.salary)}<InjuryTag key={injTick} week={week} slug={p.slug} /></span>
+                        <span className="mono" style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', textAlign: 'center', lineHeight: 1.3 }}>
+                          {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? (fits && !afford ? `over budget by ${fmt$(over)}` : `proj ${projWord(p)} · ${value.toFixed(2)}/$1k${bull && !isTotal && dist != null ? ` · ${dist.toFixed(1)} off` : ''}`)}
                         </span>
-                      )}
-                    </span>
-                    <span className="mono" style={{ textAlign: 'right', display: 'grid', gap: 1, justifyItems: 'end' }}>
-                      <span style={{ fontSize: 13, fontWeight: 800 }}>{fmt$(p.salary)}</span>
-                      <span style={{ fontSize: 10.5, color: 'var(--dim)' }}>{`proj ${projWord(p)} · ${value.toFixed(2)}/$1k`}</span>
-                      {bull && !isTotal && dist != null && <span style={{ fontSize: 10, color: dist <= radius / 5 ? 'var(--you)' : 'var(--faint)' }}>{`${dist.toFixed(1)} off`}</span>}
-                    </span>
-                  </button>
-                );
-              })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Felt>
               {!rows.length && <div className="mono" style={{ ...small, padding: 16, textAlign: 'center' }}>Nobody matches — widen the search or show ineligible players.</div>}
             </div>
           </div>

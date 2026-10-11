@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.681.0 — The squad builder deals cards
+
+> - Building a weekly contest squad is now a card table: each spot is a card on the felt in your chosen deck, your picks face up with the price on the card and an open spot the deck's back with ＋ PICK on it. Buying a player deals him in: the card turns over.
+> - The pick sheet deals the players as cards too, the price under each; tap one to buy him. The spot's numbers (price, projection, target, tie-breaker) sit under each card.
+> - On the matchup table, each squad's tie-breaker spot carries its ⚖️ target, and how far off it is once his game is on.
+
+Founder: "Let's incorporate the card theme into the purchase interaction as
+well" and "Put the spot-specific tie breaker target chip on the player spots
+in the matchup as well." Both `ContestSquad` screens' MY SQUAD list and pick
+sheet are dealt on the kit's felt (web `Felt` / `PlayerCard` / `SealedCard`,
+the last two gaining `onClick` and a ribbon with its own words; phone
+`FeltTable` / `FlipCard` / `CardFace` with a new `foot` price, the open
+spot a `CardBack` of the chosen deck, so a buy re-keys the `FlipCard` and it
+turns). Both `ContestMatchup` screens compute `contestTiebreak` per seat and
+put `⚖️ <target>` on that spot's label line, with the distance beside the
+score. Plain JS: no iPhone build.
+
 ### v0.680.2 — The phone scoreboard's cells stack
 
 > - On the phone, the contest table's scoreboard put each squad's points and its distance from the target side by side, and the two squads' labels ran into each other in the middle. Each side's cells now stack: points over the distance.

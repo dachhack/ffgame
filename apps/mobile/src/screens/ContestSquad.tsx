@@ -10,7 +10,7 @@
 // filter, the pool filter, your seat's rule), FILL FOR ME for the open spots,
 // and the week's injuries. The engine is engine/contestBuilder.ts.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
   contestState, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
@@ -19,7 +19,6 @@ import {
 import { injuryFor } from '@drip/core/data/injuries';
 import { squadCardText } from '@drip/core/data/squadCard';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
-import { headshot, teamLogo } from '@drip/core/data/media';
 import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
 import {
   contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
@@ -33,9 +32,10 @@ import { classicSlotsFromSpec, type ClassicSlotDef, type ClassicScoring } from '
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projectedRing, tiebreakDistance } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs } from '../theme.native';
+import { FeltTable, CardBack, CardFace, FlipCard, CARD_W } from '../ui/ContestCards';
 import { tap, commit, warn } from '../ui/feedback';
-import { Card, Chip, ChipStrip, Display, Mono, PosPill } from '../ui/prims';
+import { Card, Chip, ChipStrip, Display, Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 
 const fmt$ = (n: number) => `$${n.toLocaleString('en-US')}`;
@@ -74,15 +74,6 @@ export function gameLine(team: string, slate: Map<string, SlateSpot>): string {
   if (!g) return slate.size ? 'BYE' : '';
   const when = g.kickoff ? new Date(g.kickoff).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }).replace(', ', ' ').replace(' AM', 'a').replace(' PM', 'p') : '';
   return `${g.home ? 'vs' : '@'} ${g.opp}${when ? ` · ${when}` : ''}`;
-}
-
-/** Headshot → team crest → position pill. */
-function Face({ slug, team, pos, size = 34 }: { slug: string; team: string; pos: string; size?: number }) {
-  const t = useTheme();
-  const uri = headshot(slug) ?? teamLogo(team, { slug });
-  return uri
-    ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size * 0.3, backgroundColor: t.bg }} resizeMode={headshot(slug) ? 'cover' : 'contain'} />
-    : <View style={{ width: size, height: size, borderRadius: size * 0.3, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}><PosPill pos={pos} /></View>;
 }
 
 function InjuryTag({ week, slug }: { week: number; slug: string }) {
@@ -346,60 +337,54 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
               ))}
             </View>
           )}
-          {slots.map((d) => {
-            const slug = picks[d.slot];
-            const p = slug ? byPlayer.get(slug) : null;
-            const target = theCard?.targets[d.slot];
-            const lv = liveOf(d.slot);
-            const isLocked = locked(slug);
-            const canTap = editable && !isLocked;
-            const changed = slug !== saved[d.slot];
-            return (
-              <Pressable key={d.slot} disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 9, borderRadius: 8, backgroundColor: t.bg, borderWidth: 1, borderColor: changed ? t.you : t.bd, opacity: isLocked && !lv ? 0.75 : 1 }}>
-                <View style={{ width: 54, alignItems: 'center', gap: 2 }}>
-                  <View style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 }}><Mono size={9.5} weight="700" tone="text">{labels[d.slot]}</Mono></View>
-                  {bull && !isTotal && target != null && <Mono size={12} tone="you" weight="700">{String(target)}</Mono>}
-                  {!bull && d.zeroPts != null && <Mono size={8} tone="dim">{`0 → ${d.zeroPts}`}</Mono>}
-                  {myTb?.slot === d.slot && <Mono size={8} tone="dim">{`⚖️ ${myTb.target}`}</Mono>}
-                </View>
-                {p ? (
-                  <>
-                    <Face slug={p.slug} team={p.team} pos={p.pos} size={36} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: t.text, flexShrink: 1 }}>{`${p.name}${isLocked ? ' 🔒' : ''}`}</Text>
-                        <InjuryTag key={injTick} week={week} slug={p.slug} />
-                      </View>
-                      <Mono size={8.5} tone="faint" numberOfLines={1}>{`${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}</Mono>
-                      <Mono size={9} tone="dim">{`${fmt$(p.salary)} · proj ${projWord(p)} · ${valueOf(p).toFixed(2)}/$1k`}</Mono>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <View style={{ width: 36, height: 36, borderRadius: 11, borderWidth: 1, borderStyle: 'dashed', borderColor: t.bd, alignItems: 'center', justifyContent: 'center' }}><Mono size={16} tone="faint">+</Mono></View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Mono size={10.5} weight="700" tone={editable ? 'you' : 'faint'}>{editable ? `PICK ${labels[d.slot]}` : 'empty'}</Mono>
-                      <Mono size={8.5} tone="faint">{d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price'}</Mono>
-                    </View>
-                  </>
-                )}
-                <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  {lv ? (
-                    <>
-                      <Mono size={13} weight="700" tone="text">{lv.score.toFixed(1)}</Mono>
-                      {lv.aim && <Mono size={8.5} tone={lv.aim.ring > 0 ? 'you' : 'faint'}>{`${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}`}</Mono>}
-                    </>
-                  ) : p && bull && !isTotal && target != null ? <Mono size={8.5} tone="faint">{`aims ${projectedRing(p.proj, target, radius).toFixed(1)}`}</Mono> : null}
-                  {p && canTap && (
-                    <Pressable hitSlop={8} onPress={() => { tap(); setPicks({ ...picks, [d.slot]: null }); }} style={{ borderWidth: 1, borderColor: t.bd, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                      <Mono size={9} tone="faint">✕</Mono>
+          {/* THE DEAL (v0.681.0, founder: "incorporate the card theme into
+              the purchase interaction"): a spot is a card on the felt — yours
+              face up, an open one the deck's back with ＋ PICK on it; buying a
+              player deals him in (the card turns). The numbers sit under each. */}
+          <FeltTable>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+              {slots.map((d, i) => {
+                const slug = picks[d.slot];
+                const p = slug ? byPlayer.get(slug) : null;
+                const target = theCard?.targets[d.slot];
+                const lv = liveOf(d.slot);
+                const isLocked = locked(slug);
+                const canTap = editable && !isLocked;
+                const changed = slug !== saved[d.slot];
+                const hint = d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price';
+                const dim = 'rgba(255,255,255,0.75)';
+                const face = p ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={labels[d.slot]} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} /> : <View />;
+                return (
+                  <View key={d.slot} style={{ width: CARD_W + 6, alignItems: 'center', gap: 3 }}>
+                    <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.8, color: changed ? '#E9B959' : dim }}>
+                      {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${myTb?.slot === d.slot ? ` · ⚖️ ${myTb.target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
+                    </Text>
+                    <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }} style={{ borderRadius: 13, borderWidth: 2, borderColor: changed ? '#E9B959' : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
+                      <FlipCard key={`${d.slot}-${slug ?? 'open'}`} flipped={!!p} idx={i} back={<CardBack seed={`${leagueId}|${d.slot}`} />} face={face} />
+                      {!p && (
+                        <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center' }}>
+                          <Text style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '800', letterSpacing: 0.8, color: '#fff', backgroundColor: 'rgba(0,0,0,0.62)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' }}>{editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'}</Text>
+                        </View>
+                      )}
                     </Pressable>
-                  )}
-                </View>
-              </Pressable>
-            );
-          })}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(8), color: dim, textAlign: 'center', lineHeight: fs(11), minHeight: fs(22), maxWidth: CARD_W + 6 }}>
+                        {p
+                          ? (lv ? `${lv.score.toFixed(1)}${lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}` : `proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ` · ${valueOf(p).toFixed(2)}/$1k`}`)
+                          : hint}
+                      </Text>
+                      {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
+                    </View>
+                    {p && canTap && (
+                      <Pressable hitSlop={8} onPress={() => { tap(); setPicks({ ...picks, [d.slot]: null }); }} style={{ borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>✕</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </FeltTable>
           {editable && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
               <Chip on label={dirty ? 'SAVE SQUAD' : 'SAVED'} disabled={busy || filled < n || bl.over || bl.short > 0 || !dirty} onPress={() => { tap(); void save(); }} />
@@ -454,30 +439,28 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
               {teams.map((tm) => <Chip key={tm} small on={team === tm} label={tm} onPress={() => setTeam(tm)} />)}
             </ChipStrip>
             <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
-              {rows.slice(0, 150).map(({ p, slot, fits, why, afford, over, lock, taken, dist, value }) => {
-                const ok = fits && afford && !lock && !taken;
-                return (
-                  <Pressable key={p.slug} disabled={!ok} onPress={() => { tap(); put(p.slug, slot); }}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderTopWidth: 1, borderTopColor: t.bd, opacity: ok ? 1 : 0.5 }}>
-                    <Face slug={p.slug} team={p.team} pos={p.pos} size={32} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '600', color: t.text, flexShrink: 1 }}>{p.name}</Text>
-                        <InjuryTag key={injTick} week={week} slug={p.slug} />
-                      </View>
-                      <Mono size={8.5} tone="faint" numberOfLines={1}>{`${p.pos} · ${p.team} ${gameLine(p.team, slate)}${active === 'any' && slot && ok ? ` · → ${labels[slot]}` : ''}`}</Mono>
-                      {(why || taken || lock || (fits && !afford)) && (
-                        <Mono size={8.5} tone={lock || taken ? 'faint' : 'warn'}>{lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? `over budget by ${fmt$(over)}`}</Mono>
-                      )}
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Mono size={12} weight="700" tone="text">{fmt$(p.salary)}</Mono>
-                      <Mono size={8.5} tone="dim">{`proj ${projWord(p)} · ${value.toFixed(2)}/$1k`}</Mono>
-                      {bull && !isTotal && dist != null && <Mono size={8.5} tone={dist <= radius / 5 ? 'you' : 'faint'}>{`${dist.toFixed(1)} off`}</Mono>}
-                    </View>
-                  </Pressable>
-                );
-              })}
+              {/* the players, dealt as cards (v0.681.0): the price on each; tap to buy */}
+              {rows.length > 0 && (
+                <FeltTable>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                    {rows.slice(0, 90).map(({ p, slot, fits, why, afford, over, lock, taken, dist, value }) => {
+                      const ok = fits && afford && !lock && !taken;
+                      const land = slot ? labels[slot] : null;
+                      return (
+                        <Pressable key={p.slug} disabled={!ok} onPress={() => { tap(); put(p.slug, slot); }} style={{ width: CARD_W, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
+                          <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} mine locked={lock} foot={fmt$(p.salary)} />
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(7.5), color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: fs(10), maxWidth: CARD_W }}>
+                              {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? (fits && !afford ? `over budget by ${fmt$(over)}` : `proj ${projWord(p)} · ${value.toFixed(2)}/$1k${bull && !isTotal && dist != null ? ` · ${dist.toFixed(1)} off` : ''}`)}
+                            </Text>
+                            <InjuryTag key={injTick} week={week} slug={p.slug} />
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </FeltTable>
+              )}
               {!rows.length && <Mono size={9} tone="faint" style={{ padding: 16, textAlign: 'center' }}>Nobody matches — widen the search or show everyone.</Mono>}
             </ScrollView>
           </View>

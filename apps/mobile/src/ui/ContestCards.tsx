@@ -65,8 +65,9 @@ export function CardBack({ seed }: { seed: string }) {
   );
 }
 
-export function CardFace({ slug, name, pos, team, slot, points, mine, locked }: {
+export function CardFace({ slug, name, pos, team, slot, points, mine, locked, foot }: {
   slug: string; name: string; pos: string; team?: string | null; slot?: string; points?: number | null;
+  /** Bottom-right when there is no score yet: the builder's price (v0.681.0). */ foot?: string;
   /** Your own card (gold trim) or theirs (red). */ mine?: boolean;
   /** His game has kicked off (the card is set). */ locked?: boolean;
 }) {
@@ -88,7 +89,7 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked }: 
       <Text numberOfLines={1} style={{ marginTop: 3, fontSize: fs(9.5), fontWeight: '700', color: INK }}>{name}</Text>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <Text style={{ fontFamily: MONO, fontSize: fs(7.5), color: INK, opacity: 0.65 }}>{team ?? ''}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: trim === GOLD ? '#8A6A12' : trim }}>{points != null ? points.toFixed(1) : ''}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '800', color: trim === GOLD ? '#8A6A12' : trim }}>{points != null ? points.toFixed(1) : foot ?? ''}</Text>
       </View>
       <View pointerEvents="none" style={{ position: 'absolute', top: 1, left: 1, right: 1, bottom: 1, borderRadius: 8, borderWidth: 1, borderColor: trim, opacity: 0.7 }} />
     </View>

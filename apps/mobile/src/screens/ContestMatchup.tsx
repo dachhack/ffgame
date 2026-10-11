@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -65,6 +65,13 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   });
   const L = side(left), R = side(right);
   const scoreOf = (s: 'home' | 'away', slot: string) => m.state?.slots?.find((x) => x.side === s && x.slot === slot)?.score ?? null;
+  // THE TIE-BREAKER SPOT (v0.681.0, founder: "the spot-specific tie breaker
+  // target chip on the player spots in the matchup as well"): each squad's own
+  // ⚖️ spot and target, dealt per seat as the builder shows it.
+  const tbs = {
+    home: theCard ? contestTiebreak(leagueId, st.week ?? week, m.home, theCard, slots) : null,
+    away: theCard ? contestTiebreak(leagueId, st.week ?? week, m.away, theCard, slots) : null,
+  };
   // One card for a spot: yours sits face up; another squad's starts on its
   // back and turns as its player kicks off (he arrives unsealed, so it flips).
   const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
@@ -81,13 +88,14 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
+    const tb = tbs[s]?.slot === r.slot ? tbs[s] : null;
     const color = mine ? '#E9B959' : '#F08A93';
     const align = edge === 'left' ? 'flex-start' : 'flex-end';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: align, paddingLeft: edge === 'left' ? 8 : 4, paddingRight: edge === 'right' ? 8 : 4, minWidth: 0 }}>
-        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.65)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: 'rgba(255,255,255,0.65)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${tb ? ` · ⚖️ ${tb.target}` : ''}`}</Text>
         <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : 'rgba(255,255,255,0.35)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: 'rgba(255,255,255,0.65)' }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}`}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: 'rgba(255,255,255,0.65)' }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}${tb && score != null ? ` · ⚖️ ${Math.abs(score - tb.target).toFixed(1)} off` : ''}`}</Text>
       </View>
     );
   };

@@ -869,10 +869,12 @@ const photoDeck = () => typeof document !== 'undefined' && document.documentElem
 /** A face-down sealed pick — the opponent's card before its window kicks off.
  *  `mystery` swaps the deck gem for a big ? — the demo preview's opening beat
  *  ("who are they fielding?") before the card flips at the reveal. */
-export function SealedCard({ seed, idx = 0, mystery = false, tag = true }: { seed: string; idx?: number; mystery?: boolean;
-  /** The SEALED ◈ PICK ribbon; the contest table (v0.679.1) goes without. */ tag?: boolean }) {
+export function SealedCard({ seed, idx = 0, mystery = false, tag = true, onClick }: { seed: string; idx?: number; mystery?: boolean;
+  /** The SEALED ◈ PICK ribbon; the contest table (v0.679.1) goes without; a
+   *  string is the ribbon's own words (the builder's "＋ PICK QB", v0.681.0). */ tag?: boolean | string;
+  onClick?: () => void }) {
   return (
-    <div className="ct-wrap ct-dealin" style={{ animationDelay: `${idx * 90}ms` }}>
+    <div className={`ct-wrap ct-dealin${onClick ? ' ct-tap' : ''}`} style={{ animationDelay: `${idx * 90}ms`, cursor: onClick ? 'pointer' : undefined }} onClick={onClick}>
       <div className="ct-card" style={wobbleVars(seed)}>
         <div className="ct-side ct-back">
           <div className="ct-lattice" />
@@ -880,7 +882,7 @@ export function SealedCard({ seed, idx = 0, mystery = false, tag = true }: { see
           {mystery
             ? <div className="ct-gem" style={{ fontSize: 38, fontWeight: 800, textShadow: '0 2px 0 #000, 0 0 14px rgba(0,0,0,0.35)' }}>?</div>
             : photoDeck() ? null : <div className="ct-gem">◈</div>}
-          {tag && <div className="ct-sealtag">SEALED ◈ PICK</div>}
+          {tag && <div className="ct-sealtag" style={typeof tag === 'string' ? { fontSize: 7.5, padding: '3px 7px' } : undefined}>{typeof tag === 'string' ? tag : 'SEALED ◈ PICK'}</div>}
         </div>
       </div>
     </div>
