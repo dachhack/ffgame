@@ -71,7 +71,7 @@ export function contestHowTo(cfg: ContestConfig): string {
  *  room of a contest league needs to draw its squad. */
 export function contestSetupOf(st: ContestState) {
   const slots = classicSlotsFromSpec(st.slots ?? null) ?? [];
-  const cfg = contestConfigOf({ contest: st.contest, contest_format: st.format, budget: st.budget, roster_slots: st.slots, bullseye: st.variant, bullseye_radius: st.radius }, st.kind);
+  const cfg = contestConfigOf({ contest: st.contest, contest_format: st.format, budget: st.budget, min_spend: st.min_spend ?? 0, roster_slots: st.slots, bullseye: st.variant, bullseye_radius: st.radius }, st.kind);
   const catalog = leagueCatalogOf({ scoring: (st.scoring_classic ?? null) as Partial<ClassicScoring> | null, ppr: st.ppr ?? null });
   return { slots, cfg, catalog, labels: contestSlotLabels(slots) };
 }
@@ -171,6 +171,9 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const { slots, cfg, labels } = setup;
   const n = slots.length;
   const budget = cfg.budget;
+  // NO CAP / THE FLOOR (v0.668.0): the bar fills against the cap, else the
+  // minimum spend, else what's spent (a free squad is always 'full').
+  const barBase = cfg.capped ? budget : cfg.minSpend > 0 ? cfg.minSpend : Math.max(1, cfg.slots.length * 3000);
   const bull = cfg.contest === 'bullseye';
   const isTotal = bull && cfg.bullseye?.variant === 'total';
   const radius = cfg.bullseye?.radius ?? 10;
@@ -230,7 +233,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const rows = active ? rankCandidates(players, ctx, { slot: active === 'any' ? null : active, tab, team: team || null, needle: search, sort: sort ?? undefined, locked, hideIneligible: eligibleOnly, ruledOut, saved }, salaryOf) : [];
   const sortNow: BuilderSort = sort ?? (bull && !isTotal ? 'aim' : 'proj');
   const activeDef = active && active !== 'any' ? slots.find((d) => d.slot === active) ?? null : null;
-  const barPct = Math.min(100, Math.round((bl.spent / budget) * 100));
+  const barPct = Math.min(100, Math.round((bl.spent / barBase) * 100));
+  const blocked = filled >= n && (bl.over || bl.short > 0);
 
   return (
     <div style={embedded ? { display: 'grid', gap: 12 } : { maxWidth: 760, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
@@ -299,16 +303,17 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
       {/* THE BUDGET BAR */}
       <div style={{ ...card, display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <span className="mono" style={head}>BUDGET</span>
-          <span style={{ fontSize: 18, fontWeight: 800, color: bl.over ? 'var(--warn, #c66)' : 'var(--you)' }}>{fmt$(bl.left)}</span>
-          <span className="mono" style={small}>{bl.over ? `over by ${fmt$(-bl.left)}` : `left of ${fmt$(budget)}`}</span>
-          <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{bl.open ? `${bl.open} open · ${fmtK(bl.perSpot)} each` : 'every spot filled'}</span>
+          <span className="mono" style={head}>{bl.capped ? 'BUDGET' : 'SPEND'}</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: bl.over || (bl.short > 0 && filled >= n) ? 'var(--warn, #c66)' : 'var(--you)' }}>{bl.capped ? fmt$(bl.left) : fmt$(bl.spent)}</span>
+          <span className="mono" style={small}>{bl.capped ? (bl.over ? `over by ${fmt$(-bl.left)}` : `left of ${fmt$(budget)}`) : bl.floor > 0 ? (bl.short > 0 ? `${fmt$(bl.short)} short of the ${fmt$(bl.floor)} minimum` : `✓ past the ${fmt$(bl.floor)} minimum`) : 'no cap'}</span>
+          {bl.capped && bl.floor > 0 && <span className="mono" style={small}>{bl.short > 0 ? `· min ${fmt$(bl.floor)} (${fmt$(bl.short)} to go)` : `· ✓ min ${fmt$(bl.floor)}`}</span>}
+          <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{bl.open ? (bl.capped ? `${bl.open} open · ${fmtK(bl.perSpot)} each` : `${bl.open} open`) : 'every spot filled'}</span>
         </div>
         <div style={{ height: 10, borderRadius: 999, background: 'var(--bg)', border: '1px solid var(--bd)', overflow: 'hidden', display: 'flex' }}>
           {slots.map((d) => {
             const slug = picks[d.slot];
             if (!slug) return null;
-            const w = Math.max(0.5, (salaryOf(slug) / budget) * 100);
+            const w = Math.max(0.5, (salaryOf(slug) / barBase) * 100);
             return <div key={d.slot} title={`${labels[d.slot]} · ${bySlug.get(slug)?.name ?? slug} · ${fmt$(salaryOf(slug))}`} style={{ width: `${w}%`, background: bl.over ? 'var(--warn, #c66)' : `color-mix(in srgb, var(--you) ${55 + (slots.indexOf(d) % 3) * 15}%, var(--bg))`, borderRight: '1px solid var(--surface)' }} />;
           })}
           {!bl.over && barPct < 100 && <div style={{ flex: 1 }} />}
@@ -365,7 +370,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
                     <div style={{ width: 38, height: 38, borderRadius: 11, border: '1px dashed var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 18 }}>+</div>
                     <div style={{ minWidth: 0 }}>
                       <div className="mono" style={{ fontSize: 12, color: editable ? 'var(--you)' : 'var(--faint)', fontWeight: 700 }}>{editable ? `PICK ${labels[d.slot]}` : 'empty'}</div>
-                      <div className="mono" style={small}>{d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}`}</div>
+                      <div className="mono" style={small}>{d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price'}</div>
                     </div>
                   </div>
                 )}
@@ -389,8 +394,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
         </div>
         {editable && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-            <button onClick={() => void save()} disabled={busy || filled < n || bl.over || !dirty} className="mono" style={chip(true)}>{dirty ? 'SAVE SQUAD' : 'SAVED'}</button>
-            <span className="mono" style={small}>{filled < n ? `${n - filled} to fill` : bl.over ? 'over the budget' : dirty ? 'unsaved changes' : 'your squad is in'}</span>
+            <button onClick={() => void save()} disabled={busy || filled < n || blocked || !dirty} className="mono" style={chip(true)}>{dirty ? 'SAVE SQUAD' : 'SAVED'}</button>
+            <span className="mono" style={small}>{filled < n ? `${n - filled} to fill` : bl.over ? 'over the budget' : bl.short > 0 ? `${fmt$(bl.short)} under the minimum spend` : dirty ? 'unsaved changes' : 'your squad is in'}</span>
             {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</span>}
           </div>
         )}

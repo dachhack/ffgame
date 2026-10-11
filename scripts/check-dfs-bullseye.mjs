@@ -171,6 +171,43 @@ const boardC = [
 const cfgR = C.contestConfigOf({ contest: 'golf', budget: 16000, roster_slots: [{ pos: ['QB'] }, { pos: ['RB'], max_exp: 2 }, { pos: ['HC'] }] }, 'dfs');
 const bR = C.contestAutoBuild(boardC, cfgR, 'seed');
 ok('build: every spot filled under the budget, the tenure rule kept, golf taking the smallest real projection', bR.S1 === 'qb2' && bR.S2 === 'rb1' && bR.S3 === 'hc1' && C.contestSalary(bR, (s) => boardC.find((b) => b.slug === s).salary) <= 16000, bR);
+// THE CAP IS OPTIONAL; GOLF GETS A FLOOR (v0.668.0).
+{
+  const noCap = C.contestConfigOf({ contest: 'bullseye', budget: 0, roster_slots: [{ pos: ['QB'] }, { pos: ['RB'] }] }, 'dfs');
+  ok('config: budget 0 is NO CAP', noCap.capped === false && noCap.budget === C.CONTEST_NO_CAP && noCap.minSpend === 0, noCap);
+  const floored = C.contestConfigOf({ contest: 'golf', budget: 0, min_spend: 13000, roster_slots: [{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['HC'] }] }, 'dfs');
+  ok('config: golf carries its floor', floored.capped === false && floored.minSpend === 13000);
+  ok('config: a cap still reads as before', cfgR.capped === true && cfgR.minSpend === 0 && cfgR.budget === 16000);
+  const bF = C.contestAutoBuild(boardC, floored, 'seed');
+  const spentF = C.contestSalary(bF, (s) => boardC.find((b) => b.slug === s).salary);
+  ok('build: golf under a $13k floor is forced up to it (cheapest real squad is $12k)', spentF >= 13000 && bF.S1 && bF.S2 && bF.S3, { bF, spentF });
+  const bN = C.contestAutoBuild(boardC, noCap, 'seed');
+  ok('build: no cap takes the biggest projections', bN.S1 === 'qb1' && bN.S2 === 'rb1', bN);
+  const tooHigh = C.contestConfigOf({ contest: 'golf', budget: 0, min_spend: 90000, roster_slots: [{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['HC'] }] }, 'dfs');
+  const bT = C.contestAutoBuild(boardC, tooHigh, 'seed');
+  ok('build: a floor nobody can reach still fills every spot', bT.S1 && bT.S2 && bT.S3, bT);
+  const B = await import('../packages/core/src/engine/contestBuilder.ts');
+  const lF = B.budgetLine({ slots: floored.slots, cfg: floored, picks: { S1: 'qb2', S2: 'rb3', S3: null } }, (s) => boardC.find((b) => b.slug === s).salary);
+  ok('builder: the budget line knows the floor and how short the squad is', lF.capped === false && lF.floor === 13000 && lF.spent === 8000 && lF.short === 5000 && !lF.over, lF);
+  const lN = B.budgetLine({ slots: noCap.slots, cfg: noCap, picks: { S1: 'qb1', S2: 'rb1' } }, (s) => boardC.find((b) => b.slug === s).salary);
+  ok('builder: no cap is never over', lN.capped === false && !lN.over && lN.short === 0);
+  const { contestMoneyWord } = await import('../packages/core/src/data/liveApi.ts');
+  ok('words: the money rule in a few words', contestMoneyWord({ budget: 50000 }) === '$50k budget' && contestMoneyWord({ budget: 0 }) === 'no cap' && contestMoneyWord({ budget: 0, min_spend: 45000 }) === 'min $45k spend' && contestMoneyWord({ budget: 60000, min_spend: 45000 }) === '$60k budget · min $45k');
+  const sql = read('supabase/migrations/0469_contest_cap_and_floor.sql');
+  ok('sql: the save refuses over the cap only when there is one, and under the floor', sql.includes('if budget > 0 and spent > budget') && sql.includes("minimum spend by $"));
+  ok('sql: create and rules take the floor; the old signatures are dropped', sql.includes('p_min_spend int default 0') && sql.includes('drop function if exists set_contest_rules(uuid, text, text, int)') && sql.includes('drop function if exists create_contest_league(text, text, text, text, int, int, text, int, text, text)'));
+  for (const f of ['src/screens/ContestSquad.tsx', 'apps/mobile/src/screens/ContestSquad.tsx']) {
+    const src = read(f);
+    ok(`${f}: the bar reads SPEND under no cap and says how short of the minimum`, src.includes("bl.capped ? 'BUDGET' : 'SPEND'") && src.includes('short of the') && src.includes('under the minimum spend'));
+  }
+  for (const f of ['src/screens/BullseyeLeague.tsx', 'apps/mobile/src/screens/BullseyeLeague.tsx']) {
+    const src = read(f);
+    ok(`${f}: golf starts with no cap and a minimum spend; NO CAP is on the menu`, src.includes("setBudget(0); setMinSpend(CONTEST_MIN_SPEND_DEFAULT)") && src.includes("'NO CAP'") && src.includes('MIN SPEND'));
+  }
+  for (const f of ['src/screens/ContestCommish.tsx', 'apps/mobile/src/screens/ContestCommish.tsx']) {
+    ok(`${f}: the commissioner can set the floor and drop the cap`, read(f).includes('minSpend') && read(f).includes("'NO CAP'"));
+  }
+}
 ok('allows: a RET spot takes a ball-carrier; a tenure rule refuses a veteran', C.contestSlotAllows({ slot: 'S1', type: 'RET', pos: ['RET'] }, { slug: 'rb2', pos: 'RB' }) && !C.contestSlotAllows(cfgR.slots[1], { slug: 'rb2', pos: 'RB', exp: 7 }));
 ok('squad: S-rows read by name, legacy DFS names fall into spots by position', (() => {
   const s1 = C.contestSquadOf([{ slot: 'S2', player_slug: 'x' }], cfgB.slots);

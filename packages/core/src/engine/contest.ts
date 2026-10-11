@@ -15,11 +15,23 @@ export type ContestKind = 'high' | 'golf' | 'bullseye';
 export type ContestFormat = 'h2h' | 'board';
 export const CONTEST_MIN_SALARY = 3000;
 export const CONTEST_BUDGET_DEFAULT = 50000;
+/** NO CAP (v0.668.0): the budget a league plays without one — big enough
+ *  that no squad reaches it, so every "what's left" sum still works. */
+export const CONTEST_NO_CAP = 10_000_000;
+/** The golf default: spend at least this much (90% of the default budget). */
+export const CONTEST_MIN_SPEND_DEFAULT = 45000;
 
 export interface ContestConfig {
   contest: ContestKind;
   format: ContestFormat;
+  /** The cap — CONTEST_NO_CAP when the league plays without one. */
   budget: number;
+  /** Is there a cap at all? (v0.668.0: a Bullseye league may drop it.) */
+  capped: boolean;
+  /** THE FLOOR (v0.668.0, golf): a squad must spend at least this; 0 = none.
+   *  Founder: "the lowest-projected players who still play are also the
+   *  cheapest, so the cap never binds" — the floor is golf's real constraint. */
+  minSpend: number;
   /** The league's spots, S1…Sn (leagueSlotDefs over roster_slots; the DFS nine by default). */
   slots: ClassicSlotDef[];
   /** The dart, for a Bullseye contest; null otherwise. Always a shared card. */
@@ -41,13 +53,16 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   if (!contest) return null;
   const format: ContestFormat = s.contest_format === 'h2h' || s.contest_format === 'board' ? s.contest_format : kind === 'bullseye' ? 'board' : 'h2h';
   const b = Number(s.budget);
-  const budget = Number.isFinite(b) && b >= 10000 ? Math.round(b / 100) * 100 : CONTEST_BUDGET_DEFAULT;
+  const capped = !(Number.isFinite(b) && b === 0);          // 0 stored = no cap
+  const budget = !capped ? CONTEST_NO_CAP : Number.isFinite(b) && b >= 10000 ? Math.round(b / 100) * 100 : CONTEST_BUDGET_DEFAULT;
+  const ms = Number(s.min_spend);
+  const minSpend = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 100) * 100 : 0;
   const spec = Array.isArray(s.roster_slots) && s.roster_slots.length ? s.roster_slots as SlotSpec[] : CONTEST_DEFAULT_SLOTS;
   const slots = leagueSlotDefs({ slots: spec });
   const bullseye = contest === 'bullseye'
     ? (bullseyeConfigOf({ bullseye: (s.bullseye as string) ?? 'slots', bullseye_radius: (s.bullseye_radius as number) ?? null }) ?? bullseyeConfigOf({ bullseye: 'slots' }))
     : null;
-  return { contest, format, budget, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null };
+  return { contest, format, budget, capped, minSpend, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null };
 }
 
 export const CONTEST_WORD: Record<ContestKind, string> = { high: 'HIGHEST SCORE', golf: 'GOLF · LOWEST SCORE', bullseye: 'BULLSEYE' };
@@ -216,15 +231,25 @@ export function contestAutoBuild(board: ContestBoardPlayer[], cfg: ContestConfig
   const order = [...open].sort((a, b) => fits(a).length - fits(b).length);
   const jitter = new Map(board.map((p) => [p.slug, (rand() - 0.5) * 1.5]));
   const taken = new Set<string>(Object.values(out).filter((x): x is string => !!x));
-  let budget = cfg.budget - contestSalary(out, (slug) => board.find((p) => p.slug === slug)?.salary ?? 0);
+  const salaryOf = (slug: string) => board.find((p) => p.slug === slug)?.salary ?? 0;
+  let spent = contestSalary(out, salaryOf);
+  let budget = cfg.budget - spent;
   // What each spot still to fill will need at the least: its cheapest
   // candidate not yet taken (a one-candidate spot can't be starved by a
   // pricey pick before it), else the board's floor.
   const need = (d: ClassicSlotDef) => fits(d).filter((p) => !taken.has(p.slug)).reduce((m, p) => Math.min(m, p.salary), Infinity);
+  // THE FLOOR (v0.668.0): the most each later spot could still add, so this
+  // pick is forced up only when the rest can't reach the minimum spend alone.
+  const most = (d: ClassicSlotDef) => fits(d).filter((p) => !taken.has(p.slug)).reduce((m, p) => Math.max(m, p.salary), 0);
   order.forEach((d, i) => {
     const reserve = order.slice(i + 1).reduce((s, o) => { const x = need(o); return s + (Number.isFinite(x) ? x : CONTEST_MIN_SALARY); }, 0);
     const maxSpend = budget - reserve;
-    const pool = fits(d).filter((p) => !taken.has(p.slug) && p.salary <= maxSpend);
+    const headroom = order.slice(i + 1).reduce((s, o) => s + most(o), 0);
+    const atLeast = cfg.minSpend > 0 ? cfg.minSpend - spent - headroom : 0;
+    const open = fits(d).filter((p) => !taken.has(p.slug) && p.salary <= maxSpend);
+    // A floor nobody on the board can meet from here is dropped, not fatal.
+    const floored = atLeast > 0 ? open.filter((p) => p.salary >= atLeast) : open;
+    const pool = floored.length ? floored : open;
     const j = (p: BoardPlayer) => p.proj + (jitter.get(p.slug) ?? 0);
     let pick: BoardPlayer | undefined;
     if (cfg.contest === 'bullseye' && card) {
@@ -238,6 +263,7 @@ export function contestAutoBuild(board: ContestBoardPlayer[], cfg: ContestConfig
     if (!pick) return;
     taken.add(pick.slug);
     budget -= pick.salary;
+    spent += pick.salary;
     out[d.slot] = pick.slug;
   });
   return out;

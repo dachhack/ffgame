@@ -368,3 +368,25 @@ is 0; no slate falls back to the flat number.
 The builder's card header shows PROJECTS — the picks' projected sum — and,
 in a Bullseye league, the card's total with the gap.
 
+## 18. The cap is optional; golf gets a floor (v0.668.0, 0469)
+
+Founder: "Any reason to have a budget in bullseye or golf dfs leagues?"
+Bullseye earns its cap — without one every seat picks the player projected
+closest to each number and the tie-breaker decides the week — but a
+commissioner who wants pure aim may drop it. Golf's cap never binds: the
+lowest-projected players who still play are also the cheapest. Golf's real
+constraint is the opposite one, a minimum spend.
+
+Settings: `budget` 0 = no cap; `min_spend` 0 = none, else $5,000–$500,000
+and never above a cap. `save_contest_entry` refuses a squad over the cap
+(when there is one) or under the floor. New golf leagues start with no cap
+and a $45,000 floor; HIGH and BULLSEYE keep the $50k cap with NO CAP on the
+menu. The commissioner adjusts both under CONTEST RULES.
+
+The auto-build (CPU seats, no-shows, FILL FOR ME) reserves the floor the
+way it reserves the cap: a pick is forced up only when the spots still to
+fill could not reach the minimum on their own, and a floor nobody on the
+board can meet is dropped rather than leaving a spot empty. The builder's
+bar reads SPEND under no cap and says how far short of the minimum the
+squad is; SAVE waits until it is over.
+

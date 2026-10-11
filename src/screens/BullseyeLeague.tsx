@@ -20,10 +20,10 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import {
   contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
-  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, friendlyError,
+  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
-import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, contestCredit } from '@drip/core/engine/contest';
+import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { CommishDash } from './CommishDash';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
@@ -49,11 +49,14 @@ type ContestLeague = BullseyeLeague & { kind?: string; bullseye?: ContestInfo };
 
 const CONTEST_BLURB: Record<ContestKind, string> = {
   high: 'Each week everyone builds a squad under the budget from the week’s salary board. Most points wins.',
-  golf: 'Each week everyone builds a squad under the budget. FEWEST points wins — but a scoreless spot banks a penalty, so no-shows are no bargain.',
+  golf: 'Each week everyone builds a squad that spends at least the minimum. FEWEST points wins — but a scoreless spot banks a penalty, so no-shows are no bargain.',
   bullseye: 'Each week everyone builds a squad aimed at the week’s numbers. Closest wins.',
 };
-/** The budget as a form reads it: thousands, 10–500. */
-const BUDGETS = [10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];
+/** The budget as a form reads it: thousands, 10–500; 0 is NO CAP (0469). */
+const BUDGETS = [0, 10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];
+/** The minimum spend (0469): golf's constraint. 0 is none. */
+const MIN_SPENDS = [0, 10000, 20000, 30000, 40000, 45000, 50000, 60000, 75000, 100000];
+const moneyOpt = (v: number, none: string) => (v ? fmt$(v) : none);
 
 // ── start: make one, or join one ───────────────────────────────────────────
 export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: string; onOpen: (leagueId: string) => void; onBack: () => void }) {
@@ -63,6 +66,12 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
   const [span, setSpan] = useState<BullseyeSpan>('season');
   const [variant, setVariant] = useState<DfsVariant>('slots');
   const [budget, setBudget] = useState(CONTEST_BUDGET_DEFAULT);
+  const [minSpend, setMinSpend] = useState(0);
+  // GOLF'S MONEY (v0.668.0): no cap, a minimum spend; the others cap and no floor.
+  const pickContest = (c: ContestKind) => {
+    setContest(c);
+    if (c === 'golf') { setBudget(0); setMinSpend(CONTEST_MIN_SPEND_DEFAULT); } else { setBudget((b) => (b || CONTEST_BUDGET_DEFAULT)); setMinSpend(0); }
+  };
   const [max, setMax] = useState(12);
   const [cap, setCap] = useState(32);
   const [team, setTeam] = useState('');
@@ -81,7 +90,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
   const create = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await createContestLeague({ name, contest, format, span, max: sizeOk(max), budget, variant, teamName: team || null });
+      const r = await createContestLeague({ name, contest, format, span, max: sizeOk(max), budget, minSpend, variant, teamName: team || null });
       if (!r.ok || !r.league_id) { setErr(r.error ?? 'Couldn’t make it.'); return; }
       if (list) await postLeagueListing(r.league_id, blurb.trim() || null, null).catch(() => {});
       onOpen(r.league_id);
@@ -112,7 +121,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className="mono" style={small}>WINS BY</span>
           {(['high', 'golf', 'bullseye'] as const).map((c) => (
-            <button key={c} onClick={() => setContest(c)} className="mono" style={chip(contest === c)}>{`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`}</button>
+            <button key={c} onClick={() => pickContest(c)} className="mono" style={chip(contest === c)}>{`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -136,10 +145,19 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="mono" style={small}>BUDGET</span>
           <select value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="mono" style={{ ...input, width: 130 }}>
-            {BUDGETS.map((b) => <option key={b} value={b}>{fmt$(b)}</option>)}
+            {BUDGETS.map((b) => <option key={b} value={b}>{moneyOpt(b, 'NO CAP')}</option>)}
           </select>
           <span className="mono" style={small}>per squad · the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST) — change the roster in COMMISH</span>
         </div>
+        {contest === 'golf' && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="mono" style={small}>MIN SPEND</span>
+            <select value={minSpend} onChange={(e) => setMinSpend(Number(e.target.value))} className="mono" style={{ ...input, width: 130 }}>
+              {MIN_SPENDS.map((v) => <option key={v} value={v}>{moneyOpt(v, 'NONE')}</option>)}
+            </select>
+            <span className="mono" style={small}>golf’s real constraint: you must roster expensive players and bet on which stars have a quiet week</span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="mono" style={small}>{format === 'h2h' ? 'TEAMS (even, 2–32)' : `UP TO (2–${n0(cap)})`}</span>
           <input type="number" min={2} max={top} step={format === 'h2h' ? 2 : 1} value={max} onChange={(e) => setMax(Math.max(2, Math.min(top, Number(e.target.value) || 2)))} onBlur={() => setMax((m) => sizeOk(m))} style={{ ...input, width: 110 }} />
@@ -414,9 +432,9 @@ function SettingsRoom({ lg, onLeft }: { lg: ContestLeague; onLeft: () => void })
     contestState(lg.league_id!, lg.week).then((s) => {
       if (!s.ok) return;
       const { slots, labels } = contestSetupOf(s);
-      setSpotsLine(slots.length ? `A squad of ${slots.length} — ${slots.map((d) => labels[d.slot]).join(', ')} — under a ${fmt$(b.budget)} budget, from the week’s salary board.` : null);
+      setSpotsLine(slots.length ? `A squad of ${slots.length} — ${slots.map((d) => labels[d.slot]).join(', ')} — ${contestMoneyWord(b)}, from the week’s salary board.` : null);
     }).catch(() => {});
-  }, [lg.league_id, lg.week, b.budget]);
+  }, [lg.league_id, lg.week, b.budget, b.min_spend]);
   const leave = async () => {
     if (!window.confirm(`Leave ${lg.name}? Your squads stay in the standings.`)) return;
     const r = await leaveLeague(lg.league_id!).catch((e) => ({ ok: false, error: friendlyError(e) }));
