@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.667.3 — The credit is a tiny "i"
+
+> - The Bullseye credit is now a small "i" ring on the league page, its settings and the create form. Tap it for the line crediting Jon Acevedo.
+
+- Founder: "Don't have the full idea chip, just a tiny i chip."
+  `CONTEST_CREDIT.chip` is 'i'; `CreditChip` is an 18px ring (web: toggles
+  the line beneath; phone: an alert). The settings room keeps the line in
+  its rule list and drops its duplicate chip. No iPhone build needed.
+
 ### v0.667.2 — A coach's week is his matchup; the squad's projected total
 
 > - A HEAD COACH spot now projects by the week's game, not a flat slice of the season: who he's playing and where, turned into a win chance and a margin, paid under your league's coach scoring. A bye projects 0.

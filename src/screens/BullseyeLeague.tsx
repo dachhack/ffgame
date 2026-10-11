@@ -236,13 +236,17 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
 }
 
 // ── CREDIT WHERE IT'S DUE: the chip, and the line it opens ─────────────────
+// A TINY "i" (founder: "Don't have the full idea chip, just a tiny i chip"):
+// an 18px ring that opens the line beneath it.
 function CreditChip({ contest }: { contest: ContestKind }) {
   const credit = contestCredit(contest);
   const [open, setOpen] = useState(false);
   if (!credit) return null;
   return (
     <div style={{ display: 'grid', gap: 6, justifyItems: 'start' }}>
-      <button onClick={() => setOpen((o) => !o)} className="mono" title={credit.title} aria-expanded={open} style={{ ...chip(open), fontSize: 9.5 }}>{credit.chip}</button>
+      <button onClick={() => setOpen((o) => !o)} className="mono" title={credit.title} aria-label={credit.title} aria-expanded={open}
+        style={{ width: 18, height: 18, borderRadius: 999, padding: 0, fontSize: 10, fontWeight: 700, fontStyle: 'italic', lineHeight: '16px', textAlign: 'center', cursor: 'pointer',
+          color: open ? 'var(--on-accent, var(--bg))' : 'var(--faint)', background: open ? 'var(--you)' : 'transparent', border: `1px solid ${open ? 'var(--you)' : 'var(--bd)'}` }}>{credit.chip}</button>
       {open && <div style={{ fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.5 }}>{credit.line}</div>}
     </div>
   );
@@ -438,7 +442,6 @@ function SettingsRoom({ lg, onLeft }: { lg: ContestLeague; onLeft: () => void })
         <li>{b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`}</li>
         {contestCredit(b.contest) && <li>{`💡 ${contestCredit(b.contest)!.line}`}</li>}
       </ul>
-      {contestCredit(b.contest) && <CreditChip contest={b.contest} />}
       {lg.me && !lg.commish && (
         <button onClick={() => void leave()} className="mono" style={{ ...chip(false, true), justifySelf: 'start' }}>LEAVE THE LEAGUE</button>
       )}

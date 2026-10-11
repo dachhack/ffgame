@@ -184,10 +184,17 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
 }
 
 // ── CREDIT WHERE IT'S DUE: the chip opens the line ─────────────────────────
+// A TINY "i" (founder: "just a tiny i chip"): an 18pt ring that opens the line.
 function CreditChip({ contest }: { contest: ContestKind }) {
+  const t = useTheme();
   const credit = contestCredit(contest);
   if (!credit) return null;
-  return <Chip small dim label={credit.chip} onPress={() => { tap(); Alert.alert(credit.title, credit.line); }} />;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={credit.title} hitSlop={8} onPress={() => { tap(); Alert.alert(credit.title, credit.line); }}
+      style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: t.bd, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' }}>
+      <Text style={{ fontSize: 10, fontWeight: '700', fontStyle: 'italic', color: t.faint, lineHeight: 12 }}>{credit.chip}</Text>
+    </Pressable>
+  );
 }
 
 function WeekArrows({ weeks, week, current, onWeek }: { weeks: number[]; week: number | null; current: number | null; onWeek: (w: number) => void }) {
@@ -377,7 +384,6 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
       <Mono size={9} tone="faint" weight="700" track={0.1}>HOW THIS LEAGUE PLAYS</Mono>
       {rules.map((r, i) => <Text key={i} style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`• ${r}`}</Text>)}
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-        {contestCredit(b.contest) && <CreditChip contest={b.contest} />}
         {lg.commish && <Chip label="⚑ COMMISSIONER" onPress={() => { tap(); onCommish(); }} />}
         {lg.me && !lg.commish && <Chip dim label="LEAVE THE LEAGUE" onPress={() => { tap(); leave(); }} />}
       </View>
