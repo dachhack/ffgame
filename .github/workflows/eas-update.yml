@@ -93,7 +93,19 @@ jobs:
         working-directory: apps/mobile
         run: |
           msg=$(git log -1 --pretty=%s | cut -c1-180)
-          for rt in $(grep -oE '^[0-9a-f]{40}' ios-legacy-runtimes.txt); do
+          # A `build <EAS build id>` line names a build whose runtime the CI
+          # fingerprint got wrong (v0.661.1): EAS's macOS builder stamped
+          # TestFlight build 5 with be78b4bc… while CI computed 2f593a89… from
+          # the same commit, so no update ever reached it. Expo knows the
+          # runtime it actually built with; ask it.
+          extra=""
+          for id in $(grep -oE '^build [0-9a-f-]{36}' ios-legacy-runtimes.txt | cut -d' ' -f2); do
+            rt=$(npx -y eas-cli@latest build:view "$id" --json 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const b=JSON.parse(s);console.log((b.runtime&&b.runtime.version)||b.runtimeVersion||'')}catch{console.log('')}})")
+            echo "build $id → iOS runtime ${rt:-unknown}"
+            echo "- build \`$id\` runs iOS runtime \`${rt:-unknown}\`" >> "$GITHUB_STEP_SUMMARY"
+            if echo "$rt" | grep -qE '^[0-9a-f]{40}$'; then extra="$extra $rt"; fi
+          done
+          for rt in $(grep -oE '^[0-9a-f]{40}' ios-legacy-runtimes.txt) $extra; do
             echo "── iOS runtime $rt"
             IOS_RUNTIME_OVERRIDE="$rt" npx -y eas-cli@latest update \
               --channel production \
