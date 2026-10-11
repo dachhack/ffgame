@@ -125,6 +125,16 @@ const boardRows = P.contestLockRows({ ...L, settings_json: { contest: 'high', co
 ok('lock: a leaderboard seat is told a missing squad scores nothing, the day before', /scores nothing/.test(boardRows[0].body) && boardRows[0].title.startsWith('🗓 Kickoff Bullseye: squads lock') && boardRows[0].dedupe_key.startsWith('contest-lock:day:'), boardRows[0]);
 const zeroRows = P.contestLockRows({ ...L, settings_json: { ...L.settings_json, late_entry: 'zero', entry_deadline: 'first' } }, 7, 'last', kick, T.league_membership, new Set());
 ok('lock: the reminder follows the league’s no-show rule and the deadline (v0.673.0)', /scores zero — entries close at the first kickoff/.test(zeroRows[0].body) && !/CPU builds/.test(zeroRows[0].body), zeroRows[0].body);
+// PER SEAT (v0.682.3): a member with several entries is paged once, and the push names the seats without a squad
+const multi = [...T.league_membership, { league_id: 'L1', sleeper_roster_id: 5, team_name: 'Red Zone II', app_user_id: 'u4', controller: 'human', enrolled: true }, { league_id: 'L1', sleeper_roster_id: 6, team_name: 'Red Zone III', app_user_id: 'u4', controller: 'human', enrolled: true }];
+const oneOf = P.contestLockRows(L, 7, 'last', kick, multi, new Set([3, 4, 6]));
+ok('lock: per seat — one push, naming the one seat still without a squad', oneOf.filter((r) => r.app_user_id === 'u4').length === 1 && /No squad yet for Red Zone II in Kickoff Bullseye for week 7/.test(oneOf.find((r) => r.app_user_id === 'u4').body) && oneOf.find((r) => r.app_user_id === 'u4').data.roster_id === 5, oneOf.filter((r) => r.app_user_id === 'u4'));
+const twoOf = P.contestLockRows(L, 7, 'day', kick, multi, new Set([3, 4]));
+ok('lock: per seat — two seats missing read as a list', /Red Zone II and Red Zone III have no week 7 squad yet/.test(twoOf.find((r) => r.app_user_id === 'u4').body), twoOf.find((r) => r.app_user_id === 'u4').body);
+const threeOf = P.contestLockRows(L, 7, 'day', kick, multi, new Set([3]));
+ok('lock: per seat — three read as a list with commas; a one-seat member keeps the plain words', /Red Zone, Red Zone II and Red Zone III have/.test(threeOf.find((r) => r.app_user_id === 'u4').body) && /You haven’t built a week 7 squad yet/.test(threeOf.find((r) => r.app_user_id === 'u1').body), threeOf.map((r) => r.body));
+const noneOf = P.contestLockRows(L, 7, 'last', kick, multi, new Set([3, 4, 5, 6]));
+ok('lock: per seat — every seat built, no push', !noneOf.some((r) => r.app_user_id === 'u4'), noneOf);
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);
