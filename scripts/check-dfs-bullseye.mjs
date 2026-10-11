@@ -98,7 +98,7 @@ ok('worker: modeOfSettings carries dfs_bullseye', /dfs_bullseye: s\?\.dfs_bullse
 ok('worker: scored under the league\'s catalog, RET spots as RET', /classicPoints\(player\(slug\), matchup\.week, catalog, contestScoreAs\(def\), slot\)/.test(resolve));
 ok('lock: no drip auto-lineup for a Bullseye contest', /settings_json\?\.dfs_bullseye === true\) continue/.test(read('server/src/lock.js')));
 const pods = read('server/src/pods.js');
-ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(board, contest,/.test(pods));
+ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(playable, contest,/.test(pods));
 ok('pods: a leaderboard contest is skipped in the seat loop', /if \(contest && contest\.format === 'board'\) continue;/.test(pods));
 const sql = read('supabase/migrations/0462_dfs_bullseye.sql');
 ok('sql: slot names match the engine', /array\['QB','RB1','RB2','WR1','WR2','WR3','TE','K','DEF'\]/.test(sql));
@@ -190,7 +190,7 @@ ok('sql: head-to-head needs an even count and makes every seat now', sql3.includ
 ok('sql: an entry is checked spot by spot (position, filter, pool, seat rule) and against the budget', ['_contest_spot_error', 'seat_player_rule', 'pool_filter', 'over the budget'].every((k) => sql3.includes(k)) || ['_contest_spot_error', 'seat_player_rule', 'pool_filter', 'budget'].every((k) => sql3.includes(k)));
 ok('sql: the format is set only before the first week', sql3.includes("if p_format <> _contest_format_of(lg) and exists (select 1 from matchup where league_id = p_league)"));
 ok('sql: the commissioner\'s console knows the kind', sql3.includes("'avatar_url', l.avatar_url, 'kind', l.kind,"));
-ok('board read: every position, with exp, past the 1000-row page', (() => { const api = read('packages/core/src/data/liveApi.ts'); return api.includes("select('slug, name, pos, team, salary, proj, exp')") && /proj, exp'\)[\s\S]{0,200}\.range\(0, 4999\)/.test(api); })());
+ok('board read: every position, with exp, past the 1000-row page', (() => { const api = read('packages/core/src/data/liveApi.ts'); return api.includes("select('slug, name, pos, team, salary, proj, exp, priced_proj')") && /priced_proj'\)[\s\S]{0,200}\.range\(0, 4999\)/.test(api); })());
 ok('pods: the board carries exp and the extra positions', /expOf|exp:/.test(read('server/src/playerIndex.js')) && /contestExtraPositions/.test(pods));
 ok('bullseye cards: not published for a contest league (its card is dealt in the engine)', /settings_json\?\.contest|dfs_bullseye/.test(read('server/src/bullseye.js')));
 
@@ -222,6 +222,26 @@ for (const f of ['src/screens/ContestSquad.tsx', 'apps/mobile/src/screens/Contes
   const src = read(f);
   ok(`${f}: the builder — budget bar, spot cards, tabs, team filter, sort, search, eligibility, FILL FOR ME, injuries`,
     ['budgetLine(', 'rankCandidates(', 'fillOpenSpots(', 'builderTabs(', 'weekSlateByTeam(', 'seatPlayerRules(', 'leagueGameMode(', 'loadLiveInjuries(', 'injuryFor(', 'FILL FOR ME', 'eligibleOnly', 'BUILDER_SORTS'].every((k) => src.includes(k)));
+}
+
+// ── pricing on scarcity, the live projection, the injury rule (v0.666.0) ────
+const SP = await import('../packages/core/src/engine/salaryPricing.ts');
+ok('pricing: the replacement is the body after the 12-team starters', SP.STARTERS_12.RB === 24 && SP.STARTERS_12.WR === 36 && SP.TARGET_SHARE > 1);
+ok('pods: boards are priced by priceBoard and carry priced_proj', /priceBoard\(rows\)/.test(pods) && /priced_proj: row\.proj/.test(pods));
+ok('pods: the projection refreshes, the price does not', /export async function refreshBoardProj/.test(pods) && /salary: r\.salary, proj: next/.test(pods));
+ok('pods: CPU builds skip the ruled out and swap them before lock', /contestAutoBuild\(playable, contest,/.test(pods) && /\|sub\$\{e\.roster_id\}/.test(pods));
+const sql4 = read('supabase/migrations/0467_salary_pricing.sql');
+ok('sql: priced_proj, and an O/IR new pick is refused', sql4.includes('add column if not exists priced_proj') && sql4.includes("upper(ist.status) in ('O', 'IR')") && sql4.includes('is ruled out this week'));
+ok('builder: a ruled-out body says so, unless already saved', (() => {
+  const rowsO = B.rankCandidates(bBoard, bCtx, { slot: null, ruledOut: (s) => s === 'rb1' }, bSal);
+  const rowsS = B.rankCandidates(bBoard, bCtx, { slot: null, ruledOut: (s) => s === 'rb1', saved: { S2: 'rb1' } }, bSal);
+  return rowsO.find((r) => r.p.slug === 'rb1')?.why === 'ruled out this week' && rowsS.find((r) => r.p.slug === 'rb1')?.fits === true;
+})());
+ok('builder: the priced delta reads the feed, half a point or more', B.pricedDelta({ proj: 9, feedProj: 18.1, priced: 15.4 })?.dir === '↑' && B.pricedDelta({ proj: 9, feedProj: 15.6, priced: 15.4 }) === null);
+ok('builder: a league that pays nothing for a position shows the feed number; HC gets the catalog\'s', B.leagueWeekProj({ slug: 'x', pos: 'WR', proj: 12 }, null) === 12 && B.leagueWeekProj({ slug: 'kc-hc', pos: 'HC', team: 'KC', proj: 0 }, { hcWin: 10 }) >= 0);
+for (const f of ['src/screens/ContestSquad.tsx', 'apps/mobile/src/screens/ContestSquad.tsx']) {
+  const src = read(f);
+  ok(`${f}: the league projection, the priced delta and the ruled-out rule`, ['leagueWeekProj(r, setup?.catalog)', 'pricedDelta(', 'ruledOut, saved', ', ruledOut);'].every((k) => src.includes(k)));
 }
 
 // ── weekly leagues are listings like any other (v0.662.0) ────────────────────

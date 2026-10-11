@@ -23,7 +23,7 @@ import {
   type ContestConfig,
 } from '@drip/core/engine/contest';
 import {
-  builderTabs, rankCandidates, fillOpenSpots, budgetLine, roomFor, posLabel, valueOf, BUILDER_SORTS,
+  builderTabs, rankCandidates, fillOpenSpots, budgetLine, roomFor, posLabel, valueOf, leagueWeekProj, pricedDelta, BUILDER_SORTS,
   type BuilderCtx, type BuilderPlayer, type BuilderSort, type PoolFilter,
 } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicSlotDef, type ClassicScoring } from '@drip/core/engine/classic';
@@ -36,6 +36,8 @@ import { Card, Chip, ChipStrip, Display, Mono, PosPill } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 
 const fmt$ = (n: number) => `$${n.toLocaleString('en-US')}`;
+/** "18.1 ↑2.7" when the feed has moved since the price was set. */
+const projWord = (p: BuilderPlayer): string => { const d = pricedDelta(p); return `${p.proj.toFixed(1)}${d ? ` ${d.dir}${d.by.toFixed(1)}` : ''}`; };
 const fmtK = (n: number) => (Math.abs(n) >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : fmt$(n));
 const INJ_WORD: Record<string, string> = { O: 'OUT', D: 'DOUBTFUL', Q: 'QUESTIONABLE', IR: 'IR' };
 
@@ -139,7 +141,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
   const theCard = useMemo(() => (setup?.cfg?.contest === 'bullseye' && st?.week != null ? contestCard(leagueId, st.week, setup.slots, setup.catalog) : null), [leagueId, st?.week, setup]);
   const ctx = useMemo<BuilderCtx | null>(() => (setup?.cfg ? { slots: setup.slots, cfg: setup.cfg, picks, seatRule, poolFilter, card: theCard } : null), [setup, picks, seatRule, poolFilter, theCard]);
   const locked = useCallback((slug: string | null) => { if (!slug) return false; const at = locks.get(bySlug.get(slug)?.team ?? ''); return at != null && at <= now; }, [locks, bySlug, now]);
-  const players = useMemo<BuilderPlayer[]>(() => (board ?? []).map((r) => ({ slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: r.proj, exp: r.exp ?? null })), [board]);
+  // THE LEAGUE'S OWN PROJECTION (v0.666.0): the board's PPR number scaled to
+  // this league's catalog (leagueWeekProj) — the price is the shared sheet,
+  // the projection is yours. `feedProj` keeps the feed's number for the
+  // "↑ since priced" readout.
+  const players = useMemo<BuilderPlayer[]>(() => (board ?? []).map((r) => ({ slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: leagueWeekProj(r, setup?.catalog), feedProj: r.proj, priced: r.priced_proj ?? null, exp: r.exp ?? null })), [board, setup?.catalog]);
+  // RULED OUT (v0.666.0): O or IR on the report — not a new pick; one already
+  // saved stays, swappable until his game locks (the server's rule too).
+  const byPlayer = useMemo(() => new Map(players.map((p) => [p.slug, p])), [players]);
+  const ruledOut = useCallback((slug: string) => { const s = injuryFor(st?.week ?? 0, slug); return s === 'O' || s === 'IR'; }, [st?.week, injTick]);   // eslint-disable-line react-hooks/exhaustive-deps
   const teams = useMemo(() => [...new Set(players.map((p) => p.team))].sort(), [players]);
   const tabs = useMemo(() => (setup ? builderTabs(setup.slots) : ['ALL']), [setup]);
   const dirty = useMemo(() => JSON.stringify(picks) !== JSON.stringify(saved), [picks, saved]);
@@ -181,7 +191,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
   const theirSquad = st.opponent ? sealedRows(st.opponent.entry, slots) : [];
   const bl = budgetLine(ctx, salaryOf);
   const filled = n - bl.open;
-  const projTotal = Object.values(picks).reduce((s, slug) => s + (slug ? bySlug.get(slug)?.proj ?? 0 : 0), 0);
+  const projTotal = Object.values(picks).reduce((s, slug) => s + (slug ? byPlayer.get(slug)?.proj ?? 0 : 0), 0);
   const week = st.week!;
 
   const save = async () => {
@@ -193,7 +203,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
     } catch (e) { warn(); setNote(friendlyError(e)); } finally { setBusy(false); }
   };
   const fill = () => {
-    const built = fillOpenSpots(players.filter((p) => !locked(p.slug)), ctx, `${leagueId}|w${week}|${st.roster_id}|${Date.now()}`);
+    const built = fillOpenSpots(players.filter((p) => !locked(p.slug)), ctx, `${leagueId}|w${week}|${st.roster_id}|${Date.now()}`, ruledOut);
     const open = slots.filter((d) => !picks[d.slot]).length;
     const got = slots.filter((d) => !picks[d.slot] && built[d.slot]).length;
     setPicks(built);
@@ -218,7 +228,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
     setPicks(next);
     setActive(null);
   };
-  const rows = active ? rankCandidates(players, ctx, { slot: active === 'any' ? null : active, tab, team: team || null, needle: search, sort: sort ?? undefined, locked, hideIneligible: eligibleOnly }, salaryOf) : [];
+  const rows = active ? rankCandidates(players, ctx, { slot: active === 'any' ? null : active, tab, team: team || null, needle: search, sort: sort ?? undefined, locked, hideIneligible: eligibleOnly, ruledOut, saved }, salaryOf) : [];
   const sortNow: BuilderSort = sort ?? (bull && !isTotal ? 'aim' : 'proj');
   const activeDef = active && active !== 'any' ? slots.find((d) => d.slot === active) ?? null : null;
 
@@ -293,7 +303,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
           </View>
           {slots.map((d) => {
             const slug = picks[d.slot];
-            const p = slug ? bySlug.get(slug) : null;
+            const p = slug ? byPlayer.get(slug) : null;
             const target = theCard?.targets[d.slot];
             const lv = liveOf(d.slot);
             const isLocked = locked(slug);
@@ -317,7 +327,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
                         <InjuryTag key={injTick} week={week} slug={p.slug} />
                       </View>
                       <Mono size={8.5} tone="faint" numberOfLines={1}>{`${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}</Mono>
-                      <Mono size={9} tone="dim">{`${fmt$(p.salary)} · proj ${p.proj.toFixed(1)} · ${valueOf(p).toFixed(2)}/$1k`}</Mono>
+                      <Mono size={9} tone="dim">{`${fmt$(p.salary)} · proj ${projWord(p)} · ${valueOf(p).toFixed(2)}/$1k`}</Mono>
                     </View>
                   </>
                 ) : (
@@ -416,7 +426,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
                       <Mono size={12} weight="700" tone="text">{fmt$(p.salary)}</Mono>
-                      <Mono size={8.5} tone="dim">{`proj ${p.proj.toFixed(1)} · ${value.toFixed(2)}/$1k`}</Mono>
+                      <Mono size={8.5} tone="dim">{`proj ${projWord(p)} · ${value.toFixed(2)}/$1k`}</Mono>
                       {bull && !isTotal && dist != null && <Mono size={8.5} tone={dist <= radius / 5 ? 'you' : 'faint'}>{`${dist.toFixed(1)} off`}</Mono>}
                     </View>
                   </Pressable>

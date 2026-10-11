@@ -11,8 +11,22 @@ import { TEAM_UNIT_POS, slotEligiblePos } from './classic';
 import { seatRuleAllows, seatRuleText, normTeam, type SeatRule } from '../data/seatRules';
 import { contestSlotAllows, contestAutoBuild, CONTEST_MIN_SALARY, type ContestConfig, type ContestBoardPlayer } from './contest';
 import type { BullseyeCard } from './bullseye';
+import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, withPprProjections } from './projScoring';
+import type { ClassicScoring } from './classic';
 
-export interface BuilderPlayer extends ContestBoardPlayer { name: string; team: string }
+export interface BuilderPlayer extends ContestBoardPlayer {
+  name: string; team: string;
+  /** The projection the salary was set from (0467), and the feed's current
+   *  number before the league's scaling — the "priced 15.4 ↑" readout. */
+  priced?: number | null; feedProj?: number;
+}
+/** "↑ 2.7 since priced" / "↓ 1.1 since priced" — null inside half a point. */
+export function pricedDelta(p: { priced?: number | null; feedProj?: number; proj: number }): { dir: '↑' | '↓'; by: number } | null {
+  const now = p.feedProj ?? p.proj;
+  if (p.priced == null || !Number.isFinite(Number(p.priced))) return null;
+  const d = Math.round((now - Number(p.priced)) * 10) / 10;
+  return Math.abs(d) < 0.5 ? null : { dir: d > 0 ? '↑' : '↓', by: Math.abs(d) };
+}
 export interface PoolFilter { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null }
 export interface BuilderCtx {
   slots: ClassicSlotDef[];
@@ -100,6 +114,27 @@ export function roomFor(ctx: BuilderCtx, slot: string, salaryOf: (slug: string) 
 /** Projected points per $1,000 — the sheet's VALUE. */
 export const valueOf = (p: { salary: number; proj: number }): number => (p.salary > 0 ? Math.round((p.proj / (p.salary / 1000)) * 100) / 100 : 0);
 
+/** THE LEAGUE'S OWN NUMBER (v0.666.0). The board's projection is PPR points
+ *  from the weekly feed — the shared price sheet. A league scoring half-PPR,
+ *  TE-premium or paying coaches sees its own: the weekly feed scaled by the
+ *  season projection under the league's catalog over the same under stock
+ *  PPR (bounded, so a thin season line can't swing it), and for a body the
+ *  feed does not price at all (HC, P) the league catalog's per-week number
+ *  outright. Pure of the clock; installs and clears the catalog around the
+ *  read. */
+export function leagueWeekProj(row: { slug: string; pos: string; team?: string | null; proj: number }, catalog?: Partial<ClassicScoring> | null): number {
+  if (!catalog) return row.proj;
+  const who = { id: row.slug, pos: row.pos, team: row.team ?? null };
+  let lg = 0;
+  try { setLeagueProjScoring(catalog); lg = projectedPoints(who); } finally { clearLeagueProjScoring(); }
+  const ppr = withPprProjections(() => projectedPoints(who));
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  if (!(row.proj > 0)) return lg > 0 ? r1(lg) : row.proj;
+  if (!(ppr > 0) || !(lg > 0)) return row.proj;
+  const ratio = Math.max(0.5, Math.min(2, lg / ppr));
+  return r1(row.proj * ratio);
+}
+
 export interface BuilderRow {
   p: BuilderPlayer;
   /** The spot he'd land in — the chosen one, else the tightest open one. */
@@ -120,6 +155,10 @@ export interface BuilderRow {
 export function rankCandidates(board: BuilderPlayer[], ctx: BuilderCtx, o: {
   slot?: string | null; tab?: string; team?: string | null; needle?: string; sort?: BuilderSort;
   locked?: (slug: string) => boolean; hideIneligible?: boolean;
+  /** RULED OUT (v0.666.0): the injury report's O and IR. Not a new pick —
+   *  the server refuses him too — but one already in the saved squad stays
+   *  (and swappable until his game locks). */
+  ruledOut?: (slug: string) => boolean; saved?: Record<string, string | null>;
 }, salaryOf: (slug: string) => number): BuilderRow[] {
   const bull = ctx.cfg.contest === 'bullseye' && ctx.cfg.bullseye?.variant === 'slots' && !!ctx.card;
   const sort: BuilderSort = o.sort ?? (bull ? 'aim' : ctx.cfg.contest === 'golf' ? 'proj' : 'proj');
@@ -136,7 +175,10 @@ export function rankCandidates(board: BuilderPlayer[], ctx: BuilderCtx, o: {
     const taken = takenBy.get(p.slug) ?? null;
     const land = def ? def.slot : openSpotFor(p, ctx);
     const landDef = land ? ctx.slots.find((d) => d.slot === land)! : null;
-    const why = def ? spotWhyNot(def, p, ctx) : landDef ? null : (ctx.slots.some((d) => !spotWhyNot(d, p, ctx)) ? 'every spot he fits is filled' : spotWhyNot(ctx.slots.find((d) => slotEligiblePos(d.pos).includes(p.pos)) ?? ctx.slots[0], p, ctx));
+    const inSaved = !!o.saved && Object.values(o.saved).includes(p.slug);
+    const out = !!o.ruledOut?.(p.slug) && !inSaved;
+    const why = out ? 'ruled out this week'
+      : def ? spotWhyNot(def, p, ctx) : landDef ? null : (ctx.slots.some((d) => !spotWhyNot(d, p, ctx)) ? 'every spot he fits is filled' : spotWhyNot(ctx.slots.find((d) => slotEligiblePos(d.pos).includes(p.pos)) ?? ctx.slots[0], p, ctx));
     const fits = !why && !!land;
     const r = def ? room! : land ? roomFor(ctx, land, salaryOf) : 0;
     const afford = fits && p.salary <= r;
@@ -164,8 +206,8 @@ export function rankCandidates(board: BuilderPlayer[], ctx: BuilderCtx, o: {
 /** FILL FOR ME: the open spots, built the way the contest wants, around the
  *  picks already made and inside what's left of the budget. A player the
  *  pool filter or seat rule refuses is never offered. */
-export function fillOpenSpots(board: BuilderPlayer[], ctx: BuilderCtx, seed: string): Record<string, string | null> {
-  const pool = board.filter((p) => poolFilterAllows(ctx.poolFilter, p) && seatRuleAllows(ctx.seatRule, p));
+export function fillOpenSpots(board: BuilderPlayer[], ctx: BuilderCtx, seed: string, ruledOut?: (slug: string) => boolean): Record<string, string | null> {
+  const pool = board.filter((p) => poolFilterAllows(ctx.poolFilter, p) && seatRuleAllows(ctx.seatRule, p) && !ruledOut?.(p.slug));
   return contestAutoBuild(pool, ctx.cfg, seed, ctx.card ?? null, ctx.picks);
 }
 

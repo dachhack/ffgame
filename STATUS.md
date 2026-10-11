@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.666.0 — Salaries priced on scarcity; projections that move; the injury rule
+
+> - Weekly squad prices are now set the way DFS sites set them: by how much a player projects beyond the replacement at his position, calibrated so the all-stars lineup is just over the budget. Prices freeze when the board is published; projections keep moving with the news, and the builder shows "↑/↓ since priced".
+> - Your league's own scoring shows in the projections (half-PPR, TE premium, coaches), and a player ruled OUT can't be added — though one already in your squad stays swappable until his game locks. CPU teams swap out their ruled-out players automatically.
+
+- Migration 0467: `pod_salary.priced_proj` (frozen with the salary);
+  `save_contest_entry` refuses an O/IR new pick. Engine
+  `salaryPricing.ts` (replacement levels, rate calibration, priceBoard);
+  pods.js prices boards through it, refreshes `proj` every 6h, and auto-subs
+  CPU seats' ruled-out players before their lock. `contestBuilder` gains
+  `leagueWeekProj`, `pricedDelta` and the ruled-out rule; the builders show
+  both. CLI/ops `salary-audit <week>` (read-only). docs/dfs-bullseye.md §15.
+  Tests: server/test/salary-pricing.mjs; the scratch flow covers the refusal.
+  Applies from the next board built. No iPhone build needed.
+
 ### v0.665.2 — The week's salary board fills in the extra positions
 
 > - A weekly squad league's pick sheet now shows the players its roster asks for — head coaches, rookies for a rookie-only spot, and any position the commissioner unlocks — even when the week's board was built before the spot existed.
