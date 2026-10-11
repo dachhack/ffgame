@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.680.0 — The weekly contest table deals from your deck
+
+> - The card table in a weekly squad league now uses the card deck you picked for drip mode: the felt takes the deck's colour and your opponent's sealed cards show its back. Change it any time under ⚙ → Cards → CARD DECK on the phone, or ⚙ → CARD DECK on the web.
+> - A photo deck's art is no longer covered by the ◈ gem on the web's contest table.
+
+Founder: "Let's use the card themes from drip mode and let the users change it
+in the options." The web's contest table (`src/screens/ContestMatchup.tsx`) was
+already on the kit's `[data-card-skin]` felt and backs; its one gap was the
+`SealedCard` gem drawn over a photo deck's art, which the drip Matchup hides —
+`cardTable.tsx` now reads the `data-card-photo` flag `App.tsx` stamps on
+`<html>` and skips the gem. The phone's table (`apps/mobile/src/ui/ContestCards.tsx`)
+had its own fixed emerald felt and lattice back; it now reads the deck from
+`ui/cards.tsx` (the same `gc-cardskin` store, art and picker drip mode uses).
+`cards.tsx` gains `useCardSkin()` (a live hook, so a pick under ⚙ re-renders an
+open table) and `SKIN_FELT` (the web's `--ct-felt` per deck). The phone's
+Emerald deck has no bundled art and is not in its picker; the contest table's
+vector lattice remains as the fallback for a skin without art. No iPhone build:
+plain JS and bundled art the app already ships.
+
 ### v0.679.2 — The CPU fills its coach and rookie spots
 
 > - In a weekly squad league the CPU's squads were leaving the HEAD COACH and Rookie Only spots empty. A spot added after the week's board was built now reaches the board on the next tick, and a CPU squad with an empty spot gets it filled from the players still to play.

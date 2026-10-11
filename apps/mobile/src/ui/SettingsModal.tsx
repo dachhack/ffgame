@@ -195,7 +195,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
 
                 <View style={{ gap: 8 }}>
                   <Mono size={8.5} weight="700" track={0.16} tone="faint">CARD DECK</Mono>
-                  <Mono size={9} tone="faint">The back your opponent&rsquo;s sealed cards show until kickoff.</Mono>
+                  <Mono size={9} tone="faint">The back your opponent&rsquo;s sealed cards show until kickoff, in drip mode and on the weekly contest table.</Mono>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                     {SKIN_OPTS.map((o) => {
                       const on = skin === o.id;

@@ -863,6 +863,9 @@ export function PowerupHand({ cards, pendingId, onArm, onApply, onCancel, onOver
   );
 }
 
+/** Is the active deck a photo deck? (the store sets data-card-photo on <html>) */
+const photoDeck = () => typeof document !== 'undefined' && document.documentElement.getAttribute('data-card-photo') === '1';
+
 /** A face-down sealed pick — the opponent's card before its window kicks off.
  *  `mystery` swaps the deck gem for a big ? — the demo preview's opening beat
  *  ("who are they fielding?") before the card flips at the reveal. */
@@ -873,9 +876,10 @@ export function SealedCard({ seed, idx = 0, mystery = false, tag = true }: { see
       <div className="ct-card" style={wobbleVars(seed)}>
         <div className="ct-side ct-back">
           <div className="ct-lattice" />
+          {/* a photo deck's art stays uncovered (v0.680.0): no gem on it */}
           {mystery
             ? <div className="ct-gem" style={{ fontSize: 38, fontWeight: 800, textShadow: '0 2px 0 #000, 0 0 14px rgba(0,0,0,0.35)' }}>?</div>
-            : <div className="ct-gem">◈</div>}
+            : photoDeck() ? null : <div className="ct-gem">◈</div>}
           {tag && <div className="ct-sealtag">SEALED ◈ PICK</div>}
         </div>
       </div>
