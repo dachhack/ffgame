@@ -873,8 +873,13 @@ export const recordWord = (r: { wins?: number | null; losses?: number | null; ti
 export interface BullseyeLeagueBoard {
   ok: boolean; error?: string; week?: number | null; started?: boolean; entries?: number;
   rows?: BullseyeBoardRow[]; me?: BullseyeBoardRow | null;
+  /** WHERE AM I (0473): when my row is off the top, the rows around mine
+   *  (`near` either side, mine among them); empty when I'm already shown. */
+  near?: BullseyeBoardRow[];
+  /** A team-name search's hits (0473), by rank; empty without a query. */
+  found?: BullseyeBoardRow[];
   /** Season leagues only: ring totals summed over the stamped weeks. */
-  season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null } | null;
+  season?: { rows: BullseyeSeasonRow[]; me: BullseyeSeasonRow | null; near?: BullseyeSeasonRow[]; found?: BullseyeSeasonRow[] } | null;
 }
 export interface BullseyeMyWeek { week: number; status: string; ring: number | null; tb: number | null; rank: number | null; entries: number }
 /** WEEKLY LEAGUES (v0.662.0, founder: "maybe have another filter for weekly
@@ -940,8 +945,12 @@ export const contestState = (leagueId: string, week?: number | null, season = '2
 /** `slots`: every spot — {S1: slug, S2: slug, …}. */
 export const saveContestEntry = (leagueId: string, week: number, slots: Record<string, string>, season = '2026') =>
   rpcOk<{ ok: boolean; error?: string; spent?: number; budget?: number }>('save_contest_entry', { p_league: leagueId, p_week: week, p_slots: slots, p_season: season });
-export const contestBoard = (leagueId: string, week?: number | null, limit = 100) =>
-  rpcOk<BullseyeLeagueBoard & { contest?: ContestKind }>('contest_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit });
+export const contestBoard = (leagueId: string, week?: number | null, limit = 100, near = 5, find: string | null = null) =>
+  rpcOk<BullseyeLeagueBoard & { contest?: ContestKind }>('contest_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit, p_near: near, p_find: find || null });
+/** The search alone (0473): the first 20 teams whose name contains `q`, by
+ *  rank, on the week board and (season leagues) the standings. */
+export const contestBoardFind = (leagueId: string, week: number | null | undefined, q: string) =>
+  contestBoard(leagueId, week, 1, 0, q).then((r) => ({ ok: r.ok, error: r.error, found: r.found ?? [], season: r.season?.found ?? [] }));
 /** Commissioner: the contest, the format (before the first week), the budget. */
 export const setContestRules = (leagueId: string, o: { contest?: ContestKind | null; format?: ContestFormat | null; budget?: number | null; minSpend?: number | null; autoSub?: boolean | null }) =>
   rpcOk<{ ok: boolean; error?: string; bullseye?: ContestInfo }>('set_contest_rules', { p_league: leagueId, p_contest: o.contest ?? null, p_format: o.format ?? null, p_budget: o.budget ?? null, p_min_spend: o.minSpend ?? null, p_auto_sub: o.autoSub ?? null });

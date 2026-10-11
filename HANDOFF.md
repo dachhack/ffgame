@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.670.1` · migrations through `0472`_
+_Last updated: 2026-10-11 · Build `v0.671.0` · migrations through `0473`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -42,9 +42,9 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
     is the read-only probe for the "Run a database query" workflow; or just
     open a league with a HEAD COACH spot and look for "Liam Coen".
 - **Not done, in the order I'd do them** (the founder has seen this list):
-  1. "Where am I" on a 50,000-seat leaderboard — `contest_board` returns the
-     top 500; needs the caller's row plus neighbours, and a search by team.
-     Add an index on `matchup(league_id, week)` before the first big one.
+  1. ~~"Where am I" on a 50,000-seat leaderboard~~ — done in v0.671.0
+     (0473: `near` + `found` on `contest_board`; the index 0001 already
+     made is pinned by name).
   2. Commissioner tools to fix a week: void, rescore after a stat correction,
      set a member's squad (CLI `set-lineup` exists for classic leagues).
   3. Entry deadline / late-entry policy (CPU build, zero, or week dropped).

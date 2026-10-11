@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.671.0 — Where am I on a big leaderboard, and find a team
+
+> - On a leaderboard too long to show whole, the standings now show your own stretch of the table — the five teams above you and the five below, with you in the middle — instead of a lone "You: #23,418" line under the top 100.
+> - Boards that long also get a FIND A TEAM box: type part of a team name and the matching squads come up with their rank, this week and for the season.
+
+- HANDOFF's first not-done item. Migration 0473: `contest_board` grows
+  `p_near` (default 5, 0–50) and `p_find` (text); the week board and the
+  season standings each return `near` (the rows within `p_near` positions
+  of mine, by row position so a run of ties can't blow it up, only when my
+  rank is past `p_limit`) and `found` (team names containing the query,
+  case-insensitive, `%`/`_` escaped, first 20 by rank). The old 3-arg
+  overload is dropped (two defaulted overloads make the PostgREST call
+  ambiguous) and `bullseye_league_board` is recreated on the new one;
+  grants re-stated. The `matchup(league_id, week)` index 0001 made is
+  pinned by name (`create index if not exists`), so a rebuilt database
+  can't miss it. liveApi `contestBoard(…, near, find)` and
+  `contestBoardFind`; both screens render `near` under the top rows with a
+  "⋯ you, at #N" divider, and show the search box only when the board is
+  at its page limit (100 rows), so a twelve-seat league looks as before.
+  `scripts/db/scratch/flow15.sql` exercises it on scratch Postgres (ten
+  seats, me tied sixth, top three shown). No iPhone build needed.
+
 ### v0.670.1 — Coaches score something out of the box
 
 > - A HEAD COACH spot now pays from the first week: when a league unlocks coaches and has never set coach scoring, a preset goes in — 10 for a win, 5 for a tie, 0.1 per point scored, and +1 to +6 by the margin of victory. Leagues already playing a coach spot with no coach scoring get it too. A commissioner who set their own coach values keeps them.

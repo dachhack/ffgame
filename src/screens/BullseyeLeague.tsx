@@ -18,10 +18,10 @@
 //   COMMISH   the classic commissioner's console, trimmed, with a CONTEST card
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
-  type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
+  type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
@@ -37,6 +37,8 @@ const chip = (on: boolean, dim = false): CSSProperties => ({
 });
 const small: CSSProperties = { fontSize: 10, color: 'var(--faint)' };
 const label: CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' };
+/** contest_board's default page; a board this long is one worth searching (0473). */
+const BOARD_LIMIT = 100;
 const input: CSSProperties = { fontSize: 13, padding: '7px 10px', background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--bd)', borderRadius: 6, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
 const errStyle: CSSProperties = { fontSize: 11, color: 'var(--warn, #c66)' };
 const n0 = (n: number) => n.toLocaleString('en-US');
@@ -299,6 +301,40 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
   const bull = b.contest === 'bullseye';
   const h2h = b.format === 'h2h';
   const flash = (k: string, s: string) => { copy(s); setCopied(k); setTimeout(() => setCopied(null), 1500); };
+  // WHERE AM I (0473): a board bigger than the rows it shows gets a team
+  // search, and my own stretch of the table when I'm off the top.
+  const big = (bd?.rows?.length ?? 0) >= BOARD_LIMIT || (bd?.season?.rows.length ?? 0) >= BOARD_LIMIT;
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<{ q: string; found: BullseyeBoardRow[]; season: BullseyeSeasonRow[] } | null>(null);
+  useEffect(() => {
+    const want = q.trim();
+    if (!want) { setHits(null); return; }
+    let alive = true;
+    const id = setTimeout(() => {
+      contestBoardFind(lg.league_id!, week, want).then((r) => { if (alive && r.ok) setHits({ q: want, found: r.found, season: r.season }); }).catch(() => {});
+    }, 300);
+    return () => { alive = false; clearTimeout(id); };
+  }, [q, lg.league_id, week]);
+  const weekRow = (r: BullseyeBoardRow) => (
+    <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: bull ? '40px minmax(0,1fr) 100px 64px' : '40px minmax(0,1fr) 64px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
+      <span>{r.rank}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
+      {bull && <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{`${Number(r.points).toFixed(1)} pts`}</span>}
+      <span style={{ textAlign: 'right', fontWeight: 700 }}>{Number(r.ring).toFixed(1)}</span>
+    </div>
+  );
+  const seasonRow = (r: BullseyeSeasonRow) => (
+    <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 90px 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
+      <span>{r.rank}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
+      <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{h2h ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}${r.best != null ? ` · best ${Number(r.best).toFixed(0)}` : ''}`}</span>
+      <span style={{ textAlign: 'right', fontWeight: 700 }}>{h2h ? recordWord(r) : Number(r.total).toFixed(1)}</span>
+    </div>
+  );
+  const youLine = (rank: number, tail: string) => (
+    <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${n0(rank)} · ${tail}`}</div>
+  );
+  const gap = (rank: number) => <div className="mono" style={{ ...small, paddingTop: 6, borderTop: '1px dashed var(--bd)', color: 'var(--faint)' }}>{`⋯ you, at #${n0(rank)}`}</div>;
   return (
     <>
       {!compact && <div style={{ ...card, display: 'grid', gap: 8 }}>
@@ -322,32 +358,34 @@ function LeagueRoom({ lg, weeks, week, onWeek, compact }: { lg: ContestLeague; w
       <div style={{ ...card, display: 'grid', gap: 4 }}>
         <span className="mono" style={label}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${h2h ? ' · HEAD-TO-HEAD' : ''}`}</span>
         {bd && !bd.started && <span className="mono" style={small}>Squads and scores show once the week’s first game locks.</span>}
-        {(bd?.rows ?? []).map((r) => (
-          <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: bull ? '40px minmax(0,1fr) 100px 64px' : '40px minmax(0,1fr) 64px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
-            <span>{r.rank}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
-            {bull && <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{`${Number(r.points).toFixed(1)} pts`}</span>}
-            <span style={{ textAlign: 'right', fontWeight: 700 }}>{Number(r.ring).toFixed(1)}</span>
-          </div>
-        ))}
+        {big && (
+          <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={30} placeholder="Find a team…" aria-label="Find a team" style={{ ...input, marginTop: 4 }} />
+        )}
+        {hits && (
+          <>
+            <span className="mono" style={{ ...small, paddingTop: 4 }}>{hits.found.length ? `FOUND “${hits.q}” · THIS WEEK` : `No squad named “${hits.q}” this week.`}</span>
+            {hits.found.map(weekRow)}
+          </>
+        )}
+        {(bd?.rows ?? []).map(weekRow)}
         {bd?.me && !(bd.rows ?? []).some((r) => r.me) && (
-          <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${bd.me.rank} · ${Number(bd.me.ring).toFixed(1)}`}</div>
+          (bd.near?.length ?? 0) > 0 ? <>{gap(bd.me.rank)}{bd.near!.map(weekRow)}</> : youLine(bd.me.rank, Number(bd.me.ring).toFixed(1))
         )}
       </div>
 
       {bd?.season && (
         <div style={{ ...card, display: 'grid', gap: 4 }}>
           <span className="mono" style={label}>SEASON STANDINGS</span>
-          {bd.season.rows.map((r) => (
-            <div key={r.roster_id} className="mono" style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 90px 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', color: r.me ? 'var(--you)' : 'var(--text)', fontWeight: r.me ? 700 : 400 }}>
-              <span>{r.rank}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.team_name ?? `Team ${r.roster_id}`}</span>
-              <span style={{ textAlign: 'right', color: 'var(--faint)' }}>{h2h ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}${r.best != null ? ` · best ${Number(r.best).toFixed(0)}` : ''}`}</span>
-              <span style={{ textAlign: 'right', fontWeight: 700 }}>{h2h ? recordWord(r) : Number(r.total).toFixed(1)}</span>
-            </div>
-          ))}
+          {hits && (
+            <>
+              <span className="mono" style={{ ...small, paddingTop: 4 }}>{hits.season.length ? `FOUND “${hits.q}” · SEASON` : `No team named “${hits.q}”.`}</span>
+              {hits.season.map(seasonRow)}
+            </>
+          )}
+          {bd.season.rows.map(seasonRow)}
           {bd.season.me && !bd.season.rows.some((r) => r.me) && (
-            <div className="mono" style={{ fontSize: 12, color: 'var(--you)', fontWeight: 700, paddingTop: 6, borderTop: '1px dashed var(--bd)' }}>{`You: #${bd.season.me.rank} · ${h2h ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</div>
+            (bd.season.near?.length ?? 0) > 0 ? <>{gap(bd.season.me.rank)}{bd.season.near!.map(seasonRow)}</>
+              : youLine(bd.season.me.rank, `${h2h ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`)
           )}
         </div>
       )}

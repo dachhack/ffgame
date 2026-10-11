@@ -10,10 +10,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
 import {
-  contestLeague, contestBoard, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
-  type BullseyeLeague, type BullseyeLeagueBoard, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
+  type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
@@ -26,6 +26,8 @@ import { CONTEST_BUDGETS, CONTEST_MIN_SPENDS, moneyChip } from './ContestCommish
 export type BullseyeRoom = 'matchup' | 'league' | 'team' | 'settings' | 'commish';
 type ContestLeague = BullseyeLeague & { kind?: string; bullseye?: ContestInfo };
 const n0 = (n: number) => n.toLocaleString('en-US');
+/** contest_board's default page; a board this long is one worth searching (0473). */
+const BOARD_LIMIT = 100;
 const CONTEST_BLURB: Record<ContestKind, string> = {
   high: 'Each week everyone builds a squad under the budget from the week’s salary board. Most points wins.',
   golf: 'Each week everyone builds a squad that spends at least the minimum. FEWEST points wins — but a scoreless spot banks a penalty, so no-shows are no bargain.',
@@ -235,6 +237,38 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
   }, [lg.league_id, week]);
   const b = lg.bullseye!;
   const bull = b.contest === 'bullseye';
+  const h2h = b.format === 'h2h';
+  // WHERE AM I (0473): a board bigger than the rows it shows gets a team
+  // search, and my own stretch of the table when I'm off the top.
+  const big = (bd?.rows?.length ?? 0) >= BOARD_LIMIT || (bd?.season?.rows.length ?? 0) >= BOARD_LIMIT;
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<{ q: string; found: BullseyeBoardRow[]; season: BullseyeSeasonRow[] } | null>(null);
+  useEffect(() => {
+    const want = q.trim();
+    if (!want) { setHits(null); return; }
+    let alive = true;
+    const id = setTimeout(() => {
+      contestBoardFind(lg.league_id!, week, want).then((r) => { if (alive && r.ok) setHits({ q: want, found: r.found, season: r.season }); }).catch(() => {});
+    }, 300);
+    return () => { alive = false; clearTimeout(id); };
+  }, [q, lg.league_id, week]);
+  const weekRow = (r: BullseyeBoardRow) => (
+    <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
+      <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
+      {bull && <Mono size={9} tone="faint">{`${Number(r.points).toFixed(1)} pts`}</Mono>}
+      <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 52, textAlign: 'right' }}>{Number(r.ring).toFixed(1)}</Mono>
+    </View>
+  );
+  const seasonRow = (r: BullseyeSeasonRow) => (
+    <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
+      <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
+      <Mono size={9} tone="faint">{h2h ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}`}</Mono>
+      <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 60, textAlign: 'right' }}>{h2h ? recordWord(r) : Number(r.total).toFixed(1)}</Mono>
+    </View>
+  );
+  const gap = (rank: number) => <Mono size={9} tone="faint" style={{ marginTop: 6 }}>{`⋯ you, at #${n0(rank)}`}</Mono>;
   const share = async () => {
     if (!lg.invite_code) return;
     try { await Share.share({ message: `Join my league "${lg.name}" on Drip Fantasy: ${SITE_ORIGIN}/?bullseye=${lg.invite_code}\nCode: ${lg.invite_code}` }); } catch { /* ignore */ }
@@ -264,28 +298,33 @@ function LeagueRoom({ lg, weeks, week, onWeek, onCommish, onBack }: { lg: Contes
       <Card style={{ gap: 2 }}>
         <Mono size={9} tone="faint" weight="700" track={0.1}>{`WEEK ${bd?.week ?? week ?? ''} · ${bd?.entries ?? 0} ${bd?.entries === 1 ? 'SQUAD' : 'SQUADS'}${b.format === 'h2h' ? ' · HEAD-TO-HEAD' : ''}`}</Mono>
         {bd && !bd.started && <Mono size={9} tone="faint">Squads and scores show once the week’s first game locks.</Mono>}
-        {(bd?.rows ?? []).map((r) => (
-          <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
-            <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
-            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
-            {bull && <Mono size={9} tone="faint">{`${Number(r.points).toFixed(1)} pts`}</Mono>}
-            <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 52, textAlign: 'right' }}>{Number(r.ring).toFixed(1)}</Mono>
-          </View>
-        ))}
-        {bd?.me && !(bd.rows ?? []).some((r) => r.me) && <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${bd.me.rank} · ${Number(bd.me.ring).toFixed(1)}`}</Mono>}
+        {big && <Field value={q} onChangeText={setQ} maxLength={30} placeholder="Find a team…" autoCorrect={false} style={{ marginTop: 4, marginBottom: 4 }} />}
+        {hits && (
+          <>
+            <Mono size={9} tone="faint" style={{ marginTop: 4 }}>{hits.found.length ? `FOUND “${hits.q}” · THIS WEEK` : `No squad named “${hits.q}” this week.`}</Mono>
+            {hits.found.map(weekRow)}
+          </>
+        )}
+        {(bd?.rows ?? []).map(weekRow)}
+        {bd?.me && !(bd.rows ?? []).some((r) => r.me) && (
+          (bd.near?.length ?? 0) > 0 ? <>{gap(bd.me.rank)}{bd.near!.map(weekRow)}</>
+            : <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${n0(bd.me.rank)} · ${Number(bd.me.ring).toFixed(1)}`}</Mono>
+        )}
       </Card>
       {bd?.season && (
         <Card style={{ gap: 2 }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>SEASON STANDINGS</Mono>
-          {bd.season.rows.map((r) => (
-            <View key={r.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: 1, borderTopColor: t.bd }}>
-              <Mono size={10} tone={r.me ? 'you' : 'dim'} style={{ width: 30 }}>{String(r.rank)}</Mono>
-              <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: r.me ? t.you : t.text, fontWeight: r.me ? '700' : '400' }}>{r.team_name ?? `Team ${r.roster_id}`}</Text>
-              <Mono size={9} tone="faint">{b.format === 'h2h' ? `${r.weeks} wk${r.weeks === 1 ? '' : 's'} · ${Number(r.total).toFixed(1)}` : `${r.weeks} wk${r.weeks === 1 ? '' : 's'}`}</Mono>
-              <Mono size={11} weight="700" tone={r.me ? 'you' : 'text'} style={{ width: 60, textAlign: 'right' }}>{b.format === 'h2h' ? recordWord(r) : Number(r.total).toFixed(1)}</Mono>
-            </View>
-          ))}
-          {bd.season.me && !bd.season.rows.some((r) => r.me) && <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${bd.season.me.rank} · ${b.format === 'h2h' ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</Mono>}
+          {hits && (
+            <>
+              <Mono size={9} tone="faint" style={{ marginTop: 4 }}>{hits.season.length ? `FOUND “${hits.q}” · SEASON` : `No team named “${hits.q}”.`}</Mono>
+              {hits.season.map(seasonRow)}
+            </>
+          )}
+          {bd.season.rows.map(seasonRow)}
+          {bd.season.me && !bd.season.rows.some((r) => r.me) && (
+            (bd.season.near?.length ?? 0) > 0 ? <>{gap(bd.season.me.rank)}{bd.season.near!.map(seasonRow)}</>
+              : <Mono size={10} tone="you" weight="700" style={{ marginTop: 6 }}>{`You: #${n0(bd.season.me.rank)} · ${h2h ? `${recordWord(bd.season.me)} · ` : ''}${Number(bd.season.me.total).toFixed(1)}`}</Mono>
+          )}
         </Card>
       )}
     </>
