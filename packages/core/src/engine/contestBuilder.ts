@@ -11,8 +11,8 @@ import { TEAM_UNIT_POS, slotEligiblePos } from './classic';
 import { seatRuleAllows, seatRuleText, normTeam, type SeatRule } from '../data/seatRules';
 import { contestSlotAllows, contestAutoBuild, CONTEST_MIN_SALARY, type ContestConfig, type ContestBoardPlayer } from './contest';
 import type { BullseyeCard } from './bullseye';
-import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, withPprProjections } from './projScoring';
-import type { ClassicScoring } from './classic';
+import { projectedPoints, setLeagueProjScoring, clearLeagueProjScoring, withPprProjections, hcWeekPoints, type HcGame } from './projScoring';
+import { normalizeClassicScoring, type ClassicScoring } from './classic';
 
 export interface BuilderPlayer extends ContestBoardPlayer {
   name: string; team: string;
@@ -122,8 +122,16 @@ export const valueOf = (p: { salary: number; proj: number }): number => (p.salar
  *  feed does not price at all (HC, P) the league catalog's per-week number
  *  outright. Pure of the clock; installs and clears the catalog around the
  *  read. */
-export function leagueWeekProj(row: { slug: string; pos: string; team?: string | null; proj: number }, catalog?: Partial<ClassicScoring> | null): number {
+export function leagueWeekProj(row: { slug: string; pos: string; team?: string | null; proj: number }, catalog?: Partial<ClassicScoring> | null,
+  /** A COACH'S WEEK (v0.667.2): his game this week (null = bye) prices him
+   *  for THAT matchup; undefined (slate unknown) falls back to the flat
+   *  seventeenth below. Ignored for anyone but a head coach. */
+  game?: HcGame | null): number {
   if (!catalog) return row.proj;
+  if (row.pos === 'HC' && game !== undefined) {
+    const n = hcWeekPoints(row.slug, game, normalizeClassicScoring(catalog));
+    if (n != null) return n;
+  }
   const who = { id: row.slug, pos: row.pos, team: row.team ?? null };
   let lg = 0;
   try { setLeagueProjScoring(catalog); lg = projectedPoints(who); } finally { clearLeagueProjScoring(); }

@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.667.2 — A coach's week is his matchup; the squad's projected total
+
+> - A HEAD COACH spot now projects by the week's game, not a flat slice of the season: who he's playing and where, turned into a win chance and a margin, paid under your league's coach scoring. A bye projects 0.
+> - The squad builder shows what your picks project to add up to — and in a Bullseye league, how far that sits from the card's total.
+
+- Founder: "Can we add coach weekly projections? And a total projected for
+  bullseye weekly leagues." `hcWeekPoints` / `hcGameOdds` in
+  engine/projScoring.ts (expected margin from both teams' projected
+  margin per game + 1.5 home edge, normal CDF at a 13.5-point game SD,
+  margin brackets via marginBracketShares); `leagueWeekProj(row, catalog,
+  game)` takes the coach's game from the week's slate (null = bye,
+  undefined = flat fallback). ContestSquad (web, phone): PROJECTS stat in
+  the card header, `· card N (±d)` for Bullseye. The board's stored HC
+  proj stays 0 (no league-free catalog); the builder prices it. Probes in
+  check:dfsbullseye. No iPhone build needed.
+
 ### v0.667.1 — Credit where it's due: Bullseye's idea chip
 
 > - Bullseye leagues now carry a small "💡 IDEA · JON ACEVEDO" chip on the league page, in its settings and on the create form. Tap it and it says so: Bullseye was Jon Acevedo's idea.

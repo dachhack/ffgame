@@ -145,7 +145,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
   // this league's catalog (leagueWeekProj) — the price is the shared sheet,
   // the projection is yours. `feedProj` keeps the feed's number for the
   // "↑ since priced" readout.
-  const players = useMemo<BuilderPlayer[]>(() => (board ?? []).map((r) => ({ slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: leagueWeekProj(r, setup?.catalog), feedProj: r.proj, priced: r.priced_proj ?? null, exp: r.exp ?? null })), [board, setup?.catalog]);
+  const players = useMemo<BuilderPlayer[]>(() => (board ?? []).map((r) => ({ slug: r.slug, name: r.name, pos: r.pos, team: r.team, salary: r.salary, proj: leagueWeekProj(r, setup?.catalog, r.pos === 'HC' ? (slate.size ? slate.get(r.team) ?? null : undefined) : undefined), feedProj: r.proj, priced: r.priced_proj ?? null, exp: r.exp ?? null })), [board, setup?.catalog, slate]);
   // RULED OUT (v0.666.0): O or IR on the report — not a new pick; one already
   // saved stays, swappable until his game locks (the server's rule too).
   const byPlayer = useMemo(() => new Map(players.map((p) => [p.slug, p])), [players]);
@@ -242,6 +242,14 @@ export function ContestSquad({ leagueId, week: weekProp, onBack }: { leagueId: s
             <Mono size={9} tone="faint" weight="700" track={0.1}>{`WEEK ${week} · ${CONTEST_WORD[cfg.contest]}`}</Mono>
             {isTotal && theCard && <Display size={22}>{String(theCard.total)}</Display>}
           </View>
+          {/* THE SQUAD'S TOTAL (v0.667.2): what the picks add up to, against the card's sum. */}
+          {!st.started && filled > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+              <Mono size={9} tone="faint">PROJECTS</Mono>
+              <Mono size={13} tone="text" weight="700">{projTotal.toFixed(1)}</Mono>
+              {bull && theCard && <Mono size={9} tone="faint">{`· card ${theCard.total} (${projTotal - theCard.total >= 0 ? '+' : ''}${(projTotal - theCard.total).toFixed(1)})`}</Mono>}
+            </View>
+          )}
           {bull && !isTotal && theCard && (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
               {slots.map((d) => (

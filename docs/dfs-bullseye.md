@@ -353,3 +353,18 @@ refused, so an outage keeps last week's names. New boards take the name from
 the table at build time; a pool built on the phone starts from the season
 list and is renamed by the next scan.
 
+## 17. A coach's week, and the squad's total (v0.667.2)
+
+The board stores a head coach at projection 0 (there is no league-free
+coach catalog), and the builder used to price him at a flat seventeenth of
+the season line under the league's catalog — every week the same. Now
+`leagueWeekProj` takes his game from the week's slate: `hcWeekPoints`
+turns both teams' projected margins per game (plus a 1.5-point home edge)
+into an expected margin, a win chance (normal CDF at the NFL's 13.5-point
+game SD) and a margin-bracket ladder, and pays them under the catalog the
+way `classicScorePlay` would; points and downs ride the season rate. A bye
+is 0; no slate falls back to the flat number.
+
+The builder's card header shows PROJECTS — the picks' projected sum — and,
+in a Bullseye league, the card's total with the gap.
+
