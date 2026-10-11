@@ -911,8 +911,8 @@ export const joinBullseye = (code: string, teamName?: string | null) =>
 export const bullseyeLeague = (leagueId: string) => rpcOk<BullseyeLeague>('bullseye_league', { p_league: leagueId });
 export const bullseyeLeagueBoard = (leagueId: string, week?: number | null, limit = 100) =>
   rpcOk<BullseyeLeagueBoard>('bullseye_league_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit });
-export const bullseyeMyWeeks = (leagueId: string) =>
-  rpcOk<{ ok: boolean; error?: string; roster_id?: number; team?: string | null; weeks?: BullseyeMyWeek[] }>('bullseye_my_weeks', { p_league: leagueId });
+export const bullseyeMyWeeks = (leagueId: string, rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; team?: string | null; weeks?: BullseyeMyWeek[]; seats?: ContestSeat[] }>('bullseye_my_weeks', { p_league: leagueId, p_roster: rosterId ?? null });
 /** Commissioner: how many people the league holds (2–32, or 50,000 for a host). */
 export const setBullseyeSize = (leagueId: string, max: number) =>
   rpcOk<{ ok: boolean; error?: string; max_seats?: number }>('set_bullseye_size', { p_league: leagueId, p_max: max });
@@ -925,6 +925,7 @@ export type ContestFormat = 'h2h' | 'board';
 export interface ContestInfo extends BullseyeInfo { contest: ContestKind; format: ContestFormat; /** 0 = no cap (0469). */ budget: number; /** The minimum spend (0469); 0 = none. */ min_spend?: number; /** AUTO-SUB (0470): the worker swaps a ruled-out pick before his kickoff. */ auto_sub?: boolean;
   /** NO SQUAD BY LOCK (0475): cpu | zero | drop. */ late_entry?: import('../engine/contest').ContestLateEntry;
   /** ENTRIES (0475): open | first (close at the week's first kickoff). */ entry_deadline?: import('../engine/contest').ContestEntryDeadline;
+  /** ENTRIES PER MEMBER (0481): seats one member may hold (board leagues; head-to-head is 1), and how many the caller holds. */ max_entries?: number; my_entries?: number;
   /** THE MONEY (0477): the dues setting (0320) and the prize list. */ dues_amount?: number | null; dues_note?: string | null; prizes?: PrizeRow[]; spots: number }
 /** A place and what it wins (0477): free text both — "1st" / "$150", "Weekly high" / "a hat". */
 export interface PrizeRow { label: string; prize: string }
@@ -942,11 +943,15 @@ export interface ContestState {
   variant?: DfsVariant; radius?: number; positions_extra?: string[];
   scoring_classic?: Record<string, unknown> | null; ppr?: number;
   roster_id?: number | null; team?: string | null; started?: boolean;
+  /** MY SEATS (0481): every seat of mine, for the switcher, and the league's entries-per-member rule. */
+  seats?: ContestSeat[]; max_entries?: number;
   entry?: unknown;
   matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null } | null;
   opponent?: { roster_id: number; team: string | null; entry: unknown } | null;
   state?: { home: number; away: number; slots: DfsSlotScore[] } | null;
 }
+/** One of my seats in a contest league (0481). */
+export interface ContestSeat { roster_id: number; team: string | null }
 export interface ContestMyWeek extends BullseyeMyWeek { opp?: number | null; opp_team?: string | null; opp_ring?: number | null }
 export const createContestLeague = (o: { name: string; contest: ContestKind; format: ContestFormat; span: BullseyeSpan; max: number; /** 0 = no cap. */ budget: number; /** The floor (golf); 0 = none. */ minSpend?: number; variant?: DfsVariant; radius?: number; teamName?: string | null }, season = '2026') =>
   rpcOk<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; roster_id?: number; team?: string; bullseye?: ContestInfo }>('create_contest_league', {
@@ -955,11 +960,15 @@ export const createContestLeague = (o: { name: string; contest: ContestKind; for
 export const joinContest = (code: string, teamName?: string | null) =>
   rpcOk<{ ok: boolean; error?: string; league_id?: string; league?: string; roster_id?: number; team?: string; already?: boolean }>('join_contest', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
 export const contestLeague = (leagueId: string) => rpcOk<BullseyeLeague & { kind?: string; bullseye?: ContestInfo }>('contest_league', { p_league: leagueId });
-export const contestState = (leagueId: string, week?: number | null, season = '2026') =>
-  rpcOk<ContestState>('contest_state', { p_league: leagueId, p_week: week ?? null, p_season: season });
+/** `rosterId` (0481): which of my seats — one that isn't mine reads as my first. */
+export const contestState = (leagueId: string, week?: number | null, season = '2026', rosterId?: number | null) =>
+  rpcOk<ContestState>('contest_state', { p_league: leagueId, p_week: week ?? null, p_season: season, p_roster: rosterId ?? null });
 /** `slots`: every spot — {S1: slug, S2: slug, …}. */
-export const saveContestEntry = (leagueId: string, week: number, slots: Record<string, string>, season = '2026') =>
-  rpcOk<{ ok: boolean; error?: string; spent?: number; budget?: number }>('save_contest_entry', { p_league: leagueId, p_week: week, p_slots: slots, p_season: season });
+export const saveContestEntry = (leagueId: string, week: number, slots: Record<string, string>, season = '2026', rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; spent?: number; budget?: number; roster_id?: number }>('save_contest_entry', { p_league: leagueId, p_week: week, p_slots: slots, p_season: season, p_roster: rosterId ?? null });
+/** ANOTHER ENTRY (0481): a seated member's next seat, under the league's entries-per-member rule. */
+export const addContestEntry = (leagueId: string, teamName?: string | null) =>
+  rpcOk<{ ok: boolean; error?: string; league_id?: string; roster_id?: number; team?: string }>('add_contest_entry', { p_league: leagueId, p_team_name: teamName?.trim() || null });
 export const contestBoard = (leagueId: string, week?: number | null, limit = 100, near = 5, find: string | null = null) =>
   rpcOk<BullseyeLeagueBoard & { contest?: ContestKind }>('contest_board', { p_league: leagueId, p_week: week ?? null, p_limit: limit, p_near: near, p_find: find || null });
 // ── THE COMMISSIONER FIXES A CONTEST WEEK (0474) ─────────────────────────────
@@ -1016,9 +1025,10 @@ export const contestBoardFind = (leagueId: string, week: number | null | undefin
   contestBoard(leagueId, week, 1, 0, q).then((r) => ({ ok: r.ok, error: r.error, found: r.found ?? [], season: r.season?.found ?? [] }));
 /** Commissioner: the contest, the format (before the first week), the budget. */
 export const setContestRules = (leagueId: string, o: { contest?: ContestKind | null; format?: ContestFormat | null; budget?: number | null; minSpend?: number | null; autoSub?: boolean | null;
-  lateEntry?: import('../engine/contest').ContestLateEntry | null; entryDeadline?: import('../engine/contest').ContestEntryDeadline | null }) =>
+  lateEntry?: import('../engine/contest').ContestLateEntry | null; entryDeadline?: import('../engine/contest').ContestEntryDeadline | null;
+  /** ENTRIES PER MEMBER (0481): 1–50, board leagues only. */ maxEntries?: number | null }) =>
   rpcOk<{ ok: boolean; error?: string; bullseye?: ContestInfo }>('set_contest_rules', { p_league: leagueId, p_contest: o.contest ?? null, p_format: o.format ?? null, p_budget: o.budget ?? null, p_min_spend: o.minSpend ?? null, p_auto_sub: o.autoSub ?? null,
-    p_late_entry: o.lateEntry ?? null, p_entry_deadline: o.entryDeadline ?? null });
+    p_late_entry: o.lateEntry ?? null, p_entry_deadline: o.entryDeadline ?? null, p_max_entries: o.maxEntries ?? null });
 /** The money rule in a few words: "$50k budget", "no cap", "min $45k" (0469). */
 export function contestMoneyWord(b: { budget?: number | null; min_spend?: number | null }): string {
   const cap = b.budget ?? 50000;

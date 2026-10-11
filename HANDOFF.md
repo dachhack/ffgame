@@ -65,11 +65,13 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
   5. ~~Prizes and dues on the settings and the board~~ — done in v0.675.0
      (0477: `set_league_prizes`; the money on `_bullseye_info` and
      `league_board`; DUES & PRIZES on the contest COMMISH card).
-  6. Multiple entries per user for the huge contests — still open (one seat
-     per user per league is assumed by contest_state, save_contest_entry,
-     contest_board's `me`, bullseye_my_weeks, the lock reminder, the recap
-     pushes and both builders; it wants a `max_entries` rule, a roster
-     parameter through those RPCs and a seat switcher in the builder).
+  6. ~~Multiple entries per user for the huge contests~~ — done in v0.682.0
+     (0481: `max_entries` on `set_contest_rules`, `add_contest_entry`, the
+     seat through contest_state / save_contest_entry / bullseye_my_weeks /
+     contest_swaps / contest_matchup, the board's `me` by my best seat; the
+     seat switcher in both builders and MY TEAM; ENTRIES PER MEMBER on
+     COMMISH). The lock reminder still pages once per member, whichever
+     seat lacks a squad.
      ~~Swap history; sharing a squad card after squads unseal~~ — done in
      v0.676.0 (0478 `contest_swap` / `contest_swaps`; `squadCardText`).
 

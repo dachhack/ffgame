@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
 import {
-  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
@@ -19,7 +19,7 @@ import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTES
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
-import { Card, Chip, Display, Mono } from '../ui/prims';
+import { Card, Chip, ChipStrip, Display, Mono } from '../ui/prims';
 import { Playoffs } from '../ui/LeagueExtras';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { ContestMatchup } from './ContestMatchup';
@@ -362,12 +362,25 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
   const [name, setName] = useState(lg.me?.team ?? '');
   const [note, setNote] = useState<string | null>(null);
   const [tbLine, setTbLine] = useState<string | null>(null);
-  useEffect(() => { bullseyeMyWeeks(id).then((r) => setWeeks(r.ok ? (r.weeks ?? []) as ContestMyWeek[] : [])).catch(() => setWeeks([])); }, [id]);
-  const rid = lg.me?.roster_id;
+  // MY SEATS (v0.682.0): a member with several entries looks at one at a time.
+  const [seat, setSeat] = useState<number | null>(null);
+  const [seats, setSeats] = useState<ContestSeat[]>([]);
+  useEffect(() => {
+    bullseyeMyWeeks(id, seat).then((r) => {
+      setWeeks(r.ok ? (r.weeks ?? []) as ContestMyWeek[] : []);
+      if (r.ok) { setSeats(r.seats ?? []); if (seat == null && r.roster_id != null) setSeat(r.roster_id); setName((r.seats ?? []).find((x) => x.roster_id === r.roster_id)?.team ?? r.team ?? ''); }
+    }).catch(() => setWeeks([]));
+  }, [id, seat]);
+  const rid = seat ?? lg.me?.roster_id;
+  const another = async () => {
+    const r = await addContestEntry(id, null).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; roster_id?: number; team?: string }));
+    setNote(r.ok ? `✓ ${r.team ?? 'your new entry'} is in — rename it here, build its squad above` : (r.error ?? 'Couldn’t add an entry.'));
+    if (r.ok) { commit(); setSeat(r.roster_id ?? null); onRenamed(); } else warn();
+  };
   const bull = lg.bullseye?.contest === 'bullseye';
   useEffect(() => {
     if (!bull || rid == null || lg.week == null) { setTbLine(null); return; }
-    contestState(id, lg.week).then((s) => {
+    contestState(id, lg.week, '2026', rid).then((s) => {
       if (!s.ok) return;
       const { slots, catalog, labels } = contestSetupOf(s);
       const tb = contestTiebreak(id, lg.week!, rid, contestCard(id, lg.week!, slots, catalog), slots);
@@ -393,10 +406,18 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
   return (
     <>
       <Card style={{ gap: 8 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>MY TEAM</Mono>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Mono size={9} tone="faint" weight="700" track={0.1}>{seats.length > 1 ? `MY TEAMS · ${seats.length}` : 'MY TEAM'}</Mono>
+          {(lg.bullseye?.max_entries ?? 1) > Math.max(1, seats.length) && <Chip small label="＋ ANOTHER ENTRY" onPress={() => { tap(); void another(); }} />}
+        </View>
+        {seats.length > 1 && (
+          <ChipStrip>
+            {seats.map((x) => <Chip key={x.roster_id} small on={x.roster_id === rid} label={x.team ?? `Seat ${x.roster_id}`} onPress={() => { tap(); setSeat(x.roster_id); }} />)}
+          </ChipStrip>
+        )}
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Field value={name} onChangeText={setName} maxLength={30} style={{ flex: 1 }} />
-          <Chip on disabled={!name.trim() || name.trim() === lg.me?.team} label="RENAME" onPress={() => { tap(); void rename(); }} />
+          <Chip on disabled={!name.trim() || name.trim() === (seats.find((x) => x.roster_id === rid)?.team ?? lg.me?.team)} label="RENAME" onPress={() => { tap(); void rename(); }} />
         </View>
         {note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'warn'}>{note}</Mono>}
         {tbLine && <Mono size={9} tone="dim">{tbLine}</Mono>}

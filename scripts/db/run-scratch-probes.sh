@@ -166,6 +166,7 @@ $RUN -f scripts/db/contest-playoffs-probes.sql | grep -E "PROBE FAIL|ALL CONTEST
 $RUN -f scripts/db/contest-prizes-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-PRIZES PROBES" || { echo "CONTEST-PRIZES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/contest-swaps-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-SWAPS PROBES" || { echo "CONTEST-SWAPS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/contest-matchup-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-MATCHUP PROBES" || { echo "CONTEST-MATCHUP PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/contest-entries-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-ENTRIES PROBES" || { echo "CONTEST-ENTRIES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/taco-locker-probes.sql | grep -E "PROBE FAIL|ALL TACO-LOCKER PROBES" || { echo "TACO-LOCKER PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/shotgun-wedding-probes.sql | grep -E "PROBE FAIL|ALL SHOTGUN-WEDDING PROBES" || { echo "SHOTGUN-WEDDING PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/ai-open-seat-probes.sql | grep -E "PROBE FAIL|ALL AI-OPEN-SEAT PROBES" || { echo "AI-OPEN-SEAT PROBES FAILED"; exit 1; }

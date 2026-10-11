@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
-  contestState, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
+  contestState, addContestEntry, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
@@ -108,9 +108,11 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   const [injTick, setInjTick] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
+  // MY SEATS (v0.682.0): which of my seats the builder is on; null = my first.
+  const [rosterId, setRosterId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    const s = await contestState(leagueId, weekProp);
+    const s = await contestState(leagueId, weekProp, '2026', rosterId);
     setSt(s);
     if (!s.ok || s.week == null) return;
     const mine = contestSquadOf(s.entry, classicSlotsFromSpec(s.slots ?? null) ?? []);
@@ -118,17 +120,17 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
     const [rows, lk, sl] = await Promise.all([podSalaries(s.week).catch(() => []), weekGameLocks(s.week, '2026', 0).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
     setBoard(rows); setLocks(lk); setSlate(sl);
     void loadLiveInjuries(s.week).then(() => setInjTick((n) => n + 1));
-  }, [leagueId, weekProp]);
+  }, [leagueId, weekProp, rosterId]);
   useEffect(() => { void load().catch((e) => setNote(friendlyError(e))); }, [load]);
   useEffect(() => {
     leagueGameMode(leagueId).then((g) => { if (g.ok) setPoolFilter(g.pool_filter ?? null); }).catch(() => {});
-    seatPlayerRules(leagueId).then((r) => { if (r.ok) setSeatRule((r.rules ?? []).find((x) => x.roster_id === r.mine) ?? null); }).catch(() => {});
-  }, [leagueId]);
+    seatPlayerRules(leagueId).then((r) => { if (r.ok) setSeatRule((r.rules ?? []).find((x) => x.roster_id === (st?.roster_id ?? r.mine)) ?? null); }).catch(() => {});
+  }, [leagueId, st?.roster_id]);
   useEffect(() => {
     if (!st?.started || st.matchup?.status === 'final') return;
-    const id = setInterval(() => { void contestState(leagueId, weekProp).then(setSt).catch(() => {}); }, 60_000);
+    const id = setInterval(() => { void contestState(leagueId, weekProp, '2026', rosterId).then(setSt).catch(() => {}); }, 60_000);
     return () => clearInterval(id);
-  }, [st?.started, st?.matchup?.status, leagueId, weekProp]);
+  }, [st?.started, st?.matchup?.status, leagueId, weekProp, rosterId]);
 
   const bySlug = useMemo(() => new Map((board ?? []).map((r) => [r.slug, r])), [board]);
   const salaryOf = useCallback((slug: string) => bySlug.get(slug)?.salary ?? 0, [bySlug]);
@@ -216,7 +218,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
     if (filled < n) { setNote(`Fill all ${n} spots first.`); return; }
     setBusy(true); setNote(null);
     try {
-      const r = await saveContestEntry(leagueId, week, picks as Record<string, string>);
+      const r = await saveContestEntry(leagueId, week, picks as Record<string, string>, '2026', st.roster_id);
       if (r.ok) { commit(); setNote('✓ squad saved'); await load(); } else { warn(); setNote(r.error ?? 'Didn’t save.'); }
     } catch (e) { warn(); setNote(friendlyError(e)); } finally { setBusy(false); }
   };
@@ -227,6 +229,16 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
     setPicks(built);
     if (got) commit(); else warn();
     setNote(got === open ? `✓ filled ${got} spot${got === 1 ? '' : 's'} — swap any you like, then save` : got ? `filled ${got} of ${open} — the rest don’t fit the budget` : 'nothing fits the budget — clear a pricey pick first');
+  };
+  // ANOTHER ENTRY (v0.682.0): a second seat under the league's rule, with a
+  // default name (rename it on MY TEAM); the builder moves to it.
+  const another = async () => {
+    setBusy(true);
+    const r = await addContestEntry(leagueId, null).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; roster_id?: number; team?: string }));
+    setBusy(false);
+    if (!r.ok) { warn(); setNote(r.error ?? 'Couldn’t add an entry.'); return; }
+    commit(); setNote(`✓ ${r.team ?? 'your new entry'} is in — build its squad`);
+    setRosterId(r.roster_id ?? null);
   };
   const clearAll = () => {
     const keep: Record<string, string | null> = {};
@@ -323,12 +335,19 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
             <Mono size={9} tone="faint" weight="700" track={0.1}>{`MY SQUAD · ${filled} OF ${n}`}</Mono>
             {editable && (
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                {(st.max_entries ?? 1) > (st.seats?.length ?? 1) && <Chip small disabled={busy} label="＋ ANOTHER ENTRY" onPress={() => { tap(); void another(); }} />}
                 <Chip small label="＋ PLAYERS" onPress={() => openSheet('any')} />
                 {bl.open > 0 && <Chip small label="✨ FILL FOR ME" onPress={fill} />}
                 {filled > 0 && <Chip small dim label="CLEAR" onPress={clearAll} />}
               </View>
             )}
           </View>
+          {/* MY SEATS (v0.682.0): a member with several entries builds one at a time */}
+          {(st.seats?.length ?? 0) > 1 && (
+            <ChipStrip>
+              {(st.seats ?? []).map((x) => <Chip key={x.roster_id} small on={x.roster_id === st.roster_id} disabled={busy} label={x.team ?? `Seat ${x.roster_id}`} onPress={() => { tap(); setRosterId(x.roster_id); }} />)}
+            </ChipStrip>
+          )}
           {swaps.length > 0 && (
             <View style={{ gap: 2 }}>
               <Pressable onPress={() => { tap(); setShowSwaps((v) => !v); }}><Mono size={9} tone="dim">{`🔁 ${swaps.length} SWAP${swaps.length === 1 ? '' : 'S'} THIS WEEK ${showSwaps ? '▲' : '▼'}`}</Mono></Pressable>

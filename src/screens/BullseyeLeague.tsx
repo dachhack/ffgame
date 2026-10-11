@@ -18,7 +18,7 @@
 //   COMMISH   the classic commissioner's console, trimmed, with a CONTEST card
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, createContestLeague, joinContest, contestState, playoffState, type PlayoffState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, createContestLeague, joinContest, contestState, playoffState, type PlayoffState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
@@ -456,14 +456,29 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
   const [name, setName] = useState(lg.me?.team ?? '');
   const [note, setNote] = useState<string | null>(null);
   const [tbLine, setTbLine] = useState<string | null>(null);
-  useEffect(() => { bullseyeMyWeeks(leagueId).then((r) => setWeeks(r.ok ? (r.weeks ?? []) as ContestMyWeek[] : [])).catch(() => setWeeks([])); }, [leagueId]);
-  const rid = lg.me?.roster_id;
+  // MY SEATS (v0.682.0): a member with several entries looks at one at a time.
+  const [seat, setSeat] = useState<number | null>(null);
+  const [seats, setSeats] = useState<ContestSeat[]>([]);
+  useEffect(() => {
+    bullseyeMyWeeks(leagueId, seat).then((r) => {
+      setWeeks(r.ok ? (r.weeks ?? []) as ContestMyWeek[] : []);
+      if (r.ok) { setSeats(r.seats ?? []); if (seat == null && r.roster_id != null) setSeat(r.roster_id); setName((r.seats ?? []).find((x) => x.roster_id === r.roster_id)?.team ?? r.team ?? ''); }
+    }).catch(() => setWeeks([]));
+  }, [leagueId, seat]);
+  const rid = seat ?? lg.me?.roster_id;
+  const another = async () => {
+    const nm = window.prompt('A name for your new entry (blank for a default):', '');
+    if (nm === null) return;
+    const r = await addContestEntry(leagueId, nm).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; roster_id?: number; team?: string }));
+    setNote(r.ok ? `✓ ${r.team ?? 'your new entry'} is in — build its squad on MY TEAM` : (r.error ?? 'Couldn’t add an entry.'));
+    if (r.ok) { setSeat(r.roster_id ?? null); onRenamed(); }
+  };
   const bull = lg.bullseye?.contest === 'bullseye';
   // My tie-break spot this week, known before I build (v0.660.1) — dealt
   // over the league's own spots, so it needs the state read.
   useEffect(() => {
     if (!bull || rid == null || lg.week == null) { setTbLine(null); return; }
-    contestState(leagueId, lg.week).then((s) => {
+    contestState(leagueId, lg.week, '2026', rid).then((s) => {
       if (!s.ok) return;
       const { slots, catalog, labels } = contestSetupOf(s);
       const tb = contestTiebreak(leagueId, lg.week!, rid, contestCard(leagueId, lg.week!, slots, catalog), slots);
@@ -490,10 +505,18 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
   return (
     <>
       <div style={{ ...card, display: 'grid', gap: 8 }}>
-        <div className="mono" style={label}>MY TEAM</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <div className="mono" style={label}>{seats.length > 1 ? `MY TEAMS · ${seats.length}` : 'MY TEAM'}</div>
+          {(lg.bullseye?.max_entries ?? 1) > Math.max(1, seats.length) && <button onClick={() => void another()} className="mono" style={chip(false)} title={`this league allows ${lg.bullseye?.max_entries} entries per member`}>＋ ANOTHER ENTRY</button>}
+        </div>
+        {seats.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {seats.map((x) => <button key={x.roster_id} onClick={() => setSeat(x.roster_id)} className="mono" style={chip(x.roster_id === rid)}>{x.team ?? `Seat ${x.roster_id}`}</button>)}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} style={{ ...input, flex: 1 }} />
-          <button onClick={() => void rename()} disabled={!name.trim() || name.trim() === lg.me?.team} className="mono" style={chip(true)}>RENAME</button>
+          <button onClick={() => void rename()} disabled={!name.trim() || name.trim() === (seats.find((x) => x.roster_id === rid)?.team ?? lg.me?.team)} className="mono" style={chip(true)}>RENAME</button>
         </div>
         {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</span>}
         {tbLine && <div className="mono" style={{ ...small, color: 'var(--dim)' }}>{tbLine}</div>}

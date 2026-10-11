@@ -114,6 +114,17 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
           ))}
         </View>
         <Mono size={8.5} tone="faint">A new squad can go in until its players kick off, or not at all once the week’s first game has — a saved squad still swaps its unlocked players either way.</Mono>
+        {!h2h && (
+          <>
+            <Mono size={9} tone="faint" weight="700" track={0.1}>ENTRIES PER MEMBER</Mono>
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              {[...new Set([1, 2, 3, 5, 10, 20, b.max_entries ?? 1])].sort((x, y) => x - y).map((v) => (
+                <Chip key={v} small on={(b.max_entries ?? 1) === v} disabled={busy} label={String(v)} onPress={() => { tap(); void act(setContestRules(leagueId, { maxEntries: v }), `${v} ${v === 1 ? 'entry' : 'entries'} per member`); }} />
+              ))}
+            </View>
+            <Mono size={8.5} tone="faint">How many squads one member may field — each is its own seat on the board, built one at a time on MY TEAM. Head-to-head is always one: an opponent is a person.</Mono>
+          </>
+        )}
         <Mono size={8.5} tone="faint">Every player locks at his own kickoff, so a ruled-out pick can be swapped until then. SWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has; LEAVE IT TO ME banks the zero.</Mono>
       </Card>
 
