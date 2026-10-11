@@ -27,6 +27,7 @@ import { lockStartedGames, resolveSportLeagues } from './sportLeague.js';
 import { currentSeason } from '../../packages/core/src/sports/league.ts';
 import { gamesToPoll, espnCurrentWeek, getGames } from './poll/scoreboard.js';
 import { REGULAR_SEASON as REGULAR_SEASON_TYPE } from './seasonType.js';
+import { COLLEGE_BASE } from './poll/collegeSlate.js';
 import { pollGame } from './poll/plays.js';
 import { getState } from './sleeper.js';
 import { simulate } from './simulate.js';
@@ -235,18 +236,27 @@ async function main() {
       // worker runs, which reconciles (adds what is new, removes what the
       // parser no longer emits). Scores are NOT rewritten here: re-stamp the
       // week afterwards if its finals should move.
-      //   node src/cli.js repoll-week <week> [season]
-      const week = Number(args[0]);
-      if (!Number.isFinite(week) || week < 1) { console.error('usage: repoll-week <week> [season]'); process.exitCode = 1; break; }
-      const season = args[1] ? Number(args[1]) : config.season;
+      //   node src/cli.js repoll-week <week> [season] [--college]
+      // --college (v0.664.0): ESPN's college week N, every FBS game, written
+      // at board week 200+N as the college context does — the recap-form
+      // fix had to reach a devy league's weeks already played. (A mixed
+      // league's NFL-week mirror of those rows is the worker's; it is not
+      // rewritten here.)
+      const college = args.includes('--college');
+      const plain = args.filter((a) => !a.startsWith('--'));
+      const week = Number(plain[0]);
+      if (!Number.isFinite(week) || week < 1) { console.error('usage: repoll-week <week> [season] [--college]'); process.exitCode = 1; break; }
+      const season = plain[1] ? Number(plain[1]) : config.season;
+      const sport = college ? 'college' : 'nfl';
+      const board = college ? COLLEGE_BASE + week : week;
       const idx = await buildPlayerIndex();
-      const games = await getGames(season, week, REGULAR_SEASON_TYPE);
+      const games = await getGames(season, week, REGULAR_SEASON_TYPE, 0, sport);
       let wrote = 0, failed = 0;
       for (const g of games) {
-        try { wrote += await pollGame(g.eventId, week, idx); }
+        try { wrote += await pollGame(g.eventId, board, idx, sport); }
         catch (e) { failed++; console.error('poll', g.eventId, e.message); }
       }
-      console.log(`repolled week ${week} (${season}): ${games.length} games, ${wrote} rows, ${failed} failed`);
+      console.log(`repolled ${college ? 'college ' : ''}week ${week} (${season}) at board week ${board}: ${games.length} games, ${wrote} rows, ${failed} failed`);
       if (failed) process.exitCode = 1;
       break;
     }
@@ -779,6 +789,7 @@ async function main() {
       } else if (req.mode === 'repoll') {
         argv.push('repoll-week', need('week'));
         if (req.season) argv.push(String(req.season));
+        if (req.college === true) argv.push('--college');   // v0.664.0: ESPN's college week N → board week 200+N
       } else if (req.mode === 'refinalize') {
         argv.push('refinalize-week', need('week'));
         if (req.season) argv.push(String(req.season));

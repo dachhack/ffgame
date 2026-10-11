@@ -22,6 +22,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.664.0 — College touchdowns ESPN wrote as scoreboard lines now score
+
+> - Some college touchdowns and field goals arrived from ESPN as a scoreboard line ("Jeremiah Smith 33 Yd pass from Julian Sayin") instead of a play, and nobody got the points. They score now, for the passer, the runner or receiver, and the kicker.
+> - College kickers now get their extra points and field goals.
+
+- Founder: "Looks like scoring is off for some college players." MD@OSU, 2026
+  college week 6: ESPN's drive text carried Sayin's 33- and 68-yard scores
+  (Jeremiah Smith, Nate Roberts) as recap lines, and the adapter reads
+  gamebook grammar only — Sayin stood at 141/2 for a real 242/4, Roberts at
+  nothing. The same week had ~35 such lines across 45 FBS games, in three
+  grammars ("X N Yd Run (Y Kick)", "X N Yd Field Goal", "T. Owens pass to
+  H. Summers for 20 yds, for a TD (C. Van Andel KICK)"), and the NFL feed
+  writes them too (MIN@CHI 2025 wk 1). `recapToGamebook` rewrites them into
+  the grammar `playToRows` knows; `abbrevFor` picks the roster's shortest
+  unique first-name prefix for a full name. The parenthesized conversion
+  becomes the extra-point / two-point sentence.
+- College PAT ("kick attempt good/failed") and field-goal ("field goal
+  attempt from 39 yards GOOD / NO GOOD") grammar is read; "NO GOOD" no longer
+  counts as made. A two-word first name ("Ray Ray Joseph Jr.") also indexes
+  as "R.Joseph".
+- `repoll-week <week> [season] --college` (ops request `college: true`)
+  re-ingests ESPN's college week at board week 200+N, so devy weeks already
+  played can be backfilled, then restamped. The worker's hourly finals
+  re-poll picks up the current week by itself.
+- Not fixed here, seen in the same sweep: a college fumble written "fumbled
+  by #7 E.Stewart … forced by … recovered by" (no "FUMBLES") drops the catch
+  before it, and ESPN's statYardage folds a tacked-on penalty into the play
+  (NFL too — the nflverse true-up corrects that side).
+- Devin McCuin (the card in the report) was right at 0.00: ESPN's own game
+  log shows no stats for him in MD@OSU.
+- server/test/espn-recap.mjs pins every grammar above.
+
 ### v0.663.2 — Bullseye leagues on the web look like every other league
 
 > - On the website, a Bullseye league now opens in the same full-width league layout as every other league, with the usual bottom bar (League · Matchup · My Team · Chat) and the ⚙ Settings button.

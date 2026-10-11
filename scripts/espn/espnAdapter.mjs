@@ -80,6 +80,9 @@ export function abbrevKeys(displayName) {
   const first = parts[0] ?? '', rest = parts.slice(1).join(' ');
   const keys = [];
   for (let n = 1; n <= first.length; n++) keys.push(`${first.slice(0, n)}.${rest}`);
+  // A two-word first name (v0.664.0): the gamebook writes "Ray Ray Joseph Jr."
+  // as "R.Joseph Jr.", initial + surname, and his 6-68-2 went unmatched.
+  if (parts.length >= 3) keys.push(`${first[0]}.${parts[parts.length - 1]}`);
   return keys.length ? keys : [abbrevOf(displayName)];
 }
 
@@ -159,7 +162,77 @@ function findNames(text, roster) {
   while ((m = re.exec(text))) hits.push({ abbr: m[0], idx: m.index });
   return hits;
 }
-const reFG = /(\d+)\s+yard field goal/;
+// "47 yard field goal" (NFL) or "field goal attempt from 47 yards" (college,
+// v0.664.0 — never matched, so no college kicker had a field goal); a college
+// miss reads "NO GOOD", which the bare \bGOOD\b test used to count as made.
+const reFG = /(\d+)\s+yard field goal|field goal attempt from (\d+) yards?/;
+const fgGood = (text) => /\bGOOD\b/.test(text) && !/\bNO GOOD\b/.test(text);
+
+// ── THE RECAP FORMS (v0.664.0) ────────────────────────────────────────────────
+// Some gamebooks hand ESPN a scoring play as its SCOREBOARD line, not the play:
+//   "Jeremiah Smith 33 Yd pass from Julian Sayin (Connor Hawkins Kick)"
+//   "Jamal Roberts 2 Yd Run (Blake Craig Kick)"      "Blake Craig 50 Yd Field Goal"
+//   "Daniel Wingate 52 Yd Interception Return (Two-Point Pass Conversion Failed)"
+//   "T. Owens pass to H. Summers for 20 yds, for a TD (C. Van Andel KICK)"
+//   "J. Hollins run for 3 yds, for a TD (D. Little KICK)"
+// playToRows reads gamebook grammar ("J.Sayin pass … to J.Smith for 33 yards,
+// TOUCHDOWN"), so every one of these scored NOBODY: no catch, no yards, no
+// touchdown, no extra point. College week 6 of 2026 carried ~35 of them across
+// 45 games (MD@OSU: Sayin's 33- and 68-yard scores, with Jeremiah Smith's and
+// Nate Roberts' catches — founder: "scoring is off for some college players"),
+// and the NFL feed writes them too ("Justin Jefferson 13 Yd pass from J.J.
+// McCarthy", MIN@CHI 2025 wk 1). Rewritten here into the grammar the parser
+// knows, with each full name abbreviated the way the roster indexes it, and
+// the conversion in parentheses turned into the extra-point / two-point
+// sentence the kicker and 2-pt branches already read. Gamebook text never
+// matches the markers, so it passes through untouched.
+const RECAP_MARK = /\b-?\d+ Yd\b|, for a TD\b|\((?:[^()]*\b(?:Kick|KICK|PAT|Two-Point Conversion)\b[^()]*|Two-Point [^()]*Conversion Failed)\)/;
+/** The play-text abbreviation for a recap name: the SHORTEST first-name prefix
+ *  the roster holds for one man only ("Je.Smith" when a Jalen Smith is in the
+ *  same game, as the gamebook itself would write it), else "F.Last". */
+function abbrevFor(name, roster) {
+  const keys = abbrevKeys(String(name ?? '').trim());
+  for (const k of keys) {
+    const cands = roster?.get?.(k);
+    if (cands?.length && cands.every((x) => x.slug === cands[0].slug)) return k;
+  }
+  return keys[0] ?? '';
+}
+export function recapToGamebook(text, roster, typeText = '') {
+  const s = String(text ?? '').trim();
+  if (!s || !RECAP_MARK.test(s)) return s;
+  const ab = (n) => abbrevFor(n, roster);
+  // 1) the parenthesized conversion notes, lifted out of the main clause.
+  let main = s, xpKicker = null, xpGood = null, changed = false; const tail = [];
+  for (const m of s.matchAll(/\s*\(([^()]*)\)/g)) {
+    const pc = m[1].trim(); let hit = true, k;
+    if ((k = /^(.+?) (?:Kick|KICK)$/.exec(pc))) { if (xpGood == null) { xpKicker = k[1]; xpGood = true; } }
+    // "(S. Porath KICK) (S. Porath PAT MISSED)" — the later note corrects the first.
+    else if ((k = /^(.+?) PAT (?:failed|missed|blocked|no good)$/i.exec(pc))) { xpKicker = k[1]; xpGood = false; }
+    else if ((k = /^(.+?) pass to (.+?) for Two-Point Conversion$/i.exec(pc))) tail.push(`TWO-POINT CONVERSION ATTEMPT. ${ab(k[1])} pass to ${ab(k[2])} is complete. ATTEMPT SUCCEEDS.`);
+    else if ((k = /^(.+?) (?:run|rush) for Two-Point Conversion$/i.exec(pc))) tail.push(`TWO-POINT CONVERSION ATTEMPT. ${ab(k[1])} rushes. ATTEMPT SUCCEEDS.`);
+    else if (/Two-Point .*Conversion Failed$/i.test(pc)) tail.push('TWO-POINT CONVERSION ATTEMPT. ATTEMPT FAILS.');
+    else hit = false;
+    if (hit) { main = main.replace(m[0], ''); changed = true; }
+  }
+  if (xpKicker) tail.unshift(`${ab(xpKicker)} extra point is ${xpGood ? 'GOOD' : 'No Good'}`);
+  // 2) the score itself.
+  const before = main = main.trim(); let k;
+  if ((k = /^(.+?) (-?\d+) Yd pass from (.+?)\.?$/.exec(main))) main = `${ab(k[3])} pass complete to ${ab(k[1])} for ${k[2]} yards, TOUCHDOWN.`;
+  else if ((k = /^(.+?) (-?\d+) Yd Run\.?$/.exec(main))) main = `${ab(k[1])} rush for ${k[2]} yards, TOUCHDOWN.`;
+  else if ((k = /^(.+?) (-?\d+) Yd Field Goal(?: (.+))?$/.exec(main))) {
+    const good = /Good/.test(typeText) || (!/Missed|Blocked|No Good/i.test(typeText) && !/Missed|Blocked|No Good/i.test(k[3] ?? ''));
+    main = `${ab(k[1])} ${k[2]} yard field goal is ${good ? 'GOOD' : 'No Good'}.`;
+  } else if ((k = /^(.+?) (-?\d+) Yd Interception Return\.?$/.exec(main))) main = `pass INTERCEPTED by ${ab(k[1])} for ${k[2]} yards, TOUCHDOWN.`;
+  else if ((k = /^(.+?) (-?\d+) Yd Fumble Return\.?$/.exec(main))) main = `FUMBLES, RECOVERED by ${ab(k[1])} for ${k[2]} yards, TOUCHDOWN.`;
+  else if ((k = /^(.+?) (-?\d+) Yd (?:Punt|Kickoff|Blocked Punt|Blocked Field Goal|Missed Field Goal) Return\.?$/.exec(main))) main = `${ab(k[1])} return for ${k[2]} yards, TOUCHDOWN.`;
+  else if ((k = /^(.+?) pass to (.+?) for (-?\d+) yds, for a TD\.?$/.exec(main))) main = `${ab(k[1])} pass complete to ${ab(k[2])} for ${k[3]} yards, TOUCHDOWN.`;
+  else if ((k = /^(.+?) (?:run|rush) for (-?\d+) yds, for a TD\.?$/.exec(main))) main = `${ab(k[1])} rush for ${k[2]} yards, TOUCHDOWN.`;
+  // A marker without a known shape (a gamebook line that merely mentions a
+  // kick in parentheses): the text goes back exactly as it came.
+  if (!changed && main === before) return s;
+  return [main, ...tail].join(' ').replace(/\s+/g, ' ').trim();
+}
 
 // ── normalize one ESPN play into zero or more { slug, play } RealPlay rows ──────
 // `gameStartMs` is the game's earliest wallclock (ms) — `t` is seconds since it.
@@ -183,7 +256,7 @@ export function stripEligible(text) {
 export function playToRows(p, roster, eventId, gameStartMs) {
   const out = [];
   const typeText = p?.type?.text ?? '';
-  const text = stripEligible(p?.text ?? '');
+  const text = recapToGamebook(stripEligible(p?.text ?? ''), roster, typeText);
   const qtr = p?.period?.number ?? 1;
   const mmss = p?.clock?.displayValue ?? '15:00';
   const c = clockOf(Number(qtr), mmss);
@@ -407,16 +480,20 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     const kk = names[0] && resolve(names[0].abbr, offTeam); // kicker is the first name
     const team = kTeam(kk);
     if (m && team) {
-      const kp = row(c, ride, /\bGOOD\b/.test(text) ? 'fg' : 'fgmiss', Number(m[1]) || 0, 0, 0, 0, 0);
+      const kp = row(c, ride, fgGood(text) ? 'fg' : 'fgmiss', Number(m[1] ?? m[2]) || 0, 0, 0, 0, 0);
       out.push({ slug: `${team.toLowerCase()}-k`, play: kp });
       if (kk) out.push({ slug: kk.slug, play: { ...kp } });
     }
   }
-  if (/extra point/i.test(text)) {
-    const kk = nameBefore(' extra point', offTeam);
+  // THE COLLEGE PAT (v0.664.0): "#96 C.Hawkins kick attempt good" / "failed",
+  // and a bare "Blocked PAT" with no kicker named. Only "extra point" was read,
+  // so a college kicker's extra points never reached him or his team.
+  const xpm = /\bextra point is (\w+)|\bkick attempt (\w+)/i.exec(text);
+  if (xpm || /^Blocked PAT\b/i.test(text)) {
+    const kk = xpm ? nameBefore(xpm[2] != null ? ' kick attempt' : ' extra point', offTeam) : null;
     const team = kTeam(kk);
     if (team) {
-      const kp = row(c, ride, /extra point is GOOD/i.test(text) ? 'xp' : 'xpmiss', 0, 0, 0, 0, 0);
+      const kp = row(c, ride, /^good$/i.test(xpm?.[1] ?? xpm?.[2] ?? '') ? 'xp' : 'xpmiss', 0, 0, 0, 0, 0);
       out.push({ slug: `${team.toLowerCase()}-k`, play: kp });
       if (kk) out.push({ slug: kk.slug, play: { ...kp } });
     }
