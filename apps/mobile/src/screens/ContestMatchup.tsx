@@ -5,7 +5,7 @@
 // afresh on every visit, so the turns replay. The picker walks the week's
 // other matchups; the week arrows live in the league frame.
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
 import { contestSlotLabels, contestCard, contestTiebreak, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
@@ -23,6 +23,9 @@ function squadRows(entry: unknown, slots: { slot: string }[]): Row[] {
   for (const r of list) if (typeof r?.slot === 'string') by.set(r.slot, { slot: r.slot, slug: typeof r.player_slug === 'string' ? r.player_slug : null, sealed: r.sealed === true });
   return slots.map((d) => by.get(d.slot) ?? { slot: d.slot, slug: null, sealed: false });
 }
+
+/** THE TIE-BREAKER CHIP (v0.682.2): what the number on the card means. */
+const TB_NOTE = 'This spot is your tie-breaker: its player aims at this number. If the matchup ties on rings, the squad whose tie-breaker lands closer to its own number wins.';
 
 export function ContestMatchup({ leagueId, week }: { leagueId: string; week: number }) {
   const t = useTheme();
@@ -67,7 +70,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const scoreOf = (s: 'home' | 'away', slot: string) => m.state?.slots?.find((x) => x.side === s && x.slot === slot)?.score ?? null;
   // THE TIE-BREAKER SPOT (v0.681.0, founder: "the spot-specific tie breaker
   // target chip on the player spots in the matchup as well"): each squad's own
-  // ⚖️ spot and target, dealt per seat as the builder shows it.
+  // tie-breaker spot and target, dealt per seat; the number rides the card as a chip (v0.682.2).
   const tbs = {
     home: theCard ? contestTiebreak(leagueId, st.week ?? week, m.home, theCard, slots) : null,
     away: theCard ? contestTiebreak(leagueId, st.week ?? week, m.away, theCard, slots) : null,
@@ -77,7 +80,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
     const p = r.slug ? bySlug.get(r.slug) : null;
     if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} />;
-    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} slot={labels[r.slot] ?? r.slot} mine={mine} locked={!mine && !!r.slug} /> : <View />;
+    const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
+    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} chip={tbc ? String(tbc.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} /> : <View />;
     return <FlipCard key={`${s}-${r.slot}`} flipped={mine || !!r.slug} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={face} />;
   };
   // THE NUMBERS (v0.678.0, founder: "the player score and projection to the
@@ -88,14 +92,13 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
-    const tb = tbs[s]?.slot === r.slot ? tbs[s] : null;
     const color = mine ? t.you : t.opp;
     const align = edge === 'left' ? 'flex-start' : 'flex-end';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: align, paddingLeft: edge === 'left' ? 8 : 4, paddingRight: edge === 'right' ? 8 : 4, minWidth: 0 }}>
-        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${tb ? ` · ⚖️ ${tb.target}` : ''}`}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
         <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : alpha(t.text, 35) }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
-        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: alpha(t.text, 65) }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}${tb && score != null ? ` · ⚖️ ${Math.abs(score - tb.target).toFixed(1)} off` : ''}`}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: alpha(t.text, 65) }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}`}</Text>
       </View>
     );
   };

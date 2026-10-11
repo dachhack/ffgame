@@ -7,9 +7,8 @@
 // (rotateY with backface hidden), played on mount whenever `flipped` starts
 // true, so a return to the matchup screen replays every turn.
 import { useEffect, useRef } from 'react';
-import { Animated, Image, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useTheme, MONO, fs, mix, alpha } from '../theme.native';
 import { useCardSkin, CARD_BACKS, SKIN_FELT } from './cards';
 
@@ -24,31 +23,18 @@ const SUIT: Record<string, string> = { QB: '#B23A48', RB: '#2C6E49', WR: '#2B5EA
 /** The felt: a dark green table with a soft vignette, behind any content. */
 /** Relative luminance of a #rrggbb; the light themes' grounds sit above 0.5. */
 const lum = (c: string) => { const m = /^#([0-9a-f]{6})$/i.exec(c.trim()); if (!m) return 0; const n = parseInt(m[1], 16); return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255; };
-let feltSeq = 0;
 export function FeltTable({ children }: { children: React.ReactNode }) {
   // THE DECK (v0.680.0): the felt takes the chosen deck's colour — and THE
-  // COLOUR THEME (v0.682.1, founder: "vary the felt color with color scheme
-  // as well"): the web kit's recipe, ported. Dark themes: the deck's felt 80%
-  // over the theme's ground, with the YOU and OPP accents glowing in from two
-  // corners and a vignette at the edges. The light themes (daylight, arctic):
-  // the ground lifted toward white over the felt, the accents as a wash.
+  // COLOUR THEME (v0.682.1): the web kit's ground, ported. Dark themes: the
+  // deck's felt 80% over the theme's ground; the light themes (daylight,
+  // arctic): the ground lifted toward white over the felt. Flat (v0.682.2,
+  // founder: "let's not do the gradient background") — no accent glows.
   const t = useTheme();
   const base = SKIN_FELT[useCardSkin()];
   const light = lum(t.bg) > 0.5;
   const ground = light ? mix(mix(t.bg, 72, '#FFFFFF'), 90, base) : mix(base, 80, t.bg);
-  const id = useRef(`felt${feltSeq++}`).current;
   return (
     <View style={{ backgroundColor: ground, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: light ? 'rgba(0,0,0,0.15)' : '#000', overflow: 'hidden' }}>
-      <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <Defs>
-          <RadialGradient id={`${id}y`} cx="18%" cy="8%" r="60%"><Stop offset="0" stopColor={t.you} stopOpacity={light ? 0.2 : 0.4} /><Stop offset="1" stopColor={t.you} stopOpacity={0} /></RadialGradient>
-          <RadialGradient id={`${id}o`} cx="85%" cy="92%" r="55%"><Stop offset="0" stopColor={t.opp} stopOpacity={light ? 0.18 : 0.38} /><Stop offset="1" stopColor={t.opp} stopOpacity={0} /></RadialGradient>
-          <RadialGradient id={`${id}v`} cx="50%" cy="40%" r="80%"><Stop offset="0.6" stopColor={light ? '#3C2814' : '#000'} stopOpacity={0} /><Stop offset="1" stopColor={light ? '#3C2814' : '#000'} stopOpacity={light ? 0.16 : 0.35} /></RadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}y)`} />
-        <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}o)`} />
-        <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}v)`} />
-      </Svg>
       {children}
     </View>
   );
@@ -87,9 +73,10 @@ export function CardBack({ seed }: { seed: string }) {
   );
 }
 
-export function CardFace({ slug, name, pos, team, slot, points, mine, locked, foot }: {
+export function CardFace({ slug, name, pos, team, slot, points, mine, locked, foot, chip, onChip }: {
   slug: string; name: string; pos: string; team?: string | null; slot?: string; points?: number | null;
   /** Bottom-right when there is no score yet: the builder's price (v0.681.0). */ foot?: string;
+  /** THE TIE-BREAKER CHIP (v0.682.2): the spot's number, top-right, in place of the slot label; a tap explains it. */ chip?: string | null; onChip?: () => void;
   /** Your own card (gold trim) or theirs (red). */ mine?: boolean;
   /** His game has kicked off (the card is set). */ locked?: boolean;
 }) {
@@ -100,7 +87,9 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked, fo
     <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: STOCK, borderWidth: 2, borderColor: '#000', overflow: 'hidden', padding: 5 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', color: '#fff', backgroundColor: suit, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, overflow: 'hidden' }}>{pos === 'DEF' ? 'DST' : pos}</Text>
-        {slot ? <Text style={{ fontFamily: MONO, fontSize: fs(7), color: INK, opacity: 0.7, letterSpacing: 0.6 }}>{slot.toUpperCase()}</Text> : null}
+        {chip != null
+          ? <Pressable hitSlop={8} onPress={onChip} style={{ backgroundColor: '#2A2010', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 1 }}><Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: '#FFD86B' }}>{chip}</Text></Pressable>
+          : slot ? <Text style={{ fontFamily: MONO, fontSize: fs(7), color: INK, opacity: 0.7, letterSpacing: 0.6 }}>{slot.toUpperCase()}</Text> : null}
       </View>
       <View style={{ flex: 1, marginTop: 4, borderRadius: 6, borderWidth: 1.2, borderColor: suit, backgroundColor: '#E8E0C8', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
         {uri

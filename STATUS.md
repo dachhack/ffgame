@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.682.2 — The tie-breaker rides the card
+
+> - On the contest table and in the squad builder, a card's top-right corner no longer repeats its spot (RB1, WR2); the tie-breaker spot carries its number there instead, on a small gold chip. Tap the chip and a note says what it is: that spot's player aims at the number, and if the matchup ties on rings, the squad whose tie-breaker lands closer wins.
+> - The ⚖️ chip and its distance have left the numbers column, and the phone's felt is flat again: no colour glows behind the cards.
+
+Founder, with a screenshot: "Let's not do the gradient background. The WR1
+and RB2 etc on the top right of the cards is redundant. Let's drop it and
+put the tie breaker chip there. Just put the number on a chip with no icon
+or calculation. Show an explainer if the user clicks it." Phone `CardFace`
+and web `PlayerCard` gain `chip` / `onChip` (the chip takes the slot label's
+place; the pick sheet keeps its "→ RB1" landing label). Both `ContestMatchup`
+screens pass each squad's own tie-breaker number (the matchup shows an
+explainer card on the web, an alert on the phone); both `ContestSquad`
+builders pass mine. The phone's `FeltTable` drops its three gradients for
+the flat blended ground. Plain JS: no iPhone build.
+
 ### v0.682.1 — The felt follows the colour theme
 
 > - The phone's contest card table now colours its felt the way the web does: the chosen deck's felt blended into your colour theme's ground, with the YOU and OPP accents glowing in from two corners. On the light themes (Feeling Lucky, Arctic Journey) the table goes pale, as the web's does.
