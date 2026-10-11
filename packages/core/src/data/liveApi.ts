@@ -779,6 +779,21 @@ export async function weekGameLocks(week: number, season = '2026'): Promise<Map<
   return m;
 }
 
+/** The week's slate by team (v0.665.0): who each team plays, at home or
+ *  away, and when — the builder's "vs KC · Sun 1:00" line. */
+export interface SlateSpot { opp: string; home: boolean; kickoff: number | null }
+export async function weekSlateByTeam(week: number, season = '2026'): Promise<Map<string, SlateSpot>> {
+  const { data } = await (await client()).from('nfl_slate')
+    .select('home, away, kickoff').eq('season', season).eq('week', week);
+  const m = new Map<string, SlateSpot>();
+  for (const g of (data ?? []) as { home: string; away: string; kickoff: string | null }[]) {
+    const k = g.kickoff ? Date.parse(g.kickoff) : null;
+    m.set(g.home, { opp: g.away, home: true, kickoff: k });
+    m.set(g.away, { opp: g.home, home: false, kickoff: k });
+  }
+  return m;
+}
+
 /** Save the caller's pod/showdown entry (9 slugs). Server validates membership,
  *  week, per-game locks (0093), roster shape (QB·2RB·3WR·TE·K·DST), and the $50k cap. */
 export async function savePodEntry(leagueId: string, week: number, picks: string[]): Promise<{ ok: boolean; error?: string; spent?: number; cap?: number }> {

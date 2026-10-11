@@ -263,3 +263,35 @@ trimmed, with a CONTEST card.
   `bullseye_league_board`) are wrappers. `commish_overview` carries the kind.
 - **Next.** The rich squad builder on web and phone (position tabs, team
   filter, value sort, a budget bar) is PR 2.
+
+## 14. The squad builder (v0.665.0)
+
+Founder: "We want the budget and player selection to be a rich, interactive,
+fun experience on web and app." The pure half is
+`packages/core/src/engine/contestBuilder.ts`; the screens are
+`src/screens/ContestSquad.tsx` and `apps/mobile/src/screens/ContestSquad.tsx`.
+
+- **The budget bar.** Fills a segment per pick; says what's left, how many
+  spots are open and what each can have (`budgetLine`); turns red over the
+  budget. Under it the squad's projection (against the card's total for a
+  TOTAL Bullseye) and its value (points per $1k).
+- **Spot cards.** The league's spots in a grid: label, the card's number or
+  the spot's `0 →` penalty, the tie-break mark; the player's face, injury tag
+  (`loadLiveInjuries` / `injuryFor`), `vs KC · Sun 1:00p` from the week's
+  slate (`weekSlateByTeam`), salary, projection and value; ✕ clears; a changed
+  spot wears the accent until saved. An empty spot says what it takes (team,
+  tenure, FLEX positions) or what it can spend.
+- **The pick sheet.** Spot chips (ANY SPOT lands a player in the tightest
+  open spot that takes him — `openSpotFor`), position tabs from the league's
+  own spots (`builderTabs`), search, a team filter, sort by PROJ / VALUE /
+  SALARY / A–Z (CLOSEST for a SLOTS Bullseye), and ELIGIBLE ONLY. Every
+  player who can't be taken says why (`spotWhyNot`: not the position, the
+  spot's team/tenure/flag filter, the league's pool filter, your seat's rule,
+  already in another spot, his game locked, over budget by $X).
+  `rankCandidates` puts the takeable first.
+- **FILL FOR ME.** `fillOpenSpots` runs the auto-build (`contestAutoBuild`
+  with `keep`) over the open spots only, inside what's left of the budget and
+  never offering a player the pool filter or seat rule refuses. The build now
+  reserves each remaining spot's cheapest candidate, so a one-candidate spot
+  can't be starved by a pricey pick before it.
+- **Saving** is unchanged: `save_contest_entry` re-checks everything.

@@ -194,6 +194,36 @@ ok('board read: every position, with exp, past the 1000-row page', (() => { cons
 ok('pods: the board carries exp and the extra positions', /expOf|exp:/.test(read('server/src/playerIndex.js')) && /contestExtraPositions/.test(pods));
 ok('bullseye cards: not published for a contest league (its card is dealt in the engine)', /settings_json\?\.contest|dfs_bullseye/.test(read('server/src/bullseye.js')));
 
+// ── the squad builder (v0.665.0): engine/contestBuilder.ts ──────────────────
+const B = await import('../packages/core/src/engine/contestBuilder.ts');
+const bCfg = C.contestConfigOf({ contest: 'high', budget: 24000, roster_slots: [{ pos: ['QB'] }, { pos: ['RB'], max_exp: 2 }, { pos: ['RB', 'WR'] }, { pos: ['HC'] }] }, 'dfs');
+const bBoard = [
+  { slug: 'qb1', name: 'Q One', pos: 'QB', team: 'KC', salary: 9000, proj: 22 }, { slug: 'qb2', name: 'Q Two', pos: 'QB', team: 'BUF', salary: 5000, proj: 14 },
+  { slug: 'rb1', name: 'R One', pos: 'RB', team: 'SF', salary: 8000, proj: 18, exp: 1 }, { slug: 'rb2', name: 'R Two', pos: 'RB', team: 'DAL', salary: 4000, proj: 9, exp: 7 },
+  { slug: 'wr1', name: 'W One', pos: 'WR', team: 'DAL', salary: 3000, proj: 6, exp: 3 }, { slug: 'hc1', name: 'Coach', pos: 'HC', team: 'KC', salary: 3000, proj: 5 },
+];
+const bSal = (sl) => bBoard.find((b) => b.slug === sl).salary;
+const bCtx = { slots: bCfg.slots, cfg: bCfg, picks: { S1: null, S2: null, S3: null, S4: null }, seatRule: { roster_id: 1, positions: [], teams: ['KC', 'SF', 'DAL'] }, poolFilter: null, card: null };
+ok('builder: tabs are the positions the spots take, ALL first', B.builderTabs(bCfg.slots).join() === 'ALL,QB,RB,WR,HC');
+ok('builder: a tenure spot says why in words', B.spotWhyNot(bCfg.slots[1], bBoard[3], bCtx) === 'this spot is up to 2 yrs only');
+ok('builder: the seat rule says why', /your seat takes KC\/SF\/DAL only/.test(B.spotWhyNot(bCfg.slots[0], bBoard[1], bCtx) ?? ''));
+ok('builder: the pool filter says why', /the league is up to 10 yrs only/.test(B.spotWhyNot(bCfg.slots[0], { slug: 'x', name: 'X', pos: 'QB', team: 'KC', salary: 1, proj: 1, exp: 12 }, { ...bCtx, poolFilter: { min_exp: null, max_exp: 10 } }) ?? ''));
+ok('builder: a veteran RB lands in the FLEX, not the rookie spot', B.openSpotFor(bBoard[3], bCtx) === 'S3' && B.openSpotFor(bBoard[2], bCtx) === 'S2');
+const bRows = B.rankCandidates(bBoard, bCtx, { slot: null, sort: 'value' }, bSal);
+ok('builder: ranked by value, the eligible first, the refused last with the reason', bRows[0].p.slug === 'qb1' && bRows.at(-1).p.slug === 'qb2' && bRows.at(-1).why != null && bRows.every((r, i) => i === 0 || r.fits === false || bRows[i - 1].value >= r.value));
+ok('builder: room for a spot reserves the floor for the others', B.roomFor(bCtx, 'S1', bSal) === 24000 - 3 * 3000);
+const bFill = B.fillOpenSpots(bBoard, bCtx, 'seed');
+ok('builder: FILL FOR ME fills every open spot under the budget, never starving the one-candidate spot', bFill.S1 === 'qb1' && bFill.S2 === 'rb1' && bFill.S4 === 'hc1' && bFill.S3 != null && B.budgetLine({ ...bCtx, picks: bFill }, bSal).left >= 0, bFill);
+const bKeep = B.fillOpenSpots(bBoard, { ...bCtx, picks: { S1: 'qb1', S2: null, S3: 'wr1', S4: null } }, 'seed');
+ok('builder: FILL FOR ME keeps the picks already made', bKeep.S1 === 'qb1' && bKeep.S3 === 'wr1' && bKeep.S2 === 'rb1' && bKeep.S4 === 'hc1', bKeep);
+ok('builder: the budget line counts open spots and what each can have', (() => { const l = B.budgetLine({ ...bCtx, picks: { S1: 'qb1', S2: null, S3: null, S4: null } }, bSal); return l.spent === 9000 && l.left === 15000 && l.open === 3 && l.perSpot === 5000 && !l.over; })());
+ok('builder: value is projection per $1k', B.valueOf({ salary: 8000, proj: 18 }) === 2.25);
+for (const f of ['src/screens/ContestSquad.tsx', 'apps/mobile/src/screens/ContestSquad.tsx']) {
+  const src = read(f);
+  ok(`${f}: the builder — budget bar, spot cards, tabs, team filter, sort, search, eligibility, FILL FOR ME, injuries`,
+    ['budgetLine(', 'rankCandidates(', 'fillOpenSpots(', 'builderTabs(', 'weekSlateByTeam(', 'seatPlayerRules(', 'leagueGameMode(', 'loadLiveInjuries(', 'injuryFor(', 'FILL FOR ME', 'eligibleOnly', 'BUILDER_SORTS'].every((k) => src.includes(k)));
+}
+
 // ── weekly leagues are listings like any other (v0.662.0) ────────────────────
 const { isWeeklyKind } = await import('../packages/core/src/data/liveApi.ts');
 ok('weekly: pods, showdowns, DFS and Bullseye; a season league is not', ['pod', 'weekly', 'dfs', 'bullseye'].every(isWeeklyKind) && !isWeeklyKind('league') && !isWeeklyKind(null));
