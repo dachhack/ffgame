@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-08-29 · Build `v0.375.3` · migrations through `0262`_
+_Last updated: 2026-10-11 · Build `v0.670.1` · migrations through `0472`_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -8,6 +8,129 @@ _Last updated: 2026-08-29 · Build `v0.375.3` · migrations through `0262`_
 > behind it, newest section first. Everything below the v0.375.3 section's
 > design decisions still hold, but only the kickoff prompt's pick-up list is
 > current.
+
+## The weekly contest suite arc (v0.664.0 → v0.670.1, Oct 11)
+
+One session, founder-driven, shipped as thirteen squash-merged PRs
+(#1198–#1213). `STATUS.md` carries the per-version reasoning;
+`docs/dfs-bullseye.md` §13–§22 the design. This is what to know to keep going.
+
+### Where things stand (end of session)
+
+- **PR #1213 (v0.670.1, the coach scoring preset) is OPEN and unmerged.**
+  Migration 0472 + `HC_SCORING_PRESET`. Checks were slow to start when the
+  session ended; merge on green with squash, then resync the branch (below).
+- Everything else is merged and deployed on main (`ce60947` = v0.670.0).
+- **First live fires still to watch:**
+  - The contest **result card** (`server/src/contestRecap.js`) posts the
+    morning after a week's last game (same release as the weekly report,
+    `weekReportRelease`). The first one is the morning after Monday night,
+    week 6. Confirm one lands in the Kickoff League / Weekly Bullseye chat and
+    that each player got the place push.
+  - The **lock reminders** (`detectContestLock` in push.js): 24h ± 5 min and
+    55–65 min before the week's first KICKOFF (Thursday). The **ruled-out
+    push** (`detectRuledOut`) fires as the injury report moves a rostered
+    player to O/IR.
+  - The **auto-sub sweep** (`server/src/contestSubs.js`, own 5-minute clock)
+    only acts for leagues with `settings.auto_sub = true` (commish: RULED
+    OUT → SWAP HIM FOR ME). Nobody has turned it on yet. CPU seats are swapped
+    regardless.
+  - The **coach name scan** (`server/src/poll/coaches.js`) runs with the
+    daily directory refresh. Its first live run was never confirmed from
+    this session (the deploy log window starts after boot, and workflow
+    dispatch is 403 from a cloud session). `scripts/db/team-role-probes.sql`
+    is the read-only probe for the "Run a database query" workflow; or just
+    open a league with a HEAD COACH spot and look for "Liam Coen".
+- **Not done, in the order I'd do them** (the founder has seen this list):
+  1. "Where am I" on a 50,000-seat leaderboard — `contest_board` returns the
+     top 500; needs the caller's row plus neighbours, and a search by team.
+     Add an index on `matchup(league_id, week)` before the first big one.
+  2. Commissioner tools to fix a week: void, rescore after a stat correction,
+     set a member's squad (CLI `set-lineup` exists for classic leagues).
+  3. Entry deadline / late-entry policy (CPU build, zero, or week dropped).
+  4. Playoffs for season head-to-head (a top-N bracket over the last weeks).
+  5. Prizes and dues on the settings and the board (the listing has a text
+     field only).
+  6. Multiple entries per user for the huge contests; swap history; sharing a
+     squad card after squads unseal.
+
+### The branch workflow this session used
+
+Develop on `ccr-35f1b6d6-q54m3h`; open a PR; merge with
+`mcp__github__merge_pull_request` (squash) once "iPhone build needed?" and
+(when it runs) "Validate live-feed round-trip" are green; then resync:
+
+```sh
+git fetch origin main && git checkout -B ccr-35f1b6d6-q54m3h origin/main \
+ && git fetch origin ccr-35f1b6d6-q54m3h \
+ && git merge -s ours --no-edit origin/ccr-35f1b6d6-q54m3h \
+ && git push -u origin ccr-35f1b6d6-q54m3h
+```
+
+Main's deploys: `gh run list --branch main --limit 7` (migrations, worker,
+Pages, APK, OTA, feed validation). Every PR body ends with the Claude Code
+line and the session URL; every commit with the two trailers (see the
+system reminder of the session). No model identifiers in anything pushed.
+
+### What was built, by layer
+
+- **Migrations** 0466 (contest leagues), 0467 (frozen price / live proj /
+  injury rule), 0468 (`team_role`, `sync_team_role_names`), 0469 (`budget`
+  0 = NO CAP; `min_spend`), 0470 (`_week_first_lock` = first kickoff;
+  per-player lock at kickoff; `set_contest_rules(…, p_auto_sub)`), 0471
+  (`contest_board` season rows carry wins/losses/ties; h2h ranks by record),
+  0472 (coach preset). `set_contest_rules` is now
+  `(uuid, text, text, int, int, boolean)`; `create_contest_league` ends in
+  `p_min_spend int`. Old overloads are dropped in each migration — a new
+  parameter means drop + recreate + regrant, or PostgREST calls go ambiguous.
+- **Engine** (`packages/core/src/engine`): `contest.ts` (`ContestConfig`
+  now carries `capped`, `minSpend`, `autoSub`; `contestAutoBuild` reserves the
+  cap AND the floor; `CONTEST_CREDIT`), `contestBuilder.ts` (the pick sheet,
+  `budgetLine` → `capped/floor/short`, `leagueWeekProj(row, catalog, game)`),
+  `salaryPricing.ts` (VORP pricing calibrated to 108% all-studs),
+  `projScoring.ts` (`hcWeekPoints` / `hcGameOdds`: a coach's week from both
+  teams' projected margins, 1.5 home edge, 13.5 game SD), `seatWaivers.ts`
+  (coverage rails so AI teams never drop their only rookie/HC), `classic.ts`
+  (`HC_SCORING_PRESET`).
+- **Worker** (`server/src`): `pods.js` (boards priced via `priceBoard`,
+  `topUpSalaryBoard` once per week, `refreshBoardProj` every 6h, CPU sub,
+  `roundRobinPairs` for contest h2h, drip pods keep `pairPodSeats`),
+  `contestRecap.js`, `contestSubs.js`, `poll/coaches.js`, `push.js`
+  (`detectContestLock`, `detectRuledOut`), `cli.js` (`seat-wire`,
+  `salary-audit`, `set-lineup`), ops-run modes incl. `computer-recard`.
+  The hourly pod tick is too coarse for anything kickoff-shaped — that is
+  why subs got their own clock.
+- **Screens** (web `src/screens`, phone `apps/mobile/src/screens`):
+  `ContestSquad.tsx` (the rich builder; PROJECTS stat; SPEND under no cap),
+  `BullseyeLeague.tsx` (create form, hub, settings, standings with records,
+  the tiny "i" credit chip for Jon Acevedo), `ContestCommish.tsx` (contest,
+  format, BUDGET incl. NO CAP, MIN SPEND, RULED OUT auto-sub, card). Lock
+  maps: `weekGameLocks(week, season, leadMs)` — contest screens pass 0.
+- **Checks**: `check:dfsbullseye`, `check:seatwire`, `check:coaches`,
+  `check:contestrecap`, `check:contestsubs`, `check:contestschedule` (all in
+  `check:parity`); `check:changelog` wants a `> - ` player-facing line per
+  STATUS entry; `check:ios-runtime` for anything under `apps/mobile/`.
+  `scripts/db/scratch/` holds the scratch-Postgres recipe and the SQL flows
+  that exercised every contest migration.
+
+### Rules the founder set this arc, in their words
+
+- "Keep farmer Casey's line up as he intended it to be" — never silently
+  change a human's squad; the one exception is the opt-in auto-sub, and it
+  pushes the owner.
+- "Don't have the full idea chip, just a tiny i chip" — credits are an 18px
+  ring, not a label.
+- "Let's add min spend as an adjustable option in golf" — golf's constraint
+  is a floor, not a cap; new golf leagues default to no cap + $45k floor.
+- Every contest player locks at his own kickoff (the drip hour never applied
+  here). A ruled-out player already in a squad stays swappable until then; a
+  ruled-out player is never a NEW pick.
+- A head-to-head league plays a round-robin and ranks by record; a
+  leaderboard league ranks by total. The card's total is shared by every
+  matchup in the week; only the tie-breaker is per seat.
+- Chat cards for members, not engineers: the closing note's hidden
+  `chat-summary` / `chat-report` lines become the league-chat card (see
+  CLAUDE.md); `computer-recard` rebuilds one from a later comment.
 
 ## The preseason live-fire arc (v0.338 → v0.375.3, Aug 22–29)
 
