@@ -18,7 +18,7 @@ const T = {
     { season: '2026', week: 6, slug: 'buf-k', name: 'BUF Kicker', pos: 'K', team: 'BUF', salary: 4200, proj: 8, exp: null },
     { season: '2026', week: 6, slug: 'buf-dst', name: 'BUF D/ST', pos: 'DEF', team: 'BUF', salary: 4000, proj: 7, exp: null },
   ],
-  league: [{ id: 'L', kind: 'dfs', season: '2026', settings_json: { positions_extra: ['HC'] } }],
+  league: [{ id: 'L', kind: 'dfs', season: '2026', settings_json: { positions_extra: [] } }],
 };
 const upserts = [];
 function builder(name, preds = []) {
@@ -43,11 +43,19 @@ const idx = {
 };
 const { topUpSalaryBoard } = await import('../src/pods.js');
 const before = T.pod_salary.map((r) => ({ ...r }));
-const board = await topUpSalaryBoard('2026', 6, idx, new Set(['KC', 'BUF']), T.pod_salary.map((r) => ({ ...r })));
+// The week's first pass: no league has unlocked a coach yet, so it fills in
+// experience and nothing else.
+const board0 = await topUpSalaryBoard('2026', 6, idx, new Set(['KC', 'BUF']), T.pod_salary.map((r) => ({ ...r })));
+ok('the first pass fills experience and adds no position nobody wants', board0.length === T.pod_salary.length && upserts.length === 2 && !board0.some((r) => r.pos === 'HC'));
+// v0.679.2: a league unlocks HEAD COACH after that pass. The same process's
+// next pass adds the coaches — the week-6 CPU squads with an empty HC and
+// Rookie Only spot were built against a board that never got them.
+T.league[0].settings_json.positions_extra = ['HC'];
+const board = await topUpSalaryBoard('2026', 6, idx, new Set(['KC', 'BUF']), board0);
 
 ok('exp is filled from the index on the frozen rows', board.find((r) => r.slug === 'qb-one')?.exp === 7 && board.find((r) => r.slug === 'rb-rook')?.exp === 0);
 ok('a rookie is a rookie now', board.find((r) => r.slug === 'rb-rook')?.exp === 0);
-ok('the HC rows a contest league unlocked are added, one per slate team', board.filter((r) => r.pos === 'HC').map((r) => r.slug).sort().join() === 'buf-hc,kc-hc');
+ok('the HC rows a contest league unlocked AFTER the first pass are added on the next, one per slate team', board.filter((r) => r.pos === 'HC').map((r) => r.slug).sort().join() === 'buf-hc,kc-hc');
 ok('the new rows sit at the floor', board.filter((r) => r.pos === 'HC').every((r) => r.salary === 3000 && r.proj === 0));
 ok('frozen salaries and projections are untouched', before.every((b) => { const n = board.find((r) => r.slug === b.slug); return n && n.salary === b.salary && n.proj === b.proj; }));
 ok('the writes are the exp fixes and the new rows only', upserts.length === 4 && upserts.filter((u) => u.pos === 'HC').length === 2 && upserts.every((u) => u.season === '2026' && u.week === 6));
