@@ -47,7 +47,6 @@ export function CardBack({ seed }: { seed: string }) {
       <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: FELT_DARK, borderWidth: 1.5, borderColor: GOLD, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ color: GOLD, fontSize: 22, fontWeight: '800' }}>◈</Text>
       </View>
-      <Text style={{ position: 'absolute', bottom: 10, color: GOLD, fontFamily: MONO, fontSize: fs(7), letterSpacing: 1.2, opacity: 0.85 }}>SEALED ◈ PICK</Text>
     </View>
   );
 }
@@ -88,7 +87,15 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked }: 
 export function FlipCard({ flipped, idx = 0, back, face }: { flipped: boolean; idx?: number; back: React.ReactNode; face: React.ReactNode }) {
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(v, { toValue: flipped ? 1 : 0, duration: 550, delay: flipped ? idx * 90 : 0, useNativeDriver: true }).start();
+    // The JS driver, not the native one: the first live deal (v0.679.0) left
+    // every card on its back on a real phone — the native-driven turn never
+    // landed. Nine cards for half a second is nothing for the bridge, and the
+    // end state is pinned whether the timing finishes or is cut short.
+    const to = flipped ? 1 : 0;
+    const anim = Animated.timing(v, { toValue: to, duration: 550, delay: flipped ? idx * 90 : 0, useNativeDriver: false });
+    anim.start(() => v.setValue(to));
+    const pin = setTimeout(() => v.setValue(to), 550 + idx * 90 + 400);
+    return () => { clearTimeout(pin); anim.stop(); v.setValue(to); };
   }, [flipped, idx, v]);
   const backRot = v.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
   const faceRot = v.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
