@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
 import { contestSlotLabels, contestCard, contestTiebreak, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
+import { ringFromDist, ringScore } from '@drip/core/engine/bullseye';
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -107,20 +108,30 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   // to land, and for Bullseye the ring — how far off the target — with the
   // projected ring beside it. A sealed pick leaves the projection blank: his
   // number would give him away. Mirrors the web (src/screens/ContestMatchup.tsx).
+  // THE RING (v0.682.5, founder: "where does the 57.4 come from?"): the
+  // server's ring is the score the week is won on — in a one-team-total
+  // league max(0, radius × spots − distance), so 90 − 32.6 = 57.4 at radius
+  // 10 over nine spots; per spot, the sum of each spot's ring. The scoreboard
+  // had labelled it OFF and projected a distance. Now: RING, the distance
+  // and target under it, a projected RING beside it, and a side with spots
+  // still to play says so (each carries the zero penalty until he posts).
+  const radius = st.radius ?? 10;
   const tally = (s: 'home' | 'away', S: typeof L) => {
-    let pts = 0, proj = 0, ringProj = 0, known = true;
+    let pts = 0, proj = 0, ringProj = 0, known = true, toPlay = 0;
     for (const r of S.rows) {
       const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
       if (score != null) pts += score;
+      if (st.started && (r.sealed || (r.slug && score == null))) toPlay++;
       if (r.sealed) { known = false; continue; }
       const v = score ?? (r.slug ? projOf(r.slug) : null) ?? 0;
       proj += v;
-      if (bull && !isTotal) { const tg = theCard?.targets[r.slot]; if (tg != null) ringProj += Math.abs(v - tg); }
+      if (bull && !isTotal) { const tg = theCard?.targets[r.slot]; if (tg != null) ringProj += ringScore(v, tg, radius); }
     }
     const points = !bull ? S.score : st.started ? pts : null;
     const projected = known ? proj : null;
-    const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
-    return { points, projected, ring: bull ? S.score : null, ringProjected };
+    const dist = bull && isTotal && theCard && points != null ? Math.abs(points - theCard.total) : null;
+    const ringProjected = !bull || !known ? null : isTotal ? (theCard ? ringFromDist(Math.abs(proj - theCard.total), radius * Math.max(1, slots.length)) : null) : ringProj;
+    return { points, projected, ring: bull ? S.score : null, ringProjected, dist, toPlay };
   };
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const x = tally(s, S);
@@ -137,7 +148,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         {bull && (
           <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%', marginTop: 4 }}>
             <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? t.text : alpha(t.text, 35) }}>{fmt(x.ring)}</Text>
-            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`OFF 🎯 ${isTotal && theCard ? theCard.total : 'PER SPOT'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)} off` : ''}`}</Text>
+            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`RING${x.dist != null && theCard ? ` · ${x.dist.toFixed(1)} off 🎯 ${theCard.total}` : isTotal ? '' : ' · 🎯 per spot'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)}` : ''}${x.toPlay ? ` · ${x.toPlay} to play` : ''}`}</Text>
           </View>
         )}
       </View>

@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.682.5 — The scoreboard says RING
+
+> - The contest table's scoreboard had labelled a Bullseye squad's big second number OFF, as if it were the distance from the target. It is the ring, the score the week is won on: in a one-team-total league, the radius times the spots (90 at radius 10 over nine) minus the distance. It now reads RING, with the distance and the target under it, a projected ring beside it, and "N to play" when a squad has spots still to kick off, since each carries the zero penalty until he posts.
+
+Founder: "My team is all done. Where does the 57.4 come from?" 137.6 points
+against a 105 target is 32.6 off; the ring is 90 − 32.6 = 57.4
+(`ringFromDist(dist, radius × n)` in `engine/bullseye.ts`); the opponent's
+29.7 carried three pending spots' penalties. Both `ContestMatchup` tallies
+now compute the distance, project a ring (`ringFromDist` for a total,
+`ringScore` per spot) instead of a distance, and count the spots to play.
+Plain JS: no iPhone build.
+
 ### v0.682.4 — The league card's squad button follows the week
 
 > - On the leagues list, a squad league's big button said BUILD YOUR SQUAD · $50K CAP whatever the week was doing. It now follows the week: BUILD YOUR SQUAD before kickoff while spots are open, YOUR SQUAD IS IN · EDIT once it's built, LIVE · WATCH THE TABLE while the games are on, FINAL · THE RESULT after. The cap left the button, since it isn't $50k in every league.
