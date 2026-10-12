@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.2 — Tonight’s game is on the fields
+
+> - The app’s All fields sheet now lists every game on the week’s slate, including the ones that haven’t kicked off: a card with the kickoff and no plays, which fills in once the game starts. Until now a game appeared only after its first play, so Monday night’s game was missing all day.
+
+Founder: "There's a game tonight but it's not in the fields view. Maybe
+because it hasn't started yet? We should get the upcoming games in."
+`AllFieldsSheet` keeps the slate it reads for the week and passes it to
+`groupFieldGames` as `scheduled`, which has seeded kickoff-only cards since
+v0.413.0 (the web's FieldView did; the sheet called it without the slate).
+Works for the college level too: its weeks ride the same slate.
+
 ### v0.696.1 — The alert icon reaches phones
 
 > - The italic DF alert icon (v0.692.1) never reached a phone: it is baked into the Android build, an over-the-air update can’t carry it, and the APK gate judged the native app unchanged because the fingerprint hashes the config that names the icon, not its pixels. This merge builds a new APK, and from now on a change to any native asset builds one.
