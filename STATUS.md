@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.682.4 — The league card's squad button follows the week
+
+> - On the leagues list, a squad league's big button said BUILD YOUR SQUAD · $50K CAP whatever the week was doing. It now follows the week: BUILD YOUR SQUAD before kickoff while spots are open, YOUR SQUAD IS IN · EDIT once it's built, LIVE · WATCH THE TABLE while the games are on, FINAL · THE RESULT after. The cap left the button, since it isn't $50k in every league.
+
+Founder, with a screenshot of a live week: "chip says build your squad but
+the week already kicked off." `squadCta(glance)` in `LiveOnboard.tsx` reads
+the `WidgetSnapshot` the card already draws its WEEK line from: `phase`,
+and before kickoff `assessable` with `alarm.empty` + `fixes`. Web only (the
+phone's list has no such button). Plain JS: no iPhone build.
+
 ### v0.682.3 — The lock reminder names the seat
 
 > - A member with several entries in a contest league gets one "no squad yet" push, and it now names the entries still without a squad ("No squad yet for Bees Two and Bees Three…"), so they know which to build. A member with one entry hears the same words as before.
