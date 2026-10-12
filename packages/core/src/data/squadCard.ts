@@ -5,10 +5,11 @@
 // the web shares it through the share sheet (or the clipboard), the phone
 // through its own. Nothing here is sent anywhere by itself.
 import type { ClassicSlotDef } from '../engine/classic';
-import { CONTEST_EMOJI, CONTEST_SCORE_WORD, type ContestKind } from '../engine/contest';
+import { CONTEST_EMOJI, contestScoreWord, type ContestKind } from '../engine/contest';
 
 export interface SquadCardInput {
   league: string; week: number; contest: ContestKind;
+  /** The Bullseye variant (v0.683.0): a one-team-total squad is so many points OFF, not a ring. */ variant?: string | null;
   /** 'live' while games are on, 'final' after, null before kickoff (the card says "squad set"). */
   status: 'live' | 'final' | null;
   slots: ClassicSlotDef[]; labels: Record<string, string>;
@@ -34,9 +35,10 @@ export function squadCardText(o: SquadCardInput): string {
     const sc = slug ? o.scoreOf(d.slot) : null;
     return `${o.labels[d.slot] ?? d.slot}: ${slug ? o.nameOf(slug) : '—'}${sc != null ? ` ${r1(sc)}` : ''}`;
   });
-  const word = CONTEST_SCORE_WORD[o.contest];
+  const word = contestScoreWord(o.contest, o.variant);
+  const total1 = o.contest === 'bullseye' ? (o.variant === 'total' ? 'Distance' : 'Ring') : 'Total';
   const tally = o.total != null
-    ? `${o.contest === 'bullseye' ? 'Ring' : 'Total'} ${r1(o.total)} ${word}${o.rank != null && o.entries ? ` · ${ord(o.rank)} of ${o.entries}` : ''}`
+    ? `${total1} ${r1(o.total)} ${word}${o.rank != null && o.entries ? ` · ${ord(o.rank)} of ${o.entries}` : ''}`
     : null;
   const opp = o.opponent
     ? `vs ${o.opponent.team ?? 'opponent'}${o.opponent.score != null ? ` ${r1(o.opponent.score)}` : ''}${o.total != null && o.opponent.score != null && o.status === 'final'

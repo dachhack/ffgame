@@ -22,6 +22,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.683.0 — In a one-team-total Bullseye, the distance is the score
+
+> - A Bullseye league that aims the whole squad at one number now scores the plain distance from it: 137.6 points against a 105 target is 32.6 off, and the LOWEST distance wins the week, like golf. A spot that posts nothing still adds 10. The ring is gone from these leagues; it stays in per-spot leagues, where nine darts need a sum.
+> - Past weeks already scored as rings have been turned into distances, so records and season totals read the same way throughout. If a converted number looks off, the commissioner's RESCORE on FIX A WEEK re-stamps the week from the stats.
+
+Founder: "why are there rings? It's just a target number and how far you
+are from it" — then "make distance the score for the total variant". The
+engine's `applyBullseye` total branch banks `dist` (zero penalties included)
+as the side's score; `bullseyeLowerWins` / `contestLowerWins` /
+`contestScoreWord` (`off`) say which way is up. Migration
+`0482_total_is_distance.sql`: `league_lower_wins(id)` (golf or a
+one-team-total Bullseye) behind the classic winner rule `golf_beats` and
+`league_standings`; `_contest_lower_wins(lg)` behind `contest_board`'s week
+ranks, records and season rows and `bullseye_my_weeks`; and
+`_bullseye_total_to_distance(league)` converting stamped finals and week
+states (ring r at span s = radius × spots → s − r, or 2s − r past the
+dead-on bonus; 0 → a miss at the span), run for every total league. The
+worker's recap ranks and records by `contestLowerWins`; the squad card says
+"Distance … off"; both scoreboards show `OFF 🎯 105` with a projected
+distance; both league rooms' records and wording follow. Known gap: the
+leagues-list glance still says LEADING by raw points for any Bullseye
+league, as before. `scripts/db/contest-distance-probes.sql` (full chain, in
+the runner). Plain JS and SQL: no iPhone build.
+
 ### v0.682.5 — The scoreboard says RING
 
 > - The contest table's scoreboard had labelled a Bullseye squad's big second number OFF, as if it were the distance from the target. It is the ring, the score the week is won on: in a one-team-total league, the radius times the spots (90 at radius 10 over nine) minus the distance. It now reads RING, with the distance and the target under it, a projected ring beside it, and "N to play" when a squad has spots still to kick off, since each carries the zero penalty until he posts.

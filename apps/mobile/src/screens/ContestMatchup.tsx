@@ -7,8 +7,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, CONTEST_SCORE_WORD } from '@drip/core/engine/contest';
-import { ringFromDist, ringScore } from '@drip/core/engine/bullseye';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord } from '@drip/core/engine/contest';
+import { ringScore } from '@drip/core/engine/bullseye';
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
@@ -54,7 +54,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   if (!st) return <Card><Mono size={9} tone="faint">Loading…</Mono></Card>;
   if (!st.ok) return <Card><Mono size={10} tone="warn">{st.error}</Mono></Card>;
   const m = st.matchup;
-  const word = CONTEST_SCORE_WORD[st.contest ?? 'high'];
+  const word = contestScoreWord(st.contest ?? 'high', st.variant);
   if (!m) return <Card><Mono size={9} tone="faint">{`No matchup for week ${st.week ?? week} yet — squads are paired once the week's board is up.`}</Mono></Card>;
   const mineHome = st.me != null && m.home === st.me;
   const mineAway = st.me != null && m.away === st.me && m.away !== m.home;
@@ -129,9 +129,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     }
     const points = !bull ? S.score : st.started ? pts : null;
     const projected = known ? proj : null;
-    const dist = bull && isTotal && theCard && points != null ? Math.abs(points - theCard.total) : null;
-    const ringProjected = !bull || !known ? null : isTotal ? (theCard ? ringFromDist(Math.abs(proj - theCard.total), radius * Math.max(1, slots.length)) : null) : ringProj;
-    return { points, projected, ring: bull ? S.score : null, ringProjected, dist, toPlay };
+    // a one-team-total league's score IS the distance (v0.683.0): project that
+    const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
+    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay };
   };
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const x = tally(s, S);
@@ -148,7 +148,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         {bull && (
           <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%', marginTop: 4 }}>
             <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? t.text : alpha(t.text, 35) }}>{fmt(x.ring)}</Text>
-            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`RING${x.dist != null && theCard ? ` · ${x.dist.toFixed(1)} off 🎯 ${theCard.total}` : isTotal ? '' : ' · 🎯 per spot'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)}` : ''}${x.toPlay ? ` · ${x.toPlay} to play` : ''}`}</Text>
+            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${isTotal ? `OFF 🎯 ${theCard?.total ?? ''}` : 'RING · 🎯 per spot'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)}${isTotal ? ' off' : ''}` : ''}${x.toPlay ? ` · ${x.toPlay} to play` : ''}`}</Text>
           </View>
         )}
       </View>

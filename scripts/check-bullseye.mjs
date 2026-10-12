@@ -166,7 +166,8 @@ const LEAGUE = '00000000-0000-4000-8000-00000000b011';
   ok('§6 and the distance to the card\'s sum', near(r.bullseye.home.dist, Math.abs(plain.home - 50)), r.bullseye);
 }
 
-// ── 7. TOTAL IS ONE DART ─────────────────────────────────────────────────────
+// ── 7. TOTAL IS ONE DART — and the distance is the score (v0.683.0): the
+//      side banks |points − total| plus a penalty per no-show, LOWER wins ──
 {
   const slots = classicSlotsFromSpec([{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['WR'] }]);
   const picks = [{ slot: 'S1', player: QB }, { slot: 'S2', player: RB }, { slot: 'S3', player: WR }];
@@ -174,21 +175,21 @@ const LEAGUE = '00000000-0000-4000-8000-00000000b011';
   const exact = { targets: { S1: 0, S2: 0, S3: 0 }, total: plain.home };   // aim the lineup at its own points
   setLeagueBullseye({ variant: 'total', radius: 10, deal: 'shared' }, exact);
   const r = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
-  ok('§7 a lineup on its total is a bullseye worth 2 × radius × spots', r.home === 60, r);
+  ok('§7 a lineup on its total is 0 off — the best a week can do', r.home === 0, r);
   ok('§7 rows carry no per-spot dart in TOTAL', r.slots.every((x) => !x.aim));
-  ok('§7 the summary is the one dart', r.bullseye?.variant === 'total' && r.bullseye.home.dist === 0 && r.bullseye.home.ring === 60, r.bullseye);
+  ok('§7 the summary is the one dart', r.bullseye?.variant === 'total' && r.bullseye.home.dist === 0 && r.bullseye.home.ring === 0, r.bullseye);
   setLeagueBullseye({ variant: 'total', radius: 10, deal: 'shared' }, { targets: {}, total: plain.home + 10 });
   const ten = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
-  ok('§7 ten over on a 30-radius dart → 20', near(ten.home, 20), ten.home);
+  ok('§7 ten over → 10 off', near(ten.home, 10), ten.home);
   setLeagueBullseye({ variant: 'total', radius: 10, deal: 'shared' }, { targets: {}, total: plain.home + 90 });
   const far = resolveClassicMatchup(side(picks, [QB, RB, WR]), side(picks, [QB, RB, WR]), WEEK, { ppr: 1 }, slots);
-  ok('§7 beyond the radius → 0', far.home === 0, far.home);
+  ok('§7 ninety over → 90 off (no floor: a far miss stays worse than a near one)', near(far.home, 90), far.home);
   clearLeagueBullseye();
   // applyBullseye is pure and scales the radius by the SLOT COUNT it is told.
   const three = applyBullseye(plain, { cfg: { variant: 'total', radius: 10, deal: 'shared' }, card: { targets: {}, total: plain.home + 15 } }, 3);
-  ok('§7 three spots → radius 30: 15 off banks 15', near(three.home, 15), three.home);
+  ok('§7 three spots, 15 off → 15', near(three.home, 15), three.home);
   const nine = applyBullseye(plain, { cfg: { variant: 'total', radius: 10, deal: 'shared' }, card: { targets: {}, total: plain.home } }, 9);
-  ok('§7 told nine spots with three filled: six no-shows, 60 off a 90-radius dart → 30', near(nine.home, 30) && nine.bullseye.home.zeros === 6, nine.bullseye.home);
+  ok('§7 told nine spots with three filled: six no-shows add 60 to a dead-on lineup', near(nine.home, 60) && nine.bullseye.home.zeros === 6, nine.bullseye.home);
 }
 
 // ── 8. OFF MEANS OFF ─────────────────────────────────────────────────────────
