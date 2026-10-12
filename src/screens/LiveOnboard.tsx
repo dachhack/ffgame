@@ -1581,6 +1581,19 @@ function LineupLine({ snap }: { snap: WidgetSnapshot }) {
   return <div className="mono" style={{ fontSize: 12, lineHeight: 1.45, fontWeight: 700, marginTop: 3, color: open ? 'var(--warn)' : 'var(--you)' }}>{text}</div>;
 }
 
+/** THE SQUAD BUTTON'S WORDS (v0.682.4, founder: "chip says build your squad
+ *  but the week already kicked off"): by the week's phase from the glance the
+ *  card already draws. Before kickoff: build it, or it's in (edit). Live: watch
+ *  the table. Final: the result. The cap left the button: it isn't $50k in
+ *  every league. */
+function squadCta(g?: WidgetSnapshot): string {
+  if (!g || g.phase === 'idle' || g.phase === 'bye') return 'BUILD YOUR SQUAD →';
+  if (g.phase === 'live') return 'LIVE · WATCH THE TABLE →';
+  if (g.phase === 'final') return 'FINAL · THE RESULT →';
+  const empty = g.assessable ? (g.alarm?.empty ?? 0) + g.fixes.length : 0;
+  return !g.assessable || empty > 0 ? 'BUILD YOUR SQUAD →' : 'YOUR SQUAD IS IN · EDIT →';
+}
+
 function LeagueCard({ e, commish, slate, glance, unread, seats, onPodBuild, onOpen }: {
   e: Enrollment; commish: boolean;
   /** v0.635.2: how many seats you hold in this league. Past one the card
@@ -1666,7 +1679,7 @@ function LeagueCard({ e, commish, slate, glance, unread, seats, onPodBuild, onOp
           surface reports it. */}
       {e.league?.kind === 'weekly' && <WeeklyCrown leagueId={e.league_id} week={e.league.contest_week} myRoster={e.sleeper_roster_id} />}
       {squadLeague && (
-        <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', marginTop: 10 }}>BUILD YOUR SQUAD · $50K CAP →</button>
+        <button onClick={onPodBuild} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', marginTop: 10 }}>{squadCta(glance)}</button>
       )}
     </div>
   );
