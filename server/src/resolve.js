@@ -36,7 +36,7 @@ import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/ga
 import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { installBullseye, bullseyeCardsFor, bullseyeCfgOf } from './bullseye.js';
-import { contestConfigOf, contestCard, contestSquadOf, scoreContest, contestTiebreak, contestScoreAs } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestCard, contestSquadOf, scoreContest, contestTiebreak, contestScoreAs, contestRedeal } from '../../packages/core/src/engine/contest.ts';
 import { classicPoints } from '../../packages/core/src/engine/classic.ts';
 
 /** PPR + K + DST points from a player's RealPlay rows (unenrolled-opponent fallback). */
@@ -623,11 +623,6 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       const k = kicks[team] ?? kicks[String(meta(slug)?.team ?? '').toUpperCase()];
       return Number.isFinite(k) && k <= nowMs && !(opts.doneTeams?.has(team));
     };
-    // THE TIE-BREAKER (v0.660.1): each seat's own spot and number.
-    const tiebreak = card ? {
-      home: contestTiebreak(matchup.league_id, matchup.week, matchup.home_roster_id, card, contestCfg.slots),
-      away: contestTiebreak(matchup.league_id, matchup.week, matchup.away_roster_id, card, contestCfg.slots),
-    } : undefined;
     // THE PLAYS (0484): each side's armed plays, when the league's coin is on.
     let plays;
     if (contestCfg.coin) {
@@ -636,9 +631,16 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       const of = (rid) => (pr ?? []).filter((x) => x.roster_id === rid).map((x) => ({ id: x.play_id, slot: x.slot, proj: x.proj == null ? null : Number(x.proj) }));
       plays = { home: of(matchup.home_roster_id), away: of(matchup.away_roster_id) };
     }
+    // THE TIE-BREAKER (v0.660.1): each seat's own spot and number — re-dealt once if the seat paid for it (0485).
+    const tiebreak = card ? {
+      home: contestTiebreak(matchup.league_id, matchup.week, matchup.home_roster_id, card, contestCfg.slots, contestRedeal(plays?.home)),
+      away: contestTiebreak(matchup.league_id, matchup.week, matchup.away_roster_id, card, contestCfg.slots, contestRedeal(plays?.away)),
+    } : undefined;
+    // JINX (0485): a touchdown's worth under this league's catalog
+    const tdValue = { pass: Number(catalog?.passTd ?? 4), rush: Number(catalog?.rushTd ?? 6), rec: Number(catalog?.recTd ?? 6) };
     const r = scoreContest({ home: homeSquad, away: awaySquad }, contestCfg,
       (slug, slot, def) => classicPoints(player(slug), matchup.week, catalog, contestScoreAs(def), slot),
-      { pending, live, card, tiebreak, plays, playsOf: (slug) => playsFor(matchup.week, slug) ?? [], settled: matchup.status === 'final' });
+      { pending, live, card, tiebreak, plays, playsOf: (slug) => playsFor(matchup.week, slug) ?? [], settled: matchup.status === 'final', tdValue });
     for (const st of r.states) states.push({ game_window: st.window, home_score: st.home, away_score: st.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

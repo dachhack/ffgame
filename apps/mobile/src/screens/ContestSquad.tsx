@@ -20,7 +20,7 @@ import { injuryFor } from '@drip/core/data/injuries';
 import { squadCardText } from '@drip/core/data/squadCard';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
-import {
+import { contestRedeal,
   contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
   type ContestConfig,
 } from '@drip/core/engine/contest';
@@ -191,7 +191,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   const theirScore = st.opponent && st.state ? (mySide === 'home' ? st.state.away : st.state.home) : null;
   const myPoints = live.reduce((s, r) => s + (r.score || 0), 0);
   const editable = st.matchup?.status !== 'final';
-  const myTb = theCard && st.roster_id != null && st.week != null ? contestTiebreak(leagueId, st.week, st.roster_id, theCard, slots) : null;
+  const myTb = theCard && st.roster_id != null && st.week != null ? contestTiebreak(leagueId, st.week, st.roster_id, theCard, slots, contestRedeal(st.plays)) : null;
   const tbLive = myTb ? liveOf(myTb.slot) : undefined;
   const myTbDist = st.matchup?.status === 'final'
     ? (mySide === 'home' ? st.matchup.home_tb : st.matchup.away_tb) ?? null

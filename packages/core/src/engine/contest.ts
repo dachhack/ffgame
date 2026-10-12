@@ -10,8 +10,8 @@
 import { applyBullseye, bullseyeConfigOf, dealBullseyeCard, type BullseyeCard, type BullseyeConfig } from './bullseye';
 import { leagueSlotDefs, slotAllows, slotDisplayName, isRetSlot, type ClassicResult, type ClassicSlotDef, type ClassicSlotScore, type SlotSpec } from './classic';
 import { tiebreakDistance, type BoardPlayer } from './dfsBullseye';
-import { contestEventBonus, GHOST_POINTS, type ContestPlay, type ContestPlayId, type PlayEvent } from './contestPlays';
-export { CONTEST_PLAYS, contestPlayById, contestPlayCap, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId } from './contestPlays';
+import { contestEventBonus, contestJinxValue, GHOST_POINTS, type ContestPlay, type ContestPlayId, type PlayEvent } from './contestPlays';
+export { CONTEST_PLAYS, contestPlayById, contestPlayCap, contestPlaysFor, contestPlayTarget, contestRedeal, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId } from './contestPlays';
 
 export type ContestKind = 'high' | 'golf' | 'bullseye';
 export type ContestFormat = 'h2h' | 'board';
@@ -219,10 +219,11 @@ export function contestSquadOf(starters: unknown, slots: ClassicSlotDef[]): Reco
 // One RB or WR spot per seat (a spot that takes exactly that position), a
 // number near its card target. A league with no such spot has no tie-break.
 export interface ContestTiebreak { slot: string; target: number }
-export function contestTiebreak(leagueId: string, week: number, rosterId: number, card: BullseyeCard, slots: ClassicSlotDef[]): ContestTiebreak | null {
+export function contestTiebreak(leagueId: string, week: number, rosterId: number, card: BullseyeCard, slots: ClassicSlotDef[],
+  /** RE-DEAL (v0.686.0): the seat's re-deals this week; a second deal from a second seed. */ redeal = 0): ContestTiebreak | null {
   const pool = slots.filter((d) => d.pos.length === 1 && (d.pos[0] === 'RB' || d.pos[0] === 'WR'));
   if (!pool.length) return null;
-  const r = mulberry(`tiebreak|${leagueId}|${week}|${rosterId}`);
+  const r = mulberry(`tiebreak|${leagueId}|${week}|${rosterId}${redeal ? `|redeal${redeal}` : ''}`);
   const d = pool[Math.floor(r() * pool.length) % pool.length];
   const mag = 1 + Math.floor(r() * 4);
   const sign = r() < 0.5 ? -1 : 1;
@@ -251,6 +252,8 @@ export function scoreContest(
     /** IN PLAY (v0.685.1): a player whose game has kicked off but not ended. A zero so far is not a zero yet —
      *  it is neither written nor penalised (the dart's zero rule, golf's zero-fill) until his game is over. */
     live?: (slug: string) => boolean;
+    /** JINX (v0.686.0): what a touchdown is worth under the league's catalog, to strike the first one off. */
+    tdValue?: { pass: number; rush: number; rec: number };
   } = {},
 ): ClassicResult & { tiebreak: { home: number | null; away: number | null } } {
   const pending = opts.pending ?? (() => false);
@@ -265,6 +268,10 @@ export function scoreContest(
     const t = opts.tiebreak?.[side] ?? null;
     const plays = opts.plays?.[side] ?? [];
     const playOn = (slot: string, id: ContestPlayId) => plays.find((p) => p.id === id && p.slot === slot) ?? null;
+    // the OTHER side's plays aimed at my spots (a leaderboard row is its own opponent: none)
+    const solo = squads.home === squads.away;
+    const theirs = solo ? [] : (opts.plays?.[side === 'home' ? 'away' : 'home'] ?? []);
+    const theirsOn = (slot: string, id: ContestPlayId) => theirs.find((p) => p.id === id && p.slot === slot) ?? null;
     let tbDone = false;
     for (const d of cfg.slots) {
       const slug = squads[side][d.slot] ?? null;
@@ -292,6 +299,15 @@ export function scoreContest(
         const don = playOn(d.slot, 'double-or-nothing')!;
         play = 'double-or-nothing';
         if (opts.settled) score = don.proj != null && raw > don.proj ? Math.round(raw * 2 * 10) / 10 : 0;
+      } else if (slug && opts.settled && cfg.contest === 'bullseye' && cfg.bullseye?.variant !== 'total' && playOn(d.slot, 'magnet') && opts.card?.targets[d.slot] != null) {
+        // MAGNET, per spot: the dart lands half as far from its number
+        const tg = opts.card.targets[d.slot];
+        score = Math.round((tg + (score - tg) / 2) * 10) / 10; play = 'magnet';
+      }
+      // JINX, from across the table: the first touchdown he scored is struck off
+      if (slug && theirsOn(d.slot, 'jinx') && opts.playsOf) {
+        const v = contestJinxValue(opts.playsOf(slug), opts.tdValue ?? { pass: 4, rush: 6, rec: 6 });
+        if (v > 0) { score = Math.round((score - v) * 10) / 10; play = play ? `${play}+jinx` : 'jinx'; }
       }
       if (!slug && !ghost && cfg.contest === 'bullseye') continue;   // an empty spot is a zero — the penalty finds the missing row
       sideRows[side].push({ win: 'wk', side, slot: d.slot, slug, metric: null, score, ...(play ? { play, raw } : {}) });
@@ -316,6 +332,14 @@ export function scoreContest(
   const bull = { cfg: cfg.bullseye, card: opts.card };
   const dartSide = (side: 'home' | 'away') => {
     const rows = sideRows[side].map((r) => ({ ...r, side: 'home' as const }));
+    // MAGNET, one-team total: at the final the squad lands half a radius closer
+    // to its number — a row of its own, since the dart sums the rows.
+    const plays = opts.plays?.[side] ?? [];
+    if (opts.settled && cfg.bullseye?.variant === 'total' && plays.some((p) => p.id === 'magnet' && !p.slot) && opts.card) {
+      const gap = opts.card.total - rows.reduce((s, r) => s + r.score, 0);
+      const shift = Math.round(Math.sign(gap) * Math.min(Math.abs(gap), cfg.bullseye.radius / 2) * 10) / 10;
+      if (shift) rows.push({ win: 'wk', side: 'home', slot: 'PLAY', slug: null, metric: null, score: shift, play: 'magnet' });
+    }
     const pts = rows.reduce((s, r) => s + r.score, 0);
     const res = applyBullseye({ home: pts, away: 0, slots: rows, states: [{ window: 'wk', home: pts, away: 0 }] }, bull, Math.max(1, counted[side]));
     // a bonus helps the dart: it comes off a one-team total's distance, or onto a per-spot ring

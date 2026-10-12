@@ -25,7 +25,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { injuryFor } from '@drip/core/data/injuries';
 import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
-import { CONTEST_PLAYS, contestPlayById, contestPlayCap, GHOST_POINTS, type ContestPlayId,
+import { contestPlaysFor, contestPlayTarget, contestRedeal, contestPlayById, contestPlayCap, GHOST_POINTS, type ContestPlayId,
   contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
   type ContestConfig,
 } from '@drip/core/engine/contest';
@@ -180,7 +180,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const teams = useMemo(() => [...new Set(players.map((p) => p.team))].sort(), [players]);
   const tabs = useMemo(() => (setup ? builderTabs(setup.slots) : ['ALL']), [setup]);
   const dirty = useMemo(() => JSON.stringify(picks) !== JSON.stringify(saved), [picks, saved]);
-  const playOn = useCallback((slot: string) => plays.find((x) => x.slot === slot) ?? null, [plays]);
+  const playOn = useCallback((slot: string) => plays.find((x) => x.slot === slot && contestPlayById(x.id)?.target !== 'opp') ?? null, [plays]);
+  const playAt = useCallback((slot: string) => plays.filter((x) => x.slot === slot && contestPlayById(x.id)?.target === 'opp'), [plays]);   // aimed across the table
   const ghosted = useCallback((slot: string) => playOn(slot)?.id === 'ghost', [playOn]);
 
   // SWAP HISTORY (0478): my seat's changes this week, newest first.
@@ -211,7 +212,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const theirScore = st.opponent && st.state ? (mySide === 'home' ? st.state.away : st.state.home) : null;
   const myPoints = live.reduce((s, r) => s + (r.score || 0), 0);
   const editable = st.matchup?.status !== 'final';
-  const myTb = theCard && st.roster_id != null && st.week != null ? contestTiebreak(leagueId, st.week, st.roster_id, theCard, slots) : null;
+  const myTb = theCard && st.roster_id != null && st.week != null ? contestTiebreak(leagueId, st.week, st.roster_id, theCard, slots, contestRedeal(plays)) : null;
   const tbLive = myTb ? liveOf(myTb.slot) : undefined;
   const myTbDist = st.matchup?.status === 'final'
     ? (mySide === 'home' ? st.matchup.home_tb : st.matchup.away_tb) ?? null
@@ -417,22 +418,23 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
             {arming && <button onClick={() => setArming(null)} className="mono" style={{ ...chip(true), marginLeft: 'auto' }}>{`▶ tap a spot for ${contestPlayById(arming)?.name ?? ''} · CANCEL`}</button>}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {CONTEST_PLAYS.map((d) => {
+            {contestPlaysFor(cfg.format, cfg.contest).map((d) => {
               const armed = plays.some((x) => x.id === d.id);
               const can = !busy && !armed && plays.length < (st.play_cap ?? contestPlayCap(cfg.format)) && (wallet ?? 0) >= d.price;
+              const target = contestPlayTarget(d, cfg.bullseye?.variant);
               return (
-                <button key={d.id} disabled={!can} title={d.blurb} onClick={() => { if (d.target === 'squad') void arm(d.id); else setArming(d.id); }} className="mono" style={{ ...chip(arming === d.id), opacity: can || armed ? 1 : 0.5 }}>
+                <button key={d.id} disabled={!can} title={d.blurb} onClick={() => { if (target === 'squad') void arm(d.id); else setArming(d.id); }} className="mono" style={{ ...chip(arming === d.id), opacity: can || armed ? 1 : 0.5 }}>
                   {`${d.icon} ${d.name.toUpperCase()} · ◎${d.price}${armed ? ' ✓' : ''}`}
                 </button>
               );
             })}
           </div>
-          {arming && <span className="mono" style={small}>{contestPlayById(arming)?.blurb}</span>}
+          {arming && <span className="mono" style={small}>{`${contestPlayById(arming)?.blurb ?? ''}${contestPlayById(arming)?.target === 'opp' ? ' — tap one of their spots below.' : ''}`}</span>}
           {plays.length > 0 && (
             <div className="mono" style={{ ...small, display: 'grid', gap: 3 }}>
               {plays.map((x) => (
                 <div key={`${x.id}-${x.slot ?? ''}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''} · ◎${x.price}`}</span>
+                  <span>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''} · ◎${x.price}`}</span>
                   <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false, true)}>TAKE BACK</button>
                 </div>
               ))}
@@ -490,7 +492,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
                   </span>
                   <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
                     {p
-                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} badge={playOn(d.slot) ? contestPlayById(playOn(d.slot)!.id)?.icon : undefined} onClick={canTap ? () => (arming ? armOn(d.slot) : openSheet(d.slot)) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
+                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} badge={playOn(d.slot) ? contestPlayById(playOn(d.slot)!.id)?.icon : undefined} onClick={canTap ? () => (arming && contestPlayById(arming)?.target !== 'opp' ? armOn(d.slot) : openSheet(d.slot)) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
                       : ghosted(d.slot)
                         ? <PlayerCard key="ghost" slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} flip idx={i} bank={lv ? lv.score : undefined} badge="👻" onClick={canTap && arming ? () => armOn(d.slot) : undefined} />
                         : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={arming ? `▶ ${contestPlayById(arming)?.name ?? ''} HERE` : editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => (arming ? armOn(d.slot) : openSheet(d.slot)) : undefined} />}
@@ -528,9 +530,10 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
             const lv = st.state?.slots?.find((x) => x.side !== mySide && x.slot === r.slot);
             const p = r.slug ? bySlug.get(r.slug) : null;
             return (
-              <div key={r.slot} className="mono" style={{ display: 'grid', gridTemplateColumns: '52px minmax(0,1fr) 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)' }}>
-                <span style={{ color: 'var(--faint)' }}>{labels[r.slot]}</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: r.slug ? 'var(--text)' : 'var(--faint)' }}>{r.slug ? (p?.name ?? r.slug) : '🔒 sealed until his game locks'}</span>
+              <div key={r.slot} className="mono" onClick={() => { if (arming && contestPlayById(arming)?.target === 'opp') armOn(r.slot); }}
+                style={{ display: 'grid', gridTemplateColumns: '52px minmax(0,1fr) 70px', gap: 8, fontSize: 12, padding: '4px 0', borderTop: '1px solid var(--bd)', cursor: arming && contestPlayById(arming)?.target === 'opp' ? 'pointer' : 'default', background: arming && contestPlayById(arming)?.target === 'opp' ? 'color-mix(in srgb, var(--you) 10%, transparent)' : 'transparent' }}>
+                <span style={{ color: 'var(--faint)' }}>{labels[r.slot]}{playAt(r.slot).map((x) => ` ${contestPlayById(x.id)?.icon ?? ''}`).join('')}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: r.slug ? 'var(--text)' : 'var(--faint)' }}>{r.slug ? (p?.name ?? r.slug) : playAt(r.slot).some((x) => x.id === 'spy') ? '👁️ nobody there yet' : '🔒 sealed until his game locks'}</span>
                 <span style={{ textAlign: 'right' }}>{lv ? lv.score.toFixed(1) : ''}</span>
               </div>
             );

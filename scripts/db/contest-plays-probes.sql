@@ -93,4 +93,56 @@ begin
   perform assert_err(contest_disarm_play(h, wk, 'underdog', 'S3'), 'cp6b …nor disarming');
   perform probe_as('b'); perform assert_true(not (contest_plays(h, wk, 1) ->> 'sealed')::boolean and jsonb_array_length(contest_plays(h, wk, 1) -> 'plays') = 2, 'cp6c the opponent''s plays unseal');
 end $$;
+-- ── PR 3 (0485): Spy, Jinx, Magnet, Re-deal ──────────────────────────────────
+do $$
+declare r jsonb; h uuid; g uuid; b2 uuid; code text; gcode text; bcode text; wk int := 46; sq jsonb; m1 uuid;
+begin
+  perform probe_as('a');
+  r := create_contest_league('CP3 H2H', 'high', 'h2h', 'season', 4, 50000); perform assert_ok(r, 'cq0'); h := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  r := create_contest_league('CP3 Board', 'high', 'board', 'season', 12, 50000); perform assert_ok(r, 'cq0b'); g := (r ->> 'league_id')::uuid; gcode := r ->> 'invite_code';
+  r := create_contest_league('CP3 Bull', 'bullseye', 'h2h', 'season', 4, 50000, 'slots', 10); perform assert_ok(r, 'cq0c'); b2 := (r ->> 'league_id')::uuid; bcode := r ->> 'invite_code';
+  perform probe_as('b'); perform assert_ok(join_contest(code, 'Bees'), 'cq0d'); perform assert_ok(join_contest(gcode, 'Bees B'), 'cq0e'); perform assert_ok(join_contest(bcode, 'Bees Bull'), 'cq0f');
+  perform probe_as('a');
+  insert into nfl_slate (season, week, home, away, win, kickoff) values ('2026', wk, 'PHI', 'DAL', '', now() + interval '2 days'), ('2026', wk, 'SF', 'KC', '', now() + interval '2 days'), ('2026', wk, 'NYJ', 'BUF', '', now() + interval '2 days') on conflict do nothing;
+  update nfl_slate set kickoff = now() + interval '2 days' where season = '2026' and week = wk;
+  insert into pod_salary (season, week, slug, name, pos, team, salary, proj)
+    select '2026', wk, replace(slug, 'cp-', 'cq-'), name, pos, team, salary, proj from pod_salary where season = '2026' and week = 45 and slug like 'cp-%' on conflict do nothing;
+  sq := '{"S1":"cq-qb1","S2":"cq-rb1","S3":"cq-rb3","S4":"cq-wr1","S5":"cq-wr2","S6":"cq-wr3","S7":"cq-te1","S8":"cq-k1","S9":"cq-d1"}';
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values (h, wk, 1, 2, 'scheduled') returning id into m1;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values (b2, wk, 1, 2, 'scheduled');
+  perform assert_ok(save_contest_entry(h, wk, sq), 'cq1 a saves'); perform assert_ok(save_contest_entry(g, wk, sq), 'cq1b'); perform assert_ok(save_contest_entry(b2, wk, sq), 'cq1c');
+  perform probe_as('b'); perform assert_ok(save_contest_entry(h, wk, sq), 'cq1d b saves'); perform assert_ok(save_contest_entry(b2, wk, sq), 'cq1e'); perform probe_as('a');
+  for r in select to_jsonb(x) from (select h as id union all select g union all select b2) x loop
+    perform assert_ok(set_contest_rules((r ->> 'id')::uuid, null, null, null, null, null, null, null, null, true), 'cq2 coin on');
+  end loop;
+  update team_wallet set coins = 300 where league_id in (h, g, b2);
+  -- where each play belongs
+  perform assert_err(contest_arm_play(g, wk, 'spy', 'S1'), 'cq3 Spy is a head-to-head play');
+  perform assert_err(contest_arm_play(g, wk, 'jinx', 'S1'), 'cq3b so is Jinx');
+  perform assert_err(contest_arm_play(h, wk, 'magnet', 'S2'), 'cq3c Magnet is a Bullseye play');
+  perform assert_err(contest_arm_play(h, wk, 're-deal'), 'cq3d so is Re-deal');
+  perform assert_err(contest_arm_play(h, wk, 'spy'), 'cq3e Spy wants a spot');
+  -- SPY: the opponent's pick there shows to me, and only to me, before kickoff
+  perform assert_true((contest_matchup(h, wk) -> 'matchup' -> 'away_entry' -> 0 ->> 'sealed')::boolean, 'cq4 their S1 is sealed');
+  r := contest_arm_play(h, wk, 'spy', 'S1'); perform assert_ok(r, 'cq4b Spy on their S1');
+  perform assert_true((contest_matchup(h, wk) -> 'matchup' -> 'away_entry' -> 0 ->> 'player_slug') = 'cq-qb1' and (contest_matchup(h, wk) -> 'matchup' -> 'away_entry' -> 1 ->> 'sealed')::boolean, 'cq4c the matchup shows me their S1, the rest stay sealed');
+  perform assert_true((contest_state(h, wk) -> 'opponent' -> 'entry' -> 0 ->> 'player_slug') = 'cq-qb1', 'cq4d the builder''s opponent view shows it too');
+  perform probe_as('b');
+  perform assert_true((contest_matchup(h, wk) -> 'matchup' -> 'home_entry' -> 0 ->> 'sealed')::boolean, 'cq4e …and b sees nothing of a''s');
+  perform probe_as('a');
+  -- JINX rides alongside: an opponent's spot can carry both, and neither takes one of my spots
+  perform assert_ok(contest_arm_play(h, wk, 'jinx', 'S1'), 'cq5 Jinx on their S1 as well');
+  perform assert_err(contest_arm_play(h, wk, 'underdog', 'S3'), 'cq5b …two plays a week, and they count');
+  perform assert_true((select count(*) from contest_play where league_id = h and week = wk and roster_id = 1) = 2, 'cq5c two rows');
+  -- MAGNET and RE-DEAL under the dart
+  perform assert_err(contest_arm_play(b2, wk, 'magnet'), 'cq6 Magnet wants a spot in a per-spot league');
+  perform assert_ok(contest_arm_play(b2, wk, 'magnet', 'S2'), 'cq6b Magnet on my RB1');
+  perform assert_ok(contest_arm_play(b2, wk, 're-deal'), 'cq6c Re-deal');
+  perform assert_true((select count(*) from contest_play where league_id = b2 and week = wk and roster_id = 1 and play_id = 're-deal') = 1, 'cq6d …one row');
+  perform assert_err(contest_arm_play(b2, wk, 're-deal'), 'cq6e …and not twice (the cap, and the row)');
+  perform assert_ok(set_league_bullseye(b2, 'total'), 'cq7 a one-team-total league') ;
+  perform assert_ok(contest_disarm_play(b2, wk, 'magnet', 'S2'), 'cq7b the per-spot magnet taken back');
+  r := contest_arm_play(b2, wk, 'magnet', 'S2'); perform assert_ok(r, 'cq7c Magnet under a one-team total takes the squad');
+  perform assert_true(r -> 'plays' -> 1 ->> 'slot' is null or (select count(*) from contest_play where league_id = b2 and roster_id = 1 and play_id = 'magnet' and slot is null) = 1, 'cq7d …no spot on its row');
+end $$;
 select 'ALL CONTEST-PLAYS PROBES PASSED';
