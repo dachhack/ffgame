@@ -12,7 +12,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { liveSlate, slateWeeks, weekGameFeeds, weekLivePlays, loadCollegeLogos, type GameFeedRow } from '@drip/core/data/liveApi';
 import { setRuntimeSlate, windowsForWeek, windowForTeam, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
-import { setLiveGameFeed, feedRowsToWeek, groupFieldGames } from '@drip/core/data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, groupFieldGames, type ScheduledGame } from '@drip/core/data/gameFeed';
 import { fieldsWeekFrom, type FieldsLevel } from '@drip/core/data/fieldsWeek';
 import { LIVE_SEASON, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { useTheme } from '../theme.native';
@@ -24,12 +24,16 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
   const t = useTheme();
   const [week, setWeek] = useState<number | null>(null);
   const [feeds, setFeeds] = useState<GameFeedRow[] | null>(null);
+  // THE WEEK'S FIXTURES (v0.696.2, founder: "There's a game tonight but it's not in the fields view"): a game has a
+  // feed only once the worker has ingested a play, so tonight's game was missing until its kickoff. The slate
+  // knows it days ahead; groupFieldGames seeds a kickoff-only card from it (v0.413.0 — the web did, this sheet didn't).
+  const [scheduled, setScheduled] = useState<ScheduledGame[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   // NFL or college (v0.560.0, founder: "We need a way to switch between CFB
   // and NFL games … in the all fields view"). Each is its own calendar, so a
   // switch forgets the week and asks the slate again.
   const [level, setLevel] = useState<FieldsLevel>('nfl');
-  const pickLevel = (l: FieldsLevel) => { if (l === level) return; levelRef.current = l; setLevel(l); setWeek(null); setFeeds(null); };
+  const pickLevel = (l: FieldsLevel) => { if (l === level) return; levelRef.current = l; setLevel(l); setWeek(null); setFeeds(null); setScheduled([]); };
   // A read started for the other level must not land after a switch.
   const levelRef = useRef(level);
 
@@ -44,6 +48,7 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
       const slate = await liveSlate(w, String(LIVE_SEASON)).catch(() => []);
       if (levelRef.current !== level) return;
       setRuntimeSlate(w, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
+      setScheduled(slate.map((g) => ({ away: g.away, home: g.home, kickoff: g.kickoff ?? null })));
       setWeek(w);
     }
     // Feeds AND plays (v0.390.7): the Game view's box score, carrier
@@ -66,7 +71,7 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
   const onPull = async () => { setRefreshing(true); try { await load(); } finally { setRefreshing(false); } };
   const wins = week != null ? windowsForWeek(week) : [];
   const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
-  const games = week != null && feeds ? groupFieldGames(week, []).map((g) => ({
+  const games = week != null && feeds ? groupFieldGames(week, [], scheduled).map((g) => ({
     key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home, label: winLabelFor(String(windowForTeam(week, g.feed.home))),
   })) : [];
 
