@@ -975,10 +975,14 @@ export const contestDisarmPlay = (leagueId: string, week: number, play: string, 
 export const contestPlays = (leagueId: string, week: number, rosterId?: number | null) =>
   rpcOk<{ ok: boolean; error?: string; roster_id?: number; week?: number; sealed?: boolean; plays?: ContestPlayRow[] }>('contest_plays', { p_league: leagueId, p_week: week, p_roster: rosterId ?? null });
 export interface ContestMyWeek extends BullseyeMyWeek { opp?: number | null; opp_team?: string | null; opp_ring?: number | null }
-export const createContestLeague = (o: { name: string; contest: ContestKind; format: ContestFormat; span: BullseyeSpan; max: number; /** 0 = no cap. */ budget: number; /** The floor (golf); 0 = none. */ minSpend?: number; variant?: DfsVariant; radius?: number; teamName?: string | null }, season = '2026') =>
+export const createContestLeague = (o: { name: string; contest: ContestKind; format: ContestFormat; span: BullseyeSpan; max: number; /** 0 = no cap. */ budget: number; /** The floor (golf); 0 = none. */ minSpend?: number; variant?: DfsVariant; radius?: number; teamName?: string | null;
+  /** WHICH WEEK a one-week league plays (0488): this week to 18; null = this week. */ week?: number | null; /** DRIP COIN from the start (0488). */ coin?: boolean }, season = '2026') =>
   rpcOk<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; roster_id?: number; team?: string; bullseye?: ContestInfo }>('create_contest_league', {
     p_name: o.name, p_contest: o.contest, p_format: o.format, p_span: o.span, p_max: o.max, p_budget: o.budget,
-    p_variant: o.variant ?? 'slots', p_radius: o.radius ?? 10, p_team_name: o.teamName ?? null, p_season: season, p_min_spend: o.minSpend ?? 0 });
+    p_variant: o.variant ?? 'slots', p_radius: o.radius ?? 10, p_team_name: o.teamName ?? null, p_season: season, p_min_spend: o.minSpend ?? 0,
+    p_week: o.week ?? null, p_coin: o.coin ?? false });
+/** THE WEEK IT IS (0488), for the form's week selector: null between seasons. */
+export const contestWeekNow = (season = '2026') => rpcOk<{ ok: boolean; week?: number | null; last?: number }>('contest_week_now', { p_season: season });
 export const joinContest = (code: string, teamName?: string | null) =>
   rpcOk<{ ok: boolean; error?: string; league_id?: string; league?: string; roster_id?: number; team?: string; already?: boolean }>('join_contest', { p_code: code.trim(), p_team_name: teamName?.trim() || null });
 export const contestLeague = (leagueId: string) => rpcOk<BullseyeLeague & { kind?: string; bullseye?: ContestInfo }>('contest_league', { p_league: leagueId });

@@ -895,7 +895,7 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
                     <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                       <Chip label="DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
                       <Chip label="CLASSIC" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
-                      <Chip label="WEEKLY DRAFT" on={game === 'weekly'} onPress={() => { tap(); setGame('weekly'); }} />
+                      <Chip label="WEEKLY DRAFT" on={game === 'weekly'} onPress={() => { tap(); if (sport !== 'nfl') pickSport('nfl'); setGame('weekly'); }} />
                     </View>
                     {game === null && (
                       <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>

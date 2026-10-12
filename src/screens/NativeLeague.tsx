@@ -697,7 +697,7 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <Chip on={game === 'drip'} onClick={() => setGame('drip')}>DRIP</Chip>
               <Chip on={game === 'classic'} onClick={() => setGame('classic')}>CLASSIC</Chip>
-              <Chip on={game === 'weekly'} onClick={() => setGame('weekly')}>WEEKLY DRAFT</Chip>
+              <Chip on={game === 'weekly'} onClick={() => { if (sport !== 'nfl') pickSport('nfl'); setGame('weekly'); }}>WEEKLY DRAFT</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
               {game === null

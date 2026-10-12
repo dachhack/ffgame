@@ -18,7 +18,7 @@
 //   COMMISH   the classic commissioner's console, trimmed, with a CONTEST card
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, type ContestWallet, createContestLeague, joinContest, contestState, playoffState, type PlayoffState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, type ContestWallet, createContestLeague, contestWeekNow, joinContest, contestState, playoffState, type PlayoffState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
@@ -56,11 +56,6 @@ const CONTEST_BLURB: Record<ContestKind, string> = {
   golf: 'Each week everyone builds a squad that spends at least the minimum. FEWEST points wins — but a scoreless spot banks a penalty, so no-shows are no bargain.',
   bullseye: 'Each week everyone builds a squad aimed at the week’s numbers. Closest wins.',
 };
-/** The budget as a form reads it: thousands, 10–500; 0 is NO CAP (0469). */
-const BUDGETS = [0, 10000, 20000, 30000, 40000, 50000, 60000, 75000, 100000, 150000, 200000, 500000];
-/** The minimum spend (0469): golf's constraint. 0 is none. */
-const MIN_SPENDS = [0, 10000, 20000, 30000, 40000, 45000, 50000, 60000, 75000, 100000];
-const moneyOpt = (v: number, none: string) => (v ? fmt$(v) : none);
 
 // ── start: make one, or join one ───────────────────────────────────────────
 export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { initialCode?: string; onOpen: (leagueId: string) => void; onBack?: () => void;
@@ -79,6 +74,12 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
     setContest(c);
     if (c === 'golf') { setBudget(0); setMinSpend(CONTEST_MIN_SPEND_DEFAULT); } else { setBudget((b) => (b || CONTEST_BUDGET_DEFAULT)); setMinSpend(0); }
   };
+  // THE SETUP (v0.691.0, founder): drip coin and power-ups from the start,
+  // and a one-week league names its week — this week marked, through 18.
+  const [coin, setCoin] = useState(true);
+  const [nowWeek, setNowWeek] = useState<number | null>(null);
+  const [weekPick, setWeekPick] = useState<number | null>(null);
+  useEffect(() => { contestWeekNow().then((r) => { if (r.ok && r.week != null) { setNowWeek(r.week); setWeekPick((w) => w ?? r.week!); } }).catch(() => {}); }, []);
   const [max, setMax] = useState(12);
   const [cap, setCap] = useState(32);
   const [team, setTeam] = useState('');
@@ -97,7 +98,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
   const create = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await createContestLeague({ name, contest, format, span, max: sizeOk(max), budget, minSpend, variant, teamName: team || null });
+      const r = await createContestLeague({ name, contest, format, span, max: sizeOk(max), budget, minSpend, variant, teamName: team || null, week: span === 'week' ? weekPick : null, coin });
       if (!r.ok || !r.league_id) { setErr(r.error ?? 'Couldn’t make it.'); return; }
       if (list) await postLeagueListing(r.league_id, blurb.trim() || null, null).catch(() => {});
       onOpen(r.league_id);
@@ -131,8 +132,18 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <span className="mono" style={small}>RUNS</span>
         <button onClick={() => setSpan('season')} className="mono" style={chip(span === 'season')}>ALL SEASON</button>
-        <button onClick={() => setSpan('week')} className="mono" style={chip(span === 'week')}>THIS WEEK ONLY</button>
+        <button onClick={() => setSpan('week')} className="mono" style={chip(span === 'week')}>ONE WEEK ONLY</button>
       </div>
+      {span === 'week' && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="mono" style={small}>WHICH WEEK</span>
+          {nowWeek == null
+            ? <span className="mono" style={small}>no NFL week on the slate right now</span>
+            : Array.from({ length: 18 - nowWeek + 1 }, (_, i) => nowWeek + i).map((w) => (
+              <button key={w} onClick={() => setWeekPick(w)} className="mono" style={chip(weekPick === w)}>{`WK ${w}${w === nowWeek ? ' · NOW' : ''}`}</button>
+            ))}
+        </div>
+      )}
       {contest === 'bullseye' && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <span className="mono" style={small}>CARD</span>
@@ -140,6 +151,21 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
           <button onClick={() => setVariant('total')} className="mono" style={chip(variant === 'total')}>ONE TEAM TOTAL</button>
         </div>
       )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className="mono" style={small}>BUDGET PER SQUAD $</span>
+        <input type="number" min={0} max={500000} step={1000} value={budget} onChange={(e) => setBudget(Math.max(0, Math.min(500000, Math.round(Number(e.target.value) || 0))))} className="mono" style={{ ...input, width: 120 }} />
+        <span className="mono" style={small}>{budget ? `${fmt$(budget)} · the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST); the roster is on COMMISH` : 'no cap'}</span>
+      </div>
+      {contest === 'golf' && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="mono" style={small}>MIN SPEND $</span>
+          <input type="number" min={0} max={500000} step={1000} value={minSpend} onChange={(e) => setMinSpend(Math.max(0, Math.min(500000, Math.round(Number(e.target.value) || 0))))} className="mono" style={{ ...input, width: 120 }} />
+          <span className="mono" style={small}>golf’s real constraint: you must roster expensive players and bet on which stars have a quiet week</span>
+        </div>
+      )}
+      <label className="mono" style={{ ...small, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+        <input type="checkbox" checked={coin} onChange={(e) => setCoin(e.target.checked)} /> DRIP COIN & POWER-UPS — every seat starts with ◎100, the week pays for showing up, reading the board and losing, and the shop sells plays before kickoff
+      </label>
     </>
   );
   const teamsRow = (
@@ -160,7 +186,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
         {essentials}
         {teamsRow}
         {listRow}
-        <span className="mono" style={small}>{`◎ ${moneyOpt(budget, 'NO CAP')} per squad, the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST) — the budget, the roster, the scoring and the rest are on COMMISH once it exists. You take seat 1 as commissioner.`}</span>
+        <span className="mono" style={small}>NFL only — each week everyone builds a squad from the week’s salary board. The roster, the scoring, prizes and who may enter are on COMMISH once it exists. You take seat 1 as commissioner.</span>
         <button onClick={() => void create()} disabled={busy || !name.trim()} className="mono"
           style={{ ...chip(true), justifySelf: 'start', opacity: busy || !name.trim() ? 0.6 : 1 }}>{busy ? 'MAKING IT…' : name.trim() ? 'CREATE WEEKLY DRAFT LEAGUE →' : 'NAME IT TO CREATE'}</button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
@@ -171,7 +197,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} className="mono" style={chip(false)}>← BACK</button>
-        <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>{`${CONTEST_EMOJI[contest]} WEEKLY SQUAD LEAGUE`}</span>
+        <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>{`${CONTEST_EMOJI[contest]} NFL · WEEKLY SQUAD LEAGUE`}</span>
       </div>
       <div style={{ fontSize: 13, color: 'var(--dim)', lineHeight: 1.5 }}>
         {CONTEST_BLURB[contest]} You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board.
@@ -181,22 +207,6 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
       <div style={{ ...card, display: 'grid', gap: 10 }}>
         <div className="mono" style={label}>START ONE</div>
         {essentials}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="mono" style={small}>BUDGET</span>
-          <select value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="mono" style={{ ...input, width: 130 }}>
-            {BUDGETS.map((b) => <option key={b} value={b}>{moneyOpt(b, 'NO CAP')}</option>)}
-          </select>
-          <span className="mono" style={small}>per squad · the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST) — change the roster in COMMISH</span>
-        </div>
-        {contest === 'golf' && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="mono" style={small}>MIN SPEND</span>
-            <select value={minSpend} onChange={(e) => setMinSpend(Number(e.target.value))} className="mono" style={{ ...input, width: 130 }}>
-              {MIN_SPENDS.map((v) => <option key={v} value={v}>{moneyOpt(v, 'NONE')}</option>)}
-            </select>
-            <span className="mono" style={small}>golf’s real constraint: you must roster expensive players and bet on which stars have a quiet week</span>
-          </div>
-        )}
         {teamsRow}
         <input value={team} onChange={(e) => setTeam(e.target.value)} maxLength={30} placeholder="Your team name (optional)" style={input} />
         {listRow}
