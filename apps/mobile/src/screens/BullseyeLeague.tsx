@@ -252,23 +252,25 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
     return (
       <View style={{ flex: 1, backgroundColor: t.bg }}>
         <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-        {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} onBack={() => onRoom('league')}
+        {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} onBack={() => onRoom('league')} onMatchup={() => onRoom('matchup')}
           after={<TeamRoom lg={lg} onOpenWeek={(w) => { setWeek(w); onRoom('matchup'); }} onRenamed={() => void load()} />} />}
       </View>
+    );
+  }
+  if (room === 'matchup' && lg.me && week != null) {
+    // THE CARD TABLE (v0.677.0): the week's matchup as two columns of cards,
+    // remounted on every visit so the reveal flips play again. It owns its
+    // scroll since v0.695.0, so the hand at its foot pins over the room bar.
+    return (
+      <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week}
+        header={<><Mono size={9} tone="dim">{contestLeagueLine(lg.bullseye)}</Mono><WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} /></>} />
     );
   }
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 90 }} keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); }} />}>
       <Mono size={9} tone="dim">{contestLeagueLine(lg.bullseye)}</Mono>
-      {room === 'matchup' && lg.me && week != null ? (
-        // THE CARD TABLE (v0.677.0): the week's matchup as two columns of
-        // cards, remounted on every visit so the reveal flips play again.
-        <>
-          <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-          <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week} />
-        </>
-      ) : room === 'settings' ? (
+      {room === 'settings' ? (
         <>
           <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />
           {/* THE SHEET (v0.679.0): the classic hub's tiles, for a squad league */}

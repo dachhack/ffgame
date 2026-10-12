@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.695.0 — The hand on the matchup, and no spot left empty
+
+> - The hand of plays now sits at the foot of MATCHUP, web and phone, and plays are applied there: a squad play goes on at once; a spot play lights up only the spots it can land on right now — a player who hasn’t kicked off, or an empty spot before the first kickoff — and the rest dim. TAKE BACK lives there too. The shop stays on MY TEAM, with a ▶ PLAY ON MATCHUP shortcut.
+> - A CPU squad fills its head-coach spot. The board carries a coach at a projection of 0, so the Bullseye and golf auto-builds, which aim with a projected number, never picked one; the worker now prices the CPU’s pool the league’s way (a coach by his game, as FILL FOR ME does), and a spot nobody is priced for is still filled by the cheapest body who fits.
+> - An empty spot under the dart shows its −10: it is a row of its own at 0.0 with the penalty on it, on the matchup table’s empty card. The squad’s score is unchanged — the penalty was already charged, invisibly.
+
+Founder: "Only Josh Allen and DJ Moore should be able to be targeted by
+double or nothing. Let's put the card hand and power up application on the
+matchup. Power up store stays in my team", and, on a Bullseye matchup with
+both HC spots empty, "CPUs failed to set HC. Those spots should take the -10
+as well." Engine: `contestSpotPlay`, `contestSpotOpen` (the twin of SQL
+`_contest_play_window`) and `contestHandCard` in `contestPlays.ts`, read by
+both matchup screens; `contestAutoBuild` falls back to the whole pool when
+nobody in a spot's pool has a projection; `scoreContest` writes the empty
+Bullseye spot's zero row. Worker: `pods.js` prices the CPU pool with
+`leagueWeekProj` and the slate (`ensureSalaryBoard` returns `slate`). Web
+and phone `ContestMatchup` gain the hand, the lit spots, the played list and
+TAKE BACK; `ContestSquad` keeps the shop. Tests: `contest-hand.mjs`,
+`contest-empty.mjs`. No migration; no iPhone build (JavaScript only).
+
 ### v0.694.1 — Hail Mary, Pick Six and Jinx score live
 
 > - Hail Mary, Pick Six and Jinx now score on the worker. Since they shipped the worker handed the scorer a count of a player's plays instead of the plays themselves, so a 40-yard touchdown pass, a defensive score or a jinxed touchdown never registered live. Found while reading the scorer for new plays; no member reported it.

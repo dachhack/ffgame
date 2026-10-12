@@ -142,10 +142,12 @@ export function FlipCard({ flipped, idx = 0, back, face }: { flipped: boolean; i
 }
 
 /** An empty spot on the table. */
-export function EmptyCard({ label }: { label: string }) {
+export function EmptyCard({ label, chip }: { label: string;
+  /** THE PENALTY (v0.695.0): the dart's no-show charge on an empty spot, red, top-right. */ chip?: string }) {
   const t = useTheme();
   return (
-    <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: alpha(t.text, 30), alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: chip ? alpha(t.warn, 60) : alpha(t.text, 30), alignItems: 'center', justifyContent: 'center' }}>
+      {!!chip && <Text style={{ position: 'absolute', top: 6, right: 6, fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: t.warn }}>{chip}</Text>}
       <Text style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 60), letterSpacing: 1 }}>{`${label.toUpperCase()} · EMPTY`}</Text>
       <Text style={{ color: t.faint, fontSize: 1 }}> </Text>
     </View>
