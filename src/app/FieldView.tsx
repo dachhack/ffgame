@@ -644,6 +644,26 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
           {feed.kickoff ? `KICKS OFF ${kickoffLabel(Date.parse(feed.kickoff))}` : 'NOT STARTED'} · NO PLAYS YET
         </div>
       )}
+      {/* THE PROJECTED LEADERS (v0.696.4, founder: "Show the field with the start time and projected point
+          leaders"): each side's three highest-projected men, under the clean field, until the first snap. */}
+      {plays.length === 0 && (() => {
+        const pb = projectedBox(home, away, week);
+        const top = (rows: typeof pb.home) => rows.filter((r) => r.proj != null).sort((a, b) => (b.proj ?? 0) - (a.proj ?? 0)).slice(0, 3);
+        const col = (tm: string, rows: typeof pb.home) => (
+          <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
+            <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--faint)' }}>{`${tm} · PROJECTED`}</span>
+            {top(rows).length === 0 && <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>— no projections —</span>}
+            {top(rows).map((r) => (
+              <div key={r.slug} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0,1fr) auto', gap: 5, alignItems: 'baseline' }}>
+                <span className="mono" style={{ fontSize: 8, fontWeight: 700, color: 'var(--faint)' }}>{r.pos}</span>
+                <span style={{ fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boxName(r.slug)}</span>
+                <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--dim)' }}>{(r.proj ?? 0).toFixed(1)}</span>
+              </div>
+            ))}
+          </div>
+        );
+        return <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>{col(away, pb.away)}{col(home, pb.home)}</div>;
+      })()}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 5 }}>
         <button onClick={() => setBoxOpen(true)} className="mono"
           title={`Every player with stats in ${away} @ ${home}`}

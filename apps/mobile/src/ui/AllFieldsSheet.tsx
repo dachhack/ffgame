@@ -72,7 +72,7 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
   const wins = week != null ? windowsForWeek(week) : [];
   const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
   const games = week != null && feeds ? groupFieldGames(week, [], scheduled).map((g) => ({
-    key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home, label: winLabelFor(String(windowForTeam(week, g.feed.home))),
+    key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home, label: winLabelFor(String(windowForTeam(week, g.feed.home))), kickoff: g.feed.kickoff ?? null,
   })) : [];
 
   return (
