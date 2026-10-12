@@ -139,4 +139,57 @@ begin
   perform assert_true((select settings_json ->> 'coin' from league where id = l) is null, 'ws10 coin off unless asked');
 end $$;
 
+-- ── THE COIN RULES (0489): the suite, a league's overrides, the allowance, the ceiling off, a purse by hand ──
+do $$
+declare r jsonb; h uuid; wk int := 46; m1 uuid; m2 uuid; b1 numeric; b2 numeric; n int;   -- 44 and 45 are dc's
+begin
+  perform probe_as('a');
+  select id into h from league where name = 'DC H2H' order by created_at desc limit 1;
+  -- the standard suite reads the same on both sides
+  r := contest_coin_rules(h); perform assert_ok(r, 'cr0 a member reads the rules');
+  perform assert_true(r -> 'rules' = r -> 'defaults', 'cr1 untouched = the standard suite');
+  perform assert_true((r -> 'defaults' ->> 'built')::int = 40 and (r -> 'defaults' ->> 'cap')::int = 150 and (r -> 'defaults' ->> 'allowance')::int = 0, 'cr2 the standard numbers');
+  -- the gate and the shape
+  perform probe_as('b'); perform assert_err(set_contest_coin_rules(h, '{"built": 50}'), 'cr3 a member cannot set them'); perform probe_as('a');
+  perform assert_err(set_contest_coin_rules(h, '{"winning": 50}'), 'cr4 not an event');
+  perform assert_err(set_contest_coin_rules(h, '{"built": -5}'), 'cr5 not a negative');
+  r := set_contest_coin_rules(h, '{"built": 50, "bargain": 0, "allowance": 10, "cap": 0, "streak": 7, "streak_cap": 100}');
+  perform assert_ok(r, 'cr6 the commissioner sets them');
+  perform assert_true((r -> 'rules' ->> 'built')::int = 50 and (r -> 'rules' ->> 'bargain')::int = 0 and (r -> 'rules' ->> 'loss')::int = 15, 'cr7 overrides over the suite');
+  perform assert_true(exists (select 1 from league_message where league_id = h and kind = 'txn' and txn ->> 'kind' = 'coin_rules' and body like '%built ◎50%' and body like '%bargain off%'), 'cr8 the league hears what differs');
+  -- a fresh week under the new rules: a and b build (a has built 44 and 45 too; b only 44); a beats b by 10
+  insert into nfl_slate (season, week, home, away, win, kickoff) values ('2026', wk, 'PHI', 'DAL', '', now() - interval '3 days') on conflict do nothing;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status, home_final, away_final) values (h, wk, 1, 2, 'final', 100, 90) returning id into m1;
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status, home_final, away_final) values (h, wk, 3, 4, 'final', 80, 0) returning id into m2;
+  insert into contest_build (league_id, week, roster_id, by_user, at) values (h, wk, 1, probe_uid('a'), now() - interval '4 days'), (h, wk, 2, probe_uid('b'), now() - interval '4 days') on conflict do nothing;
+  b1 := dc_bal(h, 1); b2 := dc_bal(h, 2);
+  r := contest_settle_coin(h, wk); perform assert_ok(r, 'cr9 the week settles');
+  perform assert_true((select delta from coin_ledger where league_id = h and roster_id = 1 and week = wk and reason = 'built') = 50, 'cr10 built pays the league''s 50');
+  perform assert_true((select delta from coin_ledger where league_id = h and roster_id = 1 and week = wk and reason = 'streak') = 14, 'cr11 the streak pays 7 a week (a: two weeks in a row)');
+  perform assert_true(not exists (select 1 from coin_ledger where league_id = h and roster_id = 2 and week = wk and reason = 'streak'), 'cr11b b missed 45, no streak');
+  perform assert_true((select delta from coin_ledger where league_id = h and roster_id = 1 and week = wk and reason = 'allowance') = 10, 'cr12 the allowance pays everyone…');
+  perform assert_true((select delta from coin_ledger where league_id = h and roster_id = 3 and week = wk and reason = 'allowance') = 10, 'cr13 …the seat that never built too');
+  perform assert_true((select delta from coin_ledger where league_id = h and roster_id = 2 and week = wk and reason = 'loss') = 15, 'cr14 a loss by 10 pays the standard 15');
+  perform assert_true(not exists (select 1 from coin_ledger where league_id = h and week = wk and reason = 'cap'), 'cr15 no ceiling, no burn');
+  perform assert_true(dc_bal(h, 1) = b1 + (select sum(delta) from coin_ledger where league_id = h and roster_id = 1 and week = wk)
+    and (select sum(delta) from coin_ledger where league_id = h and roster_id = 1 and week = wk) >= 74, 'cr16 a''s purse is the week''s lines (catch-up may ride along): ' || dc_bal(h, 1) || ' from ' || b1);
+  -- the purse by hand
+  perform probe_as('b'); perform assert_err(commish_adjust_contest_wallet(h, 2, 25, 'nice try'), 'cr17 a member cannot edit a purse'); perform probe_as('a');
+  perform assert_err(commish_adjust_contest_wallet(h, 2, 0, null), 'cr18 zero is nothing');
+  b2 := dc_bal(h, 2);
+  r := commish_adjust_contest_wallet(h, 2, 25, 'for the heartbreak'); perform assert_ok(r, 'cr19 the commissioner gives 25');
+  perform assert_true((r ->> 'coins')::numeric = b2 + 25 and dc_bal(h, 2) = b2 + 25, 'cr20 …and the purse shows it');
+  perform assert_true(exists (select 1 from league_message where league_id = h and txn ->> 'kind' = 'coin' and body like '%gave%◎25%for the heartbreak%'), 'cr21 the league hears it');
+  r := commish_adjust_contest_wallet(h, 2, -5, null); perform assert_ok(r, 'cr22 …and takes 5'); perform assert_true(dc_bal(h, 2) = b2 + 20, 'cr23 net 20');
+  r := contest_wallets(h); perform assert_ok(r, 'cr24 every purse');
+  select count(*) into n from jsonb_array_elements(r -> 'rows'); perform assert_true(n >= 3, 'cr25 …one row a seat');
+  -- back to standard, and the seed follows the rules
+  perform assert_ok(set_contest_coin_rules(h, '{}'), 'cr26 standard again');
+  perform assert_true(contest_coin_rules(h) -> 'rules' = _contest_coin_defaults(), 'cr27 …fully');
+  r := create_contest_league('CR Seedless', 'high', 'board', 'season', 12, 50000, 'slots', 10, null, '2026', 0, null, true); perform assert_ok(r, 'cr28');
+  perform assert_ok(set_contest_coin_rules((r ->> 'league_id')::uuid, '{"seed": 0}'), 'cr29 seed off');
+  perform probe_as('c'); perform assert_ok(join_contest(r ->> 'invite_code', 'Seedless C'), 'cr30 c joins'); perform assert_true(dc_bal((r ->> 'league_id')::uuid, 2) = 0, 'cr31 …and is seeded nothing');
+  perform probe_as('a');
+end $$;
+
 select 'ALL CONTEST-COIN PROBES PASSED';

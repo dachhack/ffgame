@@ -981,6 +981,20 @@ export const createContestLeague = (o: { name: string; contest: ContestKind; for
     p_name: o.name, p_contest: o.contest, p_format: o.format, p_span: o.span, p_max: o.max, p_budget: o.budget,
     p_variant: o.variant ?? 'slots', p_radius: o.radius ?? 10, p_team_name: o.teamName ?? null, p_season: season, p_min_spend: o.minSpend ?? 0,
     p_week: o.week ?? null, p_coin: o.coin ?? false });
+/** THE COIN RULES (0489): the standard suite under a league's overrides; a member may read. */
+export type ContestCoinRules = Record<string, number>;
+export const contestCoinRules = (leagueId: string) =>
+  rpcOk<{ ok: boolean; error?: string; coin?: boolean; rules?: ContestCoinRules; defaults?: ContestCoinRules }>('contest_coin_rules', { p_league: leagueId });
+/** The commissioner's hand on the rules (0489): the overrides whole (event → coin; 0 turns one off). */
+export const setContestCoinRules = (leagueId: string, rules: ContestCoinRules) =>
+  rpcOk<{ ok: boolean; error?: string; coin?: boolean; rules?: ContestCoinRules; defaults?: ContestCoinRules }>('set_contest_coin_rules', { p_league: leagueId, p_rules: rules });
+/** Every purse (0489), the commissioner's read. */
+export interface ContestWalletRow { roster_id: number; team: string; coins: number; human: boolean }
+export const contestWallets = (leagueId: string) =>
+  rpcOk<{ ok: boolean; error?: string; coin?: boolean; rows?: ContestWalletRow[] }>('contest_wallets', { p_league: leagueId });
+/** The commissioner's hand on one purse (0489): a signed amount and a note; the league hears it. */
+export const commishAdjustContestWallet = (leagueId: string, rosterId: number, delta: number, note?: string | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; coins?: number }>('commish_adjust_contest_wallet', { p_league: leagueId, p_roster: rosterId, p_delta: delta, p_note: note ?? null });
 /** THE WEEK IT IS (0488), for the form's week selector: null between seasons. */
 export const contestWeekNow = (season = '2026') => rpcOk<{ ok: boolean; week?: number | null; last?: number }>('contest_week_now', { p_season: season });
 export const joinContest = (code: string, teamName?: string | null) =>
