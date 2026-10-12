@@ -22,6 +22,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.685.2 — The penalty on the spot; the matchups in a row
+
+> - On the contest table, a spot that posted nothing now wears its no-show penalty as a red −10 chip on the card, where the tie-breaker number sits on other cards; tap it on the phone for what it means.
+> - The matchup chips are one scrollable row with no label, and the LIVE box above the table is gone: the scoreboard says it.
+
+Founder: "put the penalty as a chip on the spot that is at 0. We don't
+need the 'Matchups' text. Let's make all the matchups a scrollable row.
+The 'Live' box isn't needed either." Web `PlayerCard` and phone `CardFace`
+gain `chipTone: 'warn'`; both `ContestMatchup` screens read the slot
+row's `aim.penalty` on a zero score and put `−N` on the card (the
+tie-breaker chip yields to it), drop the status card and its `status`
+line, and the web's matchup row scrolls sideways without the SQUADS /
+MATCHUPS word (the phone's already did). Plain JS: no iPhone build.
+
+### v0.685.1 — A zero so far is not a zero
+
+> - On a Bullseye table, a player whose game is still on and who hasn't scored yet was being charged the 10-point no-show penalty live, so a squad could read 60 off when its points were 30 off. He now counts as a spot still to play until he posts or his game ends; the penalty waits for a real zero. Golf's zero-fill waits the same way.
+
+Founder: "How is my opponent 60.3 off?" — 74.7 points against 105 is 30.3
+off, and three live players at 0.0 each carried the dart's penalty.
+`scoreContest` gains `opts.live(slug)` (kicked off, not done) and leaves a
+live zero out as it does a pending player; the worker's contest branch
+builds it from the tick's kickoffs and `doneTeams`. Three cases in
+`server/test/contest-plays.mjs`. Worker only: no iPhone build.
+
 ### v0.685.0 — The plays: spend the wallet before kickoff
 
 > - A contest league with drip coin on can now spend it. Before the week's first kickoff, a seat arms one play (two in a head-to-head league) from the PLAYS card in the squad builder: Underdog (◎35, a bottom-third-priced player scores ×1.5), Double or Nothing (◎80, a staked spot scores double past his projection or zero short of it), Ghost Player (◎75, a phantom fills a spot at no salary for a flat 14), Hail Mary (◎35, a 40-yard touchdown pass banks +15) and Pick Six (◎45, a defensive return touchdown banks +25). Take one back before kickoff and the coin comes home.

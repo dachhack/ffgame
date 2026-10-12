@@ -103,7 +103,10 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
     // THE PLAYS (v0.685.0): the play on this spot (another's once the week has kicked off), the phantom as a card
     const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot) ?? null;
-    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} badge={pl ? contestPlayById(pl.id)?.icon : undefined} chip={tbc ? String(tbc.target) : null} onChip={() => setTbNote(TB_NOTE)} />;
+    // THE PENALTY CHIP (v0.685.2): a spot that posted nothing wears the dart's penalty, red
+    const lvr = m.state?.slots?.find((x) => x.side === s && x.slot === r.slot);
+    const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
+    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} badge={pl ? contestPlayById(pl.id)?.icon : undefined} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(TB_NOTE); }} />;
     if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={false} />;
     return (
@@ -190,26 +193,19 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       </div>
     );
   };
-  const status = m.status === 'final' ? 'FINAL' : st.started ? 'LIVE' : 'SQUADS LOCK AT EACH KICKOFF';
   const others = (st.matchups ?? []).filter((x) => x.id !== m.id);
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <CardTableCss />
       {(st.matchups?.length ?? 0) > 1 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="mono" style={small}>{st.format === 'board' ? 'SQUADS' : 'MATCHUPS'}</span>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', alignItems: 'center', paddingBottom: 4 }}>
           {(st.matchups ?? []).map((x) => (
-            <button key={x.id} onClick={() => setPick(x.id === (st.matchups ?? []).find((y) => y.mine)?.id ? null : x.id)} className="mono" style={chip(x.id === m.id)}>
+            <button key={x.id} onClick={() => setPick(x.id === (st.matchups ?? []).find((y) => y.mine)?.id ? null : x.id)} className="mono" style={{ ...chip(x.id === m.id), flexShrink: 0, whiteSpace: 'nowrap' }}>
               {x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}{x.mine ? ' · YOU' : ''}
             </button>
           ))}
         </div>
       )}
-      <div style={{ ...card, display: 'flex', gap: 16, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>{m.label ? `${m.label.toUpperCase()} · ${status}` : status}</span>
-        {!solo && <span className="mono" style={small}>{`${L.team} v ${R.team}`}</span>}
-        {!solo && !st.started && <span className="mono" style={{ ...small, marginLeft: 'auto' }}>{`${R.mine ? 'Your' : 'Their'} cards turn face up as each player's game kicks off.`}</span>}
-      </div>
       {tbNote && (
         <div style={{ ...card, display: 'flex', gap: 10, alignItems: 'baseline' }}>
           <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', flex: 1 }}>{tbNote}</span>
