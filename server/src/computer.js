@@ -134,8 +134,9 @@ export const SNARK = [
 ];
 export const snarkFor = (id) => SNARK[Math.abs(Number(id) || 0) % SNARK.length];
 
-/** Post a comment on an issue, as the worker. */
-async function comment(n, body) {
+/** Post a comment on an issue, as the worker. (Exported for the ops errands
+ *  that report onto an ask — v0.688.1 wire-audit.) */
+export async function comment(n, body) {
   const res = await fetch(`https://api.github.com/repos/${REPO}/issues/${n}/comments`, {
     method: 'POST',
     headers: {

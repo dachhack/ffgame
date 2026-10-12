@@ -1,0 +1,7 @@
+{
+  "mode": "wire-audit",
+  "league": "5ae08e35-c852-42a6-b944-69779cb012d0",
+  "player": "bagent",
+  "issue": 1237,
+  "why": "#1237, from Kickoff League chat: 'how did Bagent get picked up. He should be on waivers until Weds AM.' Read-only: the league's wire settings as stored, what the wire SQL answers now, Bagent's hold, his claims and the chat trail, posted onto the issue so the cause is confirmed against the rows before anything is fixed."
+}
