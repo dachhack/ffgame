@@ -44,6 +44,12 @@ build (`apps/mobile/ios-build-runtime.txt`).
 - When an iPhone build is requested (`apps/mobile/ios-build-request.txt`),
   record its runtime in `ios-build-runtime.txt` in the same change.
 - Plain JavaScript and SQL changes never need one; don't mention it then.
+- The pixels of an asset `app.json` names (`icon.png`, `adaptive-icon.png`,
+  `splash-icon.png`, `notification-icon.png`) are native too, and the
+  fingerprint does not see them: a redrawn launcher icon or splash needs an
+  iPhone build even when the check says no, and the notification icon is
+  Android-only (the APK gate rebuilds for it since v0.696.1; before that it
+  needed a line in `apps/mobile/apk-request.txt`).
 
 
 ## Info chips, not paragraphs (the standard since v0.350; restated v0.693.0)

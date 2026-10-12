@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.1 — The alert icon reaches phones
+
+> - The italic DF alert icon (v0.692.1) never reached a phone: it is baked into the Android build, an over-the-air update can’t carry it, and the APK gate judged the native app unchanged because the fingerprint hashes the config that names the icon, not its pixels. This merge builds a new APK, and from now on a change to any native asset builds one.
+> - The app says when a newer Android build is out even while its code is current: the banner reads A NEW ANDROID BUILD IS OUT, and What’s New offers the download.
+
+Founder: "My alert icon is still the same." The published APK was built
+2026-10-09 (v0.655.3, fingerprint 3d455539…); every merge since computed
+the same fingerprint, so `release-apk.yml` skipped the build. Now the gate
+also builds when a push changes an asset `app.json` names;
+`apps/mobile/apk-request.txt` gains today's request so this merge builds;
+`WhatsNew` compares the manifest's `versionCode` with the phone's
+`Constants.nativeBuildVersion` (`newBuild`), and CLAUDE.md notes that icon
+pixels are native. No iPhone
+build: the notification icon is Android-only and the rest is JavaScript.
+
 ### v0.696.0 — The second deal: fourteen one-effect plays
 
 > - Fourteen new plays in the shop, each one effect, said in a line. Squad bonuses from your players’ real plays: Trick Play (a WR/TE carry of 10+, +10), Return Man (100 return yards, +12), Bomb Squad (a 60-yard touchdown pass, +25), Hat Trick (one player, three touchdowns, +20), Century Club (a 100-yard rusher or receiver, +10), Two for One (+6 a two-point conversion), Iron Grip (no fumbles all week, +10), Goal Line Stand (a safety or a blocked kick, +15), Long Boot (+8 a 50-yard field goal).
