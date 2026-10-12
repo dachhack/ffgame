@@ -17,15 +17,21 @@ import { openLink } from './openLink';
 import { APP_VERSION } from '@drip/core/version';
 import { APK_MANIFEST_URL, APK_ZIP_URL, IOS_TESTFLIGHT_URL, CHANGELOG_PAGE_URL, CHANGELOG_URL, entriesBehind, versionsBehind, type ApkManifest, type Changelog, type ChangelogEntry } from '@drip/core/data/changelog';
 import { useTheme, MONO } from '../theme.native';
+import Constants from 'expo-constants';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 
 const MINE = APP_VERSION.replace(/^v/, '');
 
-export interface UpdateState { latest: string | null; behind: number; entries: ChangelogEntry[]; checked: boolean }
+/** A NEWER BUILD (v0.696.1, founder: "My alert icon is still the same"): the published APK's build number is
+ *  past this phone's. A native change an over-the-air update cannot carry — the notification icon, a launcher
+ *  icon — reaches a phone only through a new APK, and the version number alone never says so: the JavaScript
+ *  moves forward over the air, so this build looks current while its native half is the old one. */
+export interface UpdateState { latest: string | null; behind: number; entries: ChangelogEntry[]; checked: boolean; newBuild: boolean }
+const MY_BUILD = Platform.OS === 'android' ? Number(Constants.nativeBuildVersion ?? 0) || 0 : 0;
 
 export function useUpdateCheck(): UpdateState & { refresh: () => void } {
-  const [st, setSt] = useState<UpdateState>({ latest: null, behind: 0, entries: [], checked: false });
+  const [st, setSt] = useState<UpdateState>({ latest: null, behind: 0, entries: [], checked: false, newBuild: false });
   const busy = useRef(false);
   const refresh = useCallback(() => {
     if (busy.current) return;
@@ -45,6 +51,7 @@ export function useUpdateCheck(): UpdateState & { refresh: () => void } {
           behind: latest ? versionsBehind(entries, MINE, latest, { appOnly: true }) : 0,
           entries: latest ? entriesBehind(entries, MINE, latest) : [],
           checked: true,
+          newBuild: Platform.OS === 'android' && MY_BUILD > 0 && Number(manifest?.versionCode ?? 0) > MY_BUILD,
         });
       } catch { setSt((s) => ({ ...s, checked: true })); }
       finally { busy.current = false; }
@@ -61,7 +68,7 @@ export function useUpdateCheck(): UpdateState & { refresh: () => void } {
 /** The strip under the header. Renders nothing while current or unchecked. */
 export function WhatsNewBanner({ st, onOpen }: { st: UpdateState; onOpen: () => void }) {
   const t = useTheme();
-  if (!st.latest || st.behind <= 0) return null;
+  if (!st.latest || (st.behind <= 0 && !st.newBuild)) return null;
   return (
     // ABOVE THE FOLDING TOP (v0.556.1, founder: "I am having trouble clicking
     // the you are x versions behind banner"). App.tsx's folding header sits at
@@ -74,7 +81,7 @@ export function WhatsNewBanner({ st, onOpen }: { st: UpdateState; onOpen: () => 
       style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: t.you, zIndex: 10, elevation: 10 }}>
       <Text style={{ fontSize: 12 }}>⬆</Text>
       <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10, fontWeight: '700', letterSpacing: 0.6, color: t.onAccent }}>
-        YOU ARE {st.behind} {st.behind === 1 ? 'VERSION' : 'VERSIONS'} BEHIND · v{st.latest} IS OUT
+        {st.behind > 0 ? `YOU ARE ${st.behind} ${st.behind === 1 ? 'VERSION' : 'VERSIONS'} BEHIND · v${st.latest} IS OUT` : 'A NEW ANDROID BUILD IS OUT · INSTALL IT'}
       </Text>
       <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.onAccent, opacity: 0.85 }}>WHAT'S NEW →</Text>
     </Pressable>
@@ -86,7 +93,7 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
   const t = useTheme();
   const behind = st.latest ? st.behind : 0;
   const sub = st.latest
-    ? (behind > 0 ? `THIS BUILD ${APP_VERSION.toUpperCase()} · NEWEST V${st.latest.toUpperCase()}` : `${APP_VERSION.toUpperCase()} · YOU ARE ON THE NEWEST BUILD`)
+    ? (behind > 0 ? `THIS BUILD ${APP_VERSION.toUpperCase()} · NEWEST V${st.latest.toUpperCase()}` : st.newBuild ? `${APP_VERSION.toUpperCase()} · A NEWER ANDROID BUILD IS OUT` : `${APP_VERSION.toUpperCase()} · YOU ARE ON THE NEWEST BUILD`)
     : `${APP_VERSION.toUpperCase()}${st.checked ? ' · COULDN’T REACH THE RELEASE' : ' · CHECKING…'}`;
   return (
     <Overlay visible={visible} title="What's new" subtitle={sub} onClose={onClose}
@@ -107,7 +114,7 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
               <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.onAccent }}>OPEN TESTFLIGHT ↗</Text>
             </Pressable>
           )}
-          {behind > 0 && Platform.OS !== 'ios' && (
+          {(behind > 0 || st.newBuild) && Platform.OS !== 'ios' && (
             <Pressable onPress={() => { tap(); void openLink(APK_ZIP_URL); }}
               style={({ pressed }) => ({ flex: 1, alignItems: 'center', backgroundColor: t.you, borderRadius: 8, paddingVertical: 11, opacity: pressed ? 0.55 : 1 })}>
               <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: t.onAccent }}>⬇ GET V{st.latest?.toUpperCase()} (ZIP)</Text>
@@ -120,6 +127,9 @@ export function WhatsNewSheet({ visible, st, onClose }: { visible: boolean; st: 
         </View>
       )}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, gap: 14 }}>
+        {behind <= 0 && st.newBuild && (
+          <Mono size={9.5} tone="dim">This build’s app code is current, but a newer Android build is out with a change an update can’t carry (the alert icon, say). Installing the new APK keeps your sign-in and settings.</Mono>
+        )}
         {behind > 0 && (
           <Mono size={9.5} tone="dim">
             {behind} {behind === 1 ? 'update' : 'updates'} for the app since this build. {Platform.OS === 'ios'

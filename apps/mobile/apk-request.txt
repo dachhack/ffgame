@@ -2,3 +2,4 @@
 # the native app hasn't changed (.github/workflows/release-apk.yml, the gate).
 # One line per request: the date, who asked, and why.
 2026-10-09 founder: "Merge and cut apps" after v0.655.2 (JS-only since the last APK).
+2026-10-12 founder: "My alert icon is still the same" — the italic DF notification icon (v0.692.1) is a native resource no update carries, and the fingerprint gate skipped it.

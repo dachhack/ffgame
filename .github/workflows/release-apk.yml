@@ -94,6 +94,18 @@ jobs:
              && git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -qx 'apps/mobile/apk-request.txt'; then
             echo "apk-request.txt changed — building"; echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
+          # A NATIVE ASSET CHANGED (v0.696.1). Founder: "My alert icon is still
+          # the same." The pixels of an asset app.json names — the launcher
+          # icon, the adaptive icon, the notification icon, the splash, a
+          # widget preview — are baked into the APK at build time, and the
+          # fingerprint hashes the config that names them, not the files, so
+          # a redrawn icon slipped through the gate above and no phone ever
+          # saw it (v0.692.1). A push that changes one builds.
+          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            named=$(node -e "const s=JSON.stringify(require('./apps/mobile/app.json'));console.log([...new Set([...s.matchAll(/\.\/assets\/[\w.-]+/g)].map(m=>'apps/mobile/'+m[0].slice(2)))].join('\n'))")
+            hit=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -Fxf <(echo "$named") || true)
+            if [ -n "$hit" ]; then echo "native asset changed — building:"; echo "$hit"; echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          fi
           pub=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/apk-latest/manifest.json?t=$(date +%s)" \
                 | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).fingerprint||'')}catch{console.log('')}})" || true)
           echo "published APK fingerprint: ${pub:-none}"
