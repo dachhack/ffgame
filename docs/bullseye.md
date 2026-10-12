@@ -101,7 +101,7 @@ week is small and concrete.
 | **Radius** | How far a dart can land and still score (default **10** for a spot). At or beyond it a spot scores 0. |
 | **Score** (the engine calls it the ring score; a player only ever sees "score" or "+8.6") | What a spot banks: `max(0, radius − distance)`, plus a **bullseye bonus** of `radius` when distance ≤ `radius / 20` (half a point at radius 10) — up to `2 × radius`, exactly double on the number, 19.5 at the edge of the band. The one and only scale: a fixed-points alternative shipped in v0.645.0 and was taken out in v0.646.0. |
 | **Bullseye / Inner / Outer / Edge / Miss** | The labels the boards print on a dart: distance ≤ radius/20 (0.5) / ≤ radius/5 (2) / ≤ radius/2 (5) / inside the radius / at or beyond it. Labels only — the score is the continuous formula above. |
-| **Weekly total** | The sum of the lineup's ring scores. This is the matchup score: what `matchup.home_final` holds, what the standings sum, what the playoffs compare. Higher wins, as always. |
+| **Weekly total** | SLOTS: the sum of the lineup's ring scores, higher wins. TOTAL (v0.683.0): the lineup's distance from its one target, zero penalties included, LOWER wins. Either way it is the matchup score: what `matchup.home_final` holds, what the standings sum, what the playoffs compare; `league_lower_wins` / `contestLowerWins` say which way is up. |
 
 ### Why a continuous score rather than fixed ring points
 Fixed rings (50 / 25 / 10 / 0) read beautifully but tie constantly — a nine-
@@ -119,11 +119,15 @@ spot carries its own target. Independent darts; the week is the sum.
 
 **TOTAL** (`bullseye = 'total'`). The card is dealt exactly the same way, but
 only its **sum** is published: one number for the whole lineup. The lineup's
-raw points are compared to it as a single dart with a wider radius
-(`radius × starters`, so 90 for nine spots), scored by the same formula
-(bullseye band = `radius × starters / 20`, i.e. 4.5 points). The SLOTS card is
-still dealt underneath so the two variants aim at reachable numbers and a
-league can flip between them pre-draft without the card changing shape.
+raw points are compared to it as a single dart, and since v0.683.0 **the
+distance is the score**: `|points − total|` plus `radius` for every spot that
+posted nothing, and the LOWEST wins, like golf. (Until then the week banked
+`radius × starters − distance` as a ring, higher winning — the founder's
+"why are there rings? It's just a target number and how far you are from
+it"; migration 0482 turned the finals already stamped into distances.) The
+SLOTS card is still dealt underneath so the two variants aim at reachable
+numbers and a league can flip between them pre-draft without the card
+changing shape.
 
 Per-player locks make TOTAL the most skill-heavy version: after Thursday you
 know you are 7 over, so you cool Sunday; after the 1pm games you re-tune 4pm,

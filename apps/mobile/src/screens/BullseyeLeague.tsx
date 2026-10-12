@@ -394,7 +394,7 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
     if (r.ok) onRenamed();
   };
   const wl = useMemo(() => {
-    const golf = lg.bullseye?.contest === 'golf';
+    const golf = lg.bullseye?.contest === 'golf' || (lg.bullseye?.contest === 'bullseye' && lg.bullseye?.variant === 'total');   // lower wins (v0.683.0)
     let w = 0, l = 0, tt = 0;
     for (const x of weeks ?? []) {
       if (x.status !== 'final' || x.void || x.opp == null || x.ring == null || x.opp_ring == null) continue;
@@ -465,7 +465,7 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
     : b.contest === 'high'
       ? 'The highest score wins.'
       : b.variant === 'total'
-        ? `One number for the whole squad. Land your points close to it: dead-on doubles your score; any player who posts a zero costs ${b.radius}.`
+        ? `One number for the whole squad. Your points' distance from it is your score, and the LOWEST wins; a player who posts a zero adds ${b.radius}.`
         : `Every spot has its own number. Each player scores ${b.radius} for dead-on plus ${b.radius} more for a bullseye, less the farther off; a zero costs ${b.radius}.`;
   const rules = [
     `${CONTEST_EMOJI[b.contest]} ${CONTEST_WORD[b.contest]} · ${CONTEST_FORMAT_WORD[b.format]}${b.format === 'h2h' ? ' — paired against one opponent each week' : ' — everyone ranked each week'}.`,
@@ -474,7 +474,7 @@ function SettingsRoom({ lg, onCommish, onLeft }: { lg: ContestLeague; onCommish:
     `Each player locks at his own kickoff. Until then you can swap him — including one ruled out.${b.auto_sub ? ' If you don’t, a ruled-out player is swapped for you in the minutes before his game.' : ''}`,
     ...(b.format === 'h2h' ? ['Your opponent’s picks are sealed: each shows once his game locks.'] : []),
     ...(b.contest === 'bullseye' ? ['Ties are settled by your tie-breaker: one RB or WR spot with its own number, shown before you build. Closer wins.'] : []),
-    b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? 'ring total' : 'score'}; a week without a squad scores nothing.`,
+    b.span === 'week' ? `It plays week ${b.week} only.` : `It plays every week. Season standings add up every week’s ${b.contest === 'bullseye' ? (b.variant === 'total' ? 'distance from the target, lowest wins' : 'ring total') : 'score'}; a week without a squad scores nothing.`,
     ...(contestCredit(b.contest) ? [`💡 ${contestCredit(b.contest)!.line}`] : []),
   ];
   // THE MONEY (0477): the dues setting and the prize list, when set.

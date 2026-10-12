@@ -207,7 +207,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   const share = async () => {
     if (!st?.ok || st.week == null) return;
     const [bd, lgInfo] = await Promise.all([contestBoard(leagueId, st.week, 1, 0).catch(() => null), contestLeague(leagueId).catch(() => null)]);
-    const text = squadCardText({
+    const text = squadCardText({ variant: cfg.bullseye?.variant ?? null,
       league: st.name ?? 'Contest', week: st.week, contest: cfg.contest, status: st.matchup?.status === 'final' ? 'final' : st.started ? 'live' : null,
       slots, labels, picks, nameOf: (slug) => bySlug.get(slug)?.name ?? slug,
       scoreOf: (slot) => { const r = live.find((x) => x.slot === slot); return r ? r.score : null; },

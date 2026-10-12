@@ -363,12 +363,16 @@ export function applyBullseye(
     const zeros = Math.max(0, n - mine.length) + mine.filter((x) => isZeroScore(x.score)).length;
     const dist = round1(Math.abs(points - card.total) + penalty * zeros);
     if (cfg.variant === 'total') {
-      // One dart for the whole lineup, radius scaled to the lineup — rows
-      // carry no per-spot aim, because no spot was aiming at anything alone;
+      // THE DISTANCE IS THE SCORE (v0.683.0, founder: "why are there rings?
+      // It's just a target number and how far you are from it"): one dart for
+      // the whole lineup, and the side's score is its distance from the
+      // target — zero penalties included — with the LOWEST winning, like golf.
+      // (Until v0.682.5 this banked `radius × spots − distance` as a ring,
+      // higher winning; bullseyeLowerWins tells every ranking which way is
+      // up.) Rows carry no per-spot aim: no spot was aiming at anything alone;
       // a zero row still carries its penalty so the board can say so.
       const rows = mine.map((x) => (isZeroScore(x.score) ? { ...x, aim: { target: card.total, dist: 0, ring: 0, penalty } } : x));
-      const ring = ringFromDist(dist, cfg.radius * n);
-      return { rows, dart: { target: card.total, dist, ring, points, zeros, penalty } };
+      return { rows, dart: { target: card.total, dist, ring: dist, points, zeros, penalty } };
     }
     let ring = 0;
     const rows = mine.map((x) => {
@@ -389,6 +393,10 @@ export function applyBullseye(
     bullseye: { variant: cfg.variant, radius: cfg.radius, home: h.dart, away: a.dart },
   };
 }
+
+/** Does the LOWER weekly score win? The one-team-total variant scores the
+ *  distance from the target (v0.683.0); the per-spot variant sums rings. */
+export const bullseyeLowerWins = (cfg: Pick<BullseyeConfig, 'variant'> | null | undefined): boolean => cfg?.variant === 'total';
 
 /** Rank a week's teams by ring total — the "weekly ranked" read, shared by
  *  the boards and the week board. Ties keep the input order. */

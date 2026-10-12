@@ -149,8 +149,13 @@ export const CONTEST_CREDIT: { who: string; chip: string; title: string; line: s
 export const contestCredit = (contest: ContestKind): typeof CONTEST_CREDIT | null => (contest === 'bullseye' ? CONTEST_CREDIT : null);
 /** What a squad scores, in a word: a Bullseye squad banks a RING, the others points. */
 export const CONTEST_SCORE_WORD: Record<ContestKind, string> = { high: 'pts', golf: 'pts', bullseye: 'ring' };
+/** The word with the variant known (v0.683.0): a one-team-total Bullseye squad is so many points OFF its target. */
+export const contestScoreWord = (contest: ContestKind, variant?: string | null): string => (contest === 'bullseye' && variant === 'total' ? 'off' : CONTEST_SCORE_WORD[contest]);
+/** Does the LOWER score win? Golf, and a one-team-total Bullseye (v0.683.0: the distance is the score). */
+export const contestLowerWins = (cfg: { contest: ContestKind; bullseye?: { variant?: string } | null } | null | undefined): boolean =>
+  !!cfg && (cfg.contest === 'golf' || (cfg.contest === 'bullseye' && cfg.bullseye?.variant === 'total'));
 /** Is this score better than that one, by the contest's own rule? */
-export const contestBetter = (contest: ContestKind, a: number, b: number): boolean => (contest === 'golf' ? a < b : a > b);
+export const contestBetter = (contest: ContestKind, a: number, b: number, lower = contest === 'golf'): boolean => (lower ? a < b : a > b);
 
 /** What to call spot i on screen: the commissioner's label, else the type
  *  with a number where the type repeats (RB1, RB2 — the DFS names). */

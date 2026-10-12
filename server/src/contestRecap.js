@@ -11,7 +11,7 @@
 // league_message of kind 'txn' whose txn is {kind: 'contest_recap', week}),
 // so a restart never posts twice.
 import { db } from './supabase.js';
-import { contestConfigOf, CONTEST_WORD, CONTEST_EMOJI, CONTEST_SCORE_WORD } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestLowerWins, contestScoreWord, CONTEST_WORD, CONTEST_EMOJI } from '../../packages/core/src/engine/contest.ts';
 import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), 'recap', ...a);
@@ -29,7 +29,7 @@ const ord = (n) => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n +
  *  the league's rows for the week (a board league's are self-paired);
  *  `seats` map roster → {team_name, app_user_id, controller}. */
 export function rankWeek(cfg, matchups, seats) {
-  const golf = cfg.contest === 'golf';
+  const golf = contestLowerWins(cfg);   // lower wins: golf, and a one-team-total Bullseye (v0.683.0)
   const rows = [];
   for (const m of matchups) {
     rows.push({ roster_id: m.home_roster_id, score: Number(m.home_final ?? 0), tb: m.home_tb ?? null, opp: m.away_roster_id === m.home_roster_id ? null : m.away_roster_id, oppScore: Number(m.away_final ?? 0) });
@@ -49,7 +49,7 @@ export function rankWeek(cfg, matchups, seats) {
 /** PURE: the card's words. `season` is {leader, total, weeks} or null;
  *  `next` is {week, lockMs} or null. */
 export function recapBody(cfg, week, ranked, season, next) {
-  const word = CONTEST_SCORE_WORD[cfg.contest];
+  const word = contestScoreWord(cfg.contest, cfg.bullseye?.variant);
   const medal = ['🥇', '🥈', '🥉'];
   const lines = [`🏁 WEEK ${week} RESULT · ${CONTEST_EMOJI[cfg.contest]} ${CONTEST_WORD[cfg.contest]}`];
   const podium = ranked.filter((r) => r.rank <= 3).slice(0, 3);
@@ -101,7 +101,7 @@ export async function buildContestRecap(lg, week, season, voids = new Set()) {
   if (lg.contest_week == null) {
     const { data: fin } = await db().from('matchup').select('home_roster_id, away_roster_id, home_final, away_final, week, is_playoff')
       .eq('league_id', lg.id).eq('status', 'final').lte('week', week);
-    const golf = cfg.contest === 'golf';
+    const golf = contestLowerWins(cfg);
     const tot = new Map(); const weeks = new Set();
     const rec = new Map(); // roster → {w, l, t} (RECORDS, v0.670.0)
     const bump = (rid, k) => { const r = rec.get(rid) ?? { w: 0, l: 0, t: 0 }; r[k] += 1; rec.set(rid, r); };
@@ -175,7 +175,7 @@ export async function postContestRecaps(week, season, opts = {}) {
     posted.add(`${lg.id}:${week}`);
     n += 1;
     // YOUR PLACE, on your phone. Only people who played the week.
-    const word = CONTEST_SCORE_WORD[cfg.contest];
+    const word = contestScoreWord(cfg.contest, cfg.bullseye?.variant);
     const pushes = ranked.filter((r) => r.uid && !r.cpu).map((r) => ({
       app_user_id: r.uid, kind: 'report',
       title: `🏁 Week ${week}: ${ord(r.rank)} of ${ranked.length} in ${lg.name}`,
