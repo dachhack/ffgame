@@ -17,7 +17,7 @@ import { openLink } from './openLink';
 import { APP_VERSION } from '@drip/core/version';
 import { APK_MANIFEST_URL, APK_ZIP_URL, IOS_TESTFLIGHT_URL, CHANGELOG_PAGE_URL, CHANGELOG_URL, entriesBehind, versionsBehind, type ApkManifest, type Changelog, type ChangelogEntry } from '@drip/core/data/changelog';
 import { useTheme, MONO } from '../theme.native';
-import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 
@@ -28,7 +28,10 @@ const MINE = APP_VERSION.replace(/^v/, '');
  *  icon — reaches a phone only through a new APK, and the version number alone never says so: the JavaScript
  *  moves forward over the air, so this build looks current while its native half is the old one. */
 export interface UpdateState { latest: string | null; behind: number; entries: ChangelogEntry[]; checked: boolean; newBuild: boolean }
-const MY_BUILD = Platform.OS === 'android' ? Number(Constants.nativeBuildVersion ?? 0) || 0 : 0;
+// v0.696.3: expo-constants' nativeBuildVersion is gone at runtime on this SDK (it read as nothing, so the banner
+// never showed); expo-application's is the APK's real versionCode. The module is already in the build (expo-notifications
+// links it), so reading it is not a native change.
+const MY_BUILD = Platform.OS === 'android' ? Number(Application.nativeBuildVersion ?? 0) || 0 : 0;
 
 export function useUpdateCheck(): UpdateState & { refresh: () => void } {
   const [st, setSt] = useState<UpdateState>({ latest: null, behind: 0, entries: [], checked: false, newBuild: false });
