@@ -414,13 +414,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
 
       {/* THE SHOP AND THE HAND (v0.688.0, founder: "the power ups in a shop and floating hand like in drip
           leagues"): the shop buys a play into the hand at the foot of the screen; the hand plays it. */}
-      {cfg.coin && editable && !st.started && (
+      {cfg.coin && editable && (
         <div style={{ ...card, display: 'grid', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
             <span className="mono" style={head}>PLAYS</span>
             <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--you)' }}>{`◎ ${Math.round(wallet ?? 0)}`}</span>
             <button onClick={() => setShop(true)} className="mono" style={chip(false)}>🛒 SHOP</button>
-            <span className="mono" style={small}>{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played this week · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · play from the hand below, before the first kickoff`}</span>
+            <span className="mono" style={small}>{st.started
+              ? `the week has kicked off — buy now, play before next week's first kickoff · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand`
+              : `${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played this week · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · play from the hand below, before the first kickoff`}</span>
             {arming && <button onClick={() => setArming(null)} className="mono" style={{ ...chip(true), marginLeft: 'auto' }}>{`▶ tap ${contestPlayById(arming)?.target === 'opp' ? 'one of their spots' : 'a spot'} for ${contestPlayById(arming)?.name ?? ''} · CANCEL`}</button>}
           </div>
           {arming && <span className="mono" style={small}>{contestPlayById(arming)?.blurb}</span>}
@@ -429,7 +431,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
               {plays.map((x) => (
                 <div key={`${x.id}-${x.slot ?? ''}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''}`}</span>
-                  <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false, true)}>TAKE BACK</button>
+                  {!st.started && <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false, true)}>TAKE BACK</button>}
                 </div>
               ))}
             </div>
@@ -546,7 +548,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
       )}
 
       {/* THE HAND (v0.688.0): the plays in hand, fanned at the foot of the screen; a squad play arms, a spot play waits for a tap */}
-      {cfg.coin && editable && !st.started && Object.values(inventory).some((q) => q > 0) && (
+      {cfg.coin && editable && Object.values(inventory).some((q) => q > 0) && (
         <>
           <div style={{ height: 104 }} />
           <PowerupHand
@@ -554,8 +556,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
               id: d.id, name: d.name, icon: d.icon, qty: inventory[d.id] ?? 0,
               action: contestPlayTarget(d, cfg.bullseye?.variant) === 'squad' ? 'arm' : 'apply',
               deadline: 'before the first kickoff', blurb: d.blurb,
-              usable: !busy && plays.length < (st.play_cap ?? contestPlayCap(cfg.format)) && !plays.some((x) => x.id === d.id),
-              note: plays.some((x) => x.id === d.id) ? 'already in play this week' : plays.length >= (st.play_cap ?? contestPlayCap(cfg.format)) ? 'your plays for the week are set' : contestPlayById(d.id)?.target === 'opp' ? 'tap one of their spots' : undefined,
+              usable: !st.started && !busy && plays.length < (st.play_cap ?? contestPlayCap(cfg.format)) && !plays.some((x) => x.id === d.id),
+              note: st.started ? 'the week has kicked off — playable next week' : plays.some((x) => x.id === d.id) ? 'already in play this week' : plays.length >= (st.play_cap ?? contestPlayCap(cfg.format)) ? 'your plays for the week are set' : contestPlayById(d.id)?.target === 'opp' ? 'tap one of their spots' : undefined,
             }))}
             pendingId={arming}
             onArm={(id) => void arm(id as ContestPlayId)}
