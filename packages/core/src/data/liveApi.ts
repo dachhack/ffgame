@@ -817,7 +817,8 @@ export interface BullseyeContest {
   variant?: DfsVariant; radius?: number; entries?: number; first_lock?: string | null; started?: boolean;
   me?: { roster_id: number; team: string | null; entered: boolean } | null;
 }
-export interface DfsSlotScore { side: 'home' | 'away'; slot: string; slug: string | null; score: number; aim?: { target: number; dist: number; ring: number; penalty?: number } }
+export interface DfsSlotScore { side: 'home' | 'away'; slot: string; slug: string | null; score: number; aim?: { target: number; dist: number; ring: number; penalty?: number };
+  /** THE PLAYS (0484): the play that touched this row, and the raw score before it; a `PLAY` slot row is an event bonus. */ play?: string; raw?: number }
 export interface DfsBullseyeState {
   ok: boolean; error?: string; on?: boolean; kind?: string; name?: string; week?: number; season?: string;
   variant?: DfsVariant; radius?: number; roster_id?: number | null; team?: string | null; started?: boolean;
@@ -947,6 +948,7 @@ export interface ContestState {
   /** MY SEATS (0481): every seat of mine, for the switcher, and the league's entries-per-member rule. */
   seats?: ContestSeat[]; max_entries?: number;
   /** DRIP COIN (0483): on, and this seat's balance. */ coin?: boolean; wallet?: number | null;
+  /** THE PLAYS (0484): this seat's armed plays and how many a week it may arm. */ plays?: ContestPlayRow[]; play_cap?: number;
   entry?: unknown;
   matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null } | null;
   opponent?: { roster_id: number; team: string | null; entry: unknown } | null;
@@ -957,6 +959,17 @@ export interface ContestSeat { roster_id: number; team: string | null }
 /** DRIP COIN (0483): one line of a seat's ledger. */
 export interface CoinLine { week: number | null; reason: string; delta: number; at: string }
 export interface ContestWallet { coins: number; lines: CoinLine[] }
+/** THE PLAYS (0484): an armed play as the seat's row carries it. */
+export interface ContestPlayRow { id: import('../engine/contestPlays').ContestPlayId; slot: string | null; proj: number | null; price: number; at: string }
+/** Arm a play for the week from the seat's wallet (before the first kickoff; one a week, two head-to-head). */
+export const contestArmPlay = (leagueId: string, week: number, play: string, slot?: string | null, rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; plays?: ContestPlayRow[]; wallet?: number | null }>('contest_arm_play', { p_league: leagueId, p_week: week, p_play: play, p_slot: slot ?? null, p_roster: rosterId ?? null });
+/** Take a play back before the first kickoff; the coin comes back. */
+export const contestDisarmPlay = (leagueId: string, week: number, play: string, slot?: string | null, rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; plays?: ContestPlayRow[]; wallet?: number | null }>('contest_disarm_play', { p_league: leagueId, p_week: week, p_play: play, p_slot: slot ?? null, p_roster: rosterId ?? null });
+/** A seat's armed plays: mine any time, another's once the week has kicked off. */
+export const contestPlays = (leagueId: string, week: number, rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; week?: number; sealed?: boolean; plays?: ContestPlayRow[] }>('contest_plays', { p_league: leagueId, p_week: week, p_roster: rosterId ?? null });
 export interface ContestMyWeek extends BullseyeMyWeek { opp?: number | null; opp_team?: string | null; opp_ring?: number | null }
 export const createContestLeague = (o: { name: string; contest: ContestKind; format: ContestFormat; span: BullseyeSpan; max: number; /** 0 = no cap. */ budget: number; /** The floor (golf); 0 = none. */ minSpend?: number; variant?: DfsVariant; radius?: number; teamName?: string | null }, season = '2026') =>
   rpcOk<{ ok: boolean; error?: string; league_id?: string; name?: string; invite_code?: string; roster_id?: number; team?: string; bullseye?: ContestInfo }>('create_contest_league', {
@@ -1013,6 +1026,7 @@ export interface ContestMatchupState {
     home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null;
     playoff?: boolean; label?: string | null;
     home_entry: unknown; away_entry: unknown;
+    /** THE PLAYS (0484): each side's armed plays — mine open, another's once the week has kicked off. */ home_plays?: ContestPlayRow[]; away_plays?: ContestPlayRow[];
     state: { home: number; away: number; slots: DfsSlotScore[] } | null;
   } | null;
   matchups?: ContestMatchupRow[];

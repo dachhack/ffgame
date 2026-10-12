@@ -19,17 +19,19 @@
 // league that merely plays Bullseye; this one is for contest leagues.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestState, addContestEntry, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
+  contestState, addContestEntry, contestArmPlay, contestDisarmPlay, type ContestPlayRow, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
 import { injuryFor } from '@drip/core/data/injuries';
 import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
-import {
+import { CONTEST_PLAYS, contestPlayById, contestPlayCap, GHOST_POINTS, type ContestPlayId,
   contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
   type ContestConfig,
 } from '@drip/core/engine/contest';
 import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
+import { GHOST_PLAYER } from '@drip/core/engine/sim';
+import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { squadCardText } from '@drip/core/data/squadCard';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import {
@@ -129,11 +131,17 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
   // MY SEATS (v0.682.0): which of my seats the builder is on; null = my first.
   const [rosterId, setRosterId] = useState<number | null>(null);
+  // THE PLAYS (v0.685.0): this seat's armed plays, its wallet, and the play
+  // waiting for a spot to be tapped.
+  const [plays, setPlays] = useState<ContestPlayRow[]>([]);
+  const [wallet, setWallet] = useState<number | null>(null);
+  const [arming, setArming] = useState<ContestPlayId | null>(null);
 
   const load = useCallback(async () => {
     const s = await contestState(leagueId, weekProp, '2026', rosterId);
     setSt(s);
     if (!s.ok || s.week == null) return;
+    setPlays(s.plays ?? []); setWallet(s.wallet ?? null);
     const slots = classicSlotsFromSpec(s.slots ?? null) ?? [];
     const mine = contestSquadOf(s.entry, slots);
     setPicks(mine); setSaved(mine);
@@ -172,6 +180,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   const teams = useMemo(() => [...new Set(players.map((p) => p.team))].sort(), [players]);
   const tabs = useMemo(() => (setup ? builderTabs(setup.slots) : ['ALL']), [setup]);
   const dirty = useMemo(() => JSON.stringify(picks) !== JSON.stringify(saved), [picks, saved]);
+  const playOn = useCallback((slot: string) => plays.find((x) => x.slot === slot) ?? null, [plays]);
+  const ghosted = useCallback((slot: string) => playOn(slot)?.id === 'ghost', [playOn]);
 
   // SWAP HISTORY (0478): my seat's changes this week, newest first.
   const [swaps, setSwaps] = useState<SwapRow[]>([]);
@@ -208,7 +218,10 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     : tbLive && myTb ? tiebreakDistance(tbLive.score, myTb.target, radius) : null;
   const tieBroken = bull && st.matchup?.status === 'final' && st.opponent && myScore != null && theirScore != null && Math.abs(Number(myScore) - Number(theirScore)) < 0.0101 && Number(myScore) !== Number(theirScore);
   const theirSquad = st.opponent ? sealedRows(st.opponent.entry, slots) : [];
-  const bl = budgetLine(ctx, salaryOf);
+  // a ghosted spot is filled (by the phantom, at no salary)
+  const blRaw = budgetLine(ctx, salaryOf);
+  const ghosts = slots.filter((d) => !picks[d.slot] && ghosted(d.slot)).length;
+  const bl = { ...blRaw, open: blRaw.open - ghosts, perSpot: blRaw.open - ghosts > 0 ? Math.floor(blRaw.left / (blRaw.open - ghosts) / 100) * 100 : 0 };
   const filled = n - bl.open;
   const projTotal = Object.values(picks).reduce((s, slug) => s + (slug ? byPlayer.get(slug)?.proj ?? 0 : 0), 0);
   const week = st.week!;
@@ -241,6 +254,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   };
   const fill = () => {
     const built = fillOpenSpots(players.filter((p) => !locked(p.slug)), ctx, `${leagueId}|w${week}|${st.roster_id}|${Date.now()}`, ruledOut);
+    for (const d of slots) if (ghosted(d.slot)) built[d.slot] = null;   // the phantom keeps its spot
     const open = slots.filter((d) => !picks[d.slot]).length;
     const got = slots.filter((d) => !picks[d.slot] && built[d.slot]).length;
     setPicks(built);
@@ -257,6 +271,26 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     setNote(`✓ ${r.team ?? 'your new entry'} is in — build its squad`);
     setRosterId(r.roster_id ?? null);
   };
+  // ARM A PLAY (v0.685.0): a squad play arms at once; a spot play waits for a tap on a spot.
+  const arm = async (id: ContestPlayId, slot?: string | null) => {
+    setBusy(true);
+    const r = await contestArmPlay(leagueId, week, id, slot ?? null, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null }));
+    setBusy(false); setArming(null);
+    if (!r.ok) { setNote(r.error ?? 'Couldn’t arm it.'); return; }
+    setPlays(r.plays ?? []); setWallet(r.wallet ?? null);
+    const def = contestPlayById(id);
+    if (id === 'ghost' && slot) { const next = { ...picks, [slot]: null }; setPicks(next); setSaved({ ...saved, [slot]: null }); }
+    setNote(`✓ ${def?.icon ?? ''} ${def?.name ?? id} armed${slot ? ` on ${labels[slot] ?? slot}` : ''}`);
+  };
+  const armOn = (slot: string) => { if (arming) void arm(arming, slot); };
+  const disarm = async (x: ContestPlayRow) => {
+    setBusy(true);
+    const r = await contestDisarmPlay(leagueId, week, x.id, x.slot, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null }));
+    setBusy(false);
+    if (!r.ok) { setNote(r.error ?? 'Couldn’t take it back.'); return; }
+    setPlays(r.plays ?? []); setWallet(r.wallet ?? null);
+    setNote(`✓ ${contestPlayById(x.id)?.name ?? x.id} taken back — the coin is back in your wallet${x.id === 'ghost' ? '; fill the spot' : ''}`);
+  };
   const clearAll = () => {
     const keep: Record<string, string | null> = {};
     for (const d of slots) keep[d.slot] = locked(picks[d.slot]) ? picks[d.slot] : null;
@@ -269,6 +303,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
   };
   const put = (slug: string, slot: string | null) => {
     if (!slot) return;
+    if (ghosted(slot)) { setNote('that spot holds a ghost — disarm it to put a player there'); setActive(null); return; }
     const next = { ...picks };
     for (const [s, v] of Object.entries(next)) if (v === slug) next[s] = null;   // he moves, he doesn't double up
     next[slot] = slug;
@@ -372,6 +407,39 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
         </div>
       </div>
 
+      {/* THE PLAYS (v0.685.0): the wallet buys one a week (two head-to-head) before the first kickoff */}
+      {cfg.coin && editable && !st.started && (
+        <div style={{ ...card, display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <span className="mono" style={head}>PLAYS</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--you)' }}>{`◎ ${Math.round(wallet ?? 0)}`}</span>
+            <span className="mono" style={small}>{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} armed this week · set before the first kickoff`}</span>
+            {arming && <button onClick={() => setArming(null)} className="mono" style={{ ...chip(true), marginLeft: 'auto' }}>{`▶ tap a spot for ${contestPlayById(arming)?.name ?? ''} · CANCEL`}</button>}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {CONTEST_PLAYS.map((d) => {
+              const armed = plays.some((x) => x.id === d.id);
+              const can = !busy && !armed && plays.length < (st.play_cap ?? contestPlayCap(cfg.format)) && (wallet ?? 0) >= d.price;
+              return (
+                <button key={d.id} disabled={!can} title={d.blurb} onClick={() => { if (d.target === 'squad') void arm(d.id); else setArming(d.id); }} className="mono" style={{ ...chip(arming === d.id), opacity: can || armed ? 1 : 0.5 }}>
+                  {`${d.icon} ${d.name.toUpperCase()} · ◎${d.price}${armed ? ' ✓' : ''}`}
+                </button>
+              );
+            })}
+          </div>
+          {arming && <span className="mono" style={small}>{contestPlayById(arming)?.blurb}</span>}
+          {plays.length > 0 && (
+            <div className="mono" style={{ ...small, display: 'grid', gap: 3 }}>
+              {plays.map((x) => (
+                <div key={`${x.id}-${x.slot ?? ''}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''} · ◎${x.price}`}</span>
+                  <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false, true)}>TAKE BACK</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {/* MY SQUAD: the spot cards */}
       <div style={{ ...card, display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
@@ -422,15 +490,18 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
                   </span>
                   <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
                     {p
-                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
-                      : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => openSheet(d.slot) : undefined} />}
+                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} badge={playOn(d.slot) ? contestPlayById(playOn(d.slot)!.id)?.icon : undefined} onClick={canTap ? () => (arming ? armOn(d.slot) : openSheet(d.slot)) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
+                      : ghosted(d.slot)
+                        ? <PlayerCard key="ghost" slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} flip idx={i} bank={lv ? lv.score : undefined} badge="👻" onClick={canTap && arming ? () => armOn(d.slot) : undefined} />
+                        : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={arming ? `▶ ${contestPlayById(arming)?.name ?? ''} HERE` : editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => (arming ? armOn(d.slot) : openSheet(d.slot)) : undefined} />}
                   </div>
                   <span className="mono" style={{ fontSize: 9.5, color: dim, textAlign: 'center', lineHeight: 1.3, minHeight: 25 }}>
                     {p
                       ? (lv ? `${lv.score.toFixed(1)}${lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}` : `${fmt$(p.salary)} · proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ''}`)
-                      : hint}
+                      : ghosted(d.slot) ? `a phantom · ${GHOST_POINTS} flat, no salary` : hint}
                     {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
                   </span>
+                  {playOn(d.slot) && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: '#E9B959', letterSpacing: '0.06em' }}>{`${contestPlayById(playOn(d.slot)!.id)?.icon ?? ''} ${(contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id).toUpperCase()}`}</span>}
                   {p && canTap && (
                     <button onClick={(e) => { e.stopPropagation(); setPicks({ ...picks, [d.slot]: null }); }} title="clear this spot" className="mono"
                       style={{ background: 'none', border: '1px solid color-mix(in srgb, var(--text) 30%, transparent)', borderRadius: 999, color: dim, fontSize: 10, cursor: 'pointer', padding: '2px 8px' }}>✕</button>
