@@ -1261,7 +1261,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
       if (row.away?.team) entries.push({ team: row.away.team, side: 'their', clock: Number.MAX_SAFE_INTEGER });
     }
     return groupFieldGames(matchup.week, entries, slate)
-      .map((g) => ({ key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home }));
+      .map((g) => ({ key: g.feed.key, away: g.feed.away, home: g.feed.home, team: g.feed.home, kickoff: g.feed.kickoff ?? null }));
   }, [matchup, board, gameFeeds, slate]);
   /** A game line's tap handler — only when that game has a published feed, so
    *  the line never opens onto an empty sheet. */

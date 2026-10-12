@@ -16,7 +16,8 @@ import { FieldView } from './FieldView';
 import { ReaderBar } from './ReaderBar';
 import { GameViewBody } from './GameView';
 
-export interface FieldsListGame { key: string; away: string; home: string; team: string; label?: string }
+export interface FieldsListGame { key: string; away: string; home: string; team: string; label?: string;
+  /** v0.696.4: the slate's kickoff, for a game with no feed yet — the card draws the time and the projected leaders. */ kickoff?: string | null }
 
 export function FieldsList({ week, games, empty, extra }: {
   week: number; games: FieldsListGame[]; empty: string;
@@ -57,7 +58,7 @@ export function FieldsList({ week, games, empty, extra }: {
                 <Mono size={8} tone="you">game view ▸</Mono>
               </View>
             </View>
-            <FieldView week={week} team={g.team} clock={Number.MAX_SAFE_INTEGER} />
+            <FieldView week={week} team={g.team} clock={Number.MAX_SAFE_INTEGER} pre={{ away: g.away, home: g.home, kickoff: g.kickoff ?? null }} />
           </Pressable>
         );
       })}

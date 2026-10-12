@@ -28,7 +28,7 @@ import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } 
 import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
-import { projectedBox } from '@drip/core/engine/projectedBox';
+import { projectedBox, type ProjectedRow } from '@drip/core/engine/projectedBox';
 import { teamLogo, headshot } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
@@ -86,11 +86,19 @@ function pathLen(x1: number, x2: number, curved: boolean, y1: number = MID, y2: 
  *  from the box score; null draws the plain possession badge. */
 export type Carrier = { slug: string; name: string } | null;
 
-export function FieldView({ week, team, clock, side, carrierOf }: {
+export function FieldView({ week, team, clock, side, carrierOf, pre }: {
   week: number; team?: string | null; clock: number; side?: PlaySide | null; carrierOf?: (p: GamePlay) => Carrier;
+  /** A GAME STILL TO KICK OFF (v0.696.4, founder: "Show the field with the start time and projected point leaders"):
+   *  the slate's fixture, when the feed store has nothing for it yet. The card draws the empty field with the
+   *  kickoff stamped on it and each side's three highest-projected men under it. */
+  pre?: { away: string; home: string; kickoff?: string | null } | null;
 }) {
   const feed = gameFeedFor(week, team);
-  if (!feed) return null;
+  if (!feed) {
+    if (!pre) return null;
+    const a = normTeam(pre.away), h = normTeam(pre.home);
+    return <Field feed={{ key: `${a}@${h}`, away: a, home: h, plays: [], st: 'pre', gid: null, kickoff: pre.kickoff ?? null }} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} />;
+  }
   return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} />;
 }
 
@@ -125,6 +133,30 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
   // "No next play" alone reads a live halftime as game over — trust the feed's
   // own state when it has one, else require the shown play to be in late Q4.
   const over = cur != null && !nxt && (feed.st ? feed.st === 'post' : cur.c >= 3300);
+  // NOT STARTED (v0.696.4): no plays and not over — the kickoff is the clock, the field is clean, and the
+  // projected leaders stand in for the box score until the first snap.
+  const pre = plays.length === 0 && !over && feed.st !== 'post';
+  const kickoffText = feed.kickoff ? kickoffLabel(Date.parse(feed.kickoff)).toUpperCase() : null;
+  const leaders = useMemo(() => (pre ? projectedBox(home, away, week) : null), [pre, home, away, week]);
+  const leaderCol = (tm: string, rows: ProjectedRow[]) => {
+    const top = rows.filter((r) => r.proj != null).sort((a, b) => (b.proj ?? 0) - (a.proj ?? 0)).slice(0, 3);
+    return (
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          {!!teamLogo(tm, { week }) && <Image source={{ uri: teamLogo(tm, { week })! }} style={{ width: 12, height: 12, borderRadius: 2 }} />}
+          <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', letterSpacing: 0.6, color: t.faint }}>{`${tm} · PROJECTED`}</Text>
+        </View>
+        {top.length === 0 && <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>— no projections —</Text>}
+        {top.map((r) => (
+          <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: t.faint, width: 24 }}>{r.pos}</Text>
+            <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: t.text }}>{boxName(r.slug)}</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>{(r.proj ?? 0).toFixed(1)}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
 
   const xOf = (yte: number, tm: string) => FX + ((tm === away ? 100 - yte : yte) / 100) * FW;
 
@@ -234,7 +266,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
         <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: '800', color: t.text }}>{score.a}</Text>
         {/* The LAST PLAY's clock, not the playback clock — a window clock can
             overshoot the real game and read a Q4 game as OT. */}
-        <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '600', color: t.faint }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '600', color: t.faint }}>{over ? 'FINAL' : pre ? (kickoffText ?? 'SOON') : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</Text>
         <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: '800', color: t.text }}>{score.h}</Text>
         {strip(home, ballTm === home)}
         <Pressable
@@ -361,7 +393,21 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
           </View>
         </View>
       )}
+      {/* ── KICKS OFF banner (v0.696.4): a game still to start wears its time where a finished one wears FINAL */}
+      {pre && (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 14, paddingVertical: 3, backgroundColor: mix(t.surface, 85, 'rgba(0, 0, 0, 0)') }}>
+            <Text style={{ fontFamily: MONO, fontSize: 13, fontWeight: '800', letterSpacing: 2.5, color: t.text }}>{kickoffText ? `KICKS OFF ${kickoffText}` : 'NOT STARTED'}</Text>
+          </View>
+        </View>
+      )}
       </View>
+      {pre && leaders && (
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+          {leaderCol(away, leaders.away)}
+          {leaderCol(home, leaders.home)}
+        </View>
+      )}
 
       {/* situation chip + play text — the FINAL banner carries the verdict on
           a finished game, and a kneel-down sentence under it is noise */}

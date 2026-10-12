@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.4 — A game still to start shows its field
+
+> - On the fields, a game that hasn’t kicked off now draws its field with the kickoff stamped across it (KICKS OFF MON 8:15PM) and, under it, each side’s three highest-projected players with their numbers — on the phone’s All fields sheet and the classic board, and on the web. Until now the phone showed a bare header for such a game.
+
+Founder: "Show the field with the start time and projected point leaders."
+The phone's `FieldView` takes a `pre` fixture (the slate's away, home and
+kickoff) when the feed store has nothing for the game yet and draws the
+clean field with the time where FINAL goes, the kickoff as the clock, and
+`projectedBox`'s top three a side; `FieldsList` passes the slate's kickoff
+through from the sheet and the classic board. The web's card gains the same
+leaders under its KICKS OFF line.
+
 ### v0.696.3 — The new-build banner shows
 
 > - The A NEW ANDROID BUILD IS OUT banner (v0.696.1) never showed: the build number it compared against read as nothing on this SDK. It now reads the phone’s real build number, so a phone on an older APK than the published one is told, with the download in What’s New.
