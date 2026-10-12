@@ -95,7 +95,7 @@ export function dayClears(m: WaiverDayMode): boolean {
 
 /** WHERE THE AFTER-GAMES HOLD ACTUALLY LANDS (0338).
  *
- *  "Players dropped once the games start stay on waivers until Wednesday" is a
+ *  "Unowned players are on waivers from kickoff until Wednesday" is a
  *  promise about a RUN. Pick a Wednesday the schedule spends as FREE AGENCY or
  *  LOCKED and there is no run that morning to decide anybody — the hold would
  *  expire on nothing, which is the same shape of bug as a door opening on a
@@ -231,7 +231,7 @@ export function waiverScheduleLine(
   if (fa) parts.push(`${fa}: free agency all day`);
   if (lk) parts.push(`${lk}: locked — nothing moves`);
   if (gameHoldDow != null && DAY_LABEL[gameHoldDow]) {
-    parts.push(`players dropped once the games start stay on waivers until ${
+    parts.push(`unowned players are on waivers from their kickoff until ${
       DAY_LABEL[gameHoldDow][0] + DAY_LABEL[gameHoldDow].slice(1).toLowerCase()} ${at ?? etTime(180)}`);
   }
   return parts.join(' · ');

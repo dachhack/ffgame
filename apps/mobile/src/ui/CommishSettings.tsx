@@ -372,9 +372,9 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
               </View>
             ))}
           </View>
-          {/* AFTER GAMES, WAIVERS CLEAR: a player dropped once the week's games
-              have started is not a free agent until this morning's run,
-              whatever his own hold says. 0338 names the morning it really
+          {/* AFTER GAMES, WAIVERS CLEAR: any unowned player is on waivers from
+              his kickoff until this morning's run (0487 — a dropped one too,
+              whatever his own hold says). 0338 names the morning it really
               lands on — the chosen day rolled forward to one the run visits —
               and the time, which a rolling league is otherwise never shown. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
@@ -389,7 +389,7 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <Mono size={8.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(13) }}>
               {effGameHold === null
                 ? 'No day on the schedule holds a run, so this cannot apply.'
-                : `Dropped after the week's first kickoff → held until ${DAY_LABEL[effGameHold][0] + DAY_LABEL[effGameHold].slice(1).toLowerCase()} ${etTime(clearMin ?? 180)} ET.`}
+                : `Unowned players are on waivers from their kickoff until ${DAY_LABEL[effGameHold][0] + DAY_LABEL[effGameHold].slice(1).toLowerCase()} ${etTime(clearMin ?? 180)} ET.`}
             </Mono>
           )}
           {/* HOLD counts RUNS. A rolling league has none, so it gets the two

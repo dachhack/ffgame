@@ -784,7 +784,7 @@ function TransactionRulesEditor({ leagueId, sport = 'nfl' }: { leagueId: string;
             his own hold says. 0338 names the morning it really lands on — the
             chosen day rolled forward to one the run visits. */}
         <div>
-          <div className="mono" title="A player dropped after the week's games start stays on waivers until this morning's run." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>AFTER GAMES, WAIVERS CLEAR</div>
+          <div className="mono" title="Any unowned player is on waivers from his kickoff until this morning's run — a dropped one too, whatever his own hold says (0487)." style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>AFTER GAMES, WAIVERS CLEAR</div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
             {toggle(gameHold === null, 'NONE', () => setGameHold(null))}
             {(sport === 'nfl' ? [2, 3, 4] : []).map((d) => (

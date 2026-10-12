@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.689.0 — After games, every unowned player is on waivers
+
+> - In leagues with an after-games waiver day (Wednesday unless the commissioner changed it), any unowned player is now on waivers from his kickoff until that morning's run, not only a player somebody dropped. A claim filed before his game waits for that run too. That is the rule Sleeper plays and the one Kickoff League was told it had.
+> - Kickoff League: free agency is on again for Sunday and Monday after the 4:00 AM run, as the schedule says. It had been switched off, so every pickup was a claim all week.
+
+#1237 ("how did Bagent get picked up. He should be on waivers until Weds
+AM"), confirmed by the v0.688.1 wire audit: Bagent had never been dropped,
+so he carried no hold; the claim was filed Sunday 11:54 AM ET before the
+Bears kicked off, stamped for Monday's run, and the run honoured the stamp.
+Migration 0487: `_hold_played(league)` stamps `league_pool.waived_until`
+with the next hold-day run for every unowned player whose team kicked off
+since the last one (NFL leagues with an effective after-games day; the
+LA/LAR codes through `_nfl_team`); `add_free_agent`, `submit_waiver_claim`
+and `process_waivers` stamp before they read the hold, the add refusal
+names the morning, and the run waits for the player's hold even when the
+claim's own stamp has passed (the group clock too). Kickoff's `fa_mode`
+→ open with a house line; every other live NFL league with the day set
+gets one house line on the rule. Copy: `waiverDays.ts`, the web and phone
+commissioner consoles. Probes: `waiver-rules-probes.sql` AFTER GAMES, EVERY
+UNOWNED PLAYER (ag0–ag18).
+
 ### v0.688.1 — The wire, audited
 
 > - Nothing changes in the app. This is an ops errand for the Kickoff League question about Tyson Bagent's pickup (#1237): a read-only audit of the league's waiver wire, posted onto the issue, so the answer rests on the league's rows rather than a guess.

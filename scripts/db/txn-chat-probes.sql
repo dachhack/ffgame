@@ -215,6 +215,9 @@ begin
   perform tc_server();
   update waiver_claim set clears_at = now() - interval '1 minute'
     where league_id = lid and status = 'pending';
+  -- 0487: the run waits for the player's own hold too, so bring that forward as well
+  update league_pool set waived_until = now() - interval '1 minute'
+    where league_id = lid and slug = pick and waived_until > now();
   perform tc_as('1');
   before := tc_count(lid);
   r := process_waivers(lid);
