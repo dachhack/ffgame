@@ -190,6 +190,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
   const playOn = useCallback((slot: string) => plays.find((x) => x.slot === slot && contestPlayById(x.id)?.target !== 'opp') ?? null, [plays]);
   const playAt = useCallback((slot: string) => plays.filter((x) => x.slot === slot && contestPlayById(x.id)?.target === 'opp'), [plays]);   // aimed across the table
   const ghosted = useCallback((slot: string) => playOn(slot)?.id === 'ghost', [playOn]);
+  /** What the play chip opens: the play's line, its number, and where it is taken back. */
+  const playInfo = (x: ContestPlayRow) => { const d = contestPlayById(x.id); return `${d?.blurb ?? ''}${x.proj != null ? `\n\nHis number to beat: ${Number(x.proj).toFixed(1)}.` : ''}\n\nOn this spot this week. Take it back on MATCHUP until his kickoff.`; };
 
   // SWAP HISTORY (0478): my seat's changes this week, newest first.
   const [swaps, setSwaps] = useState<SwapRow[]>([]);
@@ -478,7 +480,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                       : ghosted(d.slot) ? `a phantom · ${GHOST_POINTS} flat, no salary` : hint}
                     {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
                   </span>
-                  {playOn(d.slot) && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: '#E9B959', letterSpacing: '0.06em' }}>{`${contestPlayById(playOn(d.slot)!.id)?.icon ?? ''} ${(contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id).toUpperCase()}`}</span>}
+                  {/* THE PLAY CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see details") */}
+                  {playOn(d.slot) && <InfoChip label={`${contestPlayById(playOn(d.slot)!.id)?.icon ?? '⚡'} PLAY`} title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
                   {p && canTap && (
                     <button onClick={(e) => { e.stopPropagation(); setPicks({ ...picks, [d.slot]: null }); }} title="clear this spot" className="mono"
                       style={{ background: 'none', border: '1px solid color-mix(in srgb, var(--text) 30%, transparent)', borderRadius: 999, color: dim, fontSize: 10, cursor: 'pointer', padding: '2px 8px' }}>✕</button>

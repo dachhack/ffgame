@@ -16,15 +16,20 @@ import { Overlay } from './Overlay';
 /** A small ⓘ that opens a pop-up with the full story. Put it beside a
  *  section label; pass the explanation as children (plain string is fine —
  *  paragraphs separated by blank lines read best). */
-export function InfoChip({ title, children }: { title: string; children: ReactNode }) {
+export function InfoChip({ title, children, label }: { title: string; children: ReactNode;
+  /** A LABELLED CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see
+   *  details"): a small gold pill reading `label` in place of the ⓘ — a state that is itself the way to its story. */
+  label?: string }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Pressable hitSlop={10} accessibilityLabel={`About ${title}`}
+      <Pressable hitSlop={label ? 6 : 10} accessibilityLabel={`About ${title}`}
         onPress={() => { tap(); setOpen(true); }}
-        style={{ width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.dim }}>ⓘ</Text>
+        style={label
+          ? { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(233,185,89,0.6)', backgroundColor: 'rgba(233,185,89,0.18)', paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'center' }
+          : { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={label ? { fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.6, color: '#B8862E' } : { fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.dim }}>{label ?? 'ⓘ'}</Text>
       </Pressable>
       <Overlay visible={open} title={title} onClose={() => setOpen(false)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>

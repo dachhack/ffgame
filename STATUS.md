@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.5 — The play chip
+
+> - A spot with a play on it now wears a small gold chip (the play’s icon and PLAY) under the card instead of the play’s name spelled out; tap it for the details — what the play does, his number to beat, and that it is taken back on MATCHUP until his kickoff. Web and phone.
+
+Founder: "Let's just do a chip if power ups are active and you can click it
+to see details." `InfoChip` on both platforms gains `label`: a gold pill in
+place of the ⓘ, opening the same sheet; both `ContestSquad` screens use it
+under the spot. The card’s own icon badge stays.
+
 ### v0.696.4 — A game still to start shows its field
 
 > - On the fields, a game that hasn’t kicked off now draws its field with the kickoff stamped across it (KICKS OFF MON 8:15PM) and, under it, each side’s three highest-projected players with their numbers — on the phone’s All fields sheet and the classic board, and on the web. Until now the phone showed a bare header for such a game.
