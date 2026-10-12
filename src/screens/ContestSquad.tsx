@@ -289,7 +289,9 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
     if (id === 'ghost' && slot) { const next = { ...picks, [slot]: null }; setPicks(next); setSaved({ ...saved, [slot]: null }); }
     setNote(`✓ ${def?.icon ?? ''} ${def?.name ?? id} armed${slot ? ` on ${labels[slot] ?? slot}` : ''}`);
   };
-  const armOn = (slot: string) => { if (arming) void arm(arming, slot); };
+  // 0490: a spot play goes on until that player's own kickoff; a locked spot says so instead of asking the server
+  const spotPlay = (d: { id: string; target: string }) => { const t = contestPlayTarget(contestPlayById(d.id as ContestPlayId)!, cfg.bullseye?.variant); return (t === 'spot' || t === 'opp') && d.id !== 'spy'; };
+  const armOn = (slot: string) => { if (!arming) return; if (locked(picks[slot])) { setNote('his game has kicked off — pick a spot that hasn’t'); return; } void arm(arming, slot); };
   const disarm = async (x: ContestPlayRow) => {
     setBusy(true);
     const r = await contestDisarmPlay(leagueId, week, x.id, x.slot, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null; inventory?: Record<string, number> }));
@@ -423,7 +425,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
             <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--you)' }}>{`◎ ${Math.round(wallet ?? 0)}`}</span>
             <button onClick={() => setShop(true)} className="mono" style={chip(false)}>🛒 SHOP</button>
             <span className="mono" style={small}>{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand${st.started ? ' · the week has kicked off' : ''}`}</span>
-            <InfoChip title="Plays" info={'Buy a play in the shop; it lands in your hand at the foot of the screen. Tap a card to play it before the week’s first kickoff: a squad play goes on at once, a spot play asks for the spot. One a week (two head-to-head). TAKE BACK before kickoff returns the card to your hand.\n\nOnce the week has kicked off you can still buy; the cards wait for next week.'} />
+            <InfoChip title="Plays" info={'Buy a play in the shop; it lands in your hand at the foot of the screen. Tap a card to play it: a squad play goes on at once, a spot play asks for the spot. One a week (two head-to-head).\n\nA spot play goes on, and comes back with TAKE BACK, until that player’s own kickoff. A squad play (Hail Mary, Pick Six, Re-deal, Spy) before the week’s first kickoff.'} />
             {arming && <button onClick={() => setArming(null)} className="mono" style={{ ...chip(true), marginLeft: 'auto' }}>{`▶ tap ${contestPlayById(arming)?.target === 'opp' ? 'one of their spots' : 'a spot'} for ${contestPlayById(arming)?.name ?? ''} · CANCEL`}</button>}
           </div>
           {arming && <span className="mono" style={small}>{contestPlayById(arming)?.blurb}</span>}
@@ -432,7 +434,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
               {plays.map((x) => (
                 <div key={`${x.id}-${x.slot ?? ''}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''}`}</span>
-                  {!st.started && <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false, true)}>TAKE BACK</button>}
+                  {(!st.started || !!x.slot) && <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false, true)}>TAKE BACK</button>}
                 </div>
               ))}
             </div>
@@ -441,7 +443,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
       )}
       {shop && (
         <ShopModal onClose={() => setShop(false)} coinsOverride={wallet ?? 0} inventoryOverride={inventory}
-          items={contestPlaysFor(cfg.format, cfg.contest).map(contestPlayAsPowerup)}
+          items={contestPlaysFor(cfg.format, cfg.contest, st.plays_off).map(contestPlayAsPowerup)}
           onBuy={async (id) => {
             const r = await contestBuyPlay(leagueId, id, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; wallet?: number | null; inventory?: Record<string, number> }));
             if (!r.ok) return r.error ?? 'Couldn’t buy it.';
@@ -556,9 +558,9 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
             cards={contestPlaysFor(cfg.format, cfg.contest).filter((d) => (inventory[d.id] ?? 0) > 0).map((d): HandCard => ({
               id: d.id, name: d.name, icon: d.icon, qty: inventory[d.id] ?? 0,
               action: contestPlayTarget(d, cfg.bullseye?.variant) === 'squad' ? 'arm' : 'apply',
-              deadline: 'before the first kickoff', blurb: d.blurb,
-              usable: !st.started && !busy && plays.length < (st.play_cap ?? contestPlayCap(cfg.format)) && !plays.some((x) => x.id === d.id),
-              note: st.started ? 'the week has kicked off — playable next week' : plays.some((x) => x.id === d.id) ? 'already in play this week' : plays.length >= (st.play_cap ?? contestPlayCap(cfg.format)) ? 'your plays for the week are set' : contestPlayById(d.id)?.target === 'opp' ? 'tap one of their spots' : undefined,
+              deadline: spotPlay(d) ? 'before his own kickoff' : 'before the first kickoff', blurb: d.blurb,
+              usable: !(st.plays_off ?? []).includes(d.id) && (!st.started || spotPlay(d)) && !busy && plays.length < (st.play_cap ?? contestPlayCap(cfg.format)) && !plays.some((x) => x.id === d.id),
+              note: (st.plays_off ?? []).includes(d.id) ? 'the commissioner turned this play off' : st.started && !spotPlay(d) ? 'the week has kicked off — playable next week' : st.started ? 'until his own kickoff — tap a spot that hasn’t' : plays.some((x) => x.id === d.id) ? 'already in play this week' : plays.length >= (st.play_cap ?? contestPlayCap(cfg.format)) ? 'your plays for the week are set' : contestPlayById(d.id)?.target === 'opp' ? 'tap one of their spots' : undefined,
             }))}
             pendingId={arming}
             onArm={(id) => void arm(id as ContestPlayId)}

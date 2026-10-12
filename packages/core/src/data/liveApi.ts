@@ -950,6 +950,7 @@ export interface ContestState {
   /** DRIP COIN (0483): on, and this seat's balance. */ coin?: boolean; wallet?: number | null;
   /** THE PLAYS (0484): this seat's armed plays and how many a week it may arm. */ plays?: ContestPlayRow[]; play_cap?: number;
   /** THE HAND (0486): the plays this seat has bought and not yet played, by id. */ inventory?: Record<string, number>;
+  /** THE PLAYS, ON AND OFF (0490): the ids the commissioner turned off. */ plays_off?: string[];
   entry?: unknown;
   matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null } | null;
   opponent?: { roster_id: number; team: string | null; entry: unknown } | null;
@@ -984,7 +985,10 @@ export const createContestLeague = (o: { name: string; contest: ContestKind; for
 /** THE COIN RULES (0489): the standard suite under a league's overrides; a member may read. */
 export type ContestCoinRules = Record<string, number>;
 export const contestCoinRules = (leagueId: string) =>
-  rpcOk<{ ok: boolean; error?: string; coin?: boolean; rules?: ContestCoinRules; defaults?: ContestCoinRules }>('contest_coin_rules', { p_league: leagueId });
+  rpcOk<{ ok: boolean; error?: string; coin?: boolean; rules?: ContestCoinRules; defaults?: ContestCoinRules; /** 0490 */ plays_off?: string[] }>('contest_coin_rules', { p_league: leagueId });
+/** THE PLAYS, ON AND OFF (0490): the commissioner's whole off-list. */
+export const setContestPlays = (leagueId: string, off: string[]) =>
+  rpcOk<{ ok: boolean; error?: string; plays_off?: string[] }>('set_contest_plays', { p_league: leagueId, p_off: off });
 /** The commissioner's hand on the rules (0489): the overrides whole (event → coin; 0 turns one off). */
 export const setContestCoinRules = (leagueId: string, rules: ContestCoinRules) =>
   rpcOk<{ ok: boolean; error?: string; coin?: boolean; rules?: ContestCoinRules; defaults?: ContestCoinRules }>('set_contest_coin_rules', { p_league: leagueId, p_rules: rules });

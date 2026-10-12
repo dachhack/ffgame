@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.694.0 — Plays on and off, and the spot play's clock
+
+> - The commissioner of a drip-coin contest league can turn any play on or off: COMMISH → DRIP COIN → PLAYS. An off play leaves the shop and cannot be played; a card already in a hand waits until it is back on. The league chat hears each change.
+> - A spot play (Underdog, Double or Nothing, Phantom, Magnet on a spot, Jinx) now goes on, and comes back with TAKE BACK, until that player's own kickoff rather than the week's first. A squad play (Hail Mary, Pick Six, Re-deal, Spy) still goes on before the first kickoff.
+
+The founder: "Let's let commissioners turn on and off power up availability
+as well", and on a Monday hand, "Shouldn't this be playable until a
+player's individual kick off?" Migration 0490: `_contest_plays_off(lg)`
+(`settings_json.plays_off`), `set_contest_plays(league, off)` (commissioner;
+ids checked against the catalog; a house line), `contest_buy_play` and
+`contest_arm_play` refuse an off play, `contest_state` and
+`contest_coin_rules` carry the list; `_contest_play_window(lg, wk, play,
+slot, slug, roster)` is the clock — a spot play until its player's kickoff
+(`_dfs_player_locked`), Jinx until their player's, squad plays, Spy and an
+empty spot before the first kickoff — read by the arm and by
+`contest_disarm_play`. Engine `contestPlaysFor(format, contest, off)`;
+liveApi `setContestPlays`, `ContestState.plays_off`. Builders: the shop
+lists what is on, an off card in hand waits with a note, spot plays stay
+usable after the first kickoff with a locked-spot guard, TAKE BACK stays
+on a spot play. Consoles: the PLAYS card under DRIP COIN. Probes:
+`contest-plays-probes.sql` THE PLAYS, ON AND OFF (po0–po13) and THE WINDOW
+(pw0–pw8); cp6b follows the per-player clock.
+
 ### v0.693.1 — The shop shows up
 
 > - In a drip-coin contest league the PLAYS bar with the 🛒 SHOP, and the hand, now actually appear on MY TEAM. The squad builder was reading the league's rules without the coin switch, so it never knew coin was on. The WALLET card now points at the shop instead of saying there is nothing to spend on.
