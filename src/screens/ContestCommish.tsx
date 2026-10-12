@@ -131,6 +131,12 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
             </div>
           </>
         )}
+        <div className="mono" style={label}>DRIP COIN</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { coin: true }), 'drip coin on — every seat starts with ◎100')} className="mono" style={chip(!!b.coin)}>ON</button>
+          <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { coin: false }), 'drip coin off')} className="mono" style={chip(!b.coin)}>OFF</button>
+          <span className="mono" style={small}>Every seat starts with ◎100 and earns each week for showing up (a squad of your own before kickoff, and weeks in a row), for reading the board (a bargain, the call, a dead-on dart) and for losing (the heartbreaker, a loss, the bottom half, catch-up below the median) — never for winning. A wallet above ◎150 burns down to 150. Power-ups to spend it on come next.</span>
+        </div>
       </div>
 
       {b.contest === 'bullseye' && (

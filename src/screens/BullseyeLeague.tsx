@@ -18,12 +18,12 @@
 //   COMMISH   the classic commissioner's console, trimmed, with a CONTEST card
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
-  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, createContestLeague, joinContest, contestState, playoffState, type PlayoffState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, type ContestWallet, createContestLeague, joinContest, contestState, playoffState, type PlayoffState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
-import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
+import { coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { ContestMatchup } from './ContestMatchup';
 import { ContestSettingsTiles } from './ContestSettings';
@@ -459,10 +459,11 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
   // MY SEATS (v0.682.0): a member with several entries looks at one at a time.
   const [seat, setSeat] = useState<number | null>(null);
   const [seats, setSeats] = useState<ContestSeat[]>([]);
+  const [wallet, setWallet] = useState<ContestWallet | null>(null);   // DRIP COIN (0483)
   useEffect(() => {
     bullseyeMyWeeks(leagueId, seat).then((r) => {
       setWeeks(r.ok ? (r.weeks ?? []) as ContestMyWeek[] : []);
-      if (r.ok) { setSeats(r.seats ?? []); if (seat == null && r.roster_id != null) setSeat(r.roster_id); setName((r.seats ?? []).find((x) => x.roster_id === r.roster_id)?.team ?? r.team ?? ''); }
+      if (r.ok) { setWallet(r.wallet ?? null); setSeats(r.seats ?? []); if (seat == null && r.roster_id != null) setSeat(r.roster_id); setName((r.seats ?? []).find((x) => x.roster_id === r.roster_id)?.team ?? r.team ?? ''); }
     }).catch(() => setWeeks([]));
   }, [leagueId, seat]);
   const rid = seat ?? lg.me?.roster_id;
@@ -521,6 +522,22 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
         {note && <span className="mono" style={{ fontSize: 11, color: note.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{note}</span>}
         {tbLine && <div className="mono" style={{ ...small, color: 'var(--dim)' }}>{tbLine}</div>}
       </div>
+      {wallet && (
+        <div style={{ ...card, display: 'grid', gap: 4 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+            <span className="mono" style={label}>WALLET</span>
+            <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--you)' }}>{`◎ ${Math.round(wallet.coins)}`}</span>
+          </div>
+          <span className="mono" style={small}>Earned for showing up, reading the board and losing — never for winning. Nothing to spend it on yet.</span>
+          {wallet.lines.slice(0, 8).map((x, i) => (
+            <div key={i} className="mono" style={{ display: 'grid', gridTemplateColumns: '64px minmax(0,1fr) 56px', gap: 8, fontSize: 12, padding: '3px 0', borderTop: '1px solid var(--bd)' }}>
+              <span style={{ color: 'var(--faint)' }}>{x.week != null ? `Week ${x.week}` : ''}</span>
+              <span>{coinReasonWord(x.reason)}</span>
+              <span style={{ textAlign: 'right', fontWeight: 700, color: x.delta < 0 ? 'var(--faint)' : 'var(--you)' }}>{`${x.delta > 0 ? '+' : ''}${Math.round(x.delta)}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ ...card, display: 'grid', gap: 4 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <span className="mono" style={label}>MY WEEKS</span>

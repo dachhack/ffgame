@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.684.0 — Drip coin on a contest league: the wallet and the week's earn
+
+> - A contest league's commissioner can turn on DRIP COIN. Every seat starts with ◎100 and earns each week for showing up (a squad of your own saved before the first kickoff, and weeks in a row), for reading the board (a bargain, the call, a dead-on dart) and for losing (the heartbreaker, a loss, the bottom half, catch-up below the season's median). A win pays nothing: the win already paid. A wallet above ◎150 burns down to 150 at the week's end.
+> - MY TEAM shows the wallet and its last lines in words. There is nothing to spend it on yet; the power-ups are the next piece.
+
+PR 1 of the drip-coin plan, with the rethought rewards (founder: "not the
+rich get richer or winners get richer"). Migration `0483_contest_coin.sql`:
+`settings_json.coin` via `set_contest_rules`'s tenth parameter (turning it on
+seeds every seat; the ninth overload is dropped); `_contest_seed_coin` on
+the way into a seat when coin is on; `contest_build` (a member's first save
+of the week, with its time; the CPU's build and the commissioner's fix
+write nothing) written by `save_contest_entry`; and `contest_settle_coin
+(league, week)` — the week's lines per human seat through `adjust_wallet`
+with idem keys of league, week, seat and reason: built 40, streak 5/wk to
+25, bargain 15 (a bottom-third-priced player at 2× his projection), call 10
+(the cheapest spot outscored the priciest; a salary tie goes the member's
+way), dead-on 10 each to 30 (a one-team total inside its band, 30),
+heartbreaker 25 (a head-to-head loss by under 10) / loss 15, bottom half 20
+(below the middle seat of a board week), catch-up 10 (below the season's
+median from the second week), and the cap. `_bullseye_info` carries `coin`,
+`contest_state` the seat's `wallet`, `bullseye_my_weeks` the wallet with its
+last 24 lines. The worker settles as it posts the week's recap card
+(`contestRecap.js`). Engine `ContestConfig.coin`, `coinReasonWord`; liveApi
+`ContestWallet` / `CoinLine`, `setContestRules({ coin })`. DRIP COIN on both
+COMMISH cards; WALLET on both MY TEAM rooms. `scripts/db/contest-coin-
+probes.sql` (full chain, in the runner). Plain JS and SQL: no iPhone build.
+
 ### v0.683.0 — In a one-team-total Bullseye, the distance is the score
 
 > - A Bullseye league that aims the whole squad at one number now scores the plain distance from it: 137.6 points against a 105 target is 32.6 off, and the LOWEST distance wins the week, like golf. A spot that posts nothing still adds 10. The ring is gone from these leagues; it stays in per-spot leagues, where nine darts need a sum.

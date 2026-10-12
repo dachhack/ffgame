@@ -10,12 +10,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
 import {
-  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, createContestLeague, joinContest, contestState,
+  contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, type ContestWallet, createContestLeague, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
-import { contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
+import { coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -365,10 +365,11 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
   // MY SEATS (v0.682.0): a member with several entries looks at one at a time.
   const [seat, setSeat] = useState<number | null>(null);
   const [seats, setSeats] = useState<ContestSeat[]>([]);
+  const [wallet, setWallet] = useState<ContestWallet | null>(null);   // DRIP COIN (0483)
   useEffect(() => {
     bullseyeMyWeeks(id, seat).then((r) => {
       setWeeks(r.ok ? (r.weeks ?? []) as ContestMyWeek[] : []);
-      if (r.ok) { setSeats(r.seats ?? []); if (seat == null && r.roster_id != null) setSeat(r.roster_id); setName((r.seats ?? []).find((x) => x.roster_id === r.roster_id)?.team ?? r.team ?? ''); }
+      if (r.ok) { setWallet(r.wallet ?? null); setSeats(r.seats ?? []); if (seat == null && r.roster_id != null) setSeat(r.roster_id); setName((r.seats ?? []).find((x) => x.roster_id === r.roster_id)?.team ?? r.team ?? ''); }
     }).catch(() => setWeeks([]));
   }, [id, seat]);
   const rid = seat ?? lg.me?.roster_id;
@@ -422,6 +423,22 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
         {note && <Mono size={9} tone={note.startsWith('✓') ? 'you' : 'warn'}>{note}</Mono>}
         {tbLine && <Mono size={9} tone="dim">{tbLine}</Mono>}
       </Card>
+      {wallet && (
+        <Card style={{ gap: 4 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+            <Mono size={9} tone="faint" weight="700" track={0.1}>WALLET</Mono>
+            <Display size={18}>{`◎ ${Math.round(wallet.coins)}`}</Display>
+          </View>
+          <Mono size={8.5} tone="faint">Earned for showing up, reading the board and losing — never for winning. Nothing to spend it on yet.</Mono>
+          {wallet.lines.slice(0, 8).map((x, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: 1, borderTopColor: t.bd }}>
+              <Mono size={9} tone="faint" style={{ width: 56 }}>{x.week != null ? `Week ${x.week}` : ''}</Mono>
+              <Mono size={10} tone="text" style={{ flex: 1 }}>{coinReasonWord(x.reason)}</Mono>
+              <Mono size={11} weight="700" tone={x.delta < 0 ? 'faint' : 'you'}>{`${x.delta > 0 ? '+' : ''}${Math.round(x.delta)}`}</Mono>
+            </View>
+          ))}
+        </Card>
+      )}
       <Card style={{ gap: 2 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Mono size={9} tone="faint" weight="700" track={0.1}>MY WEEKS</Mono>

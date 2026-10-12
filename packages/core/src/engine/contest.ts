@@ -52,6 +52,8 @@ export interface ContestConfig {
   entryDeadline: ContestEntryDeadline;
   /** ENTRIES PER MEMBER (0481): seats one member may hold; 1 on head-to-head. */
   maxEntries: number;
+  /** DRIP COIN (0483): the wallet and the week's earn are on. */
+  coin: boolean;
 }
 export type ContestLateEntry = 'cpu' | 'zero' | 'drop';
 export type ContestEntryDeadline = 'open' | 'first';
@@ -85,6 +87,7 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const entryDeadline: ContestEntryDeadline = s.entry_deadline === 'first' ? 'first' : 'open';
   const me = Number(s.max_entries);
   const maxEntries = format === 'board' && Number.isFinite(me) && me >= 1 ? Math.min(50, Math.floor(me)) : 1;
+  const coin = s.coin === true;
   const ms = Number(s.min_spend);
   const minSpend = Number.isFinite(ms) && ms > 0 ? Math.round(ms / 100) * 100 : 0;
   const spec = Array.isArray(s.roster_slots) && s.roster_slots.length ? s.roster_slots as SlotSpec[] : CONTEST_DEFAULT_SLOTS;
@@ -92,7 +95,7 @@ export function contestConfigOf(settings?: Record<string, unknown> | null, kind?
   const bullseye = contest === 'bullseye'
     ? (bullseyeConfigOf({ bullseye: (s.bullseye as string) ?? 'slots', bullseye_radius: (s.bullseye_radius as number) ?? null }) ?? bullseyeConfigOf({ bullseye: 'slots' }))
     : null;
-  return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null, lateEntry, entryDeadline, maxEntries };
+  return { contest, format, budget, capped, minSpend, autoSub, slots, bullseye: bullseye ? { ...bullseye, deal: 'shared' } : null, lateEntry, entryDeadline, maxEntries, coin };
 }
 
 /** PLAYOFFS (v0.674.0, 0476): a season head-to-head contest league plays the
@@ -147,6 +150,14 @@ export const CONTEST_CREDIT: { who: string; chip: string; title: string; line: s
 };
 /** The credit a contest carries, or null — only Bullseye has one. */
 export const contestCredit = (contest: ContestKind): typeof CONTEST_CREDIT | null => (contest === 'bullseye' ? CONTEST_CREDIT : null);
+/** DRIP COIN (0483): the week's earn lines, in the member's words. Pays for
+ *  showing up, for reading the board, and for losing — never for winning. */
+export const COIN_REASON_WORD: Record<string, string> = {
+  seed: 'starting coin', built: 'built your squad', streak: 'weeks in a row', bargain: 'the bargain', call: 'the call',
+  deadon: 'dead-on', heartbreaker: 'the heartbreaker', loss: 'a loss', bottomhalf: 'the bottom half', catchup: 'catch-up', cap: 'over the cap',
+};
+export const coinReasonWord = (r: string): string => COIN_REASON_WORD[r] ?? r;
+
 /** What a squad scores, in a word: a Bullseye squad banks a RING, the others points. */
 export const CONTEST_SCORE_WORD: Record<ContestKind, string> = { high: 'pts', golf: 'pts', bullseye: 'ring' };
 /** The word with the variant known (v0.683.0): a one-team-total Bullseye squad is so many points OFF its target. */
