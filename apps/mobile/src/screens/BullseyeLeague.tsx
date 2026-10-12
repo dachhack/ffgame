@@ -488,7 +488,10 @@ function TeamRoom({ lg, onOpenWeek, onRenamed }: { lg: ContestLeague; onOpenWeek
             <Mono size={9} tone="faint" weight="700" track={0.1}>WALLET</Mono>
             <Display size={18}>{`◎ ${Math.round(wallet.coins)}`}</Display>
           </View>
-          <Mono size={8.5} tone="faint">Earned for showing up, reading the board and losing — never for winning. Nothing to spend it on yet.</Mono>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Mono size={8.5} tone="faint">spend it in the 🛒 SHOP on MY TEAM</Mono>
+            <InfoChip title="Drip coin">{'Earned for showing up, reading the board and losing — never for winning. The commissioner sets the amounts.\n\nSpend it in the shop at the top of your squad builder: a play lands in your hand and goes on before the week’s first kickoff.'}</InfoChip>
+          </View>
           {wallet.lines.slice(0, 8).map((x, i) => (
             <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: 1, borderTopColor: t.bd }}>
               <Mono size={9} tone="faint" style={{ width: 56 }}>{x.week != null ? `Week ${x.week}` : ''}</Mono>

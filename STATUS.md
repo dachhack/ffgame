@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.693.1 — The shop shows up
+
+> - In a drip-coin contest league the PLAYS bar with the 🛒 SHOP, and the hand, now actually appear on MY TEAM. The squad builder was reading the league's rules without the coin switch, so it never knew coin was on. The WALLET card now points at the shop instead of saying there is nothing to spend on.
+
+The founder, on a league with ◎100 in the wallet: "Still don't see where I
+can buy powrups." `contestSetupOf` (web and phone) built the builder's
+`ContestConfig` from `contest_state` without `coin` (or `max_entries`), so
+`cfg.coin` was always false and every shop gate failed. Both now pass the
+flags through; the wallet line is a chip.
+
 ### v0.693.0 — Categories, chips, and coin off by default
 
 > - The commissioner's console for a weekly competition league is six destinations instead of one long card: THE GAME, SEATS & ENTRIES, DRIP COIN, WEEKS & PLAYOFFS, DUES & PRIZES and THE LEAGUE BOARD, on web and phone.

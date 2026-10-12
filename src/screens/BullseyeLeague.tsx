@@ -575,7 +575,10 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
             <span className="mono" style={label}>WALLET</span>
             <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--you)' }}>{`◎ ${Math.round(wallet.coins)}`}</span>
           </div>
-          <span className="mono" style={small}>Earned for showing up, reading the board and losing — never for winning. Nothing to spend it on yet.</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span className="mono" style={small}>spend it in the 🛒 SHOP on MY TEAM</span>
+            <InfoChip title="Drip coin" info={'Earned for showing up, reading the board and losing — never for winning. The commissioner sets the amounts.\n\nSpend it in the shop at the top of your squad builder: a play lands in your hand and goes on before the week’s first kickoff.'} />
+          </div>
           {wallet.lines.slice(0, 8).map((x, i) => (
             <div key={i} className="mono" style={{ display: 'grid', gridTemplateColumns: '64px minmax(0,1fr) 56px', gap: 8, fontSize: 12, padding: '3px 0', borderTop: '1px solid var(--bd)' }}>
               <span style={{ color: 'var(--faint)' }}>{x.week != null ? `Week ${x.week}` : ''}</span>

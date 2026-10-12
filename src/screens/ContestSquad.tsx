@@ -78,7 +78,8 @@ export function contestHowTo(cfg: ContestConfig): string {
  *  room of a contest league needs to draw its squad. */
 export function contestSetupOf(st: ContestState) {
   const slots = classicSlotsFromSpec(st.slots ?? null) ?? [];
-  const cfg = contestConfigOf({ contest: st.contest, contest_format: st.format, budget: st.budget, min_spend: st.min_spend ?? 0, roster_slots: st.slots, bullseye: st.variant, bullseye_radius: st.radius }, st.kind);
+  // v0.693.1: the coin and entries rules ride along — without `coin` the PLAYS bar, the shop and the hand never showed (founder: "Still don't see where I can buy powrups").
+  const cfg = contestConfigOf({ contest: st.contest, contest_format: st.format, budget: st.budget, min_spend: st.min_spend ?? 0, roster_slots: st.slots, bullseye: st.variant, bullseye_radius: st.radius, coin: st.coin === true, max_entries: st.max_entries }, st.kind);
   const catalog = leagueCatalogOf({ scoring: (st.scoring_classic ?? null) as Partial<ClassicScoring> | null, ppr: st.ppr ?? null });
   return { slots, cfg, catalog, labels: contestSlotLabels(slots) };
 }
