@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import {
-  contestState, addContestEntry, contestArmPlay, contestDisarmPlay, type ContestPlayRow, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
+  contestState, addContestEntry, contestArmPlay, contestDisarmPlay, contestBuyPlay, type ContestPlayRow, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
@@ -20,7 +20,7 @@ import { injuryFor } from '@drip/core/data/injuries';
 import { squadCardText } from '@drip/core/data/squadCard';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
-import { contestRedeal, contestPlaysFor, contestPlayTarget, contestPlayById, contestPlayCap, GHOST_POINTS, type ContestPlayId,
+import { contestRedeal, contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestPlayById, contestPlayCap, GHOST_POINTS, type ContestPlayId,
   contestConfigOf, contestCard, contestSquadOf, contestTiebreak, contestSlotLabels, CONTEST_WORD,
   type ContestConfig,
 } from '@drip/core/engine/contest';
@@ -39,6 +39,8 @@ import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, ChipStrip, Display, Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
+import { ShopModal } from '../ui/ShopModal';
+import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
 
 const fmt$ = (n: number) => `$${n.toLocaleString('en-US')}`;
 /** "18.1 ↑2.7" when the feed has moved since the price was set. */
@@ -120,12 +122,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   const [plays, setPlays] = useState<ContestPlayRow[]>([]);
   const [wallet, setWallet] = useState<number | null>(null);
   const [arming, setArming] = useState<ContestPlayId | null>(null);
+  // THE SHOP AND THE HAND (v0.688.0): what the seat has bought and not yet played, and the shop sheet
+  const [inventory, setInventory] = useState<Record<string, number>>({});
+  const [shop, setShop] = useState(false);
 
   const load = useCallback(async () => {
     const s = await contestState(leagueId, weekProp, '2026', rosterId);
     setSt(s);
     if (!s.ok || s.week == null) return;
-    setPlays(s.plays ?? []); setWallet(s.wallet ?? null);
+    setPlays(s.plays ?? []); setWallet(s.wallet ?? null); setInventory(s.inventory ?? {});
     const mine = contestSquadOf(s.entry, classicSlotsFromSpec(s.slots ?? null) ?? []);
     setPicks(mine); setSaved(mine);
     const [rows, lk, sl] = await Promise.all([podSalaries(s.week).catch(() => []), weekGameLocks(s.week, '2026', 0).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
@@ -261,10 +266,10 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   // ARM A PLAY (v0.687.0): a squad play arms at once; a spot play waits for a tap on a spot (or one of theirs).
   const arm = async (id: ContestPlayId, slot?: string | null) => {
     setBusy(true);
-    const r = await contestArmPlay(leagueId, week, id, slot ?? null, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null }));
+    const r = await contestArmPlay(leagueId, week, id, slot ?? null, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null; inventory?: Record<string, number> }));
     setBusy(false); setArming(null);
     if (!r.ok) { warn(); setNote(r.error ?? 'Couldn’t arm it.'); return; }
-    commit(); setPlays(r.plays ?? []); setWallet(r.wallet ?? null);
+    commit(); setPlays(r.plays ?? []); setWallet(r.wallet ?? null); if (r.inventory) setInventory(r.inventory);
     const def = contestPlayById(id);
     if (id === 'ghost' && slot) { setPicks({ ...picks, [slot]: null }); setSaved({ ...saved, [slot]: null }); }
     setNote(`✓ ${def?.icon ?? ''} ${def?.name ?? id} armed${slot ? ` on ${def?.target === 'opp' ? 'their ' : ''}${labels[slot] ?? slot}` : ''}`);
@@ -272,14 +277,21 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   const armOn = (slot: string) => { if (arming) void arm(arming, slot); };
   const disarm = async (x: ContestPlayRow) => {
     setBusy(true);
-    const r = await contestDisarmPlay(leagueId, week, x.id, x.slot, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null }));
+    const r = await contestDisarmPlay(leagueId, week, x.id, x.slot, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null; inventory?: Record<string, number> }));
     setBusy(false);
     if (!r.ok) { warn(); setNote(r.error ?? 'Couldn’t take it back.'); return; }
-    commit(); setPlays(r.plays ?? []); setWallet(r.wallet ?? null);
-    setNote(`✓ ${contestPlayById(x.id)?.name ?? x.id} taken back — the coin is back${x.id === 'ghost' ? '; fill the spot' : ''}`);
+    commit(); setPlays(r.plays ?? []); setWallet(r.wallet ?? null); if (r.inventory) setInventory(r.inventory);
+    setNote(`✓ ${contestPlayById(x.id)?.name ?? x.id} back in your hand${x.id === 'ghost' ? ' — fill the spot' : ''}`);
   };
   const armingDef = arming ? contestPlayById(arming) : null;
   const armingOpp = armingDef?.target === 'opp';
+  const cap = st.play_cap ?? contestPlayCap(cfg.format);
+  const hand: HandCard[] = cfg.coin ? contestPlaysFor(cfg.format, cfg.contest).filter((d) => (inventory[d.id] ?? 0) > 0).map((d) => ({
+    id: d.id, qty: inventory[d.id] ?? 0,
+    action: contestPlayTarget(d, cfg.bullseye?.variant) === 'squad' ? 'arm' : 'aim',
+    usable: !busy && plays.length < cap && !plays.some((x) => x.id === d.id),
+    note: plays.some((x) => x.id === d.id) ? 'already in play this week' : plays.length >= cap ? 'your plays for the week are set' : d.target === 'opp' ? 'tap one of their spots' : 'tap one of your spots',
+  })) : [];
   const clearAll = () => {
     const keep: Record<string, string | null> = {};
     for (const d of slots) keep[d.slot] = locked(picks[d.slot]) ? picks[d.slot] : null;
@@ -306,7 +318,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       {header}
-      <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 90 }}
+      <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: hand.length ? HAND_TAB_H + 90 : 90 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load().catch(() => {}); setRefreshing(false); }} tintColor={t.you} />}>
         <Card style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
@@ -370,22 +382,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
           <Mono size={8.5} tone="faint">{`${fmt$(bl.spent)} spent${!st.started ? ` · projects ${projTotal.toFixed(1)}${isTotal && theCard ? ` vs ${theCard.total}` : ''}` : ''}${filled ? ` · ${valueOf({ salary: bl.spent, proj: projTotal }).toFixed(2)}/$1k` : ''}`}</Mono>
         </Card>
 
-        {/* THE PLAYS (v0.687.0): the wallet buys one a week (two head-to-head) before the first kickoff */}
+        {/* THE SHOP AND THE HAND (v0.688.0): the shop buys a play into the hand at the foot of the screen; the hand plays it */}
         {cfg.coin && editable && !st.started && (
           <Card style={{ gap: 6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYS</Mono>
               <Display size={16}>{`◎ ${Math.round(wallet ?? 0)}`}</Display>
-              <Mono size={8.5} tone="faint">{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} armed · set before the first kickoff`}</Mono>
+              <Chip small on label="🛒 SHOP" onPress={() => { tap(); setShop(true); }} />
+              <Mono size={8.5} tone="faint" style={{ flexBasis: '100%' }}>{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played this week · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · play from the hand below, before the first kickoff`}</Mono>
             </View>
-            <ChipStrip>
-              {contestPlaysFor(cfg.format, cfg.contest).map((d) => {
-                const armed = plays.some((x) => x.id === d.id);
-                const can = !busy && !armed && plays.length < (st.play_cap ?? contestPlayCap(cfg.format)) && (wallet ?? 0) >= d.price;
-                const target = contestPlayTarget(d, cfg.bullseye?.variant);
-                return <Chip key={d.id} small on={arming === d.id} disabled={!can} dim={!can && !armed} label={`${d.icon} ${d.name.toUpperCase()} · ◎${d.price}${armed ? ' ✓' : ''}`} onPress={() => { tap(); if (target === 'squad') void arm(d.id); else setArming(d.id); }} />;
-              })}
-            </ChipStrip>
             {armingDef && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Mono size={8.5} tone="you" style={{ flex: 1 }}>{`${armingDef.blurb} ${armingOpp ? 'Tap one of their spots below.' : 'Tap one of your spots.'}`}</Mono>
@@ -394,7 +399,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
             )}
             {plays.map((x) => (
               <View key={`${x.id}-${x.slot ?? ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Mono size={9} tone="dim" style={{ flex: 1 }}>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''} · ◎${x.price}`}</Mono>
+                <Mono size={9} tone="dim" style={{ flex: 1 }}>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''}`}</Mono>
                 <Chip small dim disabled={busy} label="TAKE BACK" onPress={() => { tap(); void disarm(x); }} />
               </View>
             ))}
@@ -561,6 +566,23 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
           </View>
         )}
       </Overlay>
+
+      {/* THE SHOP (v0.688.0): the drip shop sheet with the contest plays for sale */}
+      {cfg.coin && (
+        <ShopModal visible={shop} balance={wallet ?? 0} unlockLocked={() => false} onClose={() => setShop(false)}
+          items={contestPlaysFor(cfg.format, cfg.contest).map(contestPlayAsPowerup)} inventoryOverride={inventory}
+          onBuy={async (id) => {
+            const r = await contestBuyPlay(leagueId, id, st.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; wallet?: number | null; inventory?: Record<string, number> }));
+            if (r.ok) { setWallet(r.wallet ?? null); setInventory(r.inventory ?? {}); }
+            return { ok: r.ok, error: r.error, balance: r.wallet ?? null, inventory: r.inventory };
+          }}
+          onChanged={(balance, inv) => { setWallet(balance); setInventory(inv); }} />
+      )}
+      {/* THE HAND (v0.688.0): the plays in hand, fanned over the room bar; a squad play arms, a spot play waits for a tap */}
+      {cfg.coin && editable && !st.started && hand.length > 0 && (
+        <PowerupHand lift={50} cards={hand} busyId={busy ? arming : null} defOf={(id) => contestPlayById(id)} armLabel="PLAY · TAKE BACK BEFORE KICKOFF"
+          onArm={(id) => { const d = contestPlayById(id); if (!d) return; if (contestPlayTarget(d, cfg.bullseye?.variant) === 'squad') void arm(d.id); else setArming(d.id); }} />
+      )}
     </View>
   );
 }

@@ -53,3 +53,6 @@ export function contestEventBonus(plays: ContestPlay[], slugs: string[], playsOf
   if (plays.some((p) => p.id === 'pick-six') && all.some((e) => e.k === 'dst_td' || ((e.k === 'int' || e.k === 'fumrec') && (e.td ?? 0) > 0))) out.push({ id: 'pick-six', delta: 25 });
   return out;
 }
+
+/** A play as the drip shop and hand draw a card (data/powerups.ts's Powerup shape, the fields they read). */
+export const contestPlayAsPowerup = (d: ContestPlayDef) => ({ id: d.id, name: d.name, blurb: d.blurb, kind: 'action' as const, timing: 'pre' as const, price: d.price, icon: d.icon });

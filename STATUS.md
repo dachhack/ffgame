@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.688.0 — The shop and the hand
+
+> - Drip-coin contest leagues now buy their plays the way drip leagues do: a 🛒 SHOP sheet on the squad builder sells the plays your league offers, and what you buy lands in a hand of cards fanned along the foot of the screen. Tap a card to play it: a squad play (Underdog, Double or Nothing, Hail Mary, Phantom, Re-deal) goes on at once; a spot play (Pick Six, Magnet, Spy, Jinx) asks you to tap the spot.
+> - TAKE BACK before kickoff returns the card to your hand, not the coin to your wallet; the card keeps for a later week. Still one play a week (two head-to-head), still only before the first kickoff.
+
+The founder: "Can we have the power ups in a shop and floating hand like in
+drip leagues?" Migration 0486 adds `contest_buy_play(league, play, roster)`
+(wallet → `team_inventory` via `spend_from_wallet` / `bump_inventory`, the
+nonce `buy:…` for idempotence) and teaches `contest_arm_play` to play from
+the hand first, buying only when the hand is empty of that play;
+`contest_disarm_play` returns the card to the hand. `contest_state` carries
+`inventory`. Both shops (`LeagueOverview.ShopModal`, phone `ui/ShopModal`)
+take an injectable catalog `items` (the contest plays as power-ups via
+`contestPlayAsPowerup`) and buyer `onBuy`; the phone hand takes `defOf` and
+`armLabel`. Probes: `contest-plays-probes.sql` gains THE SHOP AND THE HAND.
+
 ### v0.687.0 — The plays on the phone
 
 > - The phone's squad builder gets the PLAYS card: your wallet, the plays your league offers with their prices, one a week (two head-to-head) armed before the first kickoff. Tap a play, then one of your spots, or for Spy and Jinx one of their spots under their squad; a squad play arms at once. TAKE BACK before kickoff returns the coin.

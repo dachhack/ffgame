@@ -64,7 +64,9 @@ begin
   perform probe_as('b'); perform assert_ok(save_contest_entry(g, wk, sq), 'cp4 b saves on the board');
   perform assert_ok(contest_arm_play(g, wk, 'pick-six'), 'cp4b b arms Pick Six on the board');
   perform assert_err(contest_arm_play(g, wk, 'hail-mary'), 'cp4c one play a week on the board');
-  perform assert_ok(contest_disarm_play(g, wk, 'pick-six'), 'cp4d disarmed'); perform assert_true(cp_bal(g, 2) = 100, 'cp4e …and refunded');
+  perform assert_ok(contest_disarm_play(g, wk, 'pick-six'), 'cp4d disarmed');
+  perform assert_true(cp_bal(g, 2) = 55 and (select qty from team_inventory where league_id = g and roster_id = 2 and powerup_id = 'pick-six') = 1, 'cp4e …back to the hand, not the wallet (0486)');
+  update team_wallet set coins = 100 where league_id = g and roster_id = 2;
   perform assert_ok(contest_arm_play(g, wk, 'ghost', 'S6'), 'cp4f the ghost takes W Four''s spot');
   perform assert_true(not exists (select 1 from sleeper_lineup sl, jsonb_array_elements(sl.starters_json) e where sl.league_id = g and sl.week = wk and sl.roster_id = 2 and e ->> 'slot' = 'S6'), 'cp4g W Four stepped out');
   perform assert_true(exists (select 1 from contest_swap where league_id = g and week = wk and roster_id = 2 and slot = 'S6' and out_slug = 'cp-wr4'), 'cp4h …as a swap in the history');
@@ -73,12 +75,14 @@ begin
   perform assert_err(contest_arm_play(g, wk, 'underdog', 'S3'), 'cp4k one play a week: the ghost was it');
   perform assert_ok(contest_disarm_play(g, wk, 'ghost', 'S6'), 'cp4l the ghost disarmed');
   perform assert_err(save_contest_entry(g, wk, sq - 'S6'), 'cp4m …and the empty spot blocks the save again');
-  -- (b is back to ◎100: the ghost again is fine)
-  perform assert_ok(contest_arm_play(g, wk, 'ghost', 'S6'), 'cp4o the ghost again');
-  perform assert_true(cp_bal(g, 2) = 25, 'cp4p ◎25 left');
+  -- (the ghost is in b's hand now: playing it again costs nothing)
+  perform assert_ok(contest_arm_play(g, wk, 'ghost', 'S6'), 'cp4o the ghost again, from the hand');
+  perform assert_true(cp_bal(g, 2) = 25 and coalesce((select qty from team_inventory where league_id = g and roster_id = 2 and powerup_id = 'ghost'), 0) = 0, 'cp4p ◎25 still; the card left the hand');
   perform assert_ok(contest_disarm_play(g, wk, 'ghost', 'S6'), 'cp4q');
+  update team_wallet set coins = 100 where league_id = g and roster_id = 2;
   perform assert_ok(contest_arm_play(g, wk, 'double-or-nothing', 'S1'), 'cp4r ◎80 from ◎100');
   perform assert_ok(contest_disarm_play(g, wk, 'double-or-nothing', 'S1'), 'cp4s');
+  delete from team_inventory where league_id = g and roster_id = 2;
   update team_wallet set coins = 30 where league_id = g and roster_id = 2;
   r := contest_arm_play(g, wk, 'ghost', 'S6'); perform assert_err(r, 'cp4t ◎30 can''t buy a ◎75 ghost'); perform assert_true(r ->> 'error' like 'not enough coin%45%', 'cp4u …and says how short');
   -- the reads: mine open, the opponent's sealed until kickoff
@@ -144,5 +148,34 @@ begin
   perform assert_ok(contest_disarm_play(b2, wk, 'magnet', 'S2'), 'cq7b the per-spot magnet taken back');
   r := contest_arm_play(b2, wk, 'magnet', 'S2'); perform assert_ok(r, 'cq7c Magnet under a one-team total takes the squad');
   perform assert_true(r -> 'plays' -> 1 ->> 'slot' is null or (select count(*) from contest_play where league_id = b2 and roster_id = 1 and play_id = 'magnet' and slot is null) = 1, 'cq7d …no spot on its row');
+end $$;
+-- ── THE SHOP AND THE HAND (0486) ────────────────────────────────────────────
+do $$
+declare r jsonb; h uuid; code text; wk int := 47; sq jsonb;
+begin
+  perform probe_as('a');
+  r := create_contest_league('CP4 H2H', 'high', 'h2h', 'season', 4, 50000); perform assert_ok(r, 'cs0'); h := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  perform probe_as('b'); perform assert_ok(join_contest(code, 'Bees'), 'cs0b'); perform probe_as('a');
+  insert into nfl_slate (season, week, home, away, win, kickoff) values ('2026', wk, 'PHI', 'DAL', '', now() + interval '2 days') on conflict do nothing;
+  update nfl_slate set kickoff = now() + interval '2 days' where season = '2026' and week = wk;
+  insert into pod_salary (season, week, slug, name, pos, team, salary, proj)
+    select '2026', wk, replace(slug, 'cp-', 'cs-'), name, pos, team, salary, proj from pod_salary where season = '2026' and week = 45 and slug like 'cp-%' on conflict do nothing;
+  sq := '{"S1":"cs-qb1","S2":"cs-rb1","S3":"cs-rb3","S4":"cs-wr1","S5":"cs-wr2","S6":"cs-wr3","S7":"cs-te1","S8":"cs-k1","S9":"cs-d1"}';
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values (h, wk, 1, 2, 'scheduled');
+  perform assert_ok(save_contest_entry(h, wk, sq), 'cs1 a saves');
+  perform assert_err(contest_buy_play(h, 'hail-mary'), 'cs2 coin off: no shop');
+  perform assert_ok(set_contest_rules(h, null, null, null, null, null, null, null, null, true), 'cs2b coin on');
+  perform assert_err(contest_buy_play(h, 'magnet', null), 'cs2c a Bullseye play is not for sale here');
+  r := contest_buy_play(h, 'hail-mary'); perform assert_ok(r, 'cs3 bought');
+  perform assert_true((r ->> 'wallet')::numeric = 65 and (r -> 'inventory' ->> 'hail-mary')::int = 1, 'cs3b ◎35 paid, one in the hand');
+  r := contest_buy_play(h, 'hail-mary'); perform assert_ok(r, 'cs3c and another');
+  perform assert_true((r -> 'inventory' ->> 'hail-mary')::int = 2 and (contest_state(h, wk) -> 'inventory' ->> 'hail-mary')::int = 2, 'cs3d two in the hand, and contest_state says so');
+  r := contest_arm_play(h, wk, 'hail-mary'); perform assert_ok(r, 'cs4 played from the hand');
+  perform assert_true((r ->> 'wallet')::numeric = 30 and (r -> 'inventory' ->> 'hail-mary')::int = 1, 'cs4b no coin moved; one left in the hand');
+  r := contest_disarm_play(h, wk, 'hail-mary'); perform assert_ok(r, 'cs4c taken back');
+  perform assert_true((r ->> 'wallet')::numeric = 30 and (r -> 'inventory' ->> 'hail-mary')::int = 2, 'cs4d …to the hand');
+  update team_wallet set coins = 10 where league_id = h and roster_id = 1;
+  perform assert_ok(contest_arm_play(h, wk, 'hail-mary'), 'cs5 a card in hand plays with an empty wallet');
+  perform assert_err(contest_buy_play(h, 'pick-six'), 'cs5b …but the shop wants coin');
 end $$;
 select 'ALL CONTEST-PLAYS PROBES PASSED';

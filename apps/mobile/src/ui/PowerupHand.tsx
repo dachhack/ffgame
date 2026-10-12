@@ -77,8 +77,12 @@ const STOCK = '#2A2115';
 const STOCK_EDGE = '#000';
 const INK = '#EFE4C8';
 
-export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: {
+export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0, defOf, armLabel = 'ARM · NO TAKE-BACKS' }: {
   cards: HandCard[];
+  /** THE CONTEST HAND (v0.688.0): the card's name, icon and blurb from a catalog of its own (the contest plays). */
+  defOf?: (id: string) => { name: string; icon?: string; blurb?: string; kind?: string; timing?: string } | undefined;
+  /** The ARM button's label; contest plays can be taken back before kickoff, so theirs says so. */
+  armLabel?: string;
   busyId?: string | null;
   onArm: (id: string) => void;
   /** Extra bottom offset — the shell's room bar (v0.356.0) parks under the
@@ -89,6 +93,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
   listSignal?: number;
 }) {
   const t = useTheme();
+  const look = defOf ?? powerupById;
   // App.tsx's SafeAreaView deliberately omits the bottom edge so the hand can sit
   // against the screen edge — which makes clearing the home indicator this
   // component's job, exactly as env(safe-area-inset-bottom) is on the web.
@@ -143,7 +148,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
   const total = cards.reduce((s, c) => s + c.qty, 0);
 
   const tip = raised ? cards.find((c) => c.id === raised) ?? null : null;
-  const tipPu = tip ? powerupById(tip.id) : null;
+  const tipPu = tip ? look(tip.id) : null;
 
   return (
     <>
@@ -174,7 +179,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
         }}
       >
         {shown.map((c, i) => {
-          const p = powerupById(c.id);
+          const p = look(c.id);
           const off = i - (n - 1) / 2;
           const isRaised = raised === c.id;
           const dim = !c.usable && !c.armed;
@@ -275,7 +280,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
               style={{ backgroundColor: tip.usable ? t.you : t.sh, borderRadius: 8, paddingVertical: 14, alignItems: 'center' }}
             >
               <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', letterSpacing: 1, color: tip.usable ? t.onAccent : t.faint }}>
-                {!tip.usable ? 'CAN’T PLAY YET' : tip.action === 'aim' ? 'PLAY → PICK A TARGET' : 'ARM · NO TAKE-BACKS'}
+                {!tip.usable ? 'CAN’T PLAY YET' : tip.action === 'aim' ? 'PLAY → PICK A TARGET' : armLabel}
               </Text>
             </Pressable>
         ) : undefined}
@@ -296,7 +301,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0 }: 
       >
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 12, gap: 8 }}>
           {cards.map((c) => {
-            const p = powerupById(c.id);
+            const p = look(c.id);
             return (
               <Pressable
                 key={c.id}

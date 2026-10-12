@@ -949,6 +949,7 @@ export interface ContestState {
   seats?: ContestSeat[]; max_entries?: number;
   /** DRIP COIN (0483): on, and this seat's balance. */ coin?: boolean; wallet?: number | null;
   /** THE PLAYS (0484): this seat's armed plays and how many a week it may arm. */ plays?: ContestPlayRow[]; play_cap?: number;
+  /** THE HAND (0486): the plays this seat has bought and not yet played, by id. */ inventory?: Record<string, number>;
   entry?: unknown;
   matchup?: { id: string; status: string; home: number; away: number; home_final: number | null; away_final: number | null; home_tb?: number | null; away_tb?: number | null } | null;
   opponent?: { roster_id: number; team: string | null; entry: unknown } | null;
@@ -961,12 +962,15 @@ export interface CoinLine { week: number | null; reason: string; delta: number; 
 export interface ContestWallet { coins: number; lines: CoinLine[] }
 /** THE PLAYS (0484): an armed play as the seat's row carries it. */
 export interface ContestPlayRow { id: import('../engine/contestPlays').ContestPlayId; slot: string | null; proj: number | null; price: number; at: string }
-/** Arm a play for the week from the seat's wallet (before the first kickoff; one a week, two head-to-head). */
+/** THE SHOP (0486): buy a play into the seat's hand. */
+export const contestBuyPlay = (leagueId: string, play: string, rosterId?: number | null) =>
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; wallet?: number | null; inventory?: Record<string, number> }>('contest_buy_play', { p_league: leagueId, p_play: play, p_roster: rosterId ?? null });
+/** Play a card from the hand (or, with none in hand, buy and play in one) before the first kickoff; one a week, two head-to-head. */
 export const contestArmPlay = (leagueId: string, week: number, play: string, slot?: string | null, rosterId?: number | null) =>
-  rpcOk<{ ok: boolean; error?: string; roster_id?: number; plays?: ContestPlayRow[]; wallet?: number | null }>('contest_arm_play', { p_league: leagueId, p_week: week, p_play: play, p_slot: slot ?? null, p_roster: rosterId ?? null });
-/** Take a play back before the first kickoff; the coin comes back. */
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; plays?: ContestPlayRow[]; wallet?: number | null; inventory?: Record<string, number> }>('contest_arm_play', { p_league: leagueId, p_week: week, p_play: play, p_slot: slot ?? null, p_roster: rosterId ?? null });
+/** Take a play back before the first kickoff; the card returns to the hand. */
 export const contestDisarmPlay = (leagueId: string, week: number, play: string, slot?: string | null, rosterId?: number | null) =>
-  rpcOk<{ ok: boolean; error?: string; roster_id?: number; plays?: ContestPlayRow[]; wallet?: number | null }>('contest_disarm_play', { p_league: leagueId, p_week: week, p_play: play, p_slot: slot ?? null, p_roster: rosterId ?? null });
+  rpcOk<{ ok: boolean; error?: string; roster_id?: number; plays?: ContestPlayRow[]; wallet?: number | null; inventory?: Record<string, number> }>('contest_disarm_play', { p_league: leagueId, p_week: week, p_play: play, p_slot: slot ?? null, p_roster: rosterId ?? null });
 /** A seat's armed plays: mine any time, another's once the week has kicked off. */
 export const contestPlays = (leagueId: string, week: number, rosterId?: number | null) =>
   rpcOk<{ ok: boolean; error?: string; roster_id?: number; week?: number; sealed?: boolean; plays?: ContestPlayRow[] }>('contest_plays', { p_league: leagueId, p_week: week, p_roster: rosterId ?? null });
