@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.687.0 — The plays on the phone
+
+> - The phone's squad builder gets the PLAYS card: your wallet, the plays your league offers with their prices, one a week (two head-to-head) armed before the first kickoff. Tap a play, then one of your spots, or for Spy and Jinx one of their spots under their squad; a squad play arms at once. TAKE BACK before kickoff returns the coin.
+> - Armed plays ride the phone's cards as a badge beside the position, the phantom deals as a card, and the matchup table shows the other side's aimed plays once they show.
+
+PR 4 of the drip-coin plan, the last. Phone `CardFace` gains `badge` and
+the ghost's art; `ContestSquad` mirrors the web: `plays` / `wallet` /
+`arming` state from `contest_state`, `arm` / `disarm` through
+`contestArmPlay` / `contestDisarmPlay`, the PLAYS card, a ghosted spot
+counted as filled and kept clear by FILL FOR ME, the arming tap on a card
+or on an opponent row, badges and the phantom; `ContestMatchup` shows
+badges (mine, and the other side's aimed ones once they show) and the
+phantom. Plain JS: no iPhone build.
+
 ### v0.686.0 — Four more plays: Spy, Jinx, Magnet, Re-deal
 
 > - Head-to-head leagues get two plays aimed across the table. Spy (◎40) shows you your opponent's sealed pick in one spot before his kickoff; they can still change it, and re-checking is free. Jinx (◎55) is blind: the first touchdown the player in that spot scores is struck off, and it whiffs if he never scores one.
