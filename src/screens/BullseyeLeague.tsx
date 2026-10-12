@@ -63,7 +63,10 @@ const MIN_SPENDS = [0, 10000, 20000, 30000, 40000, 45000, 50000, 60000, 75000, 1
 const moneyOpt = (v: number, none: string) => (v ? fmt$(v) : none);
 
 // ── start: make one, or join one ───────────────────────────────────────────
-export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: string; onOpen: (leagueId: string) => void; onBack: () => void }) {
+export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { initialCode?: string; onOpen: (leagueId: string) => void; onBack?: () => void;
+  /** THE FAST TRACK (v0.690.0, founder: "make the weekly draft a game option and fast track the league creation"):
+   *  only the essentials, embedded in the Start-a-league form — no page, no join card, no budget or blurb (COMMISH has them). */
+  quick?: boolean }) {
   const [name, setName] = useState('');
   const [contest, setContest] = useState<ContestKind>('high');
   const [format, setFormat] = useState<ContestFormat>('h2h');
@@ -108,6 +111,62 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
       onOpen(r.league_id);
     } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
   };
+  // The rows both forms share; the quick form is these and the button.
+  const essentials = (
+    <>
+      <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="League name" style={input} />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span className="mono" style={small}>WINS BY</span>
+        {(['high', 'golf', 'bullseye'] as const).map((c) => (
+          <button key={c} onClick={() => pickContest(c)} className="mono" style={chip(contest === c)}>{`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`}</button>
+        ))}
+      </div>
+      {quick && <span className="mono" style={small}>{CONTEST_BLURB[contest]}</span>}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span className="mono" style={small}>PLAYS</span>
+        <button onClick={() => { setFormat('h2h'); setMax((m) => sizeOk(Math.min(m, 32))); }} className="mono" style={chip(format === 'h2h')}>HEAD-TO-HEAD</button>
+        <button onClick={() => setFormat('board')} className="mono" style={chip(format === 'board')}>LEADERBOARD</button>
+        <span className="mono" style={small}>{format === 'h2h' ? 'paired each week · wins and losses' : 'everyone ranked each week'}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span className="mono" style={small}>RUNS</span>
+        <button onClick={() => setSpan('season')} className="mono" style={chip(span === 'season')}>ALL SEASON</button>
+        <button onClick={() => setSpan('week')} className="mono" style={chip(span === 'week')}>THIS WEEK ONLY</button>
+      </div>
+      {contest === 'bullseye' && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="mono" style={small}>CARD</span>
+          <button onClick={() => setVariant('slots')} className="mono" style={chip(variant === 'slots')}>SLOT TARGETS</button>
+          <button onClick={() => setVariant('total')} className="mono" style={chip(variant === 'total')}>ONE TEAM TOTAL</button>
+        </div>
+      )}
+    </>
+  );
+  const teamsRow = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="mono" style={small}>{format === 'h2h' ? 'TEAMS (even, 2–32)' : `UP TO (2–${n0(cap)})`}</span>
+      <input type="number" min={2} max={top} step={format === 'h2h' ? 2 : 1} value={max} onChange={(e) => setMax(Math.max(2, Math.min(top, Number(e.target.value) || 2)))} onBlur={() => setMax((m) => sizeOk(m))} style={{ ...input, width: 110 }} />
+      <span className="mono" style={small}>{format === 'h2h' ? 'empty seats play as the CPU until someone takes them' : 'people'}</span>
+    </div>
+  );
+  const listRow = (
+    <label className="mono" style={{ ...small, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+      <input type="checkbox" checked={list} onChange={(e) => setList(e.target.checked)} /> POST IT ON THE LEAGUE BOARD SO ANYONE CAN FIND IT
+    </label>
+  );
+  if (quick) {
+    return (
+      <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+        {essentials}
+        {teamsRow}
+        {listRow}
+        <span className="mono" style={small}>{`◎ ${moneyOpt(budget, 'NO CAP')} per squad, the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST) — the budget, the roster, the scoring and the rest are on COMMISH once it exists. You take seat 1 as commissioner.`}</span>
+        <button onClick={() => void create()} disabled={busy || !name.trim()} className="mono"
+          style={{ ...chip(true), justifySelf: 'start', opacity: busy || !name.trim() ? 0.6 : 1 }}>{busy ? 'MAKING IT…' : name.trim() ? 'CREATE WEEKLY DRAFT LEAGUE →' : 'NAME IT TO CREATE'}</button>
+        {err && <div className="mono" style={errStyle}>{err}</div>}
+      </div>
+    );
+  }
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', padding: '14px 14px 60px', display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -121,31 +180,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
 
       <div style={{ ...card, display: 'grid', gap: 10 }}>
         <div className="mono" style={label}>START ONE</div>
-        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="League name" style={input} />
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="mono" style={small}>WINS BY</span>
-          {(['high', 'golf', 'bullseye'] as const).map((c) => (
-            <button key={c} onClick={() => pickContest(c)} className="mono" style={chip(contest === c)}>{`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`}</button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="mono" style={small}>PLAYS</span>
-          <button onClick={() => { setFormat('h2h'); setMax((m) => sizeOk(Math.min(m, 32))); }} className="mono" style={chip(format === 'h2h')}>HEAD-TO-HEAD</button>
-          <button onClick={() => setFormat('board')} className="mono" style={chip(format === 'board')}>LEADERBOARD</button>
-          <span className="mono" style={small}>{format === 'h2h' ? 'paired each week · wins and losses' : 'everyone ranked each week'}</span>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="mono" style={small}>RUNS</span>
-          <button onClick={() => setSpan('season')} className="mono" style={chip(span === 'season')}>ALL SEASON</button>
-          <button onClick={() => setSpan('week')} className="mono" style={chip(span === 'week')}>THIS WEEK ONLY</button>
-        </div>
-        {contest === 'bullseye' && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span className="mono" style={small}>CARD</span>
-            <button onClick={() => setVariant('slots')} className="mono" style={chip(variant === 'slots')}>SLOT TARGETS</button>
-            <button onClick={() => setVariant('total')} className="mono" style={chip(variant === 'total')}>ONE TEAM TOTAL</button>
-          </div>
-        )}
+        {essentials}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="mono" style={small}>BUDGET</span>
           <select value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="mono" style={{ ...input, width: 130 }}>
@@ -162,15 +197,9 @@ export function BullseyeStart({ initialCode, onOpen, onBack }: { initialCode?: s
             <span className="mono" style={small}>golf’s real constraint: you must roster expensive players and bet on which stars have a quiet week</span>
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="mono" style={small}>{format === 'h2h' ? 'TEAMS (even, 2–32)' : `UP TO (2–${n0(cap)})`}</span>
-          <input type="number" min={2} max={top} step={format === 'h2h' ? 2 : 1} value={max} onChange={(e) => setMax(Math.max(2, Math.min(top, Number(e.target.value) || 2)))} onBlur={() => setMax((m) => sizeOk(m))} style={{ ...input, width: 110 }} />
-          <span className="mono" style={small}>{format === 'h2h' ? 'empty seats play as the CPU until someone takes them' : 'people'}</span>
-        </div>
+        {teamsRow}
         <input value={team} onChange={(e) => setTeam(e.target.value)} maxLength={30} placeholder="Your team name (optional)" style={input} />
-        <label className="mono" style={{ ...small, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
-          <input type="checkbox" checked={list} onChange={(e) => setList(e.target.checked)} /> POST IT ON THE LEAGUE BOARD SO ANYONE CAN FIND IT
-        </label>
+        {listRow}
         {list && <input value={blurb} onChange={(e) => setBlurb(e.target.value)} maxLength={200} placeholder="Board blurb (optional)" style={input} />}
         <button onClick={() => void create()} disabled={busy} className="mono" style={{ ...chip(true), justifySelf: 'start' }}>{busy ? 'MAKING IT…' : 'START THE LEAGUE →'}</button>
       </div>

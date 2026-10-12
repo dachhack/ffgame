@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.690.0 — Weekly draft, the fast track
+
+> - START A LEAGUE has a third game: WEEKLY DRAFT. Pick it and the form ends on the next step — name it, say how it wins (most points, golf, bullseye), head-to-head or a leaderboard, how long it runs and how many teams — and CREATE WEEKLY DRAFT LEAGUE opens the league. The budget, roster, scoring, prizes and entry rules are on COMMISH once it exists, as before.
+> - The full weekly-squad form (from your leagues page) is unchanged.
+
+The founder: "Let's make the weekly draft a game option and fast track the
+league creation." `BullseyeStart` (web and phone) gains `quick`: the
+essentials only, embedded, no page or join card, the same `create`. Web
+`NativeCreate`: the WEEKLY DRAFT chip, `weekly` hides the season-league
+sections and button, a new `onContest` prop (LiveOnboard opens the contest
+page). Phone `Recruit`: `game` adds 'weekly', the step list becomes game →
+WEEKLY DRAFT, a new `onCreatedContest` prop (App.tsx opens the contest rooms
+as the bullseye start does).
+
 ### v0.689.0 — After games, every unowned player is on waivers
 
 > - In leagues with an after-games waiver day (Wednesday unless the commissioner changed it), any unowned player is now on waivers from his kickoff until that morning's run, not only a player somebody dropped. A claim filed before his game waits for that run too. That is the rule Sleeper plays and the one Kickoff League was told it had.

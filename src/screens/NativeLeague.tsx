@@ -84,6 +84,7 @@ import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc } from 
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 import { LabelInfo } from './adminUi';
+import { BullseyeStart } from './BullseyeLeague';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const label: React.CSSProperties = { fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 };
@@ -225,11 +226,13 @@ const starMark = (favs: Set<string>, slug: string) =>
 // ─────────────────────────────────────────────────────────────────────────────
 // Create wizard
 // ─────────────────────────────────────────────────────────────────────────────
-export function NativeCreate({ onDone, onLeague, onBack }: {
+export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
   /** Mock created → straight into the draft room. */
   onDone: (leagueId: string, rosterId: number) => void;
   /** Real league created → its commissioner dashboard, on ROSTER settings. */
   onLeague: (leagueId: string) => void;
+  /** WEEKLY DRAFT created (v0.690.0) → the contest league's own page. */
+  onContest: (leagueId: string) => void;
   onBack: () => void;
 }) {
   // LEAGUE = the real thing (invites, schedule, season). MOCK = a practice
@@ -247,7 +250,10 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
   // at the draft, so the mistake is permanent. The form now refuses to submit
   // until the game is chosen. Mocks are exempt: a mock is a draft with no
   // season behind it, so it drafts the drip shape without asking.
-  const [game, setGame] = useState<'drip' | 'classic' | null>(null);
+  // WEEKLY DRAFT (v0.690.0, founder: "make the weekly draft a game option and
+  // fast track the league creation"): a contest league — a squad under a cap
+  // each week — made from the essentials alone, right here.
+  const [game, setGame] = useState<'drip' | 'classic' | 'weekly' | null>(null);
   // THE SPORT (0426). NFL is the default and everything below reads as it
   // did; a daily sport (NBA / NHL / MLB / WNBA) is CLASSIC by construction,
   // plays Mon–Sun periods from a start date, draws its pool from the sport
@@ -427,7 +433,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     if (busy || (kind === 'league' && (!name.trim() || !game))) return;
     // Mocks never ask — they draft the drip shape (the choice is a season
     // property, and a mock has no season).
-    const chosenGame: 'drip' | 'classic' = game ?? 'drip';
+    const chosenGame: 'drip' | 'classic' = game === 'classic' ? 'classic' : 'drip';
     setBusy(true); setErr(null);
     try {
       const pickSecs = pace === 'slow' ? clockHrs * 3600 : clock;
@@ -550,6 +556,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
     </div>
   );
 
+  const weekly = kind === 'league' && !isSport && game === 'weekly';
   return (
     <>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -690,17 +697,21 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <Chip on={game === 'drip'} onClick={() => setGame('drip')}>DRIP</Chip>
               <Chip on={game === 'classic'} onClick={() => setGame('classic')}>CLASSIC</Chip>
+              <Chip on={game === 'weekly'} onClick={() => setGame('weekly')}>WEEKLY DRAFT</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
               {game === null
                 ? 'Pick one — this is the choice that decides what your league plays, and it locks in at the draft.'
                 : game === 'drip'
                   ? 'Drip: your 8 starters play head-to-head in real time as the games run — drips, nukes and power-ups on live play-by-play.'
-                  : 'Classic: fantasy the way you already know it. A positional starting lineup, weekly point totals, scoring you tune knob by knob — every spot locking at its own kickoff.'}
+                  : game === 'weekly'
+                    ? 'Weekly draft: no season-long roster. Everyone builds a fresh squad under a salary cap every week, head-to-head or on a leaderboard — a few choices and it exists.'
+                    : 'Classic: fantasy the way you already know it. A positional starting lineup, weekly point totals, scoring you tune knob by knob — every spot locking at its own kickoff.'}
             </div>
+            {weekly && <BullseyeStart quick onOpen={onContest} />}
           </>
         )}
-        {kind === 'league' && (
+        {kind === 'league' && !weekly && (
           <>
             {/* CONTINUITY (0185): redraft / keeper / dynasty. One selection;
                 the number it needs appears with it. Editable any time in
@@ -868,7 +879,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             not a question — and every part of it is editable on the
             commissioner's ROSTER tab until the draft starts. Say what you're
             getting; don't make them configure it before the league exists. */}
-        <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5 }}>
+        {!weekly && <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 14, lineHeight: 1.5 }}>
           {kind === 'league' && isSport
             ? `${rounds} roster spots per team: ${sportStarters} starters (${Object.entries(sportDef.defaultRoster).map(([t, n]) => (n > 1 ? `${n} ${t}` : t)).join(', ')}) and ${sportDef.benchDefault} bench. Lineups change any day; a player locks when his game tips off.`
             : kind === 'league' && game === null
@@ -876,7 +887,7 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
             : game === 'classic' && kind === 'league'
               ? `${rounds} roster spots per team. You'll set the starting lineup — QB / RB / WR / TE / FLEX / K / D/ST, and any bench, taxi or IR spots — plus scoring on the league's ROSTER and SCORING tabs before the draft.`
               : `${rounds} roster spots per team: everyone fields 8 weekly starters (the game's kickoff windows — any position), the other ${Math.max(0, rounds - 8)} are bench. Roster size, position limits and the overnight draft pause are all adjustable in league settings until the draft starts.`}
-        </div>
+        </div>}
         {pace === 'slow' && (
           <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
             Slow drafts run for days. Fairness is built in: any bid restarts the full bid window (no sniping), hidden max bids answer for you while you're away, and a missed turn nominates from your own queue.
@@ -903,20 +914,20 @@ export function NativeCreate({ onDone, onLeague, onBack }: {
         )}
         {/* The button NAMES the game it will create — the confirmation lives
             in the moment of commitment, not in a dialog after the fact. */}
-        <button onClick={create} disabled={busy || (kind === 'league' && (!name.trim() || !game))} className="mono"
+        {!weekly && <button onClick={create} disabled={busy || (kind === 'league' && (!name.trim() || !game))} className="mono"
           style={{ ...btn, width: '100%', marginTop: 16, opacity: busy || (kind === 'league' && (!name.trim() || !game)) ? 0.6 : 1 }}>
           {busy ? (note || 'CREATING…')
             : kind === 'mock' ? 'START THE MOCK →'
             : game === null ? 'PICK A GAME TO CREATE'
             : isSport ? `CREATE ${contLabel}${sportDef.league} LEAGUE →`
             : `CREATE ${contLabel}${game === 'classic' ? 'CLASSIC' : 'DRIP'} LEAGUE →`}
-        </button>
+        </button>}
         {err && <div className="mono" style={errStyle}>{err}</div>}
-        <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+        {!weekly && <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 12, lineHeight: 1.5, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
           {kind === 'mock'
             ? 'You take seat 1; every other seat is an AI team that picks, nominates, and bids on its own. The draft starts the moment the room opens.'
             : 'You take seat 1 as commissioner. A 14-week head-to-head schedule is generated automatically; seats that stay empty are drafted and managed by the AI.'}
-        </div>
+        </div>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 16 }}><button onClick={onBack} className="mono" style={linkBtn}>← back</button></div>
     </>

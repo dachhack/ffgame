@@ -52,7 +52,9 @@ const useCap = () => {
 };
 
 // ── start: make one, or join one ───────────────────────────────────────────
-export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, name: string, rosterId: number) => void; onBack: () => void }) {
+export function BullseyeStart({ onOpen, onBack, quick = false }: { onOpen: (leagueId: string, name: string, rosterId: number) => void; onBack?: () => void;
+  /** THE FAST TRACK (v0.690.0): only the essentials, embedded in Start-a-league's WEEKLY DRAFT step — no page, no join card, no budget or blurb (COMMISH has them). */
+  quick?: boolean }) {
   const t = useTheme();
   const cap = useCap();
   const [name, setName] = useState('');
@@ -94,41 +96,73 @@ export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, n
       commit(); onOpen(r.league_id, r.league ?? 'Contest', r.roster_id ?? 0);
     } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
   };
+  // The rows both forms share; the quick form is these and the button.
+  const essentials = (
+    <>
+      <Field value={name} onChangeText={setName} maxLength={60} placeholder="League name" />
+      <Mono size={9} tone="faint">WINS BY</Mono>
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {(['high', 'golf', 'bullseye'] as const).map((c) => (
+          <Chip key={c} small label={`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`} on={contest === c} onPress={() => { tap(); pickContest(c); }} />
+        ))}
+      </View>
+      {quick && <Mono size={8.5} tone="faint">{CONTEST_BLURB[contest]}</Mono>}
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Mono size={9} tone="faint">PLAYS</Mono>
+        <Chip small label="HEAD-TO-HEAD" on={format === 'h2h'} onPress={() => { tap(); setFormat('h2h'); setMax((m) => String(Math.min(32, Number(m) || 12))); }} />
+        <Chip small label="LEADERBOARD" on={format === 'board'} onPress={() => { tap(); setFormat('board'); }} />
+      </View>
+      <Mono size={8.5} tone="faint">{format === 'h2h' ? 'Paired each week — wins and losses. Empty seats play as the CPU until someone takes them.' : 'Everyone ranked each week.'}</Mono>
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Mono size={9} tone="faint">RUNS</Mono>
+        <Chip small label="ALL SEASON" on={span === 'season'} onPress={() => { tap(); setSpan('season'); }} />
+        <Chip small label="THIS WEEK ONLY" on={span === 'week'} onPress={() => { tap(); setSpan('week'); }} />
+      </View>
+      {contest === 'bullseye' && (
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Mono size={9} tone="faint">CARD</Mono>
+          <Chip small label="SLOT TARGETS" on={variant === 'slots'} onPress={() => { tap(); setVariant('slots'); }} />
+          <Chip small label="ONE TEAM TOTAL" on={variant === 'total'} onPress={() => { tap(); setVariant('total'); }} />
+        </View>
+      )}
+    </>
+  );
+  const teamsRow = (
+    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+      <Mono size={9} tone="faint">{format === 'h2h' ? 'TEAMS (even, 2–32)' : `UP TO (2–${n0(cap)})`}</Mono>
+      <Field value={max} onChangeText={(v) => setMax(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 90 }} />
+    </View>
+  );
+  const listRow = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <Switch value={list} onValueChange={setList} />
+      <Mono size={9} tone="dim" style={{ flex: 1 }}>POST IT ON THE LEAGUE BOARD SO ANYONE CAN FIND IT</Mono>
+    </View>
+  );
+  if (quick) {
+    return (
+      <View style={{ gap: 10, marginTop: 10 }}>
+        {essentials}
+        {teamsRow}
+        {listRow}
+        <Mono size={8.5} tone="faint">{`◎ ${moneyChip(budget, 'NO CAP')} per squad, the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST) — the budget, the roster, the scoring and the rest are on COMMISH once it exists. You take seat 1 as commissioner.`}</Mono>
+        <Chip on={!!name.trim()} dim={!name.trim()} disabled={busy} label={busy ? 'MAKING IT…' : name.trim() ? 'CREATE WEEKLY DRAFT LEAGUE →' : 'NAME IT TO CREATE'}
+          onPress={() => { if (!name.trim()) { warn(); return; } tap(); void create(); }} />
+        {err && <Mono size={10} tone="warn">{err}</Mono>}
+      </View>
+    );
+  }
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Chip label="← BACK" onPress={() => { tap(); onBack(); }} />
+        <Chip label="← BACK" onPress={() => { tap(); onBack?.(); }} />
         <Mono size={11} tone="you" weight="700" track={0.1}>{`${CONTEST_EMOJI[contest]} WEEKLY SQUAD LEAGUE`}</Mono>
       </View>
       <Text style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`${CONTEST_BLURB[contest]} You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board.`}</Text>
       {contestCredit(contest) && <CreditChip contest={contest} />}
       <Card style={{ gap: 10 }}>
         <Mono size={9} tone="faint" weight="700" track={0.1}>START ONE</Mono>
-        <Field value={name} onChangeText={setName} maxLength={60} placeholder="League name" />
-        <Mono size={9} tone="faint">WINS BY</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {(['high', 'golf', 'bullseye'] as const).map((c) => (
-            <Chip key={c} small label={`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`} on={contest === c} onPress={() => { tap(); pickContest(c); }} />
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Mono size={9} tone="faint">PLAYS</Mono>
-          <Chip small label="HEAD-TO-HEAD" on={format === 'h2h'} onPress={() => { tap(); setFormat('h2h'); setMax((m) => String(Math.min(32, Number(m) || 12))); }} />
-          <Chip small label="LEADERBOARD" on={format === 'board'} onPress={() => { tap(); setFormat('board'); }} />
-        </View>
-        <Mono size={8.5} tone="faint">{format === 'h2h' ? 'Paired each week — wins and losses. Empty seats play as the CPU until someone takes them.' : 'Everyone ranked each week.'}</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Mono size={9} tone="faint">RUNS</Mono>
-          <Chip small label="ALL SEASON" on={span === 'season'} onPress={() => { tap(); setSpan('season'); }} />
-          <Chip small label="THIS WEEK ONLY" on={span === 'week'} onPress={() => { tap(); setSpan('week'); }} />
-        </View>
-        {contest === 'bullseye' && (
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Mono size={9} tone="faint">CARD</Mono>
-            <Chip small label="SLOT TARGETS" on={variant === 'slots'} onPress={() => { tap(); setVariant('slots'); }} />
-            <Chip small label="ONE TEAM TOTAL" on={variant === 'total'} onPress={() => { tap(); setVariant('total'); }} />
-          </View>
-        )}
+        {essentials}
         <Mono size={9} tone="faint">BUDGET PER SQUAD</Mono>
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {CONTEST_BUDGETS.map((v) => <Chip key={v} small label={moneyChip(v, 'NO CAP')} on={budget === v} onPress={() => { tap(); setBudget(v); }} />)}
@@ -143,15 +177,9 @@ export function BullseyeStart({ onOpen, onBack }: { onOpen: (leagueId: string, n
           </>
         )}
         <Mono size={8.5} tone="faint">The default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST) — change the roster in COMMISH.</Mono>
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Mono size={9} tone="faint">{format === 'h2h' ? 'TEAMS (even, 2–32)' : `UP TO (2–${n0(cap)})`}</Mono>
-          <Field value={max} onChangeText={(v) => setMax(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 90 }} />
-        </View>
+        {teamsRow}
         <Field value={team} onChangeText={setTeam} maxLength={30} placeholder="Your team name (optional)" />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Switch value={list} onValueChange={setList} />
-          <Mono size={9} tone="dim" style={{ flex: 1 }}>POST IT ON THE LEAGUE BOARD SO ANYONE CAN FIND IT</Mono>
-        </View>
+        {listRow}
         {list && <Field value={blurb} onChangeText={setBlurb} maxLength={200} placeholder="Board blurb (optional)" />}
         <Chip on disabled={busy} label={busy ? 'MAKING IT…' : 'START THE LEAGUE →'} onPress={() => { tap(); void create(); }} />
       </Card>
