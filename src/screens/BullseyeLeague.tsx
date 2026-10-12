@@ -23,7 +23,7 @@ import {
   isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
-import { coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
+import { contestRedeal, coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { ContestMatchup } from './ContestMatchup';
 import { ContestSettingsTiles } from './ContestSettings';
@@ -482,7 +482,7 @@ function TeamRoom({ leagueId, lg, onOpenWeek, onRenamed }: { leagueId: string; l
     contestState(leagueId, lg.week, '2026', rid).then((s) => {
       if (!s.ok) return;
       const { slots, catalog, labels } = contestSetupOf(s);
-      const tb = contestTiebreak(leagueId, lg.week!, rid, contestCard(leagueId, lg.week!, slots, catalog), slots);
+      const tb = contestTiebreak(leagueId, lg.week!, rid, contestCard(leagueId, lg.week!, slots, catalog), slots, contestRedeal(s.plays));
       setTbLine(tb ? `⚖️ This week’s tie-breaker: your ${labels[tb.slot]} aims at ${tb.target}.` : null);
     }).catch(() => {});
   }, [bull, leagueId, lg.week, rid]);

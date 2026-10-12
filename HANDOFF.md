@@ -77,9 +77,9 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
      the board and losing, the DRIP COIN switch, WALLET on MY TEAM). PR 2
      done in v0.685.0 (0484: the five pre-kickoff plays, the scoring hook
      in `scoreContest`, the one-a-week cap, the web builder's PLAYS card).
-     Still to come: PR 3 the head-to-head plays (Spy, Jinx) and the
-     Bullseye pair (Magnet, Re-deal); PR 4 the phone's shop sheet (the
-     phone shows badges and the phantom already).
+     PR 3 done in v0.686.0 (0485: Spy, Jinx, Magnet, Re-deal). Still to
+     come: PR 4 the phone's shop sheet (the phone shows badges, the
+     phantom and the re-dealt tie-breaker already).
      ~~Swap history; sharing a squad card after squads unseal~~ — done in
      v0.676.0 (0478 `contest_swap` / `contest_swaps`; `squadCardText`).
 

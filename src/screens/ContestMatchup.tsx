@@ -15,7 +15,7 @@
 // leaderboard); the week arrows live in the league frame.
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById, contestRedeal } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { ringScore } from '@drip/core/engine/bullseye';
@@ -92,8 +92,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   // target chip on the player spots in the matchup as well"): each squad's own
   // tie-breaker spot and target, dealt per seat; the number rides the card as a chip (v0.682.2).
   const tbs = {
-    home: theCard ? contestTiebreak(leagueId, st.week ?? week, m.home, theCard, slots) : null,
-    away: theCard ? contestTiebreak(leagueId, st.week ?? week, m.away, theCard, slots) : null,
+    home: theCard ? contestTiebreak(leagueId, st.week ?? week, m.home, theCard, slots, contestRedeal(m.home_plays)) : null,
+    away: theCard ? contestTiebreak(leagueId, st.week ?? week, m.away, theCard, slots, contestRedeal(m.away_plays)) : null,
   };
   // One card for a spot: yours deals in face up; another squad's turns face
   // up — the reveal flip — once its player has kicked off (contest_matchup
@@ -102,7 +102,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const p = r.slug ? bySlug.get(r.slug) : null;
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
     // THE PLAYS (v0.685.0): the play on this spot (another's once the week has kicked off), the phantom as a card
-    const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot) ?? null;
+    // mine on my spot, or the other side's aimed at it (Spy, Jinx) — once they show
+    const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target !== 'opp')
+      ?? (s === 'home' ? m.away_plays : m.home_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target === 'opp') ?? null;
     // THE PENALTY CHIP (v0.685.2): a spot that posted nothing wears the dart's penalty, red
     const lvr = m.state?.slots?.find((x) => x.side === s && x.slot === r.slot);
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
@@ -126,7 +128,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const color = mine ? 'var(--you)' : 'var(--opp)';
     return (
       <div style={{ display: 'grid', gap: 1, alignContent: 'center', textAlign: edge, padding: edge === 'left' ? '0 4px 0 10px' : '0 10px 0 4px', minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${(() => { const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot); return pl ? ` · ${contestPlayById(pl.id)?.icon ?? ''}` : ''; })()}`}</span>
+        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${(() => { const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target !== 'opp') ?? (s === 'home' ? m.away_plays : m.home_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target === 'opp'); return pl ? ` · ${contestPlayById(pl.id)?.icon ?? ''}` : ''; })()}`}</span>
         <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
         <span className="mono" style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>
           {proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}
@@ -178,7 +180,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     return (
       <div style={{ display: 'grid', gap: 3, textAlign: edge, minWidth: 0 }}>
         <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: S.mine ? 'var(--you)' : 'color-mix(in srgb, var(--text) 80%, transparent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</span>
-        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap', flexDirection: edge === 'left' ? 'row' : 'row-reverse' }}>
+        {/* the cells stack, always (v0.686.0, founder: "the scores always stacked in two rows") */}
+        <div style={{ display: 'grid', gap: 6, justifyItems: edge === 'left' ? 'start' : 'end' }}>
           <div style={cell}>
             <span className="mono" style={{ ...big, color: t.points != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.points)}</span>
             <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}${t.bonus ? ` · ${t.bonus}` : ''}`}</span>

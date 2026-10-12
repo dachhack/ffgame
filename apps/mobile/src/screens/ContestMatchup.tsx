@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal } from '@drip/core/engine/contest';
 import { ringScore } from '@drip/core/engine/bullseye';
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
@@ -73,8 +73,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   // target chip on the player spots in the matchup as well"): each squad's own
   // tie-breaker spot and target, dealt per seat; the number rides the card as a chip (v0.682.2).
   const tbs = {
-    home: theCard ? contestTiebreak(leagueId, st.week ?? week, m.home, theCard, slots) : null,
-    away: theCard ? contestTiebreak(leagueId, st.week ?? week, m.away, theCard, slots) : null,
+    home: theCard ? contestTiebreak(leagueId, st.week ?? week, m.home, theCard, slots, contestRedeal(m.home_plays)) : null,
+    away: theCard ? contestTiebreak(leagueId, st.week ?? week, m.away, theCard, slots, contestRedeal(m.away_plays)) : null,
   };
   // One card for a spot: yours sits face up; another squad's starts on its
   // back and turns as its player kicks off (he arrives unsealed, so it flips).

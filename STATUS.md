@@ -22,6 +22,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.686.0 — Four more plays: Spy, Jinx, Magnet, Re-deal
+
+> - Head-to-head leagues get two plays aimed across the table. Spy (◎40) shows you your opponent's sealed pick in one spot before his kickoff; they can still change it, and re-checking is free. Jinx (◎55) is blind: the first touchdown the player in that spot scores is struck off, and it whiffs if he never scores one.
+> - Bullseye leagues get two of their own. Magnet (◎50) lands one spot half as far from its number at the final, or in a one-team-total league lands the whole squad half a radius closer. Re-deal (◎40) deals your tie-breaker spot and its number again before kickoff, once.
+> - Spy and Jinx take one of your plays for the week but none of your spots. On the web the scoreboard's two numbers now always stack.
+
+PR 3 of the drip-coin plan. Engine `contestPlays.ts` (the four, `contestPlaysFor`
+by format and contest, `contestPlayTarget` — Magnet is a squad play under
+a one-team total — `contestRedeal`, `contestJinxValue`); `contestTiebreak`
+takes a re-deal count and deals from a second seed; `scoreContest` reads
+the other side's plays for Jinx (the touchdown's worth from `opts.tdValue`,
+the league's catalog), moves a Magnet's dart at the final (a per-spot
+score halfway to its number; a one-team total's shift as a `PLAY` row,
+since the dart sums the rows). Migration `0485_contest_plays_two.sql`:
+prices; `contest_arm_play` (Spy and Jinx head-to-head only, Magnet and
+Re-deal Bullseye only; an opponent's spot may carry both; Magnet wants a
+filled spot per spot and none under a total); `_contest_sealed_entry(…,
+p_spy)` unseals the spied spot; `contest_matchup` and `contest_state` hand
+it the viewer's. The resolver loads the plays before the tie-breaker and
+passes `tdValue`. Web builder: the plays a league offers, an opponent-spot
+tap for Spy and Jinx on THEIR SQUAD (badges there), the re-dealt
+tie-breaker; both tables show the other side's aimed plays once they show;
+the phone reads the re-deal everywhere it draws the tie-breaker. Founder,
+mid-way: "the scores always stacked in two rows" — the web scoreboard's
+cells are a column. Scorer cases in `server/test/contest-plays.mjs` and a
+second section of `scripts/db/contest-plays-probes.sql`. Plain JS and SQL:
+no iPhone build.
+
 ### v0.685.2 — The penalty on the spot; the matchups in a row
 
 > - On the contest table, a spot that posted nothing now wears its no-show penalty as a red −10 chip on the card, where the tie-breaker number sits on other cards; tap it on the phone for what it means.

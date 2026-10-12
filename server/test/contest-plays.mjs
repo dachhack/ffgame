@@ -44,5 +44,26 @@ r = scoreContest(liveSquads, bull, pointsOf, { card: { targets: {}, total: 30 } 
 ok('…and once his game is over, the zero is a no-show: 10 off', r.home === 10 && r.bullseye?.home?.zeros === 1, [r.home, r.bullseye?.home]);
 r = scoreContest(liveSquads, cfg({ contest: 'golf', roster_slots: [{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['WR'], zero_pts: 25 }] }), pointsOf, { live: (s) => s === 'zero' });
 ok('golf: a live zero banks no zero-fill yet', r.home === 30, r.home);
+// PR 3 (v0.686.0): Jinx from across the table, Magnet under the dart, Re-deal of the tie-breaker
+import { contestTiebreak } from '../../packages/core/src/engine/contest.ts';
+const pbp2 = { qb: [{ k: 'pass', td: 1, y: 12 }, { k: 'pass', td: 1, y: 44 }], rb: [{ k: 'rush', td: 1, y: 3 }], wr: [{ k: 'rec', td: 0, y: 20 }] };
+const playsOf2 = (s) => pbp2[s] ?? [];
+r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [], away: [{ id: 'jinx', slot: 'S1' }] }, playsOf: playsOf2, tdValue: { pass: 4, rush: 6, rec: 6 } });
+ok('jinx: the first touchdown pass is struck off the jinxed spot, at the league\'s value', r.home === 38 - 4 && r.slots.find((x) => x.side === 'home' && x.slot === 'S1').play === 'jinx', r.home);
+r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [], away: [{ id: 'jinx', slot: 'S3' }] }, playsOf: playsOf2 });
+ok('jinx: a spot whose player never scored a touchdown whiffs', r.home === 38, r.home);
+r = scoreContest({ home: squads.home, away: squads.home }, cfg({ contest_format: 'board' }), pointsOf, { plays: { home: [{ id: 'jinx', slot: 'S1' }], away: [{ id: 'jinx', slot: 'S1' }] }, playsOf: playsOf2 });
+ok('jinx: a leaderboard row is its own opponent — nothing to jinx', r.home === 38, r.home);
+r = scoreContest(squads, bullS, pointsOf, { plays: { home: [{ id: 'magnet', slot: 'S1' }], away: [] }, card: { targets: { S1: 30, S2: 10, S3: 8 }, total: 48 }, settled: true });
+ok('magnet, per spot: 20 against 30 lands at 25 — half as far, the dart rings 5 not 0', r.slots.find((x) => x.side === 'home' && x.slot === 'S1').aim.dist === 5 && r.home === 5 + 20 + 20, [r.home, r.slots.find((x) => x.side === 'home' && x.slot === 'S1')]);
+r = scoreContest(squads, bullS, pointsOf, { plays: { home: [{ id: 'magnet', slot: 'S1' }], away: [] }, card: { targets: { S1: 30, S2: 10, S3: 8 }, total: 48 } });
+ok('…and reads raw until the final', r.slots.find((x) => x.side === 'home' && x.slot === 'S1').aim.dist === 10, r.slots.find((x) => x.side === 'home' && x.slot === 'S1'));
+r = scoreContest(squads, bull, pointsOf, { plays: { home: [{ id: 'magnet' }], away: [] }, card: { targets: {}, total: 50 }, settled: true });
+ok('magnet, one-team total: 38 against 50 is 12 off; half a radius closer is 7 off', r.home === 7, r.home);
+const slotsB = [{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['WR'] }, { pos: ['WR'] }, { pos: ['RB'] }];
+const card = { targets: { S1: 20, S2: 10, S3: 8, S4: 9, S5: 11 }, total: 58 };
+const t0 = contestTiebreak('L', 7, 1, card, bullS.slots.length ? slotsB.map((d, i) => ({ ...d, slot: `S${i + 1}`, type: d.pos[0] })) : []);
+const t1 = contestTiebreak('L', 7, 1, card, slotsB.map((d, i) => ({ ...d, slot: `S${i + 1}`, type: d.pos[0] })), 1);
+ok('re-deal: a second deal comes from a second seed, and the first deal stays what it was', t0 && t1 && JSON.stringify(t0) === JSON.stringify(contestTiebreak('L', 7, 1, card, slotsB.map((d, i) => ({ ...d, slot: `S${i + 1}`, type: d.pos[0] })))) && JSON.stringify(t0) !== JSON.stringify(t1), [t0, t1]);
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);
