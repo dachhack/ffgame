@@ -73,10 +73,11 @@ export function CardBack({ seed }: { seed: string }) {
   );
 }
 
-export function CardFace({ slug, name, pos, team, slot, points, mine, locked, foot, chip, onChip }: {
+export function CardFace({ slug, name, pos, team, slot, points, mine, locked, foot, chip, onChip, chipTone = 'gold' }: {
   slug: string; name: string; pos: string; team?: string | null; slot?: string; points?: number | null;
   /** Bottom-right when there is no score yet: the builder's price (v0.681.0). */ foot?: string;
   /** THE TIE-BREAKER CHIP (v0.682.2): the spot's number, top-right, in place of the slot label; a tap explains it. */ chip?: string | null; onChip?: () => void;
+  /** 'warn' (v0.685.2): the chip is a penalty (the dart's no-show zero), red. */ chipTone?: 'gold' | 'warn';
   /** Your own card (gold trim) or theirs (red). */ mine?: boolean;
   /** His game has kicked off (the card is set). */ locked?: boolean;
 }) {
@@ -88,7 +89,7 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked, fo
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', color: '#fff', backgroundColor: suit, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, overflow: 'hidden' }}>{pos === 'DEF' ? 'DST' : pos}</Text>
         {chip != null
-          ? <Pressable hitSlop={8} onPress={onChip} style={{ backgroundColor: '#2A2010', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 1 }}><Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: '#FFD86B' }}>{chip}</Text></Pressable>
+          ? <Pressable hitSlop={8} onPress={onChip} style={{ backgroundColor: chipTone === 'warn' ? '#8E2430' : '#2A2010', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 1 }}><Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: chipTone === 'warn' ? '#fff' : '#FFD86B' }}>{chip}</Text></Pressable>
           : slot ? <Text style={{ fontFamily: MONO, fontSize: fs(7), color: INK, opacity: 0.7, letterSpacing: 0.6 }}>{slot.toUpperCase()}</Text> : null}
       </View>
       <View style={{ flex: 1, marginTop: 4, borderRadius: 6, borderWidth: 1.2, borderColor: suit, backgroundColor: '#E8E0C8', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>

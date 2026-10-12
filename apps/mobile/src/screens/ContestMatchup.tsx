@@ -82,7 +82,10 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const p = r.slug ? bySlug.get(r.slug) : null;
     if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} />;
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
-    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} chip={tbc ? String(tbc.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} /> : <View />;
+    // THE PENALTY CHIP (v0.685.2): a spot that posted nothing wears the dart's penalty, red
+    const lvr = m.state?.slots?.find((x) => x.side === s && x.slot === r.slot);
+    const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
+    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert(pen != null ? 'No-show' : 'Tie-breaker', pen != null ? `This spot posted nothing, and a zero scores nothing: it adds ${pen} to the squad's distance.` : TB_NOTE)} /> : <View />;
     return <FlipCard key={`${s}-${r.slot}`} flipped={mine || !!r.slug} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={face} />;
   };
   // THE NUMBERS (v0.678.0, founder: "the player score and projection to the
@@ -154,7 +157,6 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       </View>
     );
   };
-  const status = m.status === 'final' ? 'FINAL' : st.started ? 'LIVE' : 'LOCKS AT EACH KICKOFF';
   return (
     <View style={{ gap: 10 }}>
       {(st.matchups?.length ?? 0) > 1 && (
@@ -165,11 +167,6 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
           ))}
         </ScrollView>
       )}
-      <Card style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <Mono size={9} tone="you" weight="700" track={0.1}>{m.label ? `${m.label.toUpperCase()} · ${status}` : status}</Mono>
-        {!solo && <Mono size={9} tone="faint">{`${L.team} v ${R.team}`}</Mono>}
-        {!solo && !st.started && <Mono size={8.5} tone="faint" style={{ width: '100%' }}>{`${R.mine ? 'Your' : 'Their'} cards turn face up as each player's game kicks off.`}</Mono>}
-      </Card>
       <FeltTable>
         {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}
         <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 4, paddingBottom: 10, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: alpha(t.text, 12) }}>

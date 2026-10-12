@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.685.2 — The penalty on the spot; the matchups in a row
+
+> - On the contest table, a spot that posted nothing now wears its no-show penalty as a red −10 chip on the card, where the tie-breaker number sits on other cards; tap it on the phone for what it means.
+> - The matchup chips are one scrollable row with no label, and the LIVE box above the table is gone: the scoreboard says it.
+
+Founder: "put the penalty as a chip on the spot that is at 0. We don't
+need the 'Matchups' text. Let's make all the matchups a scrollable row.
+The 'Live' box isn't needed either." Web `PlayerCard` and phone `CardFace`
+gain `chipTone: 'warn'`; both `ContestMatchup` screens read the slot
+row's `aim.penalty` on a zero score and put `−N` on the card (the
+tie-breaker chip yields to it), drop the status card and its `status`
+line, and the web's matchup row scrolls sideways without the SQUADS /
+MATCHUPS word (the phone's already did). Plain JS: no iPhone build.
+
 ### v0.685.1 — A zero so far is not a zero
 
 > - On a Bullseye table, a player whose game is still on and who hasn't scored yet was being charged the 10-point no-show penalty live, so a squad could read 60 off when its points were 30 off. He now counts as a spot still to play until he posts or his game ends; the penalty waits for a real zero. Golf's zero-fill waits the same way.
