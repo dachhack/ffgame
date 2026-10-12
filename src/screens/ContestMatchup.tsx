@@ -15,7 +15,9 @@
 // leaderboard); the week arrows live in the league frame.
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById } from '@drip/core/engine/contest';
+import { GHOST_PLAYER } from '@drip/core/engine/sim';
+import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { ringScore } from '@drip/core/engine/bullseye';
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
@@ -99,7 +101,10 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
     const p = r.slug ? bySlug.get(r.slug) : null;
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
-    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} chip={tbc ? String(tbc.target) : null} onChip={() => setTbNote(TB_NOTE)} />;
+    // THE PLAYS (v0.685.0): the play on this spot (another's once the week has kicked off), the phantom as a card
+    const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot) ?? null;
+    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} badge={pl ? contestPlayById(pl.id)?.icon : undefined} chip={tbc ? String(tbc.target) : null} onChip={() => setTbNote(TB_NOTE)} />;
+    if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={false} />;
     return (
       <div key={`${s}-${r.slot}-empty`} className="ct-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed color-mix(in srgb, var(--text) 25%, transparent)', borderRadius: 10 }}>
@@ -118,7 +123,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const color = mine ? 'var(--you)' : 'var(--opp)';
     return (
       <div style={{ display: 'grid', gap: 1, alignContent: 'center', textAlign: edge, padding: edge === 'left' ? '0 4px 0 10px' : '0 10px 0 4px', minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</span>
+        <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}${(() => { const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot); return pl ? ` · ${contestPlayById(pl.id)?.icon ?? ''}` : ''; })()}`}</span>
         <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
         <span className="mono" style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>
           {proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}
@@ -144,6 +149,8 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const radius = st.radius ?? 10;
   const tally = (s: 'home' | 'away', S: typeof L) => {
     let pts = 0, proj = 0, ringProj = 0, known = true, toPlay = 0;
+    const bonusRows = (m.state?.slots ?? []).filter((x) => x.side === s && x.slot === 'PLAY');
+    for (const b of bonusRows) { pts += b.score; proj += b.score; }
     for (const r of S.rows) {
       const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
       if (score != null) pts += score;
@@ -157,7 +164,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const projected = known ? proj : null;
     // a one-team-total league's score IS the distance (v0.683.0): project that
     const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
-    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay };
+    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay, bonus: bonusRows.map((b) => `${contestPlayById(b.play ?? '')?.icon ?? '⚡'} ${b.score > 0 ? '+' : ''}${b.score}`).join(' ') };
   };
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const t = tally(s, S);
@@ -171,7 +178,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap', flexDirection: edge === 'left' ? 'row' : 'row-reverse' }}>
           <div style={cell}>
             <span className="mono" style={{ ...big, color: t.points != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.points)}</span>
-            <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}`}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}${t.bonus ? ` · ${t.bonus}` : ''}`}</span>
           </div>
           {bull && (
             <div style={cell}>

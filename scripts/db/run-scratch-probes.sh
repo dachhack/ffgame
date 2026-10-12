@@ -169,6 +169,7 @@ $RUN -f scripts/db/contest-matchup-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-
 $RUN -f scripts/db/contest-entries-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-ENTRIES PROBES" || { echo "CONTEST-ENTRIES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/contest-distance-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-DISTANCE PROBES" || { echo "CONTEST-DISTANCE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/contest-coin-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-COIN PROBES" || { echo "CONTEST-COIN PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/contest-plays-probes.sql | grep -E "PROBE FAIL|ALL CONTEST-PLAYS PROBES" || { echo "CONTEST-PLAYS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/taco-locker-probes.sql | grep -E "PROBE FAIL|ALL TACO-LOCKER PROBES" || { echo "TACO-LOCKER PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/shotgun-wedding-probes.sql | grep -E "PROBE FAIL|ALL SHOTGUN-WEDDING PROBES" || { echo "SHOTGUN-WEDDING PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/ai-open-seat-probes.sql | grep -E "PROBE FAIL|ALL AI-OPEN-SEAT PROBES" || { echo "AI-OPEN-SEAT PROBES FAILED"; exit 1; }

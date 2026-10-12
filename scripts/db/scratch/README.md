@@ -41,6 +41,6 @@ psql -h /tmp -p 5499 -U postgres -d t -q -v ON_ERROR_STOP=1 -f scripts/db/scratc
   stack, so it is probed on the full chain instead:
   `scripts/db/contest-playoffs-probes.sql` in the runner — as are 0477–0481
   (`contest-prizes-`, `contest-swaps-`, `contest-matchup-`,
-  `contest-entries-`, `contest-distance-`, `contest-coin-probes.sql`), which
-  copy bodies from 0476 and later.
+  `contest-entries-`, `contest-distance-`, `contest-coin-`,
+  `contest-plays-probes.sql`), which copy bodies from 0476 and later.
 - The cluster is not persistent across sessions: re-run the recipe.

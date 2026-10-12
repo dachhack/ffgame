@@ -74,12 +74,12 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
      without a squad (v0.682.3).
   7. Drip coin and power-ups on contest leagues — PR 1 done in v0.684.0
      (0483: the wallet, the week's earn that pays for showing up, reading
-     the board and losing, the DRIP COIN switch, WALLET on MY TEAM). Still
-     to come: PR 2 the pre-kickoff plays (Underdog, Double or Nothing,
-     Ghost, Hail Mary, Pick Six) and the scoring hook in `scoreContest`;
-     PR 3 the head-to-head plays (Spy, Jinx) and the Bullseye pair
-     (Magnet, Re-deal); PR 4 the phone's shop sheet. The one-play-a-week
-     cap belongs to PR 2.
+     the board and losing, the DRIP COIN switch, WALLET on MY TEAM). PR 2
+     done in v0.685.0 (0484: the five pre-kickoff plays, the scoring hook
+     in `scoreContest`, the one-a-week cap, the web builder's PLAYS card).
+     Still to come: PR 3 the head-to-head plays (Spy, Jinx) and the
+     Bullseye pair (Magnet, Re-deal); PR 4 the phone's shop sheet (the
+     phone shows badges and the phantom already).
      ~~Swap history; sharing a squad card after squads unseal~~ — done in
      v0.676.0 (0478 `contest_swap` / `contest_swaps`; `squadCardText`).
 

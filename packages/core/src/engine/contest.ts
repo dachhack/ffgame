@@ -10,6 +10,8 @@
 import { applyBullseye, bullseyeConfigOf, dealBullseyeCard, type BullseyeCard, type BullseyeConfig } from './bullseye';
 import { leagueSlotDefs, slotAllows, slotDisplayName, isRetSlot, type ClassicResult, type ClassicSlotDef, type ClassicSlotScore, type SlotSpec } from './classic';
 import { tiebreakDistance, type BoardPlayer } from './dfsBullseye';
+import { contestEventBonus, GHOST_POINTS, type ContestPlay, type ContestPlayId, type PlayEvent } from './contestPlays';
+export { CONTEST_PLAYS, contestPlayById, contestPlayCap, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId } from './contestPlays';
 
 export type ContestKind = 'high' | 'golf' | 'bullseye';
 export type ContestFormat = 'h2h' | 'board';
@@ -241,6 +243,11 @@ export function scoreContest(
     pending?: (slug: string) => boolean;
     card?: BullseyeCard | null;
     tiebreak?: { home?: ContestTiebreak | null; away?: ContestTiebreak | null };
+    /** THE PLAYS (v0.685.0): each side's armed plays, its players' real plays for the event
+     *  bonuses, and whether the week is settled (Double or Nothing resolves at the final). */
+    plays?: { home?: ContestPlay[] | null; away?: ContestPlay[] | null };
+    playsOf?: (slug: string) => PlayEvent[];
+    settled?: boolean;
   } = {},
 ): ClassicResult & { tiebreak: { home: number | null; away: number | null } } {
   const pending = opts.pending ?? (() => false);
@@ -248,35 +255,64 @@ export function scoreContest(
   const counted = { home: 0, away: 0 };
   const tb = { home: null as number | null, away: null as number | null };
   const radius = cfg.bullseye?.radius ?? 10;
+  const lower = contestLowerWins(cfg);
+  const bonus = { home: 0, away: 0 };
+  const bonusRows = { home: [] as ClassicSlotScore[], away: [] as ClassicSlotScore[] };
   for (const side of ['home', 'away'] as const) {
     const t = opts.tiebreak?.[side] ?? null;
+    const plays = opts.plays?.[side] ?? [];
+    const playOn = (slot: string, id: ContestPlayId) => plays.find((p) => p.id === id && p.slot === slot) ?? null;
     let tbDone = false;
     for (const d of cfg.slots) {
       const slug = squads[side][d.slot] ?? null;
       if (slug && pending(slug)) continue;
+      const ghost = !slug ? playOn(d.slot, 'ghost') : null;
       counted[side]++;
       let score = slug ? Math.round(pointsOf(slug, d.slot, d) * 10) / 10 : 0;
+      const raw = score;
+      let play: string | undefined;
       // THE ZERO-FILL RULE (0200): a spot that scores nothing banks its
       // zero_pts — a penalty in golf, a floor in a high-score league. Not
       // under the dart, which prices a zero itself.
       if (cfg.contest !== 'bullseye' && d.zeroPts != null && Math.abs(score) < 1e-9) score = d.zeroPts;
-      if (!slug && cfg.contest === 'bullseye') continue;   // an empty spot is a zero — the penalty finds the missing row
-      sideRows[side].push({ win: 'wk', side, slot: d.slot, slug, metric: null, score });
-      if (t && t.slot === d.slot) { tb[side] = tiebreakDistance(slug ? score : 0, t.target, radius); tbDone = true; }
+      // THE PLAYS: a phantom banks its flat points; Underdog runs the spot
+      // ×1.5; Double or Nothing settles at the final — double past his
+      // projection, zero short of it — and reads raw until then.
+      if (ghost) { score = GHOST_POINTS; play = 'ghost'; }
+      else if (slug && playOn(d.slot, 'underdog')) { score = Math.round(score * 1.5 * 10) / 10; play = 'underdog'; }
+      else if (slug && playOn(d.slot, 'double-or-nothing')) {
+        const don = playOn(d.slot, 'double-or-nothing')!;
+        play = 'double-or-nothing';
+        if (opts.settled) score = don.proj != null && raw > don.proj ? Math.round(raw * 2 * 10) / 10 : 0;
+      }
+      if (!slug && !ghost && cfg.contest === 'bullseye') continue;   // an empty spot is a zero — the penalty finds the missing row
+      sideRows[side].push({ win: 'wk', side, slot: d.slot, slug, metric: null, score, ...(play ? { play, raw } : {}) });
+      if (t && t.slot === d.slot) { tb[side] = tiebreakDistance(slug || ghost ? score : 0, t.target, radius); tbDone = true; }
     }
     if (t && !tbDone && !(squads[side][t.slot] && pending(squads[side][t.slot]!))) tb[side] = tiebreakDistance(0, t.target, radius);
+    // THE EVENT BONUSES: Hail Mary and Pick Six, from the squad's real plays.
+    if (plays.length && opts.playsOf) {
+      const slugs = cfg.slots.map((d) => squads[side][d.slot]).filter((x): x is string => !!x && !pending(x));
+      for (const b of contestEventBonus(plays, slugs, opts.playsOf)) {
+        bonus[side] += b.delta;
+        bonusRows[side].push({ win: 'wk', side, slot: 'PLAY', slug: null, metric: null, score: lower ? -b.delta : b.delta, play: b.id });
+      }
+    }
   }
   if (cfg.contest !== 'bullseye' || !cfg.bullseye || !opts.card) {
+    // high: the bonus adds; golf: it takes off (a bonus always helps)
     const sum = (rows: ClassicSlotScore[]) => Math.round(rows.reduce((s, r) => s + r.score, 0) * 10) / 10;
-    const h = sum(sideRows.home), a = sum(sideRows.away);
-    return { home: h, away: a, slots: [...sideRows.home, ...sideRows.away], states: [{ window: 'wk', home: h, away: a }], tiebreak: tb };
+    const h = sum([...sideRows.home, ...bonusRows.home]), a = sum([...sideRows.away, ...bonusRows.away]);
+    return { home: h, away: a, slots: [...sideRows.home, ...bonusRows.home, ...sideRows.away, ...bonusRows.away], states: [{ window: 'wk', home: h, away: a }], tiebreak: tb };
   }
   const bull = { cfg: cfg.bullseye, card: opts.card };
   const dartSide = (side: 'home' | 'away') => {
     const rows = sideRows[side].map((r) => ({ ...r, side: 'home' as const }));
     const pts = rows.reduce((s, r) => s + r.score, 0);
     const res = applyBullseye({ home: pts, away: 0, slots: rows, states: [{ window: 'wk', home: pts, away: 0 }] }, bull, Math.max(1, counted[side]));
-    return { ring: res.home, rows: res.slots.filter((r) => r.side === 'home').map((r) => ({ ...r, side })), summary: res.bullseye?.home };
+    // a bonus helps the dart: it comes off a one-team total's distance, or onto a per-spot ring
+    const ring = bonus[side] ? (lower ? Math.max(0, Math.round((res.home - bonus[side]) * 10) / 10) : Math.round((res.home + bonus[side]) * 10) / 10) : res.home;
+    return { ring, rows: [...res.slots.filter((r) => r.side === 'home').map((r) => ({ ...r, side })), ...bonusRows[side].map((r) => ({ ...r, score: Math.abs(r.score) }))], summary: res.bullseye?.home };
   };
   const h = dartSide('home'), a = dartSide('away');
   return {

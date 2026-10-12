@@ -620,9 +620,17 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       home: contestTiebreak(matchup.league_id, matchup.week, matchup.home_roster_id, card, contestCfg.slots),
       away: contestTiebreak(matchup.league_id, matchup.week, matchup.away_roster_id, card, contestCfg.slots),
     } : undefined;
+    // THE PLAYS (0484): each side's armed plays, when the league's coin is on.
+    let plays;
+    if (contestCfg.coin) {
+      const { data: pr } = await db().from('contest_play').select('roster_id, play_id, slot, proj')
+        .eq('league_id', matchup.league_id).eq('week', matchup.week).in('roster_id', [matchup.home_roster_id, matchup.away_roster_id]);
+      const of = (rid) => (pr ?? []).filter((x) => x.roster_id === rid).map((x) => ({ id: x.play_id, slot: x.slot, proj: x.proj == null ? null : Number(x.proj) }));
+      plays = { home: of(matchup.home_roster_id), away: of(matchup.away_roster_id) };
+    }
     const r = scoreContest({ home: homeSquad, away: awaySquad }, contestCfg,
       (slug, slot, def) => classicPoints(player(slug), matchup.week, catalog, contestScoreAs(def), slot),
-      { pending, card, tiebreak });
+      { pending, card, tiebreak, plays, playsOf: (slug) => playsFor(matchup.week, slug) ?? [], settled: matchup.status === 'final' });
     for (const st of r.states) states.push({ game_window: st.window, home_score: st.home, away_score: st.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

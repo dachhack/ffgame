@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.685.0 — The plays: spend the wallet before kickoff
+
+> - A contest league with drip coin on can now spend it. Before the week's first kickoff, a seat arms one play (two in a head-to-head league) from the PLAYS card in the squad builder: Underdog (◎35, a bottom-third-priced player scores ×1.5), Double or Nothing (◎80, a staked spot scores double past his projection or zero short of it), Ghost Player (◎75, a phantom fills a spot at no salary for a flat 14), Hail Mary (◎35, a 40-yard touchdown pass banks +15) and Pick Six (◎45, a defensive return touchdown banks +25). Take one back before kickoff and the coin comes home.
+> - Armed plays ride the cards as a badge, yours now and your opponent's once the week has kicked off; a ghosted spot deals the phantom. A bonus always helps: it adds in a high-score league, comes off in golf, and moves a Bullseye dart the right way.
+> - Web first. The phone shows the badges and the phantom but arms nothing yet; its shop sheet is the next piece.
+
+PR 2 of the drip-coin plan. Engine `contestPlays.ts` (the catalog, prices
+as `data/powerups.ts` where shared, `contestEventBonus` from the squad's
+real plays) and the hook in `scoreContest` (`opts.plays` / `playsOf` /
+`settled`; a row carries `play` and `raw`; an event bonus is a `PLAY` row,
+negative in golf, and lifts a Bullseye ring or cuts a one-team total's
+distance). Migration `0484_contest_plays.sql`: `contest_play`,
+`contest_arm_play` (the target rules — Underdog's bottom third, Double or
+Nothing's projection stored, the Ghost evicting the player there into the
+swap history; the cap; `spend_from_wallet` with a nonce so a re-arm pays
+again), `contest_disarm_play` (refund), `contest_plays` (mine open,
+another's once kicked off); `contest_state` carries `plays` and `play_cap`,
+`contest_matchup` both sides' (sealed like the squads);
+`_contest_squad_check` lets a ghost hold an empty spot;
+`save_contest_entry` refuses a player on a ghosted spot. The worker feeds
+the seat's plays and `playsFor` into the scorer when coin is on. Web
+`ContestSquad`: the PLAYS card (tap a play, then a spot), badges, the
+phantom's card, a ghosted spot counted as filled; `ContestMatchup`: badges,
+the phantom, the bonus on the scoreboard. `server/test/contest-plays.mjs`
+(the scorer, eleven cases) and `scripts/db/contest-plays-probes.sql` (full
+chain, in the runner). Plain JS and SQL: no iPhone build.
+
 ### v0.684.0 — Drip coin on a contest league: the wallet and the week's earn
 
 > - A contest league's commissioner can turn on DRIP COIN. Every seat starts with ◎100 and earns each week for showing up (a squad of your own saved before the first kickoff, and weeks in a row), for reading the board (a bargain, the call, a dead-on dart) and for losing (the heartbreaker, a loss, the bottom half, catch-up below the season's median). A win pays nothing: the win already paid. A wallet above ◎150 burns down to 150 at the week's end.
