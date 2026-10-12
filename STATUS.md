@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.690.1 — The shop stays open all week
+
+> - In a drip-coin contest league the PLAYS bar, the 🛒 SHOP and your hand now show all week, not only before the first kickoff. Once the week has kicked off you can still buy plays into your hand; the cards wait, dimmed, and play before the next week's first kickoff. TAKE BACK hides once the week has started, since a play is set by then.
+
+The founder, on a started week: "Where do I buy power ups?" The bar and hand
+were gated on `!st.started`, so on a Monday there was nothing to find.
+`contest_buy_play` has no kickoff gate, so the gate moves to the cards:
+`usable` and a note on the hand, and the bar's line says when they play.
+
 ### v0.690.0 — Weekly draft, the fast track
 
 > - START A LEAGUE has a third game: WEEKLY DRAFT. Pick it and the form ends on the next step — name it, say how it wins (most points, golf, bullseye), head-to-head or a leaderboard, how long it runs and how many teams — and CREATE WEEKLY DRAFT LEAGUE opens the league. The budget, roster, scoring, prizes and entry rules are on COMMISH once it exists, as before.

@@ -289,8 +289,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
   const hand: HandCard[] = cfg.coin ? contestPlaysFor(cfg.format, cfg.contest).filter((d) => (inventory[d.id] ?? 0) > 0).map((d) => ({
     id: d.id, qty: inventory[d.id] ?? 0,
     action: contestPlayTarget(d, cfg.bullseye?.variant) === 'squad' ? 'arm' : 'aim',
-    usable: !busy && plays.length < cap && !plays.some((x) => x.id === d.id),
-    note: plays.some((x) => x.id === d.id) ? 'already in play this week' : plays.length >= cap ? 'your plays for the week are set' : d.target === 'opp' ? 'tap one of their spots' : 'tap one of your spots',
+    usable: !st.started && !busy && plays.length < cap && !plays.some((x) => x.id === d.id),
+    note: st.started ? 'the week has kicked off — playable next week' : plays.some((x) => x.id === d.id) ? 'already in play this week' : plays.length >= cap ? 'your plays for the week are set' : d.target === 'opp' ? 'tap one of their spots' : 'tap one of your spots',
   })) : [];
   const clearAll = () => {
     const keep: Record<string, string | null> = {};
@@ -383,13 +383,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
         </Card>
 
         {/* THE SHOP AND THE HAND (v0.688.0): the shop buys a play into the hand at the foot of the screen; the hand plays it */}
-        {cfg.coin && editable && !st.started && (
+        {cfg.coin && editable && (
           <Card style={{ gap: 6 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYS</Mono>
               <Display size={16}>{`◎ ${Math.round(wallet ?? 0)}`}</Display>
               <Chip small on label="🛒 SHOP" onPress={() => { tap(); setShop(true); }} />
-              <Mono size={8.5} tone="faint" style={{ flexBasis: '100%' }}>{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played this week · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · play from the hand below, before the first kickoff`}</Mono>
+              <Mono size={8.5} tone="faint" style={{ flexBasis: '100%' }}>{st.started
+                ? `the week has kicked off — buy now, play before next week's first kickoff · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand`
+                : `${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played this week · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · play from the hand below, before the first kickoff`}</Mono>
             </View>
             {armingDef && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -400,7 +402,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
             {plays.map((x) => (
               <View key={`${x.id}-${x.slot ?? ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Mono size={9} tone="dim" style={{ flex: 1 }}>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''}`}</Mono>
-                <Chip small dim disabled={busy} label="TAKE BACK" onPress={() => { tap(); void disarm(x); }} />
+                {!st.started && <Chip small dim disabled={busy} label="TAKE BACK" onPress={() => { tap(); void disarm(x); }} />}
               </View>
             ))}
           </Card>
@@ -579,7 +581,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
           onChanged={(balance, inv) => { setWallet(balance); setInventory(inv); }} />
       )}
       {/* THE HAND (v0.688.0): the plays in hand, fanned over the room bar; a squad play arms, a spot play waits for a tap */}
-      {cfg.coin && editable && !st.started && hand.length > 0 && (
+      {cfg.coin && editable && hand.length > 0 && (
         <PowerupHand lift={50} cards={hand} busyId={busy ? arming : null} defOf={(id) => contestPlayById(id)} armLabel="PLAY · TAKE BACK BEFORE KICKOFF"
           onArm={(id) => { const d = contestPlayById(id); if (!d) return; if (contestPlayTarget(d, cfg.bullseye?.variant) === 'squad') void arm(d.id); else setArming(d.id); }} />
       )}
