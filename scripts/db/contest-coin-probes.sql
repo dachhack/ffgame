@@ -113,4 +113,30 @@ begin
   perform assert_true((contest_state(h, wk) ->> 'wallet')::numeric = dc_bal(h, 1) and (contest_state(h, wk) ->> 'coin')::boolean, 'dc8c contest_state carries the seat''s wallet');
   perform assert_true(jsonb_typeof(bullseye_my_weeks(g) -> 'wallet') = 'object', 'dc8d …and the board league''s');
 end $$;
+-- ── THE WEEKLY DRAFT SETUP (0488): coin from creation, and a one-week league's week ──
+do $$
+declare r jsonb; l uuid; wk int;
+begin
+  perform probe_as('a');
+  wk := (contest_week_now('2026') ->> 'week')::int;
+  perform assert_true(wk is not null, 'ws0 the form can ask which week it is');
+  -- coin from the start: the setting is on and the creator's wallet is seeded
+  r := create_contest_league('WS Coin', 'high', 'board', 'season', 12, 50000, 'slots', 10, null, '2026', 0, null, true);
+  perform assert_ok(r, 'ws1 a league with coin from creation'); l := (r ->> 'league_id')::uuid;
+  perform assert_true((select settings_json ->> 'coin' from league where id = l) = 'true', 'ws2 coin is on');
+  perform assert_true(jsonb_typeof(bullseye_my_weeks(l) -> 'wallet') = 'object', 'ws3 …and the creator has a wallet');
+  -- a one-week league names its week: this week or later, through 18
+  r := create_contest_league('WS Week', 'high', 'board', 'week', 12, 50000, 'slots', 10, null, '2026', 0, least(wk + 1, 18), false);
+  perform assert_ok(r, 'ws4 a one-week league for a later week'); l := (r ->> 'league_id')::uuid;
+  perform assert_true((select contest_week from league where id = l) = least(wk + 1, 18), 'ws5 …plays that week');
+  r := create_contest_league('WS Past', 'high', 'board', 'week', 12, 50000, 'slots', 10, null, '2026', 0, wk - 1, false);
+  perform assert_err(r, 'ws6 a week already gone is refused');
+  r := create_contest_league('WS Far', 'high', 'board', 'week', 12, 50000, 'slots', 10, null, '2026', 0, 19, false);
+  perform assert_err(r, 'ws7 week 19 is refused');
+  r := create_contest_league('WS Now', 'high', 'board', 'week', 12, 50000, 'slots', 10, null, '2026', 0, null, false);
+  perform assert_ok(r, 'ws8 no week named = this week'); l := (r ->> 'league_id')::uuid;
+  perform assert_true((select contest_week from league where id = l) = wk, 'ws9 …which is this one');
+  perform assert_true((select settings_json ->> 'coin' from league where id = l) is null, 'ws10 coin off unless asked');
+end $$;
+
 select 'ALL CONTEST-COIN PROBES PASSED';

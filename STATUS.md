@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.691.0 — The weekly draft setup
+
+> - The weekly draft form (START A LEAGUE → WEEKLY DRAFT, and the full form) is NFL only and says so; picking WEEKLY DRAFT snaps the sport to NFL.
+> - DRIP COIN & POWER-UPS is part of the setup, on by default: every seat starts with ◎100 and the shop sells plays before kickoff.
+> - RUNS is ALL SEASON or ONE WEEK ONLY, and a one-week league picks WHICH WEEK from a row of weeks with this week marked NOW, through week 18.
+> - The budget is a box you type into, $50,000 by default (0 is no cap); golf adds a MIN SPEND box.
+
+The founder's four asks on the weekly form. Migration 0488:
+`create_contest_league` gains `p_week` (this week to 18; null = this week)
+and `p_coin` (the setting on, the creator's seat seeded; join_contest seeds
+later seats as before) — drop, recreate, regrant; `contest_week_now(season)`
+for the selector. liveApi `createContestLeague({ week, coin })`,
+`contestWeekNow`. Both `BullseyeStart` forms (full and quick): the WHICH
+WEEK row, the budget and min-spend boxes in place of the chips, the DRIP
+COIN switch, the NFL header and note; the WEEKLY DRAFT chip calls
+`pickSport('nfl')`. Probes: `contest-coin-probes.sql` THE WEEKLY DRAFT
+SETUP (ws0–ws10).
+
 ### v0.690.1 — The shop stays open all week
 
 > - In a drip-coin contest league the PLAYS bar, the 🛒 SHOP and your hand now show all week, not only before the first kickoff. Once the week has kicked off you can still buy plays into your hand; the cards wait, dimmed, and play before the next week's first kickoff. TAKE BACK hides once the week has started, since a play is set by then.
