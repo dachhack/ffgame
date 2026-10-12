@@ -280,4 +280,80 @@ begin
   reset role;
 end $$;
 
+-- ── AFTER GAMES, EVERY UNOWNED PLAYER (0487, #1237) ─────────────────────────
+-- Bagent: never dropped, claimed Sunday morning before his kickoff, stamped for
+-- Monday's run, and Monday's run honoured the stamp. Now his kickoff holds him
+-- until the hold-day run, and the run waits for the hold even when the claim's
+-- own stamp has passed.
+do $$
+declare r jsonb; lid uuid := current_setting('probe.wv_lid')::uuid;
+        aseat int := current_setting('probe.wv_a')::int;
+        cseat int := current_setting('probe.wv_c')::int;
+        gh int; exp_hold timestamptz; cid uuid;
+begin
+  perform probe_as('a');
+  -- the schedule: a run every day at midnight ET (clear min 0, so the door on
+  -- a waivers_to_fa day is open all day), the after-games day = tomorrow, so
+  -- the last hold-day run was six days ago and the next is tomorrow midnight
+  gh := extract(dow from (now() at time zone 'America/New_York') + interval '1 day')::int;
+  exp_hold := (date_trunc('day', now() at time zone 'America/New_York') + interval '1 day') at time zone 'America/New_York';
+  update league set settings_json = coalesce(settings_json, '{}'::jsonb)
+    || jsonb_build_object('waiver_days', '["waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa","waivers_to_fa"]'::jsonb,
+                          'waiver_clear_min', 0, 'waiver_game_hold_dow', gh, 'fa_mode', 'open', 'waiver_mode', 'rolling')
+   where id = lid;
+  perform assert_true(waiver_game_hold_dow_effective(lid) = gh, 'ag0 the hold day is effective');
+  perform assert_true(fa_window_open(lid), 'ag1 the door is open');
+
+  -- the slate: DEN hosted LAR an hour ago (week 95, the NFL slate); MIA idle
+  delete from nfl_slate where season = '2026' and week = 95;
+  insert into nfl_slate (season, week, home, away, win, kickoff)
+    values ('2026', 95, 'DEN', 'LAR', 'early', now() - interval '1 hour');
+  delete from waiver_claim where league_id = lid and add_slug in ('ag-den', 'ag-la', 'ag-mia', 'ag-den-owned');
+  delete from native_roster where league_id = lid and slug in ('ag-den', 'ag-la', 'ag-mia', 'ag-den-owned');
+  delete from league_pool where league_id = lid and slug in ('ag-den', 'ag-la', 'ag-mia', 'ag-den-owned');
+  insert into league_pool (league_id, slug, full_name, pos, team, rank) values
+    (lid, 'ag-den', 'Played Bronco', 'WR', 'DEN', 301),
+    (lid, 'ag-la', 'Played Ram', 'RB', 'LA', 302),      -- pool says LA, slate says LAR (0414)
+    (lid, 'ag-mia', 'Idle Dolphin', 'TE', 'MIA', 303),
+    (lid, 'ag-den-owned', 'Owned Bronco', 'QB', 'DEN', 304);
+  insert into native_roster (league_id, roster_id, slug, acquired) values (lid, cseat, 'ag-den-owned', 'commish');
+
+  -- 1. the stamp: both unowned players who played are held until the hold-day run
+  perform assert_true(_hold_played(lid) >= 2, 'ag2 the stamp held the played players');
+  perform assert_true((select waived_until from league_pool where league_id = lid and slug = 'ag-den') = exp_hold, 'ag3 the Bronco is held until the hold-day run');
+  perform assert_true((select waived_until from league_pool where league_id = lid and slug = 'ag-la') = exp_hold, 'ag4 the Ram too, across the LA/LAR codes');
+  perform assert_true((select waived_until from league_pool where league_id = lid and slug = 'ag-mia') is null, 'ag5 the idle Dolphin is a free agent');
+  perform assert_true((select waived_until from league_pool where league_id = lid and slug = 'ag-den-owned') is null, 'ag6 a rostered player is not stamped');
+  perform assert_true(_hold_played(lid) = 0, 'ag7 the stamp is idempotent');
+
+  -- 2. the add refuses him, naming the morning
+  r := add_free_agent(lid, aseat, 'ag-den');
+  perform assert_err(r, 'on waivers until', 'ag8 a played player cannot be added outright');
+
+  -- 3. Bagent's case: a claim stamped before kickoff waits for the hold anyway
+  insert into waiver_claim (league_id, roster_id, add_slug, clears_at)
+    values (lid, cseat, 'ag-den', now() - interval '1 minute') returning id into cid;
+  r := process_waivers(lid);
+  perform assert_ok(r, 'ag9 the run ran');
+  perform assert_true((select status from waiver_claim where id = cid) = 'pending', 'ag10 the claim waits for the hold-day run');
+  perform assert_true(not exists (select 1 from native_roster where league_id = lid and slug = 'ag-den'), 'ag11 nobody has him yet');
+
+  -- 4. a claim filed on a held player carries no stamp of its own
+  perform probe_as('c');
+  r := submit_waiver_claim(lid, cseat, 'ag-la');
+  perform assert_ok(r, 'ag12 the claim on the Ram is accepted');
+  perform assert_true((select clears_at from waiver_claim where league_id = lid and roster_id = cseat and add_slug = 'ag-la' and status = 'pending') is null, 'ag13 …and waits on the hold, not a stamp');
+  perform assert_true((r ->> 'clears_at')::timestamptz = exp_hold, 'ag14 …which the answer names');
+
+  -- 5. the hold-day run comes (the hold ends; the game leaves the window)
+  perform probe_as('a');
+  update nfl_slate set kickoff = now() - interval '8 days' where season = '2026' and week = 95;
+  update league_pool set waived_until = now() - interval '1 second' where league_id = lid and slug in ('ag-den', 'ag-la');
+  r := process_waivers(lid);
+  perform assert_ok(r, 'ag15 the run ran again');
+  perform assert_true((select status from waiver_claim where id = cid) = 'won', 'ag16 the pre-kickoff claim lands at the hold-day run');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = cseat and slug = 'ag-den'), 'ag17 …onto the roster');
+  perform assert_true(exists (select 1 from native_roster where league_id = lid and roster_id = cseat and slug = 'ag-la'), 'ag18 the Ram claim lands too');
+end $$;
+
 select 'ALL WAIVER-RULES PROBES PASSED' as result;

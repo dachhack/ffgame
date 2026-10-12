@@ -70,7 +70,10 @@ begin
   perform dl_true(exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-1')
     and not exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-33'), 'dl2 nothing moved');
   perform dl_ok(add_free_agent(lid, a, 'dl-33', 'dl-32'), 'dl2 the same add dropping an unstarted player goes through');
-  perform dl_ok(add_free_agent(lid, a, 'dl-4', null), 'dl2 a started player may still be ADDED (his windows are simply locked)');
+  -- 0487: a started player is on waivers from his kickoff until the after-games
+  -- run (Wednesday here, the default), so he is a claim, not an instant add
+  r := add_free_agent(lid, a, 'dl-4', null); perform dl_refused(r, 'on waivers until', 'dl2 a started player is on waivers from kickoff, not an instant add (0487)');
+  perform dl_true((select waived_until from league_pool where league_id = lid and slug = 'dl-4') > now(), 'dl2 …and the pool row says so');
 
   -- ── dl3. submit_waiver_claim naming the drop ──
   perform dl_ok(set_transaction_rules(lid, p_fa_mode => 'off'), 'dl3 free agency off, so claims are the way in');
@@ -82,7 +85,8 @@ begin
   -- Move the kickoff ahead, file against dl-2, then bring the kickoff back.
   update nfl_slate set kickoff = now() + interval '6 hours' where season = '2026' and week = wk and home = 'DLH';
   perform dl_true(drop_lock_reason(lid, 'dl-2') is null, 'dl4 unlocked while the kickoff is ahead');
-  r := submit_waiver_claim(lid, a, 'dl-6', 'dl-2', 2); perform dl_ok(r, 'dl4 A: add dl-6 drop dl-2'); c1 := (r ->> 'claim_id')::uuid;
+  -- 0487: the add is a DLZ man (no game), so the claim is about the DROP's lock, not the add's hold
+  r := submit_waiver_claim(lid, a, 'dl-39', 'dl-2', 2); perform dl_ok(r, 'dl4 A: add dl-39 drop dl-2'); c1 := (r ->> 'claim_id')::uuid;
   update nfl_slate set kickoff = now() - interval '6 hours' where season = '2026' and week = wk and home = 'DLH';
   update waiver_claim set clears_at = now() - interval '1 second' where id = c1;
   r := process_waivers(lid); perform dl_ok(r, 'dl4 the run');
@@ -90,7 +94,7 @@ begin
   perform dl_true((select drop_slug from waiver_claim where id = c1) is null
     and (select note from waiver_claim where id = c1) ilike '%game had started%', 'dl4 its row says the drop was kept');
   perform dl_true(exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-2')
-    and exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-6'), 'dl4 dl-2 stays, dl-6 arrives');
+    and exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-39'), 'dl4 dl-2 stays, dl-39 arrives');
   -- Now a FULL seat: the same claim loses with the reason.
   i := 10; n := 0;
   while roster_seat_error(lid, a, null) is null and n < 30 loop
@@ -98,14 +102,15 @@ begin
   end loop;
   perform dl_true(roster_seat_error(lid, a, null) is not null, 'dl4 A is full');
   update nfl_slate set kickoff = now() + interval '6 hours' where season = '2026' and week = wk and home = 'DLH';
-  r := submit_waiver_claim(lid, a, 'dl-25', 'dl-2', 2); perform dl_ok(r, 'dl4 full: add dl-25 drop dl-2'); c2 := (r ->> 'claim_id')::uuid;
+  -- 0487: the add is a DLZ man (no game), so the claim is about the DROP's lock, not the add's hold
+  r := submit_waiver_claim(lid, a, 'dl-40', 'dl-2', 2); perform dl_ok(r, 'dl4 full: add dl-40 drop dl-2'); c2 := (r ->> 'claim_id')::uuid;
   update nfl_slate set kickoff = now() - interval '6 hours' where season = '2026' and week = wk and home = 'DLH';
   update waiver_claim set clears_at = now() - interval '1 second' where id = c2;
   r := process_waivers(lid); perform dl_ok(r, 'dl4 the run, full');
   perform dl_true((select status from waiver_claim where id = c2) = 'lost'
     and (select note from waiver_claim where id = c2) ilike 'drop player''s game has started%', 'dl4 full: it loses with the reason (got ' || coalesce((select note from waiver_claim where id = c2), 'null') || ')');
   perform dl_true(exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-2')
-    and not exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-25'), 'dl4 full: nothing moved');
+    and not exists (select 1 from native_roster where league_id = lid and roster_id = a and slug = 'dl-40'), 'dl4 full: nothing moved');
   perform dl_true((select count(*) from waiver_claim where league_id = lid and status = 'pending') = 0, 'dl4 the run settled everything (nothing aborted)');
 
   -- ── dl5. the week goes final: the lock lets go ──
@@ -123,7 +128,9 @@ begin
   r := create_native_league('DropLockClassic', '2026', 4, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
   perform dl_ok(r, 'dl6 classic league'); lid := (r ->> 'league_id')::uuid;
   perform seed_league_pool(lid, (
-    select jsonb_agg(jsonb_build_object('slug', 'dc-' || g, 'full', 'Classic ' || g, 'pos', 'RB', 'team', 'DLH', 'exp', 0))
+    -- 0487: only dc-1 plays (and is the locked drop); the add must be a man with
+    -- no game, or the add's own after-games hold answers before the drop's lock
+    select jsonb_agg(jsonb_build_object('slug', 'dc-' || g, 'full', 'Classic ' || g, 'pos', 'RB', 'team', case when g = 1 then 'DLH' else 'DLZ' end, 'exp', 0))
     from generate_series(1, 20) g));
   select sleeper_roster_id into a from league_membership where league_id = lid and app_user_id = '00000000-0000-0000-0000-000000000801';
   perform dl_ok(native_generate_schedule(lid, 2), 'dl6 the schedule');

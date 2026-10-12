@@ -119,7 +119,7 @@ ok(etTime(180) === '3:00am' && etTime(0) === '12:00am' && etTime(720) === '12:00
   ok(line.includes('Mon, Tue, Wed, Thu, Fri, Sat: waivers clearing at 3:00am ET'),
     `the waivers days group up (${line})`);
   ok(line.includes('Sun: waivers, then free agency after the 3:00am run'), 'Sunday reads as the two-stage day it is');
-  ok(line.includes('dropped once the games start stay on waivers until Wednesday 3:00am'),
+  ok(line.includes('unowned players are on waivers from their kickoff until Wednesday 3:00am'),
     'and the after-games hold says which morning');
   const none = waiverScheduleLine(['fa', 'fa', 'fa', 'fa', 'fa', 'fa', 'fa'], 180, null);
   ok(none === 'Sun, Mon, Tue, Wed, Thu, Fri, Sat: free agency all day',
