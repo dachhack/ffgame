@@ -180,8 +180,9 @@ export function LeagueOverview() {
 // they will in Week 1, which is the point: free power-ups taught "arm everything",
 // the one habit that bankrupts a manager in the real season. The flag only changes
 // what the header SAYS, so nobody reads their unfamiliar balance as a bug.
-export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false, inventoryOverride, availability }: {
+export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practice = false, inventoryOverride, availability, items }: {
   onClose: () => void; coinsOverride?: number; onBuy?: (id: string) => Promise<boolean | string>; cards?: boolean; practice?: boolean;
+  /** THE CONTEST SHOP (v0.688.0): a catalog of its own — the contest plays — in place of the drip power-ups. */ items?: Powerup[];
   /** THE SHOP'S CLOCK (v0.388.6) — founder: "have the power ups that you
    *  can't apply because the usage window has passed have some kind of sign
    *  so we know what we can buy and apply last minute." The board answers per
@@ -203,12 +204,12 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
   const avail = (p: Powerup): PowerupAvailability | null => availability?.(p) ?? null;
   // Catalogue order within the tab, passed cards sinking below the ones still
   // in play — "what can I still apply" reads top-down.
-  const shownPu = POWERUPS
+  const shownPu = (items ?? POWERUPS)
     .filter((p) => tab === 'all' || powerupCategory(p) === tab)
     .map((p, i) => ({ p, i, a: avail(p) }))
     .sort((x, y) => Number(x.a?.state === 'passed') - Number(y.a?.state === 'passed') || x.i - y.i)
     .map((x) => x.p);
-  const anyPassed = !!availability && POWERUPS.some((p) => avail(p)?.state === 'passed');
+  const anyPassed = !!availability && (items ?? POWERUPS).some((p) => avail(p)?.state === 'passed');
   /** The sign itself: ⛔ passed / 🟢 live / ⏳ countdown or reason. */
   const signOf = (p: Powerup): { text: string; color: string } | null => {
     const a = avail(p);

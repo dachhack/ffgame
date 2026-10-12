@@ -78,7 +78,9 @@ One session, founder-driven, shipped as thirteen squash-merged PRs
      done in v0.685.0 (0484: the five pre-kickoff plays, the scoring hook
      in `scoreContest`, the one-a-week cap, the web builder's PLAYS card).
      PR 3 done in v0.686.0 (0485: Spy, Jinx, Magnet, Re-deal). PR 4 done
-     in v0.687.0 (the phone's PLAYS card). The plan is shipped end to
+     in v0.687.0 (the phone's PLAYS card); v0.688.0 (0486) moved the plays
+     into a shop and a hand like drip leagues' (`contest_buy_play`,
+     `team_inventory`). The plan is shipped end to
      end; what it has not had is a live week with coin on — turn DRIP
      COIN on in a contest league, arm a play, and read the wallet after
      the week's recap card posts.

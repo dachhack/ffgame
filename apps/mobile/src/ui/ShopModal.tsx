@@ -27,9 +27,13 @@ import { Mono } from './prims';
 import { commit } from './feedback';
 import { Overlay } from './Overlay';
 
-export function ShopModal({ visible, matchupId, balance, practice, unlockLocked, availability, onClose, onChanged }: {
+export function ShopModal({ visible, matchupId, balance, practice, unlockLocked, availability, onClose, onChanged, items, onBuy, inventoryOverride }: {
   visible: boolean;
-  matchupId: string;
+  matchupId?: string;
+  /** THE CONTEST SHOP (v0.688.0): a catalog of its own, its own buyer, and the hand as the caller holds it. */
+  items?: Powerup[];
+  onBuy?: (id: string) => Promise<{ ok: boolean; error?: string; balance?: number | null; inventory?: Record<string, number> }>;
+  inventoryOverride?: Record<string, number>;
   balance: number;
   /** Preseason board weeks run the throwaway practice purse (0115), so the copy
    *  must not imply the season wallet moves. */
@@ -78,29 +82,29 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
 
   useEffect(() => {
     if (!visible) return;
-    myInventory(matchupId).then((inv) => setOwned(inv ?? {})).catch(() => {});
+    if (onBuy) setOwned(inventoryOverride ?? {}); else if (matchupId) myInventory(matchupId).then((inv) => setOwned(inv ?? {})).catch(() => {});
     setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(id);
-  }, [visible, matchupId]);
+  }, [visible, matchupId, onBuy, inventoryOverride]);
 
   const avail = (p: Powerup): PowerupAvailability | null => availability?.(p) ?? null;
   // Catalogue order within the tab, except that a card whose week is over
   // sinks below the ones still in play — "what we can buy and apply last
   // minute" reads top-down.
-  const shown = POWERUPS
+  const shown = (items ?? POWERUPS)
     .filter((p) => tab === 'all' || powerupCategory(p) === tab)
     .map((p, i) => ({ p, i, a: avail(p) }))
     .sort((x, y) => Number(x.a?.state === 'passed') - Number(y.a?.state === 'passed') || x.i - y.i)
     .map((x) => x.p);
-  const anyPassed = !!availability && POWERUPS.some((p) => avail(p)?.state === 'passed');
+  const anyPassed = !!availability && (items ?? POWERUPS).some((p) => avail(p)?.state === 'passed');
 
   const buy = async (id: string, price: number) => {
     if (busy) return;
     if (balance < price) { setErr(`Not enough coin — need ◈${price}.`); return; }
     setBusy(id); setErr(null);
     try {
-      const r = await walletBuyPowerup(matchupId, id);
+      const r = onBuy ? await onBuy(id) : await walletBuyPowerup(matchupId!, id);
       if (r?.ok) {
         commit();
         // After the server said yes, never before: a rejected buy that still
@@ -114,7 +118,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
         // inventory rather than being told a balance and left to find out about
         // the item on its own. On a failed read, fall back to an optimistic
         // bump: the buy succeeded, so the item is owned whatever the re-read did.
-        const inv = await myInventory(matchupId).catch(() => ({ ...owned, [id]: (owned[id] ?? 0) + 1 }));
+        const inv = onBuy ? ((r as { inventory?: Record<string, number> }).inventory ?? { ...owned, [id]: (owned[id] ?? 0) + 1 }) : await myInventory(matchupId!).catch(() => ({ ...owned, [id]: (owned[id] ?? 0) + 1 }));
         setOwned(inv ?? {});
         onChanged(Number(r.balance ?? balance), inv ?? {});
       } else {
