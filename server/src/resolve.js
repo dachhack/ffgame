@@ -20,7 +20,7 @@
 import { db } from './supabase.js';
 import { installCollegeMetaFor } from './lock.js';
 import { config } from './config.js';
-import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball, assignSealedRows, playsFor, playEventsFor } from './engine.js';
+import { injectWeek, makePlayer, resolveLiveMatchup, resolveWindow, rowsToPbp, autoLineup, EMPTY, resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball, assignSealedRows, playsFor, playEventsFor, latePointsFor } from './engine.js';
 import { matchupPremium, premiumTier, hasPremiumContent, gateSide, hasPremiumTargeted, gateTargeted } from './premium.js';
 import { slugMeta, normTeam } from '../../packages/core/src/data/slugMeta.ts';
 import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
@@ -640,7 +640,8 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const tdValue = { pass: Number(catalog?.passTd ?? 4), rush: Number(catalog?.rushTd ?? 6), rec: Number(catalog?.recTd ?? 6) };
     const r = scoreContest({ home: homeSquad, away: awaySquad }, contestCfg,
       (slug, slot, def) => classicPoints(player(slug), matchup.week, catalog, contestScoreAs(def), slot),
-      { pending, live, card, tiebreak, plays, playsOf: (slug) => playEventsFor(matchup.week, slug), settled: matchup.status === 'final', tdValue });
+      { pending, live, card, tiebreak, plays, playsOf: (slug) => playEventsFor(matchup.week, slug), settled: matchup.status === 'final', tdValue,
+        posOf: (slug) => player(slug).pos, lateOf: (slug) => latePointsFor(player(slug), matchup.week, catalog, undefined, null) });
     for (const st of r.states) states.push({ game_window: st.window, home_score: st.home, away_score: st.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

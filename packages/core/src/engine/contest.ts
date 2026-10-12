@@ -256,6 +256,9 @@ export function scoreContest(
     live?: (slug: string) => boolean;
     /** JINX (v0.686.0): what a touchdown is worth under the league's catalog, to strike the first one off. */
     tdValue?: { pass: number; rush: number; rec: number };
+    /** THE SECOND DEAL (v0.696.0): a player's position (Trick Play) and his fourth-quarter-and-overtime points (Garbage Time). */
+    posOf?: (slug: string) => string | undefined;
+    lateOf?: (slug: string) => number;
   } = {},
 ): ClassicResult & { tiebreak: { home: number | null; away: number | null } } {
   const pending = opts.pending ?? (() => false);
@@ -305,6 +308,17 @@ export function scoreContest(
         // MAGNET, per spot: the dart lands half as far from its number
         const tg = opts.card.targets[d.slot];
         score = Math.round((tg + (score - tg) / 2) * 10) / 10; play = 'magnet';
+      } else if (slug && playOn(d.slot, 'floor')) {
+        // FLOOR (v0.696.0): at the final the spot scores at least his projection
+        const f = playOn(d.slot, 'floor')!;
+        play = 'floor';
+        if (opts.settled && f.proj != null && raw < f.proj) score = Math.round(f.proj * 10) / 10;
+      } else if (slug && playOn(d.slot, 'garbage-time')) {
+        // GARBAGE TIME (v0.696.0): his fourth-quarter and overtime points count twice
+        play = 'garbage-time';
+        if (opts.lateOf) score = Math.round((score + opts.lateOf(slug)) * 10) / 10;
+      } else if (slug && (playOn(d.slot, 'smoke') || playOn(d.slot, 'mirror'))) {
+        play = playOn(d.slot, 'smoke') ? 'smoke' : 'mirror';   // the badge; Mirror settles below, Smoke scores nothing
       }
       // JINX, from across the table: the first touchdown he scored is struck off
       if (slug && theirsOn(d.slot, 'jinx') && opts.playsOf) {
@@ -321,10 +335,27 @@ export function scoreContest(
     // THE EVENT BONUSES: Hail Mary and Pick Six, from the squad's real plays.
     if (plays.length && opts.playsOf) {
       const slugs = cfg.slots.map((d) => squads[side][d.slot]).filter((x): x is string => !!x && !pending(x));
-      for (const b of contestEventBonus(plays, slugs, opts.playsOf)) {
+      for (const b of contestEventBonus(plays, slugs, opts.playsOf, { posOf: opts.posOf, settled: opts.settled })) {
         bonus[side] += b.delta;
         bonusRows[side].push({ win: 'wk', side, slot: 'PLAY', slug: null, metric: null, score: lower ? -b.delta : b.delta, play: b.id });
       }
+    }
+  }
+  // MIRROR and CURSE (v0.696.0), across the table at the final — head-to-head, high-score only (the catalog's `only`):
+  // a mirrored spot takes their matching spot's score when it is higher; a cursed squad's best spot counts for 80%.
+  if (opts.settled && squads.home !== squads.away && cfg.contest === 'high') {
+    for (const side of ['home', 'away'] as const) {
+      const other = side === 'home' ? 'away' : 'home';
+      for (const p of (opts.plays?.[side] ?? []).filter((x) => x.id === 'mirror' && x.slot)) {
+        const mine = sideRows[side].find((r) => r.slot === p.slot), theirs = sideRows[other].find((r) => r.slot === p.slot);
+        if (mine && theirs && theirs.score > mine.score) { mine.raw = mine.raw ?? mine.score; mine.score = theirs.score; mine.play = 'mirror'; }
+      }
+    }
+    for (const side of ['home', 'away'] as const) {
+      const other = side === 'home' ? 'away' : 'home';
+      if (!(opts.plays?.[other] ?? []).some((x) => x.id === 'curse') || !sideRows[side].length) continue;
+      const best = sideRows[side].reduce((a, r) => (r.score > a.score ? r : a));
+      best.raw = best.raw ?? best.score; best.score = Math.round(best.score * 0.8 * 10) / 10; best.play = best.play ? `${best.play}+curse` : 'curse';
     }
   }
   if (cfg.contest !== 'bullseye' || !cfg.bullseye || !opts.card) {

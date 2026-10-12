@@ -230,4 +230,52 @@ begin
   update nfl_slate set kickoff = now() + interval '2 days' where season = '2026' and week = wk;
 end $$;
 
+-- ═══ THE SECOND DEAL (0491) ═════════════════════════════════════════════════
+-- Fourteen one-effect plays: priced, a squad play arms with no spot, Floor
+-- remembers the projection, a high-score play is refused elsewhere, the
+-- across-the-table plays want a head-to-head league, and a Smoked spot
+-- stays sealed from their Spy.
+do $$
+declare r jsonb; h uuid; g uuid; wk int; m jsonb; e jsonb;
+begin
+  perform probe_as('a');
+  select id into h from league where name = 'CP H2H' order by created_at desc limit 1;
+  select id into g from league where name = 'CP Board' order by created_at desc limit 1;
+  select max(week) into wk from matchup where league_id = h;
+  update nfl_slate set kickoff = now() + interval '2 days' where season = '2026' and week = wk;
+  update team_wallet set coins = 900 where league_id = h and roster_id in (1, 2);
+  delete from contest_play where league_id = h and week = wk;
+  perform assert_true(_contest_play_price('floor') = 60 and _contest_play_price('curse') = 60 and _contest_play_price('long-boot') = 25 and _contest_play_price('nope') is null, 'np0 the new plays are priced');
+  r := contest_arm_play(h, wk, 'trick-play'); perform assert_ok(r, 'np1 a squad play arms with no spot');
+  r := contest_arm_play(h, wk, 'floor', 'S5'); perform assert_ok(r, 'np2 Floor stakes a spot');
+  perform assert_true((select proj from contest_play where league_id = h and week = wk and roster_id = 1 and play_id = 'floor') > 0, 'np3 …and remembers his projection');
+  perform assert_ok(contest_disarm_play(h, wk, 'trick-play'), 'np4 a squad play comes back with no spot');
+  perform assert_ok(contest_disarm_play(h, wk, 'floor', 'S5'), 'np5 Floor comes back');
+  r := contest_arm_play(h, wk, 'mirror'); perform assert_err(r, 'np6 Mirror wants a spot');
+  update league set settings_json = settings_json || '{"contest":"golf"}'::jsonb where id = h;
+  r := contest_arm_play(h, wk, 'floor', 'S5'); perform assert_err(r, 'np7 no Floor in golf');
+  perform assert_true(r ->> 'error' like '%high-score%', 'np8 …and says so: ' || (r ->> 'error'));
+  r := contest_buy_play(h, 'curse'); perform assert_err(r, 'np9 …nor a Curse in the shop');
+  update league set settings_json = settings_json || '{"contest":"high"}'::jsonb where id = h;
+  update team_wallet set coins = 900 where league_id = g and roster_id = 1;
+  r := contest_arm_play(g, wk, 'curse'); perform assert_err(r, 'np10 Curse wants a head-to-head league');
+  perform assert_true(r ->> 'error' like '%head-to-head%', 'np11 …and says so: ' || (r ->> 'error'));
+  -- SMOKE v SPY
+  r := contest_arm_play(h, wk, 'smoke', 'S5'); perform assert_ok(r, 'np12 Smoke on my S5');
+  perform probe_as('b');
+  update team_wallet set coins = 900 where league_id = h and roster_id = 2;
+  r := contest_arm_play(h, wk, 'spy', 'S5'); perform assert_ok(r, 'np13 their Spy on it');
+  m := contest_matchup(h, wk);
+  e := m -> 'matchup' -> (case when (m -> 'matchup' ->> 'home')::int = 1 then 'home_entry' else 'away_entry' end);
+  perform assert_true(exists (select 1 from jsonb_array_elements(e) x where x ->> 'slot' = 'S5' and coalesce((x ->> 'sealed')::boolean, false)), 'np14 …sees nothing: the smoked spot stays sealed');
+  perform probe_as('a');
+  perform assert_ok(contest_disarm_play(h, wk, 'smoke', 'S5'), 'np15 the Smoke comes back');
+  perform probe_as('b');
+  m := contest_matchup(h, wk);
+  e := m -> 'matchup' -> (case when (m -> 'matchup' ->> 'home')::int = 1 then 'home_entry' else 'away_entry' end);
+  perform assert_true(exists (select 1 from jsonb_array_elements(e) x where x ->> 'slot' = 'S5' and nullif(x ->> 'player_slug', '') is not null), 'np16 …and the Spy sees the pick again');
+  perform probe_as('a');
+  delete from contest_play where league_id = h and week = wk;
+end $$;
+
 select 'ALL CONTEST-PLAYS PROBES PASSED';

@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.0 — The second deal: fourteen one-effect plays
+
+> - Fourteen new plays in the shop, each one effect, said in a line. Squad bonuses from your players’ real plays: Trick Play (a WR/TE carry of 10+, +10), Return Man (100 return yards, +12), Bomb Squad (a 60-yard touchdown pass, +25), Hat Trick (one player, three touchdowns, +20), Century Club (a 100-yard rusher or receiver, +10), Two for One (+6 a two-point conversion), Iron Grip (no fumbles all week, +10), Goal Line Stand (a safety or a blocked kick, +15), Long Boot (+8 a 50-yard field goal).
+> - On a spot, high-score leagues: Floor (at the final the spot scores at least his projection, ◎60) and Garbage Time (his fourth-quarter and overtime points count twice, ◎40). Across the table, head-to-head: Smoke (their Spy can’t reveal the spot, ◎45), Mirror (your spot takes their matching spot’s score when higher, ◎70, high-score), Curse (their best spot counts for 80%, ◎60, high-score).
+> - Left out as compound or unexplainable in a line: First Blood, Bench Press, Mulligan, Wide Net; and the second tiers of Trick Play, Return Man and Century Club.
+
+Founder: "Let's add these but no compound effect power ups. It should have one
+effect and one effect only and it should be easy to explain in three rows of
+text, if not skip it and let me know which got excluded." Engine: the catalog
+and `only` (a contest-kind gate) in `contestPlays.ts`; `contestEventBonus`
+gains the nine bonuses with `posOf` and `settled`; `scoreContest` applies
+Floor, Garbage Time (`lateOf`), Mirror and Curse at the final. Worker:
+`latePointsFor` (a player's plays from 45:00 on, scored under the league's
+catalog) and `posOf`. Migration 0491: the prices, `_contest_squad_play`, the
+offer rules (head-to-head, high-score) in buy and arm, Floor remembers the
+projection, and a Smoked spot stays sealed from their Spy in `contest_matchup`.
+Probes np0–np16; `server/test/contest-plays-three.mjs`. No iPhone build.
+
 ### v0.695.0 — The hand on the matchup, and no spot left empty
 
 > - The hand of plays now sits at the foot of MATCHUP, web and phone, and plays are applied there: a squad play goes on at once; a spot play lights up only the spots it can land on right now — a player who hasn’t kicked off, or an empty spot before the first kickoff — and the rest dim. TAKE BACK lives there too. The shop stays on MY TEAM, with a ▶ PLAY ON MATCHUP shortcut.

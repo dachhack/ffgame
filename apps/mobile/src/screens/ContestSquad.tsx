@@ -364,7 +364,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
               <Chip small on label="🛒 SHOP" onPress={() => { tap(); setShop(true); }} />
               <Mono size={8.5} tone="faint">{`${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · ${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played`}</Mono>
               {onMatchup && <Chip small dim label="▶ PLAY ON MATCHUP" onPress={() => { tap(); onMatchup(); }} />}
-              <InfoChip title="Plays">{'Buy a play in the shop; it lands in your hand. The hand sits at the foot of MATCHUP: tap a card there to play it, and TAKE BACK puts it back. One a week (two head-to-head).\n\nA spot play goes on until that player’s own kickoff. A squad play (Hail Mary, Pick Six, Re-deal, Spy) before the week’s first kickoff.'}</InfoChip>
+              <InfoChip title="Plays">{'Buy a play in the shop; it lands in your hand. The hand sits at the foot of MATCHUP: tap a card there to play it, and TAKE BACK puts it back. One a week (two head-to-head).\n\nA spot play goes on until that player’s own kickoff. A squad play (Hail Mary, Pick Six and the other squad bonuses, Curse, Re-deal, Spy) before the week’s first kickoff.'}</InfoChip>
             </View>
           </Card>
         )}
