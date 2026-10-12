@@ -42,6 +42,7 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { LabelInfo } from '../ui/InfoChip';
+import { BullseyeStart } from './BullseyeLeague';
 
 /** League crest with an initial fallback (same reasoning as Leagues.Crest). */
 function Crest({ url, name, size = 40 }: { url?: string | null; name?: string | null; size?: number }) {
@@ -71,7 +72,7 @@ const NODE_TITLE: Record<Node, string> = {
 const NODE_SUB: Record<Node, string> = {
   root: 'Find one, start one, bring one in, or join with a code.',
   browse: 'Open leagues looking for managers.',
-  create: 'Six or seven questions, one at a time.',
+  create: 'Six or seven questions, one at a time — two for a weekly draft.',
   sleeper: 'Your league stays on Sleeper; Drip runs the game on top.',
   provider: 'Paste the league id, pick your team. This season only.',
   join: "Paste the code a friend sent you.",
@@ -80,9 +81,9 @@ const NODE_SUB: Record<Node, string> = {
 };
 
 /** The create branch's steps, in the order the old form asked them. */
-type Step = 'copy' | 'game' | 'season' | 'format' | 'name' | 'devy' | 'draft' | 'review';
+type Step = 'copy' | 'game' | 'weekly' | 'season' | 'format' | 'name' | 'devy' | 'draft' | 'review';
 const STEP_TITLE: Record<Step, string> = {
-  copy: 'COPY SETTINGS', game: 'WHICH GAME', season: 'NEXT SEASON', format: 'FORMAT',
+  copy: 'COPY SETTINGS', game: 'WHICH GAME', weekly: 'WEEKLY DRAFT', season: 'NEXT SEASON', format: 'FORMAT',
   name: 'NAME & SIZE', devy: 'COLLEGE', draft: 'THE DRAFT', review: 'REVIEW',
 };
 
@@ -108,7 +109,7 @@ function MenuRow({ title, sub, onPress }: {
   );
 }
 
-export function Recruit({ onBack, onJoined, onCreated, initial }: {
+export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial }: {
   onBack: () => void;
   /** 'create' — arrived from ＋ ADD A LEAGUE rather than FIND A LEAGUE, so
    *  open the START A LEAGUE card and scroll to it. The board's three jobs
@@ -122,6 +123,8 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
    *  draft drafts the roster the league is SHAPED for, and both the shape and
    *  the draft freeze the moment it starts, so the settings come first. */
   onCreated?: (leagueId: string, name: string, rosterId: number | null) => void;
+  /** A WEEKLY DRAFT league was created (v0.690.0) — open it on its own rooms. */
+  onCreatedContest?: (leagueId: string, name: string, rosterId: number) => void;
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<BoardListing[] | null>(null);
@@ -178,7 +181,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
   // 'drip', and a commissioner who never tapped NORMAL got a drip league
   // with a normie name; the choice freezes at the draft, so the mistake is
   // permanent. The form refuses to submit until the game is chosen.
-  const [game, setGame] = useState<'drip' | 'classic' | null>(null);
+  // WEEKLY DRAFT (v0.690.0, founder: "make the weekly draft a game option and
+  // fast track the league creation"): a contest league — a squad under a cap
+  // each week — and the form ends on the next step, the essentials alone.
+  const [game, setGame] = useState<'drip' | 'classic' | 'weekly' | null>(null);
   // THE SPORT (0426) — the web's twin. A daily sport is CLASSIC by
   // construction, plays Mon–Sun periods from a start date, and skips the
   // football-only formats and continuities.
@@ -533,7 +539,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
       const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode,
         bp ? bp.budget : 200, bp ? bp.lotSeconds : 15,
         bp && draftMode === 'auction' ? bp.maxLots : 1,
-        bp ? bp.nightStartMin : null, bp ? bp.nightEndMin : null, caps, game,
+        bp ? bp.nightStartMin : null, bp ? bp.nightEndMin : null, caps, game === 'classic' ? 'classic' : 'drip',
         continuity, contN);
       if (!r.ok || !r.league_id) { warn(); setErr(friendlyError(r.error ?? 'could not create the league')); return; }
       if (format !== 'standard') {
@@ -557,7 +563,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
         const steps = await applyBlueprint(r.league_id, {
           ...bp, format: 'standard',
           teams: teamCount, rounds, pickSeconds: secs, mode: draftMode,
-          gameMode: game, continuity, continuityN: contN,
+          gameMode: game === 'classic' ? 'classic' : 'drip', continuity, continuityN: contN,
         });
         setCopyReport(steps.filter((s) => !s.ok).map((s) => `${s.step} — ${friendlyError(s.error ?? 'refused')}`));
       }
@@ -611,7 +617,10 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
 
   // The step list is COMPUTED: no copy step when there is nothing to copy
   // from, so a first league is never asked a question with one answer.
-  const STEPS: Step[] = [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'season', 'format', 'name',
+  const STEPS: Step[] = game === 'weekly' && !isSport
+    // THE FAST TRACK (v0.690.0): a weekly draft league is the game question and one more.
+    ? [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'weekly']
+    : [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'season', 'format', 'name',
     // No devy step for a daily sport (0426): college players have no place in an NBA or NHL pool.
     ...(game === 'classic' && !isSport ? (['devy'] as Step[]) : []), 'draft', 'review'];
   const step: Step = STEPS[Math.min(stepIx, STEPS.length - 1)];
@@ -882,16 +891,24 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 ) : (
                   <View style={{ marginTop: 10 }}>
                     <LabelInfo label="WHICH GAME?"
-                      info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\nDRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\nCLASSIC — fantasy the way you already know it: a positional starting lineup, weekly point totals, scoring you tune knob by knob.'} />
-                    <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
+                      info={'This is the choice that decides what your league PLAYS, and it locks in at the draft.\n\nDRIP — your 8 starters play head-to-head in real time as the games run: drips, nukes and power-ups on live play-by-play.\n\nCLASSIC — fantasy the way you already know it: a positional starting lineup, weekly point totals, scoring you tune knob by knob.\n\nWEEKLY DRAFT — no season-long roster: everyone builds a fresh squad under a salary cap every week, head-to-head or on a leaderboard. A few choices and it exists.'} />
+                    <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                       <Chip label="DRIP" on={game === 'drip'} onPress={() => { tap(); setGame('drip'); }} />
                       <Chip label="CLASSIC" on={game === 'classic'} onPress={() => { tap(); setGame('classic'); }} />
+                      <Chip label="WEEKLY DRAFT" on={game === 'weekly'} onPress={() => { tap(); setGame('weekly'); }} />
                     </View>
                     {game === null && (
                       <Mono size={8.5} tone="dim" style={{ marginTop: 5 }}>pick one — the form won't submit without it</Mono>
                     )}
                   </View>
                 )}
+              </View>
+            )}
+            {step === 'weekly' && (
+              <View>
+                <LabelInfo label="THE ESSENTIALS"
+                  info={'Name it, say how it wins and whether it is head-to-head or a leaderboard, and how long it runs. Everything else — the budget, the roster spots, the scoring, prizes, who may enter — is on COMMISH once it exists, and the league board can list it from here.'} />
+                <BullseyeStart quick onOpen={(leagueId, name, rosterId) => { setNode('root'); setStepIx(0); onCreatedContest?.(leagueId, name, rosterId); }} />
               </View>
             )}
             {step === 'season' && (
@@ -1105,7 +1122,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
 
           {/* NEXT is refused rather than hidden when the step is unanswered,
               and says WHY — a disabled button with no reason is a dead end. */}
-          {step !== 'review' && (
+          {step !== 'review' && step !== 'weekly' && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
               <Chip label="← BACK" onPress={() => { tap(); if (stepIx === 0) { setNode('root'); } else setStepIx((i) => i - 1); }} />
               <View style={{ flex: 1 }} />
@@ -1116,7 +1133,7 @@ export function Recruit({ onBack, onJoined, onCreated, initial }: {
                 onPress={() => { if (!canNext) { warn(); return; } tap(); setStepIx((i) => Math.min(STEPS.length - 1, i + 1)); }} />
             </View>
           )}
-          {step === 'review' && (
+          {(step === 'review' || step === 'weekly') && (
             <View style={{ flexDirection: 'row', marginTop: 12 }}>
               <Chip label="← BACK" onPress={() => { tap(); setStepIx((i) => Math.max(0, i - 1)); }} />
             </View>

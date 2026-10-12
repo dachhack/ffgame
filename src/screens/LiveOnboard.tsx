@@ -983,6 +983,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
       // which is the room you want SECOND: the draft drafts the roster the
       // league is shaped for, and the shape freezes the moment it starts.
       onLeague={(leagueId) => { setManageId(leagueId); setManageTab('lineup'); refresh(); setView('commishdash'); }}
+      // WEEKLY DRAFT (v0.690.0): a contest league opens on its own page, as the full form's does.
+      onContest={(leagueId) => { refresh(); setBullLeague(leagueId); setView('bleague'); }}
       onBack={() => setView('home')} />
   );
   if (view === 'draft' && target) return (

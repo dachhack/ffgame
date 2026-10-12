@@ -518,7 +518,9 @@ export function App() {
                 setOpen({ leagueId, rosterId, name, native: true, commish: true, pickUserId: undefined });
                 setToolsSection('lineup');
                 setView('commishtools');
-              }} />
+              }}
+              // WEEKLY DRAFT (v0.690.0): a contest league opens on its own rooms, as BullseyeStart's does.
+              onCreatedContest={(leagueId, name, rosterId) => { setLeaguesEpoch((n) => n + 1); setOpen({ leagueId, rosterId, name, native: false, commish: true, kind: 'dfs' }); setView('picks'); }} />
           </View>
         ) : view === 'bstart' ? (
           <View style={{ flex: 1 }}><BullseyeStart onBack={() => setView('picks')}
