@@ -13,16 +13,17 @@
 // afresh on every visit, so the flip plays again each time. The picker above
 // the table walks the week's other matchups (every seat's squad on a
 // leaderboard); the week arrows live in the league frame.
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { contestMatchup, podSalaries, weekSlateByTeam, type ContestMatchupState, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById, contestRedeal } from '@drip/core/engine/contest';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById, contestRedeal, contestPlaysFor, contestPlayCap, contestSpotOpen, contestHandCard, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { ringScore } from '@drip/core/engine/bullseye';
 import { leagueWeekProj } from '@drip/core/engine/contestBuilder';
 import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/classic';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
-import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
+import { CardTableCss, Felt, PlayerCard, SealedCard, PowerupHand, type HandCard } from '../app/cardTable';
+import { InfoChip } from './adminUi';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const small: CSSProperties = { fontSize: 10, color: 'var(--faint)' };
@@ -49,13 +50,33 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const [pick, setPick] = useState<string | null>(null);
   const [tbNote, setTbNote] = useState<string | null>(null);   // THE TIE-BREAKER CHIP (v0.682.2): the explainer, on a click
   const [board, setBoard] = useState<PodSalaryRow[]>([]);
+  const read = useCallback(() => contestMatchup(leagueId, week, pick).then(setSt).catch(() => {}), [leagueId, week, pick]);
   useEffect(() => {
-    let alive = true;
-    const read = () => contestMatchup(leagueId, week, pick).then((r) => { if (alive) setSt(r); }).catch(() => {});
     void read();
-    const id = setInterval(read, 60_000);
-    return () => { alive = false; clearInterval(id); };
-  }, [leagueId, week, pick]);
+    const id = setInterval(() => void read(), 60_000);
+    return () => clearInterval(id);
+  }, [read]);
+  // THE HAND ON THE MATCHUP (v0.695.0, founder: "put the card hand and power up application on the matchup"):
+  // my seat's hand, plays and cap ride contest_state; a play lands on a spot by a tap on its card here.
+  // Only a spot whose player hasn't kicked off lights up ("Only Josh Allen and DJ Moore should be able to
+  // be targeted by double or nothing"); the rest dim. The shop stays on MY TEAM.
+  const [ps, setPs] = useState<ContestState | null>(null);
+  const [plays, setPlays] = useState<ContestPlayRow[]>([]);
+  const [inventory, setInventory] = useState<Record<string, number>>({});
+  const [arming, setArming] = useState<ContestPlayId | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [locks, setLocks] = useState<Map<string, number>>(new Map());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
+  const me = st?.ok ? st.me ?? null : null;
+  useEffect(() => {
+    if (me == null) { setPs(null); return; }
+    let alive = true;
+    contestState(leagueId, week, '2026', me).then((r) => { if (!alive) return; setPs(r); setPlays(r.plays ?? []); setInventory(r.inventory ?? {}); }).catch(() => {});
+    weekGameLocks(week, '2026', 0).then((lk) => { if (alive) setLocks(lk); }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId, week, me]);
   const [slate, setSlate] = useState<Map<string, SlateSpot>>(new Map());
   useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week]);
   const bySlug = useMemo(() => new Map(board.map((r) => [r.slug, r])), [board]);
@@ -67,6 +88,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const bull = st?.contest === 'bullseye';
   const theCard = useMemo(() => (st?.contest === 'bullseye' && st.week != null && slots.length ? contestCard(leagueId, st.week, slots, catalog) : null), [leagueId, st?.contest, st?.week, slots, catalog]);
   const isTotal = bull && st?.variant === 'total';
+  const locked = (slug: string | null) => { if (!slug) return false; const tm = locks.get(bySlug.get(slug)?.team ?? ''); return tm != null && tm <= now; };
   if (!st) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!st.ok) return <div style={{ padding: 24 }}><div className="mono" style={{ color: 'var(--warn, #c66)', fontSize: 12 }}>{st.error}</div></div>;
   const m = st.matchup;
@@ -87,6 +109,36 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     mine: (s === 'home' && mineHome) || (s === 'away' && mineAway),
   });
   const L = side(left), R = side(right);
+  // my table: the hand plays here; another matchup is only watched
+  const myTable = L.mine && ps?.ok === true && ps.coin === true && m.status !== 'final';
+  type PlayResult = { ok: boolean; error?: string; plays?: ContestPlayRow[]; wallet?: number | null; inventory?: Record<string, number> };
+  const arm = async (id: ContestPlayId, slot?: string | null) => {
+    if (!ps?.ok) return;
+    setBusy(true);
+    const r = await contestArmPlay(leagueId, week, id, slot ?? null, ps.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as PlayResult));
+    setBusy(false); setArming(null);
+    if (!r.ok) { setNote(r.error ?? 'Couldn’t play it.'); return; }
+    setPlays(r.plays ?? []); if (r.inventory) setInventory(r.inventory);
+    const def = contestPlayById(id);
+    setNote(`✓ ${def?.icon ?? ''} ${def?.name ?? id} on${slot ? ` ${def?.target === 'opp' ? 'their ' : ''}${labels[slot] ?? slot}` : ' your squad'}`);
+    void read();
+  };
+  const disarm = async (x: ContestPlayRow) => {
+    if (!ps?.ok) return;
+    setBusy(true);
+    const r = await contestDisarmPlay(leagueId, week, x.id, x.slot, ps.roster_id).catch((e) => ({ ok: false, error: friendlyError(e) } as PlayResult));
+    setBusy(false);
+    if (!r.ok) { setNote(r.error ?? 'Couldn’t take it back.'); return; }
+    setPlays(r.plays ?? []); if (r.inventory) setInventory(r.inventory);
+    setNote(`✓ ${contestPlayById(x.id)?.name ?? x.id} back in your hand${x.id === 'ghost' ? ' — fill the spot on MY TEAM' : ''}`);
+    void read();
+  };
+  const cap = ps?.play_cap ?? contestPlayCap(st.format ?? 'h2h');
+  const armingDef = arming ? contestPlayById(arming) : null;
+  const hand: HandCard[] = myTable ? contestPlaysFor(st.format ?? 'h2h', st.contest ?? 'high').filter((d) => (inventory[d.id] ?? 0) > 0).map((d) => {
+    const h = contestHandCard(d, { variant: st.variant, started: !!st.started, off: ps?.plays_off, plays, cap, busy });
+    return { id: d.id, name: d.name, icon: d.icon, qty: inventory[d.id] ?? 0, action: h.action, deadline: h.deadline, blurb: d.blurb, usable: h.usable, note: h.note };
+  }) : [];
   const scoreOf = (s: 'home' | 'away', slot: string) => m.state?.slots?.find((x) => x.side === s && x.slot === slot)?.score ?? null;
   // THE TIE-BREAKER SPOT (v0.681.0, founder: "the spot-specific tie breaker
   // target chip on the player spots in the matchup as well"): each squad's own
@@ -98,7 +150,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   // One card for a spot: yours deals in face up; another squad's turns face
   // up — the reveal flip — once its player has kicked off (contest_matchup
   // unseals him). Empty spots show a dashed outline.
-  const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
+  const cardInner = (s: 'home' | 'away', r: Row, mine: boolean, i: number, onPick?: () => void, hot = false) => {
     const p = r.slug ? bySlug.get(r.slug) : null;
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
     // THE PLAYS (v0.685.0): the play on this spot (another's once the week has kicked off), the phantom as a card
@@ -108,21 +160,30 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     // THE PENALTY CHIP (v0.685.2): a spot that posted nothing wears the dart's penalty, red
     const lvr = m.state?.slots?.find((x) => x.side === s && x.slot === r.slot);
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
-    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} badge={pl ? contestPlayById(pl.id)?.icon : undefined} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(TB_NOTE); }} />;
-    if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" />;
-    if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={false} />;
+    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} badge={pl ? contestPlayById(pl.id)?.icon : undefined} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(TB_NOTE); }} onClick={onPick} selected={hot} />;
+    if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" onClick={onPick} selected={hot} />;
+    if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={hot ? '▶ HERE' : false} onClick={onPick} />;
     return (
-      <div key={`${s}-${r.slot}-empty`} className="ct-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed color-mix(in srgb, var(--text) 25%, transparent)', borderRadius: 10 }}>
-        <span className="mono" style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text) 50%, transparent)', letterSpacing: '0.08em' }}>EMPTY</span>
+      <div key={`${s}-${r.slot}-empty`} className="ct-wrap" onClick={onPick} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px dashed ${hot ? 'var(--you)' : 'color-mix(in srgb, var(--text) 25%, transparent)'}`, borderRadius: 10, cursor: onPick ? 'pointer' : 'default' }}>
+        <span className="mono" style={{ fontSize: 9, color: hot ? 'var(--you)' : pen != null ? 'var(--warn, #c66)' : 'color-mix(in srgb, var(--text) 50%, transparent)', letterSpacing: '0.08em', fontWeight: pen != null ? 800 : 400 }}>{hot ? '▶ HERE' : pen != null ? `EMPTY · −${pen}` : 'EMPTY'}</span>
       </div>
     );
+  };
+  // While a play is aimed, only the spots it may land on now light up: mine for a spot play, theirs for Spy
+  // and Jinx, each until that spot's player kicks off (contestSpotOpen, the twin of SQL _contest_play_window).
+  const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
+    const aimed = myTable && !!arming && !!armingDef && (armingDef.target === 'opp' ? !mine : mine);
+    const open = aimed && contestSpotOpen(arming!, { slug: r.slug, locked: locked(r.slug) }, !!st.started);
+    const el = cardInner(s, r, mine, i, open ? () => void arm(arming!, r.slot) : undefined, open);
+    if (!myTable || !arming) return el;
+    return <div key={`aim-${s}-${r.slot}`} style={{ opacity: open ? 1 : 0.35, transition: 'opacity .2s' }}>{el}</div>;
   };
   // THE NUMBERS (v0.678.0, founder: "the player score and projection to the
   // inside of the card columns in larger numbers"): the spot, the score once
   // his game is on, the projection under it; a Bullseye spot's target and how
   // far off. A sealed pick shows nothing — a projection would give him away.
   const numbersOf = (s: 'home' | 'away', r: Row, mine: boolean, edge: 'left' | 'right') => {
-    const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
+    const score = st.started ? scoreOf(s, r.slot) : null;   // an empty spot's zero row shows too (v0.695.0)
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
     const color = mine ? 'var(--you)' : 'var(--opp)';
@@ -215,6 +276,28 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
           <button onClick={() => setTbNote(null)} className="mono" style={chip(false)}>✕</button>
         </div>
       )}
+      {myTable && (
+        <div style={{ ...card, display: 'grid', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>PLAYS</span>
+            <span className="mono" style={small}>{`${hand.reduce((a, c) => a + c.qty, 0)} in hand · ${plays.length} of ${cap} played`}</span>
+            <InfoChip title="Plays" info={'Your hand sits at the foot of the screen. Tap a card to play it: a squad play goes on at once; a spot play lights up the spots it can land on — tap one. Only a player who hasn’t kicked off can take a play; the rest dim. TAKE BACK puts a play back in your hand on the same clock. Buy more in the shop on MY TEAM.'} />
+            {arming && <button onClick={() => setArming(null)} className="mono" style={{ ...chip(true), marginLeft: 'auto' }}>{`▶ tap ${armingDef?.target === 'opp' ? 'one of their lit spots' : 'a lit spot'} for ${armingDef?.name ?? ''} · CANCEL`}</button>}
+          </div>
+          {arming && <span className="mono" style={small}>{armingDef?.blurb}</span>}
+          {note && <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}><span className="mono" style={{ ...small, color: 'var(--dim)', flex: 1 }}>{note}</span><button onClick={() => setNote(null)} className="mono" style={chip(false)}>✕</button></div>}
+          {plays.length > 0 && (
+            <div className="mono" style={{ ...small, display: 'grid', gap: 3 }}>
+              {plays.map((x) => (
+                <div key={`${x.id}-${x.slot ?? ''}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''}`}</span>
+                  {(!st.started || !!x.slot) && <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false)}>TAKE BACK</button>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <Felt>
         {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}
         <div style={{ display: 'grid', gridTemplateColumns: solo ? '1fr' : 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: '4px 8px 12px', borderBottom: '1px solid color-mix(in srgb, var(--text) 12%, transparent)', marginBottom: 8 }}>
@@ -238,6 +321,16 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       </Felt>
       {others.length > 0 && st.format !== 'board' && (
         <div className="mono" style={small}>{`${others.length} other matchup${others.length === 1 ? '' : 's'} this week — pick one above.`}</div>
+      )}
+      {/* THE HAND (v0.695.0): the plays in hand, fanned at the foot of the screen; a squad play goes on at once, a spot play lights its spots */}
+      {hand.length > 0 && (
+        <>
+          <div style={{ height: 104 }} />
+          <PowerupHand cards={hand} pendingId={arming}
+            onArm={(id) => void arm(id as ContestPlayId)}
+            onApply={(id) => { setArming(id as ContestPlayId); setNote(null); }}
+            onCancel={() => setArming(null)} />
+        </>
       )}
     </div>
   );

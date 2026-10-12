@@ -21,6 +21,7 @@ import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/play
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
 import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds, contestPlayoffs } from '../../packages/core/src/engine/contest.ts';
+import { leagueWeekProj } from '../../packages/core/src/engine/contestBuilder.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { priceBoard } from '../../packages/core/src/engine/salaryPricing.ts';
 import { ruledOutSlugs } from './injuries.js';
@@ -285,7 +286,7 @@ export async function ensurePods(week, season, idx) {
   // is made when they save an entry.)
   if (!pods?.length) return { pods: 0, dealt: 0, matchups: 0, tossed };
 
-  const { board, skipped, kicks } = await ensureSalaryBoard(season, week, idx);
+  const { board, skipped, kicks, slate } = await ensureSalaryBoard(season, week, idx);
   if (skipped) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped };
   if (!board.length) return { pods: pods.length, dealt: 0, matchups: 0, tossed, skipped: 'no board' };
   // RULED OUT (v0.666.0): the injury report's O and IR, for the CPU's builds
@@ -307,7 +308,12 @@ export async function ensurePods(week, season, idx) {
     const teamLocked = (team) => { const k = kicks?.[String(team ?? '').toUpperCase()]; return Number.isFinite(k) && k - lead <= Date.now(); };
     const lockAt = lockMs ? new Date(lockMs - lead).toISOString() : null;
     const lockPassed = lockMs != null && lockMs - lead <= Date.now();
-    const contestCardNow = contest?.contest === 'bullseye' ? contestCard(pod.id, week, contest.slots, leagueCatalogOf({ scoring: pod.settings_json?.scoring_classic ?? null, ppr: pod.settings_json?.ppr })) : null;
+    const podCatalog = contest ? leagueCatalogOf({ scoring: pod.settings_json?.scoring_classic ?? null, ppr: pod.settings_json?.ppr }) : null;
+    const contestCardNow = contest?.contest === 'bullseye' ? contestCard(pod.id, week, contest.slots, podCatalog) : null;
+    // THE CPU'S POOL (v0.695.0, founder: "CPUs failed to set HC"): priced the league's own way, as the builder's
+    // FILL FOR ME prices it (leagueWeekProj) — a head coach by his game this week, who the shared board carries
+    // at 0 and the dart's auto-build therefore never picked.
+    const cpuPool = contest ? playable.map((r) => ({ ...r, proj: leagueWeekProj(r, podCatalog, r.pos === 'HC' ? (slate?.get(String(r.team ?? '').toUpperCase()) ?? null) : undefined) })) : playable;
     // DFS Bullseye (0462): AI seats and no-shows AIM at the card instead.
     const bullCfg = contest ? null : dfsBullseyeConfigOf(pod.settings_json);
     const card = bullCfg ? dfsCard(pod.id, week) : null;
@@ -335,7 +341,7 @@ export async function ensurePods(week, season, idx) {
       const rows = need.map(({ roster_id, how }) => {
         if (contest) {
           if (how === 'zero') return { league_id: pod.id, week, roster_id, starters_json: [] };
-          const built = contestAutoBuild(playable, contest, `${pod.id}|w${week}|aim${roster_id}`, contestCardNow);
+          const built = contestAutoBuild(cpuPool, contest, `${pod.id}|w${week}|aim${roster_id}`, contestCardNow);
           return {
             league_id: pod.id, week, roster_id,
             starters_json: contest.slots.filter((d) => built[d.slot]).map((d) => ({ slot: d.slot, sleeper_id: null, player_slug: built[d.slot], pos: board.find((b) => b.slug === built[d.slot])?.pos ?? d.pos[0] })),
@@ -391,7 +397,7 @@ export async function ensurePods(week, season, idx) {
           const keep = Object.fromEntries(contest.slots.map((d) => [d.slot, null]));
           for (const r of rowsE) if (r?.slot in keep && r.player_slug && !hurt.includes(r)) keep[r.slot] = r.player_slug;
           const keptSlugs = new Set(Object.values(keep).filter(Boolean));
-          const built = contestAutoBuild(playable.filter((b) => keptSlugs.has(b.slug) || !teamLocked(b.team)), contest, `${pod.id}|w${week}|sub${e.roster_id}|${hurt.map((h) => h.player_slug).join(',')}`, contestCardNow, keep);
+          const built = contestAutoBuild(cpuPool.filter((b) => keptSlugs.has(b.slug) || !teamLocked(b.team)), contest, `${pod.id}|w${week}|sub${e.roster_id}|${hurt.map((h) => h.player_slug).join(',')}`, contestCardNow, keep);
           const changed = contest.slots.some((d) => built[d.slot] !== keep[d.slot]);
           if (!changed) continue;
           fixes.push({ league_id: pod.id, week, roster_id: e.roster_id,
@@ -455,6 +461,9 @@ export async function ensureSalaryBoard(season, week, idx) {
   if (!slateTeams.size) return { board: [], skipped: 'no slate' };
   // Each team's kickoff (ms), for the per-player lock the auto-sub honours.
   const kicks = {};
+  // THE SLATE BY TEAM (v0.695.0): who each team plays and where, for pricing a head coach's week
+  const slate = new Map();
+  for (const g of slateRows) { if (g.home && g.away) { slate.set(String(g.home).toUpperCase(), { opp: g.away, home: true }); slate.set(String(g.away).toUpperCase(), { opp: g.home, home: false }); } }
   for (const g of slateRows) {
     const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
     if (!Number.isFinite(ms)) continue;
@@ -481,8 +490,8 @@ export async function ensureSalaryBoard(season, week, idx) {
     board = await topUpSalaryBoard(season, week, idx, slateTeams, board);
     board = await refreshBoardProj(season, week, idx, board);
   }
-  if (!board.length) return { board, skipped: 'no board', kicks };
-  return { board, skipped: null, kicks };
+  if (!board.length) return { board, skipped: 'no board', kicks, slate };
+  return { board, skipped: null, kicks, slate };
 }
 
 /** THE PROJECTION MOVES, THE PRICE DOESN'T (v0.666.0). The DFS rule: a

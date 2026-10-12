@@ -303,7 +303,7 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
         // name and MY WEEKS sit under the builder.
         <div style={{ display: 'grid', gap: 12 }}>
           <WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />
-          {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} embedded onBack={() => setRoom('league')} />}
+          {week != null && <ContestSquad key={week} leagueId={leagueId} week={week} embedded onBack={() => setRoom('league')} onMatchup={() => setRoom('matchup')} />}
           <TeamRoom leagueId={leagueId} lg={lg} onOpenWeek={(w) => { setWeek(w); setRoom('matchup'); }} onRenamed={() => void load()} />
         </div>
       )}

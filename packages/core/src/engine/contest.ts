@@ -11,7 +11,7 @@ import { applyBullseye, bullseyeConfigOf, dealBullseyeCard, type BullseyeCard, t
 import { leagueSlotDefs, slotAllows, slotDisplayName, isRetSlot, type ClassicResult, type ClassicSlotDef, type ClassicSlotScore, type SlotSpec } from './classic';
 import { tiebreakDistance, type BoardPlayer } from './dfsBullseye';
 import { contestEventBonus, contestJinxValue, GHOST_POINTS, type ContestPlay, type ContestPlayId, type PlayEvent } from './contestPlays';
-export { CONTEST_PLAYS, contestPlayById, contestPlayCap, contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestRedeal, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId } from './contestPlays';
+export { CONTEST_PLAYS, contestPlayById, contestPlayCap, contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestRedeal, contestSpotPlay, contestSpotOpen, contestHandCard, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId, type HandCardState } from './contestPlays';
 export { CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, contestCoinRules, contestCoinOverrides, coinEventApplies, coinRulesLine, type CoinEventDef, type CoinEventId, type ContestCoinRules } from './contestCoin';
 
 export type ContestKind = 'high' | 'golf' | 'bullseye';
@@ -311,7 +311,9 @@ export function scoreContest(
         const v = contestJinxValue(opts.playsOf(slug), opts.tdValue ?? { pass: 4, rush: 6, rec: 6 });
         if (v > 0) { score = Math.round((score - v) * 10) / 10; play = play ? `${play}+jinx` : 'jinx'; }
       }
-      if (!slug && !ghost && cfg.contest === 'bullseye') continue;   // an empty spot is a zero — the penalty finds the missing row
+      // AN EMPTY SPOT IS A ZERO ROW (v0.695.0, founder: "Those spots should take the -10 as well"): under the dart it
+      // used to be a missing row, penalised the same but invisible; now it is a row at 0.0 that applyBullseye stamps
+      // with the penalty, so the table can show the −10 on the spot.
       sideRows[side].push({ win: 'wk', side, slot: d.slot, slug, metric: null, score, ...(play ? { play, raw } : {}) });
       if (t && t.slot === d.slot) { tb[side] = tiebreakDistance(slug || ghost ? score : 0, t.target, radius); tbDone = true; }
     }
@@ -405,11 +407,16 @@ export function contestAutoBuild(board: ContestBoardPlayer[], cfg: ContestConfig
     const pool = floored.length ? floored : open;
     const j = (p: BoardPlayer) => p.proj + (jitter.get(p.slug) ?? 0);
     let pick: BoardPlayer | undefined;
+    // A SPOT IS NEVER LEFT EMPTY (v0.695.0, founder: "CPUs failed to set HC"): the dart and golf want a
+    // projected number to aim with, but a body the board does not price (a head coach, a punter: proj 0)
+    // still fills the spot — the cheapest of them — rather than leaving it to the no-show penalty.
+    const live = pool.filter((p) => p.proj > 0);
+    const aimable = live.length ? live : pool;
     if (cfg.contest === 'bullseye' && card) {
       const target = card.targets[d.slot] ?? 0;
-      pick = pool.filter((p) => p.proj > 0).sort((a, b) => Math.abs(j(a) - target) - Math.abs(j(b) - target) || a.salary - b.salary)[0];
+      pick = aimable.sort((a, b) => Math.abs(j(a) - target) - Math.abs(j(b) - target) || a.salary - b.salary)[0];
     } else if (cfg.contest === 'golf') {
-      pick = pool.filter((p) => p.proj > 0).sort((a, b) => j(a) - j(b) || a.salary - b.salary)[0];
+      pick = aimable.sort((a, b) => j(a) - j(b) || a.salary - b.salary)[0];
     } else {
       pick = pool.sort((a, b) => j(b) - j(a) || a.salary - b.salary)[0];
     }

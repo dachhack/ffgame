@@ -57,3 +57,44 @@ export function contestEventBonus(plays: ContestPlay[], slugs: string[], playsOf
 
 /** A play as the drip shop and hand draw a card (data/powerups.ts's Powerup shape, the fields they read). */
 export const contestPlayAsPowerup = (d: ContestPlayDef) => ({ id: d.id, name: d.name, blurb: d.blurb, kind: 'action' as const, timing: 'pre' as const, price: d.price, icon: d.icon });
+
+// ═══ THE HAND ON THE MATCHUP (v0.695.0) ═══════════════════════════════════════
+// Founder: "Only Josh Allen and DJ Moore should be able to be targeted by
+// double or nothing. Let's put the card hand and power up application on the
+// matchup." The two builders (web and phone) read a card's state and a
+// spot's openness from here, so the hand says the same thing everywhere and
+// the taps match SQL _contest_play_window (0490).
+
+/** Is this play a SPOT play — one that waits for a tap on a spot (mine or theirs)? Spy
+ *  aims at a spot too, but reveals a sealed pick, so it keeps the squad play's clock. */
+export const contestSpotPlay = (d: ContestPlayDef, variant?: string | null): boolean => {
+  const t = contestPlayTarget(d, variant);
+  return (t === 'spot' || t === 'open' || t === 'opp') && d.id !== 'spy';
+};
+
+/** May `play` land on this spot NOW? A play on a filled spot goes on until that
+ *  player's own kickoff; the phantom and Jinx take an empty or sealed spot
+ *  before the week's first kickoff; everything else on a spot wants a player. */
+export function contestSpotOpen(play: ContestPlayId, spot: { slug: string | null; locked: boolean }, weekStarted: boolean): boolean {
+  if (play === 'spy') return !weekStarted;
+  if (spot.slug) return !spot.locked;
+  return (play === 'ghost' || play === 'jinx') && !weekStarted;
+}
+
+export interface HandCardState { usable: boolean; note?: string; deadline: string; action: 'arm' | 'apply' }
+/** One hand card's state: playable now, and if not, why (or how). */
+export function contestHandCard(d: ContestPlayDef, o: { variant?: string | null; started: boolean; off?: readonly string[] | null; plays: readonly { id: string }[]; cap: number; busy?: boolean }): HandCardState {
+  const spot = contestSpotPlay(d, o.variant);
+  const off = (o.off ?? []).includes(d.id);
+  const inPlay = o.plays.some((x) => x.id === d.id);
+  const full = o.plays.length >= o.cap;
+  const usable = !off && (!o.started || spot) && !o.busy && !full && !inPlay;
+  const note = off ? 'the commissioner turned this play off'
+    : o.started && !spot ? 'the week has kicked off — playable next week'
+    : inPlay ? 'already in play this week'
+    : full ? 'your plays for the week are set'
+    : o.started ? (d.target === 'opp' ? 'until their player’s kickoff — tap one of their spots' : 'until his own kickoff — tap a spot that hasn’t')
+    : d.target === 'opp' ? 'tap one of their spots'
+    : spot ? 'tap one of your spots' : undefined;
+  return { usable, note, deadline: spot ? 'before his own kickoff' : 'before the first kickoff', action: contestPlayTarget(d, o.variant) === 'squad' ? 'arm' : 'apply' };
+}
