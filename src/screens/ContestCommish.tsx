@@ -8,11 +8,11 @@ import {
   contestLeague, setContestRules, setDfsBullseye, setBullseyeSize, postLeagueListing, closeLeagueListing, leagueListingState,
   isAdmin, myFeatures, bullseyeMaxSeats, friendlyError,
   contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries, setLeaguePrizes,
-  contestCoinRules, setContestCoinRules, contestWallets, commishAdjustContestWallet, type ContestCoinRules, type ContestWalletRow,
+  contestCoinRules, setContestCoinRules, contestWallets, commishAdjustContestWallet, setContestPlays, type ContestCoinRules, type ContestWalletRow,
   type ContestInfo, type ContestKind, type ContestFormat, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow, type PrizeRow,
 } from '@drip/core/data/liveApi';
 import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline,
-  CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, coinEventApplies, coinRulesLine } from '@drip/core/engine/contest';
+  CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, coinEventApplies, coinRulesLine, contestPlaysFor } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { RescoreBox, AdjustBox, DuesPanel } from './CommishDesk';
 import { LabelInfo, InfoChip } from './adminUi';
@@ -172,6 +172,7 @@ export function ContestCommishPanel({ leagueId, onChanged, part = 'game' }: { le
               <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { coin: false }), 'drip coin off')} className="mono" style={chip(!b.coin)}>OFF</button>
             </div>
           </div>
+          {b.coin && <PlaysCard leagueId={leagueId} info={b} />}
           {b.coin && <CoinRulesCard leagueId={leagueId} info={b} />}
           {b.coin && <PursesCard leagueId={leagueId} />}
         </>
@@ -524,6 +525,48 @@ function PursesCard({ leagueId }: { leagueId: string }) {
         </div>
       ))}
       {note && <div className="mono" style={small}>{note}</div>}
+    </div>
+  );
+}
+
+// THE PLAYS, ON AND OFF (v0.694.0, founder: "let commissioners turn on and off
+// power up availability as well"): every play the league's shape offers, with
+// a switch; an off play leaves the shop and cannot be played (a card already
+// in a hand waits for it to come back).
+function PlaysCard({ leagueId, info }: { leagueId: string; info: ContestInfo }) {
+  const [off, setOff] = useState<string[] | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    contestCoinRules(leagueId).then((r) => { if (r.ok) setOff(r.plays_off ?? []); else setNote(r.error ?? 'Couldn’t read the plays.'); }).catch((e) => setNote(friendlyError(e)));
+  }, [leagueId]);
+  const flip = async (id: string, on: boolean) => {
+    if (!off) return;
+    const next = on ? off.filter((x) => x !== id) : [...new Set([...off, id])];
+    setBusy(true); setNote(null);
+    try {
+      const r = await setContestPlays(leagueId, next);
+      if (!r.ok) { setNote(r.error ?? 'Couldn’t change the plays.'); return; }
+      setOff(r.plays_off ?? next); setNote(`${on ? 'on' : 'off'} — the league was told`);
+    } catch (e) { setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const plays = contestPlaysFor(info.format, info.contest);
+  return (
+    <div style={{ ...card, display: 'grid', gap: 8 }}>
+      <LabelInfo label="PLAYS" info={'The power-ups the shop sells in this league. Turn one off and it leaves the shop and cannot be played; a card already in a hand waits until it is back on. The league chat hears each change.'} />
+      {off === null ? <span className="mono" style={small}>{note ?? 'loading…'}</span> : plays.map((d) => {
+        const on = !off.includes(d.id);
+        return (
+          <div key={d.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: on ? 'var(--text)' : 'var(--faint)', minWidth: 150 }}>{`${d.icon} ${d.name}`}</span>
+            <InfoChip title={d.name} info={`${d.blurb}\n\n◎${d.price} in the shop.`} />
+            <span className="mono" style={small}>{`◎${d.price}`}</span>
+            <button disabled={busy} onClick={() => void flip(d.id, true)} className="mono" style={chip(on)}>ON</button>
+            <button disabled={busy} onClick={() => void flip(d.id, false)} className="mono" style={chip(!on)}>OFF</button>
+          </div>
+        );
+      })}
+      {note && off !== null && <span className="mono" style={small}>{note}</span>}
     </div>
   );
 }

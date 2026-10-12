@@ -94,7 +94,10 @@ begin
   -- kickoff closes the shop
   update nfl_slate set kickoff = now() - interval '1 hour' where season = '2026' and week = wk and home = 'PHI';
   perform assert_err(contest_arm_play(h, wk, 'hail-mary'), 'cp6 no arming after the first kickoff');
-  perform assert_err(contest_disarm_play(h, wk, 'underdog', 'S3'), 'cp6b …nor disarming');
+  -- 0490: a spot play lives on its player's own clock — Q One (PHI) has kicked off, R Three (KC) has not
+  perform assert_err(contest_disarm_play(h, wk, 'double-or-nothing', 'S1'), 'cp6b …nor taking back a play on a spot whose player kicked off');
+  perform assert_ok(contest_disarm_play(h, wk, 'underdog', 'S3'), 'cp6b2 …but a spot whose player has not kicked off still gives its play back');
+  perform assert_ok(contest_arm_play(h, wk, 'underdog', 'S3'), 'cp6b3 …and takes it again, from the hand');
   perform probe_as('b'); perform assert_true(not (contest_plays(h, wk, 1) ->> 'sealed')::boolean and jsonb_array_length(contest_plays(h, wk, 1) -> 'plays') = 2, 'cp6c the opponent''s plays unseal');
 end $$;
 -- ── PR 3 (0485): Spy, Jinx, Magnet, Re-deal ──────────────────────────────────
@@ -178,4 +181,53 @@ begin
   perform assert_ok(contest_arm_play(h, wk, 'hail-mary'), 'cs5 a card in hand plays with an empty wallet');
   perform assert_err(contest_buy_play(h, 'pick-six'), 'cs5b …but the shop wants coin');
 end $$;
+-- ── THE PLAYS, ON AND OFF (0490): the commissioner turns a play off; the shop and the arm refuse it ──
+do $$
+declare r jsonb; h uuid; wk int;
+begin
+  perform probe_as('a');
+  select id into h from league where name = 'CP H2H' order by created_at desc limit 1;
+  select max(week) into wk from matchup where league_id = h;
+  perform assert_true(jsonb_array_length(contest_state(h, wk) -> 'plays_off') = 0, 'po0 every play on to start');
+  perform probe_as('b'); perform assert_err(set_contest_plays(h, '["spy"]'), 'po1 a member cannot'); perform probe_as('a');
+  perform assert_err(set_contest_plays(h, '["winning"]'), 'po2 not a play');
+  perform assert_err(set_contest_plays(h, '"spy"'), 'po3 a list, not a word');
+  r := set_contest_plays(h, '["spy", "pick-six", "spy"]'); perform assert_ok(r, 'po4 spy and pick six off');
+  perform assert_true(r -> 'plays_off' = '["spy", "pick-six"]'::jsonb, 'po5 …once each: ' || (r -> 'plays_off')::text);
+  perform assert_true(exists (select 1 from league_message where league_id = h and txn ->> 'kind' = 'plays_off' and body like '%Spy, Pick Six off%'), 'po6 the league hears it');
+  perform assert_true(contest_state(h, wk) -> 'plays_off' = '["spy", "pick-six"]'::jsonb and contest_coin_rules(h) -> 'plays_off' = '["spy", "pick-six"]'::jsonb, 'po7 the reads carry it');
+  update team_wallet set coins = 500 where league_id = h and roster_id = 1;
+  perform assert_err(contest_buy_play(h, 'pick-six'), 'po8 the shop refuses an off play');
+  perform assert_err(contest_arm_play(h, wk, 'pick-six', 'S1'), 'po9 …and so does the arm');
+  perform assert_ok(contest_buy_play(h, 'underdog'), 'po10 an on play still sells');
+  perform assert_ok(set_contest_plays(h, '[]'), 'po11 everything back on');
+  perform assert_ok(contest_buy_play(h, 'pick-six'), 'po12 …and pick six sells again');
+  perform assert_true(exists (select 1 from league_message where league_id = h and txn ->> 'kind' = 'plays_off' and body like '%every play is on%'), 'po13 the league hears that too');
+end $$;
+
+-- ── THE WINDOW (0490): a spot play until the player's own kickoff; a squad play before the first ──
+do $$
+declare r jsonb; h uuid; wk int;
+begin
+  perform probe_as('a');
+  select id into h from league where name = 'CP H2H' order by created_at desc limit 1;
+  select max(week) into wk from matchup where league_id = h;
+  update team_wallet set coins = 500 where league_id = h and roster_id = 1;
+  delete from contest_play where league_id = h and week = wk and roster_id = 1;   -- a clean week, under the cap
+  -- the Eagles kick off; the Niners have not (S1 Q One is PHI, S5 W Two is SF)
+  update nfl_slate set kickoff = now() - interval '1 hour' where season = '2026' and week = wk and home = 'PHI';
+  update nfl_slate set kickoff = now() + interval '2 days' where season = '2026' and week = wk and home <> 'PHI';
+  perform assert_true(not _contest_week_open((select l from league l where l.id = h), wk), 'pw0 the week has kicked off');
+  r := contest_arm_play(h, wk, 'pick-six'); perform assert_err(r, 'pw1 a squad play is shut');
+  perform assert_true(r ->> 'error' like '%first kickoff%', 'pw2 …and says so: ' || (r ->> 'error'));
+  r := contest_arm_play(h, wk, 'double-or-nothing', 'S1'); perform assert_err(r, 'pw3 a spot whose player kicked off is shut');
+  perform assert_true(r ->> 'error' like '%kicked off%', 'pw4 …and says so: ' || (r ->> 'error'));
+  r := contest_arm_play(h, wk, 'double-or-nothing', 'S5'); perform assert_ok(r, 'pw5 a spot whose player has not kicked off still takes a play');
+  r := contest_disarm_play(h, wk, 'double-or-nothing', 'S5'); perform assert_ok(r, 'pw6 …and gives it back on the same clock');
+  perform assert_ok(contest_arm_play(h, wk, 'double-or-nothing', 'S5'), 'pw7 armed again');
+  update nfl_slate set kickoff = now() - interval '1 minute' where season = '2026' and week = wk and home = 'SF';
+  r := contest_disarm_play(h, wk, 'double-or-nothing', 'S5'); perform assert_err(r, 'pw8 once he kicks off the play is set');
+  update nfl_slate set kickoff = now() + interval '2 days' where season = '2026' and week = wk;
+end $$;
+
 select 'ALL CONTEST-PLAYS PROBES PASSED';

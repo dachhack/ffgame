@@ -8,11 +8,11 @@ import {
   contestLeague, setContestRules, setDfsBullseye, setBullseyeSize, postLeagueListing, closeLeagueListing, leagueListingState,
   isAdmin, myFeatures, bullseyeMaxSeats, friendlyError,
   contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries, setLeaguePrizes,
-  contestCoinRules, setContestCoinRules, contestWallets, commishAdjustContestWallet, type ContestCoinRules, type ContestWalletRow,
+  contestCoinRules, setContestCoinRules, contestWallets, commishAdjustContestWallet, setContestPlays, type ContestCoinRules, type ContestWalletRow,
   type ContestInfo, type ContestKind, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow, type PrizeRow,
 } from '@drip/core/data/liveApi';
 import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline,
-  CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, coinEventApplies, coinRulesLine } from '@drip/core/engine/contest';
+  CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, coinEventApplies, coinRulesLine, contestPlaysFor } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -160,6 +160,7 @@ export function ContestCommishCard({ leagueId, onChanged, part = 'game' }: { lea
               <Chip small on={!b.coin} disabled={busy} label="OFF" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: false }), 'drip coin off'); }} />
             </View>
           </Card>
+          {b.coin && <PlaysCard leagueId={leagueId} info={b} />}
           {b.coin && <CoinRulesCard leagueId={leagueId} info={b} />}
           {b.coin && <PursesCard leagueId={leagueId} />}
         </>
@@ -526,6 +527,45 @@ function PursesCard({ leagueId }: { leagueId: string }) {
         </View>
       ))}
       {note && <Mono size={8.5} tone="dim">{note}</Mono>}
+    </Card>
+  );
+}
+
+// THE PLAYS, ON AND OFF (v0.694.0) — the web twin's note.
+function PlaysCard({ leagueId, info }: { leagueId: string; info: ContestInfo }) {
+  const [off, setOff] = useState<string[] | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    contestCoinRules(leagueId).then((r) => { if (r.ok) setOff(r.plays_off ?? []); else setNote(r.error ?? 'Couldn’t read the plays.'); }).catch((e) => setNote(friendlyError(e)));
+  }, [leagueId]);
+  const flip = async (id: string, on: boolean) => {
+    if (!off) return;
+    const next = on ? off.filter((x) => x !== id) : [...new Set([...off, id])];
+    setBusy(true); setNote(null);
+    try {
+      const r = await setContestPlays(leagueId, next);
+      if (!r.ok) { warn(); setNote(r.error ?? 'Couldn’t change the plays.'); return; }
+      commit(); setOff(r.plays_off ?? next); setNote(`${on ? 'on' : 'off'} — the league was told`);
+    } catch (e) { warn(); setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const plays = contestPlaysFor(info.format, info.contest);
+  return (
+    <Card style={{ gap: 8 }}>
+      <LabelInfo label="PLAYS" info={'The power-ups the shop sells in this league. Turn one off and it leaves the shop and cannot be played; a card already in a hand waits until it is back on. The league chat hears each change.'} />
+      {off === null ? <Mono size={8.5} tone="faint">{note ?? 'loading…'}</Mono> : plays.map((d) => {
+        const on = !off.includes(d.id);
+        return (
+          <View key={d.id} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Mono size={10} tone={on ? 'text' : 'faint'} weight="700" style={{ flex: 1, minWidth: 110 }}>{`${d.icon} ${d.name}`}</Mono>
+            <InfoChip title={d.name}>{`${d.blurb}\n\n◎${d.price} in the shop.`}</InfoChip>
+            <Mono size={8.5} tone="faint">{`◎${d.price}`}</Mono>
+            <Chip small on={on} disabled={busy} label="ON" onPress={() => { tap(); void flip(d.id, true); }} />
+            <Chip small on={!on} disabled={busy} label="OFF" onPress={() => { tap(); void flip(d.id, false); }} />
+          </View>
+        );
+      })}
+      {note && off !== null && <Mono size={8.5} tone="dim">{note}</Mono>}
     </Card>
   );
 }

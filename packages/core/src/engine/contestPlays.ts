@@ -27,8 +27,9 @@ export const CONTEST_PLAYS: ContestPlayDef[] = [
   { id: 're-deal', name: 'Re-deal', icon: '🔄', price: 40, target: 'squad', bullseyeOnly: true, blurb: 'Deal your tie-breaker spot and its number again, before kickoff. One re-deal a week; what comes up, stays.' },
 ];
 /** The plays a league offers: the head-to-head pair only head-to-head, the Bullseye pair only under the dart. */
-export const contestPlaysFor = (format: 'h2h' | 'board', contest: string): ContestPlayDef[] =>
-  CONTEST_PLAYS.filter((d) => (!d.h2hOnly || format === 'h2h') && (!d.bullseyeOnly || contest === 'bullseye'));
+/** The plays a league of this shape offers; `off` (0490) is what its commissioner turned off. */
+export const contestPlaysFor = (format: 'h2h' | 'board', contest: string, off?: readonly string[] | null): ContestPlayDef[] =>
+  CONTEST_PLAYS.filter((d) => (!d.h2hOnly || format === 'h2h') && (!d.bullseyeOnly || contest === 'bullseye') && !(off ?? []).includes(d.id));
 /** Magnet aims at a spot under a per-spot card; under a one-team total it is the whole squad's. */
 export const contestPlayTarget = (d: ContestPlayDef, variant?: string | null): ContestPlayDef['target'] => (d.id === 'magnet' && variant === 'total' ? 'squad' : d.target);
 /** How many times the seat's tie-breaker has been re-dealt this week (0 or 1). */
