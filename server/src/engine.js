@@ -10,9 +10,9 @@
 //
 // NOTE: run anything importing this under tsx (see package.json scripts), so the
 // .ts imports resolve in Node.
-import { resolveSlot, EMPTY_PLAYER } from '../../packages/core/src/engine/sim.ts';
+import { resolveSlot, EMPTY_PLAYER, playsForPlayer } from '../../packages/core/src/engine/sim.ts';
 import { resolveLiveMatchup } from '../../packages/core/src/engine/liveResolve.ts';
-import { resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball } from '../../packages/core/src/engine/classic.ts';
+import { resolveClassicMatchup, CLASSIC_WIN, classicSlots, leagueSlotDefs, leagueBestball, classicPointsFrom } from '../../packages/core/src/engine/classic.ts';
 import { assignSealedRows } from '../../packages/core/src/engine/seatPicks.ts';
 import { setSyntheticWeeks, clearSyntheticWeeks, realPbpFor, LIVE_SEASON } from '../../packages/core/src/data/realPbp.ts';
 import { liveTeamFor } from '../../packages/core/src/data/slugMeta.ts';
@@ -28,6 +28,13 @@ export function playsFor(week, slug) {
  *  the three could ever score live. Never null: a player with no rows is []. */
 export function playEventsFor(week, slug) {
   return realPbpFor(week, slug) ?? [];
+}
+
+/** GARBAGE TIME (v0.696.0): a player's points from the fourth quarter on — his plays at 45:00 of game clock
+ *  or later (overtime included), scored under the league's own catalog. */
+export function latePointsFor(player, week, catalog, scoreAs, slot) {
+  const { plays } = playsForPlayer(player, week);
+  return classicPointsFrom(plays.filter((p) => (p.clock ?? 0) >= 45 * 60), player, catalog, scoreAs, slot);
 }
 import { aiLineup, aiLiveBuffs } from '../../packages/core/src/data/aiLineup.ts';
 
