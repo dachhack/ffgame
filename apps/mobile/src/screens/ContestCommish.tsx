@@ -125,6 +125,12 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
             <Mono size={8.5} tone="faint">How many squads one member may field — each is its own seat on the board, built one at a time on MY TEAM. Head-to-head is always one: an opponent is a person.</Mono>
           </>
         )}
+        <Mono size={9} tone="faint" weight="700" track={0.1}>DRIP COIN</Mono>
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+          <Chip small on={!!b.coin} disabled={busy} label="ON" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: true }), 'drip coin on — every seat starts with ◎100'); }} />
+          <Chip small on={!b.coin} disabled={busy} label="OFF" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: false }), 'drip coin off'); }} />
+        </View>
+        <Mono size={8.5} tone="faint">Every seat starts with ◎100 and earns each week for showing up (a squad of your own before kickoff, and weeks in a row), for reading the board (a bargain, the call, a dead-on dart) and for losing (the heartbreaker, a loss, the bottom half, catch-up below the median) — never for winning. A wallet above ◎150 burns down to 150. Power-ups to spend it on come next.</Mono>
         <Mono size={8.5} tone="faint">Every player locks at his own kickoff, so a ruled-out pick can be swapped until then. SWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has; LEAVE IT TO ME banks the zero.</Mono>
       </Card>
 

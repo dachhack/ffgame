@@ -174,6 +174,13 @@ export async function postContestRecaps(week, season, opts = {}) {
     if (mErr) { log(lg.name, 'wk', week, 'card', mErr.message); continue; }
     posted.add(`${lg.id}:${week}`);
     n += 1;
+    // DRIP COIN (0483): the week's earn, settled as the card posts — once per
+    // seat per reason (the idem keys), so a repeat is harmless.
+    if (cfg.coin && typeof db().rpc === 'function') {
+      const { data: coin, error: cErr } = await db().rpc('contest_settle_coin', { p_league: lg.id, p_week: Number(week) }) ?? {};
+      if (cErr) log(lg.name, 'wk', week, 'coin', cErr.message); else if (coin && coin.ok === false) log(lg.name, 'wk', week, 'coin', coin.error);
+      else if (coin) log(lg.name, 'wk', week, 'coin', `${coin.seats} seats, ${coin.lines} lines`);
+    }
     // YOUR PLACE, on your phone. Only people who played the week.
     const word = contestScoreWord(cfg.contest, cfg.bullseye?.variant);
     const pushes = ranked.filter((r) => r.uid && !r.cpu).map((r) => ({
