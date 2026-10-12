@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.692.1 — The notification icon
+
+> - The small icon on Android notifications is now an italic DF, which reads at status-bar size; the football-with-a-drop lost its drop there. It rides the next Android build, since that icon is baked into the app rather than updated over the air.
+
+The founder: "The drip fantasy notification icon is kinda buns. Let's try
+some other versions." Ten drafts (taps, helmets, DF monograms, a drop with a
+lace) at 96 px and 24 px; the pick was the italic block DF. A white
+silhouette on transparent, drawn at 8x and downsampled, in
+`apps/mobile/assets/notification-icon.png`. No iPhone build: the icon is
+Android's and the iOS fingerprint is unchanged.
+
 ### v0.692.0 — The coin rules
 
 > - Drip coin has a standard suite of ways to earn it — the starting coin, built your squad, weeks in a row, the bargain, the call, dead-on, the heartbreaker, a loss, the bottom half, catch-up, and the wallet ceiling — and the commissioner of a weekly competition league can now change any of them: COMMISH → DRIP COIN → COIN RULES, coin per event, 0 to turn one off, STANDARD SUITE to go back. A new WEEKLY ALLOWANCE pays every seat every week, whatever happened. The league chat hears what changed.
