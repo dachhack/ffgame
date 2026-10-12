@@ -248,6 +248,9 @@ export function scoreContest(
     plays?: { home?: ContestPlay[] | null; away?: ContestPlay[] | null };
     playsOf?: (slug: string) => PlayEvent[];
     settled?: boolean;
+    /** IN PLAY (v0.685.1): a player whose game has kicked off but not ended. A zero so far is not a zero yet —
+     *  it is neither written nor penalised (the dart's zero rule, golf's zero-fill) until his game is over. */
+    live?: (slug: string) => boolean;
   } = {},
 ): ClassicResult & { tiebreak: { home: number | null; away: number | null } } {
   const pending = opts.pending ?? (() => false);
@@ -267,8 +270,13 @@ export function scoreContest(
       const slug = squads[side][d.slot] ?? null;
       if (slug && pending(slug)) continue;
       const ghost = !slug ? playOn(d.slot, 'ghost') : null;
-      counted[side]++;
       let score = slug ? Math.round(pointsOf(slug, d.slot, d) * 10) / 10 : 0;
+      // A ZERO SO FAR IS NOT A ZERO (v0.685.1, founder: "how is my opponent
+      // 60.3 off?" — three live players at 0.0 were each charged the dart's
+      // penalty): a player still in his game with nothing yet is a spot still
+      // to play, not a no-show. He is scored once he posts, or once the game ends.
+      if (slug && Math.abs(score) < 1e-9 && opts.live?.(slug)) continue;
+      counted[side]++;
       const raw = score;
       let play: string | undefined;
       // THE ZERO-FILL RULE (0200): a spot that scores nothing banks its

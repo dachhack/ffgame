@@ -615,6 +615,14 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       const k = kicks[team] ?? kicks[String(meta(slug)?.team ?? '').toUpperCase()];
       return Number.isFinite(k) && k > nowMs;
     };
+    // IN PLAY (v0.685.1): kicked off, not yet done — the tick hands the done
+    // teams; a final week has none in play.
+    const live = (slug) => {
+      if (!kicks) return false;
+      const team = normTeam(meta(slug)?.team ?? '');
+      const k = kicks[team] ?? kicks[String(meta(slug)?.team ?? '').toUpperCase()];
+      return Number.isFinite(k) && k <= nowMs && !(opts.doneTeams?.has(team));
+    };
     // THE TIE-BREAKER (v0.660.1): each seat's own spot and number.
     const tiebreak = card ? {
       home: contestTiebreak(matchup.league_id, matchup.week, matchup.home_roster_id, card, contestCfg.slots),
@@ -630,7 +638,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     }
     const r = scoreContest({ home: homeSquad, away: awaySquad }, contestCfg,
       (slug, slot, def) => classicPoints(player(slug), matchup.week, catalog, contestScoreAs(def), slot),
-      { pending, card, tiebreak, plays, playsOf: (slug) => playsFor(matchup.week, slug) ?? [], settled: matchup.status === 'final' });
+      { pending, live, card, tiebreak, plays, playsOf: (slug) => playsFor(matchup.week, slug) ?? [], settled: matchup.status === 'final' });
     for (const st of r.states) states.push({ game_window: st.window, home_score: st.home, away_score: st.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

@@ -36,5 +36,13 @@ ok('bullseye total: 38 against 40 is 2 off; the bonus takes the distance to 0', 
 const bullS = cfg({ contest: 'bullseye', bullseye: 'slots', bullseye_radius: 10 });
 r = scoreContest(squads, bullS, pointsOf, { plays: { home: [{ id: 'hail-mary' }], away: [] }, playsOf, card: { targets: { S1: 20, S2: 10, S3: 8 }, total: 38 } });
 ok('bullseye per spot: three dead-on darts ring 60, the bonus rides on top', r.home === 60 + 15, r.home);
+// IN PLAY (v0.685.1): a zero so far, in a game still on, is a spot still to play — no dart penalty, no row
+const liveSquads = { home: { S1: 'qb', S2: 'rb', S3: 'zero' }, away: { S1: 'qb', S2: 'rb', S3: 'zero' } };
+r = scoreContest(liveSquads, bull, pointsOf, { card: { targets: {}, total: 30 }, live: (s) => s === 'zero' });
+ok('in play: the live zero is left out — 30 points against 30 is 0 off, no penalty', r.home === 0 && !r.slots.some((x) => x.side === 'home' && x.slot === 'S3'), [r.home, r.bullseye?.home]);
+r = scoreContest(liveSquads, bull, pointsOf, { card: { targets: {}, total: 30 } });
+ok('…and once his game is over, the zero is a no-show: 10 off', r.home === 10 && r.bullseye?.home?.zeros === 1, [r.home, r.bullseye?.home]);
+r = scoreContest(liveSquads, cfg({ contest: 'golf', roster_slots: [{ pos: ['QB'] }, { pos: ['RB'] }, { pos: ['WR'], zero_pts: 25 }] }), pointsOf, { live: (s) => s === 'zero' });
+ok('golf: a live zero banks no zero-fill yet', r.home === 30, r.home);
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);
