@@ -21,6 +21,14 @@ import { liveTeamFor } from '../../packages/core/src/data/slugMeta.ts';
 export function playsFor(week, slug) {
   return realPbpFor(week, slug)?.length ?? 0;
 }
+
+/** The squad's real plays as the contest scorer's PlayEvent rows (v0.694.1):
+ *  Hail Mary, Pick Six and Jinx read `k`/`td`/`y`, which a real row already
+ *  carries. Until this the worker handed them playsFor's COUNT, so none of
+ *  the three could ever score live. Never null: a player with no rows is []. */
+export function playEventsFor(week, slug) {
+  return realPbpFor(week, slug) ?? [];
+}
 import { aiLineup, aiLiveBuffs } from '../../packages/core/src/data/aiLineup.ts';
 
 const ZERO_STATS = {

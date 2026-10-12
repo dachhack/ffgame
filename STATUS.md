@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.694.1 — Hail Mary, Pick Six and Jinx score live
+
+> - Hail Mary, Pick Six and Jinx now score on the worker. Since they shipped the worker handed the scorer a count of a player's plays instead of the plays themselves, so a 40-yard touchdown pass, a defensive score or a jinxed touchdown never registered live. Found while reading the scorer for new plays; no member reported it.
+
+`server/src/engine.js` gains `playEventsFor(week, slug)`, the player's real
+rows (already the scorer's `{k, td, y}` shape), never null; `resolve.js` feeds it to
+`scoreContest` in place of `playsFor` (a count). `server/test/contest-events.mjs`
+runs the three plays through the worker's own feed and fails on the old
+shape. A settled week that had one of the three armed stays as it was: the
+worker re-scores a final only when something about it changes.
+
 ### v0.694.0 — Plays on and off, and the spot play's clock
 
 > - The commissioner of a drip-coin contest league can turn any play on or off: COMMISH → DRIP COIN → PLAYS. An off play leaves the shop and cannot be played; a card already in a hand waits until it is back on. The league chat hears each change.
