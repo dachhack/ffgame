@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.3 — The new-build banner shows
+
+> - The A NEW ANDROID BUILD IS OUT banner (v0.696.1) never showed: the build number it compared against read as nothing on this SDK. It now reads the phone’s real build number, so a phone on an older APK than the published one is told, with the download in What’s New.
+
+Founder, on a phone still showing the old alert icon: "Have not updated
+yet." `expo-constants`' `nativeBuildVersion` is gone at runtime on SDK 57,
+so `MY_BUILD` was 0 and `newBuild` never true. `WhatsNew` now reads
+`expo-application`'s `nativeBuildVersion` (the APK's versionCode); the
+module was already in the build through expo-notifications, declared now
+as a dependency, and the Android fingerprint is unchanged (3d455539…), so
+this reaches every installed build over the air. No iPhone build.
+
 ### v0.696.2 — Tonight’s game is on the fields
 
 > - The app’s All fields sheet now lists every game on the week’s slate, including the ones that haven’t kicked off: a card with the kickoff and no plays, which fills in once the game starts. Until now a game appeared only after its first play, so Monday night’s game was missing all day.
