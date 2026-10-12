@@ -31,6 +31,7 @@ import { contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestRedeal
 } from '@drip/core/engine/contest';
 import { CardTableCss, Felt, PlayerCard, SealedCard, PowerupHand, type HandCard } from '../app/cardTable';
 import { ShopModal } from './LeagueOverview';
+import { InfoChip } from './adminUi';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { squadCardText } from '@drip/core/data/squadCard';
@@ -420,9 +421,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded }: { l
             <span className="mono" style={head}>PLAYS</span>
             <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--you)' }}>{`◎ ${Math.round(wallet ?? 0)}`}</span>
             <button onClick={() => setShop(true)} className="mono" style={chip(false)}>🛒 SHOP</button>
-            <span className="mono" style={small}>{st.started
-              ? `the week has kicked off — buy now, play before next week's first kickoff · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand`
-              : `${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played this week · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · play from the hand below, before the first kickoff`}</span>
+            <span className="mono" style={small}>{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand${st.started ? ' · the week has kicked off' : ''}`}</span>
+            <InfoChip title="Plays" info={'Buy a play in the shop; it lands in your hand at the foot of the screen. Tap a card to play it before the week’s first kickoff: a squad play goes on at once, a spot play asks for the spot. One a week (two head-to-head). TAKE BACK before kickoff returns the card to your hand.\n\nOnce the week has kicked off you can still buy; the cards wait for next week.'} />
             {arming && <button onClick={() => setArming(null)} className="mono" style={{ ...chip(true), marginLeft: 'auto' }}>{`▶ tap ${contestPlayById(arming)?.target === 'opp' ? 'one of their spots' : 'a spot'} for ${contestPlayById(arming)?.name ?? ''} · CANCEL`}</button>}
           </div>
           {arming && <span className="mono" style={small}>{contestPlayById(arming)?.blurb}</span>}

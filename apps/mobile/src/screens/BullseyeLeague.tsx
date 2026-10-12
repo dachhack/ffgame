@@ -20,6 +20,7 @@ import { SITE_ORIGIN } from '@drip/core/data/invite';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, ChipStrip, Display, Mono } from '../ui/prims';
+import { InfoChip } from '../ui/InfoChip';
 import { Playoffs } from '../ui/LeagueExtras';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { ContestMatchup } from './ContestMatchup';
@@ -71,7 +72,7 @@ export function BullseyeStart({ onOpen, onBack, quick = false }: { onOpen: (leag
   };
   // THE SETUP (v0.691.0, founder): drip coin and power-ups from the start,
   // and a one-week league names its week — this week marked, through 18.
-  const [coin, setCoin] = useState(true);
+  const [coin, setCoin] = useState(false);   // v0.693.0: off by default
   const [nowWeek, setNowWeek] = useState<number | null>(null);
   const [weekPick, setWeekPick] = useState<number | null>(null);
   useEffect(() => { contestWeekNow().then((r) => { if (r.ok && r.week != null) { setNowWeek(r.week); setWeekPick((w) => w ?? r.week!); } }).catch(() => {}); }, []);
@@ -119,7 +120,10 @@ export function BullseyeStart({ onOpen, onBack, quick = false }: { onOpen: (leag
         <Chip small label="HEAD-TO-HEAD" on={format === 'h2h'} onPress={() => { tap(); setFormat('h2h'); setMax((m) => String(Math.min(32, Number(m) || 12))); }} />
         <Chip small label="LEADERBOARD" on={format === 'board'} onPress={() => { tap(); setFormat('board'); }} />
       </View>
-      <Mono size={8.5} tone="faint">{format === 'h2h' ? 'Paired each week — wins and losses. Empty seats play as the CPU until someone takes them.' : 'Everyone ranked each week.'}</Mono>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Mono size={8.5} tone="faint">{format === 'h2h' ? 'paired each week' : 'everyone ranked each week'}</Mono>
+        <InfoChip title="Plays">{'HEAD-TO-HEAD — paired each week, wins and losses; an even number of seats, up to 32; empty seats play as the CPU until someone takes them.\n\nLEADERBOARD — everyone ranked each week.'}</InfoChip>
+      </View>
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <Mono size={9} tone="faint">RUNS</Mono>
         <Chip small label="ALL SEASON" on={span === 'season'} onPress={() => { tap(); setSpan('season'); }} />
@@ -145,18 +149,20 @@ export function BullseyeStart({ onOpen, onBack, quick = false }: { onOpen: (leag
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Mono size={9} tone="faint">BUDGET PER SQUAD $</Mono>
         <Field value={budget ? String(budget) : ''} onChangeText={(v) => money(v, setBudget)} keyboardType="number-pad" placeholder="0 = no cap" style={{ width: 110 }} />
-        <Mono size={8.5} tone="faint" style={{ flex: 1 }}>{budget ? `${moneyChip(budget, '')} · the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST); the roster is on COMMISH` : 'no cap'}</Mono>
+        <Mono size={8.5} tone="faint">{budget ? moneyChip(budget, '') : 'no cap'}</Mono>
+        <InfoChip title="Budget">{'Every squad is built under this each week from the week’s salary board. 0 is no cap.\n\nThe default nine spots are QB, 2 RB, 3 WR, TE, K, D/ST; the roster, like the budget, is on COMMISH once the league exists.'}</InfoChip>
       </View>
       {contest === 'golf' && (
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <Mono size={9} tone="faint">MIN SPEND $</Mono>
           <Field value={minSpend ? String(minSpend) : ''} onChangeText={(v) => money(v, setMinSpend)} keyboardType="number-pad" placeholder="0 = none" style={{ width: 110 }} />
-          <Mono size={8.5} tone="faint" style={{ flex: 1 }}>Golf’s real constraint: you must roster expensive players and bet on which stars have a quiet week.</Mono>
+          <InfoChip title="Min spend">{'Golf’s real constraint: a squad must spend at least this, so you must roster expensive players and bet on which stars have a quiet week. 0 is none.'}</InfoChip>
         </View>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Switch value={coin} onValueChange={setCoin} />
-        <Mono size={9} tone="dim" style={{ flex: 1 }}>DRIP COIN & POWER-UPS — every seat starts with ◎100, the week pays for showing up, reading the board and losing, and the shop sells plays before kickoff</Mono>
+        <Mono size={9} tone="dim">DRIP COIN & POWER-UPS</Mono>
+        <InfoChip title="Drip coin & power-ups">{'Every seat starts with ◎100. The week pays for showing up, reading the board and losing — never for winning — and the shop sells plays before kickoff. The commissioner can change every amount on COMMISH → DRIP COIN.'}</InfoChip>
       </View>
     </>
   );
@@ -178,7 +184,10 @@ export function BullseyeStart({ onOpen, onBack, quick = false }: { onOpen: (leag
         {essentials}
         {teamsRow}
         {listRow}
-        <Mono size={8.5} tone="faint">NFL only — each week everyone builds a squad from the week’s salary board. The roster, the scoring, prizes and who may enter are on COMMISH once it exists. You take seat 1 as commissioner.</Mono>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Mono size={8.5} tone="faint">NFL · you take seat 1 as commissioner</Mono>
+          <InfoChip title="Weekly draft">{'NFL only — each week everyone builds a squad from the week’s salary board. The roster, the scoring, prizes and who may enter are on COMMISH once the league exists.'}</InfoChip>
+        </View>
         <Chip on={!!name.trim()} dim={!name.trim()} disabled={busy} label={busy ? 'MAKING IT…' : name.trim() ? 'CREATE WEEKLY DRAFT LEAGUE →' : 'NAME IT TO CREATE'}
           onPress={() => { if (!name.trim()) { warn(); return; } tap(); void create(); }} />
         {err && <Mono size={10} tone="warn">{err}</Mono>}
@@ -191,7 +200,10 @@ export function BullseyeStart({ onOpen, onBack, quick = false }: { onOpen: (leag
         <Chip label="← BACK" onPress={() => { tap(); onBack?.(); }} />
         <Mono size={11} tone="you" weight="700" track={0.1}>{`${CONTEST_EMOJI[contest]} NFL · WEEKLY SQUAD LEAGUE`}</Mono>
       </View>
-      <Text style={{ fontSize: 13, color: t.dim, lineHeight: 19 }}>{`${CONTEST_BLURB[contest]} You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board.`}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+        <Mono size={8.5} tone="faint">{CONTEST_BLURB[contest]}</Mono>
+        <InfoChip title="Weekly squad league">{'You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board — all on COMMISH once it exists.'}</InfoChip>
+      </View>
       {contestCredit(contest) && <CreditChip contest={contest} />}
       <Card style={{ gap: 10 }}>
         <Mono size={9} tone="faint" weight="700" track={0.1}>START ONE</Mono>

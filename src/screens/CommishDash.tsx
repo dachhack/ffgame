@@ -179,7 +179,14 @@ export function CommishDash({ onBack, focusId, defaultTab, onDeleted }: {
                 // A CONTEST LEAGUE (0466) keeps its name & crest and gains the
                 // CONTEST card; the drip/classic switch, golf and Bullseye-as-
                 // a-classic-setting are the contest's, set on that card.
-                ...(isContestKind(l.kind) ? { contest: <ContestCommishPanel leagueId={l.league_id} onChanged={() => void load()} /> } : {}),
+                ...(isContestKind(l.kind) ? {
+                  contest: <ContestCommishPanel leagueId={l.league_id} part="game" onChanged={() => void load()} />,
+                  contestseats: <ContestCommishPanel leagueId={l.league_id} part="seats" onChanged={() => void load()} />,
+                  contestcoin: <ContestCommishPanel leagueId={l.league_id} part="coin" onChanged={() => void load()} />,
+                  contestweeks: <ContestCommishPanel leagueId={l.league_id} part="weeks" onChanged={() => void load()} />,
+                  contestmoney: <ContestCommishPanel leagueId={l.league_id} part="money" onChanged={() => void load()} />,
+                  contestboard: <ContestCommishPanel leagueId={l.league_id} part="board" onChanged={() => void load()} />,
+                } : {}),
                 mode: <><LeagueIdentityPanel leagueId={l.league_id} name={l.name} avatar={l.avatar_url} reload={load} />{!isContestKind(l.kind) && <LeagueSettings leagueId={l.league_id} view="mode" />}</>,
                 lineup: <LeagueSettings leagueId={l.league_id} view="lineup" />,
                 scoring: <LeagueSettings leagueId={l.league_id} view="scoring" />,

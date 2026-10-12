@@ -40,6 +40,7 @@ import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, ChipStrip, Display, Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { ShopModal } from '../ui/ShopModal';
+import { InfoChip } from '../ui/InfoChip';
 import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
 
 const fmt$ = (n: number) => `$${n.toLocaleString('en-US')}`;
@@ -389,9 +390,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after }: { leag
               <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYS</Mono>
               <Display size={16}>{`◎ ${Math.round(wallet ?? 0)}`}</Display>
               <Chip small on label="🛒 SHOP" onPress={() => { tap(); setShop(true); }} />
-              <Mono size={8.5} tone="faint" style={{ flexBasis: '100%' }}>{st.started
-                ? `the week has kicked off — buy now, play before next week's first kickoff · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand`
-                : `${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played this week · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand · play from the hand below, before the first kickoff`}</Mono>
+              <Mono size={8.5} tone="faint">{`${plays.length} of ${st.play_cap ?? contestPlayCap(cfg.format)} played · ${Object.values(inventory).reduce((a, b) => a + b, 0)} in hand${st.started ? ' · kicked off' : ''}`}</Mono>
+              <InfoChip title="Plays">{'Buy a play in the shop; it lands in your hand at the foot of the screen. Tap a card to play it before the week’s first kickoff: a squad play goes on at once, a spot play asks for the spot. One a week (two head-to-head). TAKE BACK before kickoff returns the card to your hand.\n\nOnce the week has kicked off you can still buy; the cards wait for next week.'}</InfoChip>
             </View>
             {armingDef && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

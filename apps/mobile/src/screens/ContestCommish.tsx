@@ -17,6 +17,7 @@ import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Mono } from '../ui/prims';
+import { LabelInfo, InfoChip } from '../ui/InfoChip';
 import { RescoreBox, AdjustBox, DuesCard } from '../ui/CommishDesk';
 import { PlayoffControls } from '../ui/LeagueExtras';
 
@@ -32,7 +33,8 @@ function Field(props: React.ComponentProps<typeof TextInput>) {
     style={[{ color: t.text, borderWidth: 1, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, backgroundColor: t.bg }, props.style]} />;
 }
 
-export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; onChanged?: () => void }) {
+export type ContestCommishPart = 'game' | 'seats' | 'coin' | 'weeks' | 'money' | 'board';
+export function ContestCommishCard({ leagueId, onChanged, part = 'game' }: { leagueId: string; onChanged?: () => void; part?: ContestCommishPart }) {
   const [b, setB] = useState<ContestInfo | null>(null);
   const [played, setPlayed] = useState(false);
   const [cap, setCap] = useState(32);
@@ -67,125 +69,136 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
   if (!b) return <Card><Mono size={9} tone="faint">{note ?? 'Loading…'}</Mono></Card>;
   const h2h = b.format === 'h2h';
   const rad = Number(radius) || 10;
+  // THE CATEGORIES (v0.693.0) — the web twin's note: one card, six destinations on the map.
+  const game = part === 'game', seats = part === 'seats', coinPart = part === 'coin', weeks = part === 'weeks', money = part === 'money', board = part === 'board';
   return (
     <View style={{ gap: 10 }}>
-      <Card style={{ gap: 8 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>WINS BY</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {(['high', 'golf', 'bullseye'] as ContestKind[]).map((c) => (
-            <Chip key={c} small on={b.contest === c} disabled={busy} label={`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`} onPress={() => { tap(); void act(setContestRules(leagueId, { contest: c }), `now ${CONTEST_WORD[c].toLowerCase()}`); }} />
-          ))}
-        </View>
-        <Mono size={8.5} tone="faint">{b.contest === 'golf' ? 'Lowest score wins. Set each spot’s 0 → penalty on ROSTER so a scoreless player costs something.' : b.contest === 'high' ? 'Highest score wins.' : 'Closest to the week’s card wins; the dart scores each spot.'} Takes effect from the next week.</Mono>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYS</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          <Chip small on={h2h} disabled={busy || played} label="HEAD-TO-HEAD" onPress={() => { tap(); void act(setContestRules(leagueId, { format: 'h2h' }), 'head-to-head'); }} />
-          <Chip small on={!h2h} disabled={busy || played} label="LEADERBOARD" onPress={() => { tap(); void act(setContestRules(leagueId, { format: 'board' }), 'leaderboard'); }} />
-        </View>
-        <Mono size={8.5} tone="faint">{played ? 'Set once the league has played a week.' : 'Head-to-head pairs an even number of seats, up to 32; the CPU plays an empty seat.'}</Mono>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>BUDGET</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {[...new Set([...CONTEST_BUDGETS, b.budget])].sort((x, y) => x - y).map((v) => (
-            <Chip key={v} small on={b.budget === v} disabled={busy} label={moneyChip(v, 'NO CAP')} onPress={() => { tap(); void act(setContestRules(leagueId, { budget: v }), 'budget changed'); }} />
-          ))}
-        </View>
-        <Mono size={8.5} tone="faint">Per squad, from the next week. Add or remove spots on ROSTER — a bigger squad wants a bigger budget. NO CAP suits Bullseye: the card does the limiting.</Mono>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>MIN SPEND</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {[...new Set([...CONTEST_MIN_SPENDS, b.min_spend ?? 0])].sort((x, y) => x - y).map((v) => (
-            <Chip key={v} small on={(b.min_spend ?? 0) === v} disabled={busy} label={moneyChip(v, 'NONE')} onPress={() => { tap(); void act(setContestRules(leagueId, { minSpend: v }), 'minimum spend changed'); }} />
-          ))}
-        </View>
-        <Mono size={8.5} tone="faint">{b.contest === 'golf' ? 'Golf’s real constraint: a squad must spend at least this, so cheap no-names aren’t the whole game.' : 'A floor a squad must spend; mostly for golf.'}</Mono>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>RULED OUT</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          <Chip small on={!!b.auto_sub} disabled={busy} label="SWAP HIM FOR ME" onPress={() => { tap(); void act(setContestRules(leagueId, { autoSub: true }), 'auto-sub on'); }} />
-          <Chip small on={!b.auto_sub} disabled={busy} label="LEAVE IT TO ME" onPress={() => { tap(); void act(setContestRules(leagueId, { autoSub: false }), 'auto-sub off'); }} />
-        </View>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>NO SQUAD BY LOCK</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {(h2h ? ['cpu', 'zero'] as ContestLateEntry[] : ['cpu', 'zero', 'drop'] as ContestLateEntry[]).map((v) => (
-            <Chip key={v} small on={(b.late_entry ?? contestLateEntryDefault(b.format)) === v} disabled={busy} label={CONTEST_LATE_WORD[v]} onPress={() => { tap(); void act(setContestRules(leagueId, { lateEntry: v }), `a no-show ${CONTEST_LATE_WORD[v].toLowerCase()}`); }} />
-          ))}
-        </View>
-        <Mono size={8.5} tone="faint">{`A seat with no squad at the week’s first kickoff: ${h2h ? 'the CPU builds one so its opponent has a game, or it forfeits with a zero' : 'the CPU builds one, it scores a zero, or it sits the week out with no row at all'}.${b.contest === 'golf' ? ' In golf a scoreless squad is the best score, so SCORES ZERO needs every spot’s 0 → penalty set on ROSTER.' : ''}`}</Mono>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>ENTRIES</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {(['open', 'first'] as ContestEntryDeadline[]).map((v) => (
-            <Chip key={v} small on={(b.entry_deadline ?? 'open') === v} disabled={busy} label={CONTEST_DEADLINE_WORD[v]} onPress={() => { tap(); void act(setContestRules(leagueId, { entryDeadline: v }), v === 'first' ? 'entries close at the first kickoff' : 'entries open until each player’s game'); }} />
-          ))}
-        </View>
-        <Mono size={8.5} tone="faint">A new squad can go in until its players kick off, or not at all once the week’s first game has — a saved squad still swaps its unlocked players either way.</Mono>
-        {!h2h && (
-          <>
-            <Mono size={9} tone="faint" weight="700" track={0.1}>ENTRIES PER MEMBER</Mono>
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-              {[...new Set([1, 2, 3, 5, 10, 20, b.max_entries ?? 1])].sort((x, y) => x - y).map((v) => (
-                <Chip key={v} small on={(b.max_entries ?? 1) === v} disabled={busy} label={String(v)} onPress={() => { tap(); void act(setContestRules(leagueId, { maxEntries: v }), `${v} ${v === 1 ? 'entry' : 'entries'} per member`); }} />
-              ))}
-            </View>
-            <Mono size={8.5} tone="faint">How many squads one member may field — each is its own seat on the board, built one at a time on MY TEAM. Head-to-head is always one: an opponent is a person.</Mono>
-          </>
-        )}
-        <Mono size={9} tone="faint" weight="700" track={0.1}>DRIP COIN</Mono>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          <Chip small on={!!b.coin} disabled={busy} label="ON" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: true }), 'drip coin on — every seat starts with ◎100'); }} />
-          <Chip small on={!b.coin} disabled={busy} label="OFF" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: false }), 'drip coin off'); }} />
-        </View>
-        <Mono size={8.5} tone="faint">Every seat starts with the starting coin and earns each week by the COIN RULES below — for showing up, reading the board and losing, never for winning — and spends it in the shop on plays before kickoff.</Mono>
-        <Mono size={8.5} tone="faint">Every player locks at his own kickoff, so a ruled-out pick can be swapped until then. SWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has; LEAVE IT TO ME banks the zero.</Mono>
-      </Card>
-      {b.coin && <CoinRulesCard leagueId={leagueId} info={b} />}
-      {b.coin && <PursesCard leagueId={leagueId} />}
-
-      {b.contest === 'bullseye' && (
+      {game && (
         <Card style={{ gap: 8 }}>
-          <Mono size={9} tone="faint" weight="700" track={0.1}>THE CARD</Mono>
+          <LabelInfo label="WINS BY" info={'HIGHEST SCORE — most points wins.\n\nGOLF — lowest score wins; set each spot’s 0 → penalty on ROSTER so a scoreless player costs something.\n\nBULLSEYE — closest to the week’s card wins; the dart scores each spot.\n\nTakes effect from the next week, never while a week is being played.'} />
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-            {(['slots', 'total'] as const).map((v) => (
-              <Chip key={v} small on={b.variant === v} disabled={busy} label={v === 'slots' ? 'SLOT TARGETS' : 'ONE TEAM TOTAL'} onPress={() => { tap(); void act(setDfsBullseye(leagueId, v, rad), 'card changed'); }} />
+            {(['high', 'golf', 'bullseye'] as ContestKind[]).map((c) => (
+              <Chip key={c} small on={b.contest === c} disabled={busy} label={`${CONTEST_EMOJI[c]} ${CONTEST_WORD[c]}`} onPress={() => { tap(); void act(setContestRules(leagueId, { contest: c }), `now ${CONTEST_WORD[c].toLowerCase()}`); }} />
             ))}
           </View>
-          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <Mono size={9} tone="faint" style={{ flex: 1 }}>RADIUS (2–50): points for dead-on, and the zero penalty</Mono>
-            <Field value={radius} onChangeText={(v) => setRadius(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 60 }} />
-            <Chip small on disabled={busy || rad === b.radius} label="SET" onPress={() => { tap(); void act(setDfsBullseye(leagueId, b.variant, rad), 'radius changed'); }} />
+          <LabelInfo label="PLAYS" info={'HEAD-TO-HEAD pairs an even number of seats, up to 32, and the CPU plays an empty seat.\n\nLEADERBOARD ranks everyone each week.\n\nSet once the league has played a week.'} />
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Chip small on={h2h} disabled={busy || played} label="HEAD-TO-HEAD" onPress={() => { tap(); void act(setContestRules(leagueId, { format: 'h2h' }), 'head-to-head'); }} />
+            <Chip small on={!h2h} disabled={busy || played} label="LEADERBOARD" onPress={() => { tap(); void act(setContestRules(leagueId, { format: 'board' }), 'leaderboard'); }} />
+            {played && <Mono size={8.5} tone="faint">set — a week has been played</Mono>}
           </View>
-          <Mono size={8.5} tone="faint">Not while a week is being played — change it once that week is final.</Mono>
+          <LabelInfo label="BUDGET" info={'Per squad, from the next week. Add or remove spots on ROSTER — a bigger squad wants a bigger budget. NO CAP suits Bullseye: the card does the limiting.'} />
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {[...new Set([...CONTEST_BUDGETS, b.budget])].sort((x, y) => x - y).map((v) => (
+              <Chip key={v} small on={b.budget === v} disabled={busy} label={moneyChip(v, 'NO CAP')} onPress={() => { tap(); void act(setContestRules(leagueId, { budget: v }), 'budget changed'); }} />
+            ))}
+          </View>
+          <LabelInfo label="MIN SPEND" info={'A floor a squad must spend, from the next week. Golf’s real constraint: cheap no-names can’t be the whole game.'} />
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {[...new Set([...CONTEST_MIN_SPENDS, b.min_spend ?? 0])].sort((x, y) => x - y).map((v) => (
+              <Chip key={v} small on={(b.min_spend ?? 0) === v} disabled={busy} label={moneyChip(v, 'NONE')} onPress={() => { tap(); void act(setContestRules(leagueId, { minSpend: v }), 'minimum spend changed'); }} />
+            ))}
+          </View>
+          {b.contest === 'bullseye' && (
+            <>
+              <LabelInfo label="THE CARD" info={'SLOT TARGETS — each spot aims at its own number and scores a ring.\n\nONE TEAM TOTAL — one number for the whole squad; the distance is the score and lower wins.\n\nRADIUS (2–50) is the band for dead-on and the zero penalty.\n\nNot while a week is being played — change it once that week is final.'} />
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {(['slots', 'total'] as const).map((v) => (
+                  <Chip key={v} small on={b.variant === v} disabled={busy} label={v === 'slots' ? 'SLOT TARGETS' : 'ONE TEAM TOTAL'} onPress={() => { tap(); void act(setDfsBullseye(leagueId, v, rad), 'card changed'); }} />
+                ))}
+                <Mono size={9} tone="faint">RADIUS</Mono>
+                <Field value={radius} onChangeText={(v) => setRadius(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 60 }} />
+                <Chip small on disabled={busy || rad === b.radius} label="SET" onPress={() => { tap(); void act(setDfsBullseye(leagueId, b.variant, rad), 'radius changed'); }} />
+              </View>
+            </>
+          )}
         </Card>
       )}
-
-      <Card style={{ gap: 8 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>WHO CAN GET IN</Mono>
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Mono size={9} tone="faint" style={{ flex: 1 }}>{`${h2h ? 'TEAMS (even, 2–32)' : `UP TO (2–${n0(cap)})`} · ${n0(b.seats_taken)} in now`}</Mono>
-          <Field value={size} onChangeText={(v) => setSize(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 90 }} />
-          <Chip small on disabled={busy || Number(size) === b.max_seats} label="SET" onPress={() => { tap(); void act(setBullseyeSize(leagueId, Number(size) || 0), 'size changed'); }} />
-        </View>
-        {h2h && <Mono size={8.5} tone="faint">An added seat plays as the CPU until someone takes it.</Mono>}
-        <Mono size={9} tone="faint" weight="700" track={0.1}>THE LEAGUE BOARD</Mono>
-        <Field value={blurb} onChangeText={setBlurb} maxLength={200} multiline placeholder="Blurb (optional)" />
-        <Field value={dues} onChangeText={setDues} maxLength={120} placeholder="Dues (optional) — printed, never collected" />
-        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          <Chip on disabled={busy} label={listed ? 'UPDATE THE POST' : 'POST IT TO THE BOARD'} onPress={() => { tap(); void act(postLeagueListing(leagueId, blurb.trim() || null, dues.trim()), listed ? 'board post updated' : 'posted to the board').then((ok) => { if (ok) setListed(true); }); }} />
-          {listed && <Chip disabled={busy} label="TAKE IT DOWN" onPress={() => { tap(); void act(closeLeagueListing(leagueId), 'taken off the board').then((ok) => { if (ok) setListed(false); }); }} />}
-        </View>
-        {b.span === 'week' && <Mono size={8.5} tone="faint">A one-week league leaves the board once its week kicks off.</Mono>}
-      </Card>
-      <Card style={{ gap: 6 }}>
-        <Mono size={9} tone="faint" weight="700" track={0.1}>DUES & PRIZES</Mono>
-        <Mono size={8.5} tone="faint">What a seat costs and what the places win. The platform prints it and never collects it; both show on the league’s SETTINGS and on the league board.</Mono>
-        <DuesCard leagueId={leagueId} />
-        <PrizesEditor leagueId={leagueId} prizes={b.prizes ?? []} onSaved={() => void load()} />
-      </Card>
-      {h2h && b.span === 'season' && (
+      {seats && (
+        <Card style={{ gap: 8 }}>
+          <LabelInfo label="WHO CAN GET IN" info={'How many seats the league holds. Head-to-head wants an even number, 2–32, and an added seat plays as the CPU until someone takes it. A leaderboard holds up to your cap.'} />
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <Mono size={9} tone="faint" style={{ flex: 1 }}>{`${h2h ? 'TEAMS · even, 2–32' : `UP TO · 2–${n0(cap)}`} · ${n0(b.seats_taken)} in now`}</Mono>
+            <Field value={size} onChangeText={(v) => setSize(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 90 }} />
+            <Chip small on disabled={busy || Number(size) === b.max_seats} label="SET" onPress={() => { tap(); void act(setBullseyeSize(leagueId, Number(size) || 0), 'size changed'); }} />
+          </View>
+          <LabelInfo label="ENTRIES" info={'UNTIL EACH PLAYER’S GAME — a new squad can go in until its players kick off.\n\nBY THE FIRST KICKOFF — not at all once the week’s first game has started.\n\nA saved squad still swaps its unlocked players either way.'} />
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {(['open', 'first'] as ContestEntryDeadline[]).map((v) => (
+              <Chip key={v} small on={(b.entry_deadline ?? 'open') === v} disabled={busy} label={CONTEST_DEADLINE_WORD[v]} onPress={() => { tap(); void act(setContestRules(leagueId, { entryDeadline: v }), v === 'first' ? 'entries close at the first kickoff' : 'entries open until each player’s game'); }} />
+            ))}
+          </View>
+          {!h2h && (
+            <>
+              <LabelInfo label="ENTRIES PER MEMBER" info={'How many squads one member may field. Each is its own seat on the board, built one at a time on MY TEAM. Head-to-head is always one: an opponent is a person.'} />
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                {[...new Set([1, 2, 3, 5, 10, 20, b.max_entries ?? 1])].sort((x, y) => x - y).map((v) => (
+                  <Chip key={v} small on={(b.max_entries ?? 1) === v} disabled={busy} label={String(v)} onPress={() => { tap(); void act(setContestRules(leagueId, { maxEntries: v }), `${v} ${v === 1 ? 'entry' : 'entries'} per member`); }} />
+                ))}
+              </View>
+            </>
+          )}
+          <LabelInfo label="NO SQUAD BY LOCK" info={`A seat with no squad at the week’s first kickoff: ${h2h ? 'the CPU builds one so its opponent has a game, or it forfeits with a zero' : 'the CPU builds one, it scores a zero, or it sits the week out with no row at all'}.${b.contest === 'golf' ? '\n\nIn golf a scoreless squad is the best score, so SCORES ZERO needs every spot’s 0 → penalty set on ROSTER.' : ''}`} />
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {(h2h ? ['cpu', 'zero'] as ContestLateEntry[] : ['cpu', 'zero', 'drop'] as ContestLateEntry[]).map((v) => (
+              <Chip key={v} small on={(b.late_entry ?? contestLateEntryDefault(b.format)) === v} disabled={busy} label={CONTEST_LATE_WORD[v]} onPress={() => { tap(); void act(setContestRules(leagueId, { lateEntry: v }), `a no-show ${CONTEST_LATE_WORD[v].toLowerCase()}`); }} />
+            ))}
+          </View>
+          <LabelInfo label="RULED OUT" info={'Every player locks at his own kickoff, so a ruled-out pick can be swapped until then.\n\nSWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has.\n\nLEAVE IT TO ME banks the zero.'} />
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <Chip small on={!!b.auto_sub} disabled={busy} label="SWAP HIM FOR ME" onPress={() => { tap(); void act(setContestRules(leagueId, { autoSub: true }), 'auto-sub on'); }} />
+            <Chip small on={!b.auto_sub} disabled={busy} label="LEAVE IT TO ME" onPress={() => { tap(); void act(setContestRules(leagueId, { autoSub: false }), 'auto-sub off'); }} />
+          </View>
+        </Card>
+      )}
+      {coinPart && (
+        <>
+          <Card style={{ gap: 8 }}>
+            <LabelInfo label="DRIP COIN" info={'Every seat starts with the starting coin and earns each week by the coin rules — for showing up, reading the board and losing, never for winning — and spends it in the shop on plays before kickoff.\n\nTurning it on seeds every seat already in.'} />
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <Chip small on={!!b.coin} disabled={busy} label="ON" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: true }), 'drip coin on — every seat seeded'); }} />
+              <Chip small on={!b.coin} disabled={busy} label="OFF" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: false }), 'drip coin off'); }} />
+            </View>
+          </Card>
+          {b.coin && <CoinRulesCard leagueId={leagueId} info={b} />}
+          {b.coin && <PursesCard leagueId={leagueId} />}
+        </>
+      )}
+      {weeks && (
+        <>
+          {h2h && b.span === 'season' && (
+            <Card style={{ gap: 6 }}>
+              <LabelInfo label="PLAYOFFS" info={'A season head-to-head league plays a bracket over its last weeks — four teams from week 15 unless you say otherwise, seeded by the regular-season standings; everyone else plays a consolation ladder. The round-robin stops where the bracket starts.'} />
+              <PlayoffControls leagueId={leagueId} onChanged={() => void load()} />
+            </Card>
+          )}
+          {played ? <ContestFixWeekCard leagueId={leagueId} /> : (
+            <Card style={{ gap: 6 }}>
+              <LabelInfo label="FIX A WEEK" info={'Once a week has been played: void it, restore it, correct a stat on the board, set a seat’s squad, or re-score it — the result card rebuilds.'} />
+              <Mono size={8.5} tone="faint">No week played yet.</Mono>
+            </Card>
+          )}
+        </>
+      )}
+      {money && (
         <Card style={{ gap: 6 }}>
-          <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYOFFS</Mono>
-          <Mono size={8.5} tone="faint">A season head-to-head league plays a bracket over its last weeks — four teams from week 15 unless you say otherwise, seeded by the regular-season standings; everyone else plays a consolation ladder. The round-robin stops where the bracket starts.</Mono>
-          <PlayoffControls leagueId={leagueId} onChanged={() => void load()} />
+          <LabelInfo label="DUES & PRIZES" info={'What a seat costs and what the places win. The platform prints it and never collects it; both show on the league’s SETTINGS and on the league board.'} />
+          <DuesCard leagueId={leagueId} />
+          <PrizesEditor leagueId={leagueId} prizes={b.prizes ?? []} onSaved={() => void load()} />
         </Card>
       )}
-      {played && <ContestFixWeekCard leagueId={leagueId} />}
+      {board && (
+        <Card style={{ gap: 8 }}>
+          <LabelInfo label="THE LEAGUE BOARD" info={'Post the league where anyone can find it, with a blurb and the dues (printed, never collected). A one-week league leaves the board once its week kicks off.'} />
+          <Field value={blurb} onChangeText={setBlurb} maxLength={200} multiline placeholder="Blurb (optional)" />
+          <Field value={dues} onChangeText={setDues} maxLength={120} placeholder="Dues (optional)" />
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Chip on disabled={busy} label={listed ? 'UPDATE THE POST' : 'POST IT TO THE BOARD'} onPress={() => { tap(); void act(postLeagueListing(leagueId, blurb.trim() || null, dues.trim()), listed ? 'board post updated' : 'posted to the board').then((ok) => { if (ok) setListed(true); }); }} />
+            {listed && <Chip disabled={busy} label="TAKE IT DOWN" onPress={() => { tap(); void act(closeLeagueListing(leagueId), 'taken off the board').then((ok) => { if (ok) setListed(false); }); }} />}
+            <Mono size={8.5} tone="faint">{listed ? 'on the board' : 'not on the board'}</Mono>
+          </View>
+        </Card>
+      )}
       {note && <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'warn'}>{note}</Mono>}
     </View>
   );
@@ -440,8 +453,7 @@ function CoinRulesCard({ leagueId, info }: { leagueId: string; info: ContestInfo
   const groups = [...new Set(CONTEST_COIN_EVENTS.map((e) => e.group))];
   return (
     <Card style={{ gap: 8 }}>
-      <Mono size={9} tone="faint" weight="700" track={0.1}>COIN RULES · THE STANDARD SUITE, YOURS TO CHANGE</Mono>
-      <Mono size={8.5} tone="faint">Coin per event. 0 turns an event off; the ceiling at 0 is no ceiling. The allowance pays every seat every week, whatever happened. Changes reach the league chat and apply from the next week that settles.</Mono>
+      <LabelInfo label="COIN RULES" info={'The standard suite, yours to change: coin per event. 0 turns an event off; the ceiling at 0 is no ceiling. The allowance pays every seat every week, whatever happened.\n\nChanges reach the league chat and apply from the next week that settles. STANDARD SUITE puts every number back.'} />
       {groups.map((g) => (
         <View key={g} style={{ gap: 6 }}>
           <Mono size={8.5} tone="faint" weight="700" track={0.08}>{g.toUpperCase()}</Mono>
@@ -451,6 +463,7 @@ function CoinRulesCard({ leagueId, info }: { leagueId: string; info: ContestInfo
               <View key={e.id} style={{ gap: 3, opacity: on ? 1 : 0.45 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Mono size={10} tone="text" weight="700" style={{ minWidth: 120 }}>{e.name}</Mono>
+                  <InfoChip title={e.name}>{e.blurb}</InfoChip>
                   <Mono size={9} tone="faint">◎</Mono>
                   <Field value={draft[e.id] ?? ''} editable={!busy} keyboardType="number-pad" onChangeText={(v) => setDraft((d) => ({ ...d, [e.id]: v.replace(/[^0-9]/g, '') }))} style={{ width: 70, paddingVertical: 5 }} />
                   <Mono size={8.5} tone="faint">{e.unit === 'once' ? 'once' : e.unit === 'week' ? 'a week' : e.unit === 'ceiling' ? 'ceiling' : e.unit}</Mono>
@@ -461,7 +474,7 @@ function CoinRulesCard({ leagueId, info }: { leagueId: string; info: ContestInfo
                     </>
                   )}
                 </View>
-                <Mono size={8.5} tone="faint">{e.blurb}{on ? '' : ' — not this league’s shape'}{rules[e.id] !== CONTEST_COIN_DEFAULTS[e.id] ? ` · standard ◎${CONTEST_COIN_DEFAULTS[e.id]}` : ''}</Mono>
+                {(!on || rules[e.id] !== CONTEST_COIN_DEFAULTS[e.id]) && <Mono size={8.5} tone="faint">{[on ? null : 'not this league’s shape', rules[e.id] !== CONTEST_COIN_DEFAULTS[e.id] ? `standard ◎${CONTEST_COIN_DEFAULTS[e.id]}` : null].filter(Boolean).join(' · ')}</Mono>}
               </View>
             );
           })}
@@ -498,7 +511,7 @@ function PursesCard({ leagueId }: { leagueId: string }) {
   };
   return (
     <Card style={{ gap: 8 }}>
-      <Mono size={9} tone="faint" weight="700" track={0.1}>PURSES</Mono>
+      <LabelInfo label="PURSES" info={'Every seat’s coin. Type an amount and a note, then GIVE or TAKE on a seat; the league chat hears each one.'} />
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Mono size={9} tone="faint">AMOUNT ◎</Mono>
         <Field value={amount} onChangeText={(v) => setAmount(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 80, paddingVertical: 5 }} />
