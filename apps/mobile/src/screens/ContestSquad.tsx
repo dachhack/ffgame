@@ -170,6 +170,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
   const playOn = useCallback((slot: string) => plays.find((x) => x.slot === slot && contestPlayById(x.id)?.target !== 'opp') ?? null, [plays]);
   const playAt = useCallback((slot: string) => plays.filter((x) => x.slot === slot && contestPlayById(x.id)?.target === 'opp'), [plays]);   // aimed across the table
   const ghosted = useCallback((slot: string) => playOn(slot)?.id === 'ghost', [playOn]);
+  /** What the play chip opens: the play's line, its number, and where it is taken back. */
+  const playInfo = (x: ContestPlayRow) => { const d = contestPlayById(x.id); return `${d?.blurb ?? ''}${x.proj != null ? `\n\nHis number to beat: ${Number(x.proj).toFixed(1)}.` : ''}\n\nOn this spot this week. Take it back on MATCHUP until his kickoff.`; };
 
   const header = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingTop: 10 }}>
@@ -437,7 +439,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       </Text>
                       {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
                     </View>
-                    {playOn(d.slot) && <Text style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '800', letterSpacing: 0.6, color: t.you }}>{`${contestPlayById(playOn(d.slot)!.id)?.icon ?? ''} ${(contestPlayById(playOn(d.slot)!.id)?.name ?? '').toUpperCase()}`}</Text>}
+                    {/* THE PLAY CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see details") */}
+                    {playOn(d.slot) && <InfoChip label={`${contestPlayById(playOn(d.slot)!.id)?.icon ?? '⚡'} PLAY`} title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
                     {p && canTap && (
                       <Pressable hitSlop={8} onPress={() => { tap(); setPicks({ ...picks, [d.slot]: null }); }} style={{ borderWidth: 1, borderColor: alpha(t.text, 30), borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
                         <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>✕</Text>

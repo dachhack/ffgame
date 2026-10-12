@@ -200,13 +200,18 @@ export function TabBar<T extends string>({ tabs, active, onSelect, style, wrap =
 // ── ⓘ — the explainer, folded away (v0.350.4) ────────────────────────────────
 // Web twin of the app's ui/InfoChip: a control gets its LABEL and one ⓘ; the
 // paragraph lives in a modal that opens on demand. Dynamic STATE stays inline.
-export function InfoChip({ title, info }: { title: string; info: string }) {
+export function InfoChip({ title, info, label }: { title: string; info: string;
+  /** A LABELLED CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see
+   *  details"): a small gold pill reading `label` in place of the ⓘ — a state that is itself the way to its story. */
+  label?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button onClick={() => setOpen(true)} aria-label={`About ${title}`} className="mono"
-        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: 12, fontWeight: 700, color: 'var(--dim)', lineHeight: 1 }}>
-        ⓘ
+      <button onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={`About ${title}`} className="mono"
+        style={label
+          ? { background: 'color-mix(in srgb, #E9B959 18%, transparent)', border: '1px solid color-mix(in srgb, #E9B959 60%, transparent)', borderRadius: 999, cursor: 'pointer', padding: '2px 8px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: '#B8862E', lineHeight: 1.2 }
+          : { background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: 12, fontWeight: 700, color: 'var(--dim)', lineHeight: 1 }}>
+        {label ?? 'ⓘ'}
       </button>
       {open && (
         <div onClick={() => setOpen(false)}
