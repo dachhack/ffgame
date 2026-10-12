@@ -12,6 +12,7 @@ import { leagueSlotDefs, slotAllows, slotDisplayName, isRetSlot, type ClassicRes
 import { tiebreakDistance, type BoardPlayer } from './dfsBullseye';
 import { contestEventBonus, contestJinxValue, GHOST_POINTS, type ContestPlay, type ContestPlayId, type PlayEvent } from './contestPlays';
 export { CONTEST_PLAYS, contestPlayById, contestPlayCap, contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestRedeal, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId } from './contestPlays';
+export { CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, contestCoinRules, contestCoinOverrides, coinEventApplies, coinRulesLine, type CoinEventDef, type CoinEventId, type ContestCoinRules } from './contestCoin';
 
 export type ContestKind = 'high' | 'golf' | 'bullseye';
 export type ContestFormat = 'h2h' | 'board';
@@ -157,6 +158,7 @@ export const contestCredit = (contest: ContestKind): typeof CONTEST_CREDIT | nul
 export const COIN_REASON_WORD: Record<string, string> = {
   seed: 'starting coin', built: 'built your squad', streak: 'weeks in a row', bargain: 'the bargain', call: 'the call',
   deadon: 'dead-on', heartbreaker: 'the heartbreaker', loss: 'a loss', bottomhalf: 'the bottom half', catchup: 'catch-up', cap: 'over the cap',
+  allowance: 'the allowance', commish: 'from the commissioner',
 };
 export const coinReasonWord = (r: string): string => COIN_REASON_WORD[r] ?? r;
 

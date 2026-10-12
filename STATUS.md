@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.692.0 — The coin rules
+
+> - Drip coin has a standard suite of ways to earn it — the starting coin, built your squad, weeks in a row, the bargain, the call, dead-on, the heartbreaker, a loss, the bottom half, catch-up, and the wallet ceiling — and the commissioner of a weekly competition league can now change any of them: COMMISH → DRIP COIN → COIN RULES, coin per event, 0 to turn one off, STANDARD SUITE to go back. A new WEEKLY ALLOWANCE pays every seat every week, whatever happened. The league chat hears what changed.
+> - PURSES, below it, shows every seat's coin and lets the commissioner GIVE or TAKE an amount with a note; the league chat hears that too.
+
+The founder: "a standard suite of ways to earn drip coin, but create a section
+in the commish settings for weekly competition leagues for commissioners to
+change the events that earn coin and the values. Also edit individual purses
+and set any allowance." Engine `engine/contestCoin.ts`: `CONTEST_COIN_EVENTS`
+(name, blurb, unit, default, cap, which league shapes), `CONTEST_COIN_DEFAULTS`,
+`contestCoinRules`, `contestCoinOverrides`, `coinEventApplies`, `coinRulesLine`;
+`COIN_REASON_WORD` gains allowance and commish. Migration 0489:
+`_contest_coin_defaults` / `_contest_coin_rules(lg)` (overrides in
+`settings_json.coin_rules`), `_contest_seed_coin` reads the seed rule,
+`contest_settle_coin` (the live 0483 body) reads every amount off the rules
+and pays the allowance, `contest_coin_rules`, `set_contest_coin_rules`
+(commissioner; keys and ranges checked; a house line naming what differs),
+`contest_wallets`, `commish_adjust_contest_wallet` (reason 'commish', a house
+line). liveApi: the four calls. Consoles: `CoinRulesCard` and `PursesCard`,
+web and phone. Tests: `server/test/coin-rules.mjs` (the engine's and the
+SQL's defaults agree); probes `contest-coin-probes.sql` THE COIN RULES
+(cr0–cr31).
+
 ### v0.691.0 — The weekly draft setup
 
 > - The weekly draft form (START A LEAGUE → WEEKLY DRAFT, and the full form) is NFL only and says so; picking WEEKLY DRAFT snaps the sport to NFL.

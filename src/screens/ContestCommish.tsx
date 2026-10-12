@@ -8,9 +8,11 @@ import {
   contestLeague, setContestRules, setDfsBullseye, setBullseyeSize, postLeagueListing, closeLeagueListing, leagueListingState,
   isAdmin, myFeatures, bullseyeMaxSeats, friendlyError,
   contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries, setLeaguePrizes,
+  contestCoinRules, setContestCoinRules, contestWallets, commishAdjustContestWallet, type ContestCoinRules, type ContestWalletRow,
   type ContestInfo, type ContestKind, type ContestFormat, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow, type PrizeRow,
 } from '@drip/core/data/liveApi';
-import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline } from '@drip/core/engine/contest';
+import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline,
+  CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, coinEventApplies, coinRulesLine } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { RescoreBox, AdjustBox, DuesPanel } from './CommishDesk';
 import { PlayoffPanel } from './AdminPage';
@@ -135,9 +137,11 @@ export function ContestCommishPanel({ leagueId, onChanged }: { leagueId: string;
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { coin: true }), 'drip coin on — every seat starts with ◎100')} className="mono" style={chip(!!b.coin)}>ON</button>
           <button disabled={busy} onClick={() => void act(setContestRules(leagueId, { coin: false }), 'drip coin off')} className="mono" style={chip(!b.coin)}>OFF</button>
-          <span className="mono" style={small}>Every seat starts with ◎100 and earns each week for showing up (a squad of your own before kickoff, and weeks in a row), for reading the board (a bargain, the call, a dead-on dart) and for losing (the heartbreaker, a loss, the bottom half, catch-up below the median) — never for winning. A wallet above ◎150 burns down to 150. Power-ups to spend it on come next.</span>
+          <span className="mono" style={small}>Every seat starts with the starting coin and earns each week by the COIN RULES below — for showing up, reading the board and losing, never for winning — and spends it in the shop on plays before kickoff.</span>
         </div>
       </div>
+      {b.coin && <CoinRulesCard leagueId={leagueId} info={b} />}
+      {b.coin && <PursesCard leagueId={leagueId} />}
 
       {b.contest === 'bullseye' && (
         <div style={{ ...card, display: 'grid', gap: 10 }}>
@@ -393,6 +397,113 @@ function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
         </div>
       )}
       {msg && <div className="mono" style={{ fontSize: 11, marginTop: 6, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--warn, #c66)' }}>{msg}</div>}
+    </div>
+  );
+}
+
+// ── THE COIN RULES (v0.692.0) ───────────────────────────────────────────────
+// Founder: "a standard suite of ways to earn drip coin, but … a section in the
+// commish settings … to change the events that earn coin and the values. Also
+// edit individual purses and set any allowance." The suite is
+// CONTEST_COIN_EVENTS; the league's overrides are set_contest_coin_rules (0489).
+function CoinRulesCard({ leagueId, info }: { leagueId: string; info: ContestInfo }) {
+  const [rules, setRules] = useState<ContestCoinRules | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const take = (r: ContestCoinRules) => { setRules(r); setDraft(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v)]))); };
+  useEffect(() => {
+    contestCoinRules(leagueId).then((r) => { if (r.ok && r.rules) take(r.rules); else setNote(r.error ?? 'Couldn’t read the coin rules.'); }).catch((e) => setNote(friendlyError(e)));
+  }, [leagueId]);
+  const shape = { format: info.format, contest: info.contest, span: info.span };
+  const num = (k: string) => Math.max(0, Math.min(100000, Math.round(Number(draft[k] ?? rules?.[k] ?? 0) || 0)));
+  const dirty = !!rules && CONTEST_COIN_KEYS.some((k) => num(k) !== rules[k]);
+  const save = async (next: ContestCoinRules, done: string) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setContestCoinRules(leagueId, next);
+      if (!r.ok || !r.rules) { setNote(r.error ?? 'Couldn’t save the coin rules.'); return; }
+      take(r.rules); setNote(done);
+    } catch (e) { setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  if (!rules) return <div style={card}><div className="mono" style={label}>COIN RULES</div><div className="mono" style={small}>{note ?? 'loading…'}</div></div>;
+  const groups = [...new Set(CONTEST_COIN_EVENTS.map((e) => e.group))];
+  return (
+    <div style={{ ...card, display: 'grid', gap: 10 }}>
+      <div className="mono" style={label}>COIN RULES · THE STANDARD SUITE, YOURS TO CHANGE</div>
+      <div className="mono" style={small}>Coin per event. 0 turns an event off; the ceiling at 0 is no ceiling. The allowance pays every seat every week, whatever happened. Changes reach the league chat and apply from the next week that settles.</div>
+      {groups.map((g) => (
+        <div key={g} style={{ display: 'grid', gap: 6 }}>
+          <div className="mono" style={{ ...small, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{g}</div>
+          {CONTEST_COIN_EVENTS.filter((e) => e.group === g).map((e) => {
+            const on = coinEventApplies(e, shape);
+            return (
+              <div key={e.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', opacity: on ? 1 : 0.45 }}>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', minWidth: 150 }}>{e.name}</span>
+                <span className="mono" style={small}>◎</span>
+                <input type="number" min={0} max={100000} step={e.unit === 'ceiling' ? 10 : 5} value={draft[e.id] ?? ''} disabled={busy}
+                  onChange={(ev) => setDraft((d) => ({ ...d, [e.id]: ev.target.value }))} className="mono" style={{ ...input, width: 86 }} />
+                <span className="mono" style={small}>{e.unit === 'once' ? 'once' : e.unit === 'week' ? 'a week' : e.unit === 'ceiling' ? 'ceiling' : e.unit}</span>
+                {e.capId && (
+                  <>
+                    <span className="mono" style={small}>up to ◎</span>
+                    <input type="number" min={0} max={100000} step={5} value={draft[e.capId] ?? ''} disabled={busy}
+                      onChange={(ev) => setDraft((d) => ({ ...d, [e.capId!]: ev.target.value }))} className="mono" style={{ ...input, width: 86 }} />
+                    <span className="mono" style={small}>(0 = no cap)</span>
+                  </>
+                )}
+                <span className="mono" style={{ ...small, flexBasis: '100%' }}>{e.blurb}{on ? '' : ' — not this league’s shape'}{rules[e.id] !== CONTEST_COIN_DEFAULTS[e.id] ? ` · standard ◎${CONTEST_COIN_DEFAULTS[e.id]}` : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button disabled={busy || !dirty} onClick={() => void save(Object.fromEntries(CONTEST_COIN_KEYS.map((k) => [k, num(k)])), 'coin rules saved — the league was told')} className="mono" style={chip(dirty, !dirty)}>SAVE RULES</button>
+        <button disabled={busy} onClick={() => void save({}, 'back to the standard suite')} className="mono" style={chip(false)}>STANDARD SUITE</button>
+        {note && <span className="mono" style={small}>{note}</span>}
+      </div>
+      <div className="mono" style={small}>{`As this league plays it: ${coinRulesLine(rules, shape)}.`}</div>
+    </div>
+  );
+}
+
+// THE PURSES (v0.692.0): every seat's coin, and the commissioner's hand on one.
+function PursesCard({ leagueId }: { leagueId: string }) {
+  const [rows, setRows] = useState<ContestWalletRow[] | null>(null);
+  const [amount, setAmount] = useState('10');
+  const [why, setWhy] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => contestWallets(leagueId).then((r) => { if (r.ok && r.rows) setRows(r.rows); else setNote(r.error ?? 'Couldn’t read the purses.'); }).catch((e) => setNote(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const move = async (row: ContestWalletRow, sign: 1 | -1) => {
+    const n = Math.round(Number(amount) || 0);
+    if (!n) { setNote('type an amount first'); return; }
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishAdjustContestWallet(leagueId, row.roster_id, sign * n, why.trim() || null);
+      if (!r.ok) { setNote(r.error ?? 'Couldn’t change the purse.'); return; }
+      setNote(`${row.team}: ◎${r.coins ?? '?'} now — the league was told`); await load();
+    } catch (e) { setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ ...card, display: 'grid', gap: 10 }}>
+      <div className="mono" style={label}>PURSES</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className="mono" style={small}>AMOUNT ◎</span>
+        <input type="number" min={1} max={100000} value={amount} onChange={(e) => setAmount(e.target.value)} className="mono" style={{ ...input, width: 90 }} />
+        <input value={why} onChange={(e) => setWhy(e.target.value)} maxLength={120} placeholder="Why (goes in the chat, optional)" style={{ ...input, flex: 1, minWidth: 180 }} />
+      </div>
+      {rows === null ? <div className="mono" style={small}>loading…</div> : rows.length === 0 ? <div className="mono" style={small}>No seats yet.</div> : rows.map((r) => (
+        <div key={r.roster_id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, color: r.human ? 'var(--text)' : 'var(--faint)', flex: 1, minWidth: 120 }}>{r.team}{r.human ? '' : ' · CPU'}</span>
+          <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: 'var(--you)', minWidth: 60, textAlign: 'right' }}>{`◎ ${Math.round(r.coins)}`}</span>
+          <button disabled={busy} onClick={() => void move(r, 1)} className="mono" style={chip(false)}>GIVE</button>
+          <button disabled={busy} onClick={() => void move(r, -1)} className="mono" style={chip(false, true)}>TAKE</button>
+        </div>
+      ))}
+      {note && <div className="mono" style={small}>{note}</div>}
     </div>
   );
 }

@@ -8,9 +8,11 @@ import {
   contestLeague, setContestRules, setDfsBullseye, setBullseyeSize, postLeagueListing, closeLeagueListing, leagueListingState,
   isAdmin, myFeatures, bullseyeMaxSeats, friendlyError,
   contestWeekList, commishVoidWeek, commishContestSquad, commishSetContestSquad, contestBoard, contestBoardFind, podSalaries, setLeaguePrizes,
+  contestCoinRules, setContestCoinRules, contestWallets, commishAdjustContestWallet, type ContestCoinRules, type ContestWalletRow,
   type ContestInfo, type ContestKind, type ContestWeekRow, type CommishContestSquad, type PodSalaryRow, type PrizeRow,
 } from '@drip/core/data/liveApi';
-import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline } from '@drip/core/engine/contest';
+import { CONTEST_WORD, CONTEST_EMOJI, CONTEST_LATE_WORD, CONTEST_DEADLINE_WORD, contestLateEntryDefault, contestSquadOf, contestSlotLabels, type ContestLateEntry, type ContestEntryDeadline,
+  CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, coinEventApplies, coinRulesLine } from '@drip/core/engine/contest';
 import { classicSlotsFromSpec } from '@drip/core/engine/classic';
 import { useTheme } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
@@ -130,9 +132,11 @@ export function ContestCommishCard({ leagueId, onChanged }: { leagueId: string; 
           <Chip small on={!!b.coin} disabled={busy} label="ON" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: true }), 'drip coin on — every seat starts with ◎100'); }} />
           <Chip small on={!b.coin} disabled={busy} label="OFF" onPress={() => { tap(); void act(setContestRules(leagueId, { coin: false }), 'drip coin off'); }} />
         </View>
-        <Mono size={8.5} tone="faint">Every seat starts with ◎100 and earns each week for showing up (a squad of your own before kickoff, and weeks in a row), for reading the board (a bargain, the call, a dead-on dart) and for losing (the heartbreaker, a loss, the bottom half, catch-up below the median) — never for winning. A wallet above ◎150 burns down to 150. Power-ups to spend it on come next.</Mono>
+        <Mono size={8.5} tone="faint">Every seat starts with the starting coin and earns each week by the COIN RULES below — for showing up, reading the board and losing, never for winning — and spends it in the shop on plays before kickoff.</Mono>
         <Mono size={8.5} tone="faint">Every player locks at his own kickoff, so a ruled-out pick can be swapped until then. SWAP HIM FOR ME puts the best affordable body in his spot in the minutes before his game if nobody has; LEAVE IT TO ME banks the zero.</Mono>
       </Card>
+      {b.coin && <CoinRulesCard leagueId={leagueId} info={b} />}
+      {b.coin && <PursesCard leagueId={leagueId} />}
 
       {b.contest === 'bullseye' && (
         <Card style={{ gap: 8 }}>
@@ -408,5 +412,107 @@ function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
       )}
       {msg && <Mono size={9} tone={msg.startsWith('✓') ? 'you' : 'warn'}>{msg}</Mono>}
     </View>
+  );
+}
+
+// ── THE COIN RULES (v0.692.0) — the web twin's note ─────────────────────────
+function CoinRulesCard({ leagueId, info }: { leagueId: string; info: ContestInfo }) {
+  const [rules, setRules] = useState<ContestCoinRules | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const take = (r: ContestCoinRules) => { setRules(r); setDraft(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v)]))); };
+  useEffect(() => {
+    contestCoinRules(leagueId).then((r) => { if (r.ok && r.rules) take(r.rules); else setNote(r.error ?? 'Couldn’t read the coin rules.'); }).catch((e) => setNote(friendlyError(e)));
+  }, [leagueId]);
+  const shape = { format: info.format, contest: info.contest, span: info.span };
+  const num = (k: string) => Math.max(0, Math.min(100000, Math.round(Number(draft[k] ?? rules?.[k] ?? 0) || 0)));
+  const dirty = !!rules && CONTEST_COIN_KEYS.some((k) => num(k) !== rules[k]);
+  const save = async (next: ContestCoinRules, done: string) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await setContestCoinRules(leagueId, next);
+      if (!r.ok || !r.rules) { warn(); setNote(r.error ?? 'Couldn’t save the coin rules.'); return; }
+      commit(); take(r.rules); setNote(done);
+    } catch (e) { warn(); setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  if (!rules) return <Card style={{ gap: 6 }}><Mono size={9} tone="faint" weight="700" track={0.1}>COIN RULES</Mono><Mono size={8.5} tone="faint">{note ?? 'loading…'}</Mono></Card>;
+  const groups = [...new Set(CONTEST_COIN_EVENTS.map((e) => e.group))];
+  return (
+    <Card style={{ gap: 8 }}>
+      <Mono size={9} tone="faint" weight="700" track={0.1}>COIN RULES · THE STANDARD SUITE, YOURS TO CHANGE</Mono>
+      <Mono size={8.5} tone="faint">Coin per event. 0 turns an event off; the ceiling at 0 is no ceiling. The allowance pays every seat every week, whatever happened. Changes reach the league chat and apply from the next week that settles.</Mono>
+      {groups.map((g) => (
+        <View key={g} style={{ gap: 6 }}>
+          <Mono size={8.5} tone="faint" weight="700" track={0.08}>{g.toUpperCase()}</Mono>
+          {CONTEST_COIN_EVENTS.filter((e) => e.group === g).map((e) => {
+            const on = coinEventApplies(e, shape);
+            return (
+              <View key={e.id} style={{ gap: 3, opacity: on ? 1 : 0.45 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Mono size={10} tone="text" weight="700" style={{ minWidth: 120 }}>{e.name}</Mono>
+                  <Mono size={9} tone="faint">◎</Mono>
+                  <Field value={draft[e.id] ?? ''} editable={!busy} keyboardType="number-pad" onChangeText={(v) => setDraft((d) => ({ ...d, [e.id]: v.replace(/[^0-9]/g, '') }))} style={{ width: 70, paddingVertical: 5 }} />
+                  <Mono size={8.5} tone="faint">{e.unit === 'once' ? 'once' : e.unit === 'week' ? 'a week' : e.unit === 'ceiling' ? 'ceiling' : e.unit}</Mono>
+                  {e.capId && (
+                    <>
+                      <Mono size={8.5} tone="faint">up to ◎</Mono>
+                      <Field value={draft[e.capId] ?? ''} editable={!busy} keyboardType="number-pad" onChangeText={(v) => setDraft((d) => ({ ...d, [e.capId!]: v.replace(/[^0-9]/g, '') }))} style={{ width: 70, paddingVertical: 5 }} />
+                    </>
+                  )}
+                </View>
+                <Mono size={8.5} tone="faint">{e.blurb}{on ? '' : ' — not this league’s shape'}{rules[e.id] !== CONTEST_COIN_DEFAULTS[e.id] ? ` · standard ◎${CONTEST_COIN_DEFAULTS[e.id]}` : ''}</Mono>
+              </View>
+            );
+          })}
+        </View>
+      ))}
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Chip small on={dirty} dim={!dirty} disabled={busy || !dirty} label="SAVE RULES" onPress={() => { tap(); void save(Object.fromEntries(CONTEST_COIN_KEYS.map((k) => [k, num(k)])), 'coin rules saved — the league was told'); }} />
+        <Chip small disabled={busy} label="STANDARD SUITE" onPress={() => { tap(); void save({}, 'back to the standard suite'); }} />
+      </View>
+      {note && <Mono size={8.5} tone="dim">{note}</Mono>}
+      <Mono size={8.5} tone="faint">{`As this league plays it: ${coinRulesLine(rules, shape)}.`}</Mono>
+    </Card>
+  );
+}
+
+// THE PURSES (v0.692.0): every seat's coin, and the commissioner's hand on one.
+function PursesCard({ leagueId }: { leagueId: string }) {
+  const [rows, setRows] = useState<ContestWalletRow[] | null>(null);
+  const [amount, setAmount] = useState('10');
+  const [why, setWhy] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => contestWallets(leagueId).then((r) => { if (r.ok && r.rows) setRows(r.rows); else setNote(r.error ?? 'Couldn’t read the purses.'); }).catch((e) => setNote(friendlyError(e)));
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
+  const move = async (row: ContestWalletRow, sign: 1 | -1) => {
+    const n = Math.round(Number(amount) || 0);
+    if (!n) { warn(); setNote('type an amount first'); return; }
+    setBusy(true); setNote(null);
+    try {
+      const r = await commishAdjustContestWallet(leagueId, row.roster_id, sign * n, why.trim() || null);
+      if (!r.ok) { warn(); setNote(r.error ?? 'Couldn’t change the purse.'); return; }
+      commit(); setNote(`${row.team}: ◎${r.coins ?? '?'} now — the league was told`); await load();
+    } catch (e) { warn(); setNote(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Card style={{ gap: 8 }}>
+      <Mono size={9} tone="faint" weight="700" track={0.1}>PURSES</Mono>
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Mono size={9} tone="faint">AMOUNT ◎</Mono>
+        <Field value={amount} onChangeText={(v) => setAmount(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={{ width: 80, paddingVertical: 5 }} />
+        <Field value={why} onChangeText={setWhy} maxLength={120} placeholder="Why (goes in the chat, optional)" style={{ flex: 1, minWidth: 160, paddingVertical: 5 }} />
+      </View>
+      {rows === null ? <Mono size={8.5} tone="faint">loading…</Mono> : rows.length === 0 ? <Mono size={8.5} tone="faint">No seats yet.</Mono> : rows.map((r) => (
+        <View key={r.roster_id} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Mono size={10} tone={r.human ? 'text' : 'faint'} weight="700" style={{ flex: 1, minWidth: 100 }}>{`${r.team}${r.human ? '' : ' · CPU'}`}</Mono>
+          <Mono size={11} tone="you" weight="700">{`◎ ${Math.round(r.coins)}`}</Mono>
+          <Chip small disabled={busy} label="GIVE" onPress={() => { tap(); void move(r, 1); }} />
+          <Chip small dim disabled={busy} label="TAKE" onPress={() => { tap(); void move(r, -1); }} />
+        </View>
+      ))}
+      {note && <Mono size={8.5} tone="dim">{note}</Mono>}
+    </Card>
   );
 }
