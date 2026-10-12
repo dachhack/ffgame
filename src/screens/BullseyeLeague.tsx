@@ -29,7 +29,7 @@ import { ContestMatchup } from './ContestMatchup';
 import { ContestSettingsTiles } from './ContestSettings';
 import { CommishDash } from './CommishDash';
 import { LeagueStrip, type StripRoom } from '../app/LeagueStrip';
-import { useWide } from './adminUi';
+import { useWide, InfoChip } from './adminUi';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const chip = (on: boolean, dim = false): CSSProperties => ({
@@ -76,7 +76,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
   };
   // THE SETUP (v0.691.0, founder): drip coin and power-ups from the start,
   // and a one-week league names its week — this week marked, through 18.
-  const [coin, setCoin] = useState(true);
+  const [coin, setCoin] = useState(false);   // v0.693.0: off by default
   const [nowWeek, setNowWeek] = useState<number | null>(null);
   const [weekPick, setWeekPick] = useState<number | null>(null);
   useEffect(() => { contestWeekNow().then((r) => { if (r.ok && r.week != null) { setNowWeek(r.week); setWeekPick((w) => w ?? r.week!); } }).catch(() => {}); }, []);
@@ -127,7 +127,7 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
         <span className="mono" style={small}>PLAYS</span>
         <button onClick={() => { setFormat('h2h'); setMax((m) => sizeOk(Math.min(m, 32))); }} className="mono" style={chip(format === 'h2h')}>HEAD-TO-HEAD</button>
         <button onClick={() => setFormat('board')} className="mono" style={chip(format === 'board')}>LEADERBOARD</button>
-        <span className="mono" style={small}>{format === 'h2h' ? 'paired each week · wins and losses' : 'everyone ranked each week'}</span>
+        <InfoChip title="Plays" info={'HEAD-TO-HEAD — paired each week, wins and losses; an even number of seats, up to 32; empty seats play as the CPU until someone takes them.\n\nLEADERBOARD — everyone ranked each week.'} />
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <span className="mono" style={small}>RUNS</span>
@@ -154,18 +154,22 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="mono" style={small}>BUDGET PER SQUAD $</span>
         <input type="number" min={0} max={500000} step={1000} value={budget} onChange={(e) => setBudget(Math.max(0, Math.min(500000, Math.round(Number(e.target.value) || 0))))} className="mono" style={{ ...input, width: 120 }} />
-        <span className="mono" style={small}>{budget ? `${fmt$(budget)} · the default nine spots (QB, 2 RB, 3 WR, TE, K, D/ST); the roster is on COMMISH` : 'no cap'}</span>
+        <span className="mono" style={small}>{budget ? fmt$(budget) : 'no cap'}</span>
+        <InfoChip title="Budget" info={'Every squad is built under this each week from the week’s salary board. 0 is no cap.\n\nThe default nine spots are QB, 2 RB, 3 WR, TE, K, D/ST; the roster, like the budget, is on COMMISH once the league exists.'} />
       </div>
       {contest === 'golf' && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="mono" style={small}>MIN SPEND $</span>
           <input type="number" min={0} max={500000} step={1000} value={minSpend} onChange={(e) => setMinSpend(Math.max(0, Math.min(500000, Math.round(Number(e.target.value) || 0))))} className="mono" style={{ ...input, width: 120 }} />
-          <span className="mono" style={small}>golf’s real constraint: you must roster expensive players and bet on which stars have a quiet week</span>
+          <InfoChip title="Min spend" info={'Golf’s real constraint: a squad must spend at least this, so you must roster expensive players and bet on which stars have a quiet week. 0 is none.'} />
         </div>
       )}
-      <label className="mono" style={{ ...small, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
-        <input type="checkbox" checked={coin} onChange={(e) => setCoin(e.target.checked)} /> DRIP COIN & POWER-UPS — every seat starts with ◎100, the week pays for showing up, reading the board and losing, and the shop sells plays before kickoff
-      </label>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <label className="mono" style={{ ...small, display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+          <input type="checkbox" checked={coin} onChange={(e) => setCoin(e.target.checked)} /> DRIP COIN & POWER-UPS
+        </label>
+        <InfoChip title="Drip coin & power-ups" info={'Every seat starts with ◎100. The week pays for showing up, reading the board and losing — never for winning — and the shop sells plays before kickoff. The commissioner can change every amount on COMMISH → DRIP COIN.'} />
+      </div>
     </>
   );
   const teamsRow = (
@@ -186,7 +190,10 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
         {essentials}
         {teamsRow}
         {listRow}
-        <span className="mono" style={small}>NFL only — each week everyone builds a squad from the week’s salary board. The roster, the scoring, prizes and who may enter are on COMMISH once it exists. You take seat 1 as commissioner.</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span className="mono" style={small}>NFL · you take seat 1 as commissioner</span>
+          <InfoChip title="Weekly draft" info={'NFL only — each week everyone builds a squad from the week’s salary board. The roster, the scoring, prizes and who may enter are on COMMISH once the league exists.'} />
+        </div>
         <button onClick={() => void create()} disabled={busy || !name.trim()} className="mono"
           style={{ ...chip(true), justifySelf: 'start', opacity: busy || !name.trim() ? 0.6 : 1 }}>{busy ? 'MAKING IT…' : name.trim() ? 'CREATE WEEKLY DRAFT LEAGUE →' : 'NAME IT TO CREATE'}</button>
         {err && <div className="mono" style={errStyle}>{err}</div>}
@@ -199,8 +206,9 @@ export function BullseyeStart({ initialCode, onOpen, onBack, quick = false }: { 
         <button onClick={onBack} className="mono" style={chip(false)}>← BACK</button>
         <span className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--you)' }}>{`${CONTEST_EMOJI[contest]} NFL · WEEKLY SQUAD LEAGUE`}</span>
       </div>
-      <div style={{ fontSize: 13, color: 'var(--dim)', lineHeight: 1.5 }}>
-        {CONTEST_BLURB[contest]} You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board.
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <span className="mono" style={small}>{CONTEST_BLURB[contest]}</span>
+        <InfoChip title="Weekly squad league" info={'You run it: who’s in, the roster, the scoring, the budget, and whether it’s on the board — all on COMMISH once it exists.'} />
       </div>
       {contestCredit(contest) && <CreditChip contest={contest} />}
 

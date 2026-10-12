@@ -100,7 +100,13 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // A CONTEST LEAGUE (0466): what wins, how it plays, the budget, the
     // Bullseye card, the size, the board — in place of MODE, which it has no
     // say in (it is classic, scored by its contest).
-    { id: 'contest', label: '🏁 CONTEST', contestOnly: true },
+    // THE CONTEST CATEGORIES (v0.693.0): what was one card is six destinations.
+    { id: 'contest', label: '🏁 THE GAME', contestOnly: true },
+    { id: 'contestseats', label: 'SEATS & ENTRIES', contestOnly: true },
+    { id: 'contestcoin', label: '◎ DRIP COIN', contestOnly: true },
+    { id: 'contestweeks', label: 'WEEKS & PLAYOFFS', contestOnly: true },
+    { id: 'contestmoney', label: 'DUES & PRIZES', contestOnly: true },
+    { id: 'contestboard', label: 'THE LEAGUE BOARD', contestOnly: true },
     { id: 'mode', label: 'MODE', notContest: true },
     { id: 'lineup', label: 'ROSTER' },
     { id: 'scoring', label: 'SCORING' },
@@ -476,7 +482,12 @@ export function CommishTools({ leagueId, native, contest = false, rosterId, init
                 <View style={{ maxHeight: 520 }}><RegisterView leagueId={leagueId} /></View>
               </View>
             )}
-            {section === 'contest' && <ContestCommishCard leagueId={leagueId} />}
+            {section === 'contest' && <ContestCommishCard leagueId={leagueId} part="game" />}
+            {section === 'contestseats' && <ContestCommishCard leagueId={leagueId} part="seats" />}
+            {section === 'contestcoin' && <ContestCommishCard leagueId={leagueId} part="coin" />}
+            {section === 'contestweeks' && <ContestCommishCard leagueId={leagueId} part="weeks" />}
+            {section === 'contestmoney' && <ContestCommishCard leagueId={leagueId} part="money" />}
+            {section === 'contestboard' && <ContestCommishCard leagueId={leagueId} part="board" />}
             {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
             {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" onDragActive={(a) => setSheetScroll(!a)} />}
             {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}

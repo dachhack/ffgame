@@ -45,3 +45,13 @@ build (`apps/mobile/ios-build-runtime.txt`).
   record its runtime in `ios-build-runtime.txt` in the same change.
 - Plain JavaScript and SQL changes never need one; don't mention it then.
 
+
+## Info chips, not paragraphs (the standard since v0.350; restated v0.693.0)
+
+The founder: "Remove walls of text in the app and site and do tiny info chips
+instead. Make that a standard." A control gets its LABEL and, when it needs
+explaining, one ⓘ beside it — `LabelInfo` / `InfoChip` from `src/screens/adminUi.tsx`
+(web) and `apps/mobile/src/ui/InfoChip.tsx` (phone). The explanation lives in
+the chip's sheet, never under the control. Dynamic STATE stays inline, one
+short line: "3 in now", "set — a week has been played", "◎ 120". If you catch
+yourself writing a sentence under a chip row, move it into the ⓘ.

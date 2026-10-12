@@ -346,7 +346,7 @@ export type LeagueTab =
   | 'overview' | 'waivers' | 'admin' | 'salary'
   | 'mode' | 'lineup' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
-  | 'activity' | 'buffs' | 'awards' | 'delete' | 'contest';
+  | 'activity' | 'buffs' | 'awards' | 'delete' | 'contest' | 'contestseats' | 'contestcoin' | 'contestweeks' | 'contestmoney' | 'contestboard';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
@@ -1550,7 +1550,13 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   const navGroups: NavGroup<LeagueTab>[] = contest ? [
     { title: 'SET UP', items: [
       { id: 'overview', label: 'INVITE & ACCESS' },
-      ...(has('contest') ? [{ id: 'contest', label: '🏁 CONTEST' } as TabDef<LeagueTab>] : []),
+      // THE CONTEST CATEGORIES (v0.693.0): what was one 🏁 CONTEST card is six destinations.
+      ...(has('contest') ? [{ id: 'contest', label: '🏁 THE GAME' } as TabDef<LeagueTab>] : []),
+      ...(has('contestseats') ? [{ id: 'contestseats', label: 'SEATS & ENTRIES' } as TabDef<LeagueTab>] : []),
+      ...(has('contestcoin') ? [{ id: 'contestcoin', label: '◎ DRIP COIN' } as TabDef<LeagueTab>] : []),
+      ...(has('contestweeks') ? [{ id: 'contestweeks', label: 'WEEKS & PLAYOFFS' } as TabDef<LeagueTab>] : []),
+      ...(has('contestmoney') ? [{ id: 'contestmoney', label: 'DUES & PRIZES' } as TabDef<LeagueTab>] : []),
+      ...(has('contestboard') ? [{ id: 'contestboard', label: 'THE LEAGUE BOARD' } as TabDef<LeagueTab>] : []),
       ...(has('mode') ? [{ id: 'mode', label: 'NAME & CREST' } as TabDef<LeagueTab>] : []),
       ...(has('lineup') ? [{ id: 'lineup', label: '🧩 ROSTER' } as TabDef<LeagueTab>] : []),
       ...(has('scoring') ? [{ id: 'scoring', label: '⚖ SCORING' } as TabDef<LeagueTab>] : []),

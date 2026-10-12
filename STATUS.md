@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.693.0 — Categories, chips, and coin off by default
+
+> - The commissioner's console for a weekly competition league is six destinations instead of one long card: THE GAME, SEATS & ENTRIES, DRIP COIN, WEEKS & PLAYOFFS, DUES & PRIZES and THE LEAGUE BOARD, on web and phone.
+> - The paragraphs under the controls are gone. Each control has its label and a tiny ⓘ that opens the explanation on demand; only live state (3 in now, ◎ 120) stays inline. The weekly draft form and the PLAYS bar follow the same rule.
+> - A new weekly draft league starts with drip coin off; the switch is in the setup when you want it.
+
+The founder: "Let's make drip coin in weekly contest off by default. Remove
+walls of text in the app and site and do tiny info chips instead. Make that
+a standard. The contest section of the commish settings has too many
+distinct groups of options, break those out and make them categories."
+`ContestCommishPanel` / `ContestCommishCard` take `part` ('game' | 'seats' |
+'coin' | 'weeks' | 'money' | 'board'); the web rail (`AdminPage` LeagueTab,
+`CommishDash` panels) and the phone map (`CommishTools` NAV_GROUPS) list the
+six. `LabelInfo` / `InfoChip` replace every explanatory span and Mono on the
+contest consoles (the COIN RULES rows too), on both `BullseyeStart` forms and
+on the PLAYS bar; the standard is written into CLAUDE.md. `coin` defaults
+false on both forms. Not swept here: the classic consoles and the onboarding
+screens, which keep whatever paragraphs they had.
+
 ### v0.692.1 — The notification icon
 
 > - The small icon on Android notifications is now an italic DF, which reads at status-bar size; the football-with-a-drop lost its drop there. It rides the next Android build, since that icon is baked into the app rather than updated over the air.
