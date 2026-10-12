@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.688.1 — The wire, audited
+
+> - Nothing changes in the app. This is an ops errand for the Kickoff League question about Tyson Bagent's pickup (#1237): a read-only audit of the league's waiver wire, posted onto the issue, so the answer rests on the league's rows rather than a guess.
+
+Worker `wireAudit.js`: `wireAudit({ league, player, days })` reads the league's
+stored wire settings, what the wire SQL answers now (`league_waiver_day`,
+`fa_window_open`, `fa_opens_at`, `next_waiver_run`, `claim_clears_at`,
+`waiver_hold_until`, `waiver_game_hold_dow_effective`), the slate around now,
+the player's pool row and owner, every claim naming him, and the chat house
+lines that matter (his moves, every run, schedule changes); `wireReport` and
+`relevantLines` are pure. CLI `wire-audit --league --player [--issue] [--days]`
+and ops mode `wire-audit`, which posts the report as a comment that names
+@computer (so the fix relay skips it). `computer.js` exports `comment`.
+Request `ops/run/041-wire-audit-kickoff-bagent.json`. Tests:
+`server/test/wire-audit.mjs`.
+
 ### v0.688.0 — The shop and the hand
 
 > - Drip-coin contest leagues now buy their plays the way drip leagues do: a 🛒 SHOP sheet on the squad builder sells the plays your league offers, and what you buy lands in a hand of cards fanned along the foot of the screen. Tap a card to play it: a squad play (Underdog, Double or Nothing, Hail Mary, Phantom, Re-deal) goes on at once; a spot play (Pick Six, Magnet, Spy, Jinx) asks you to tap the spot.

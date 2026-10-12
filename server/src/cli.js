@@ -832,12 +832,18 @@ async function main() {
         // v0.615.0: one read of the conference availability reports; `dry` plans only.
         argv.push('college-avail');
         if (req.dry) argv.push('--dry');
+      } else if (req.mode === 'wire-audit') {
+        // v0.688.1: read-only — a league's wire settings and one player's hold,
+        // claims and chat trail, printed and posted onto the ask's issue.
+        argv.push('wire-audit', `--league=${need('league')}`, `--player=${need('player')}`);
+        if (req.issue) argv.push(`--issue=${req.issue}`);
+        if (req.days) argv.push(`--days=${req.days}`);
       } else if (req.mode === 'college-report') {
         // v0.550.1: read-only — plays stored for rostered college players.
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | set-lineup | offboard-sweep`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | set-lineup | offboard-sweep | wire-audit`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -1074,6 +1080,25 @@ async function main() {
       const slate = (rows ?? []).map((g) => ({ home: g.home, away: g.away, win: g.win, kickoff: g.kickoff }));
       const n = await sweepSeatWire(week, slate, (...a) => console.log(...a), { leagueId: league, rosterId: seatArg ? Number(seatArg) : null });
       console.log(`seat-wire: week ${week}, league ${league}, seat ${seatArg || '*'} — ${n} transaction(s)`);
+      break;
+    }
+    case 'wire-audit': {
+      // ▶ THE WIRE, AUDITED (v0.688.1) — read-only. One league's waiver
+      //   settings as stored, what the wire SQL answers now, and one player's
+      //   hold, claims and chat trail; printed, and posted onto an issue:
+      //   node src/cli.js wire-audit --league=<uuid> --player=<slug|name> [--issue=<n>] [--days=21]
+      const { wireAudit } = await import('./wireAudit.js');
+      const opt = (k) => (args.find((a) => a.startsWith(`--${k}=`)) ?? '').slice(k.length + 3) || null;
+      const league = opt('league'); const player = opt('player'); const issue = Number(opt('issue')) || null;
+      if (!league || !player) { console.error('usage: wire-audit --league=<uuid> --player=<slug|name> [--issue=<n>] [--days=21]'); process.exitCode = 1; break; }
+      const { report } = await wireAudit({ league, player, days: Number(opt('days')) || 21 });
+      console.log(report);
+      if (issue) {
+        // Says @computer so the fix relay never takes it for the fix note.
+        const { comment } = await import('./computer.js');
+        try { console.log(`wire-audit: comment ${await comment(issue, `Wire audit for this @computer ask (ops wire-audit)\n\n${report}`)} on #${issue}`); }
+        catch (e) { console.error(`wire-audit: could not comment on #${issue} — ${e.message} (the report is above)`); }
+      }
       break;
     }
     case 'seal-audit': {
