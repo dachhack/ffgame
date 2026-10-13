@@ -534,7 +534,7 @@ function MatchupStrip({ row, glance }: { row: LeagueSlateRow | undefined; glance
   // Classic: the projected finals beside the live scores, until the week is
   // final (v0.509.0). The opponent's only when their lineup could be read.
   const proj = glance?.projected && glance.phase !== 'final' && glance.them ? glance : null;
-  const v = verdictOf(g);
+  const v = verdictOf(g, row?.lower_wins === true);
   // A live game is LEADING, never winning — see verdictOf. The colour follows
   // the word rather than the arithmetic, so a 40-point first-quarter lead is
   // amber-neutral rather than dressed as a result.

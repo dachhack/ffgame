@@ -22,6 +22,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.2 — Lower wins on the leagues list; no Tuesday lock
+
+> - In a Bullseye league scored on one total, and in golf, the leagues list now calls the lower score the win: a 32.60 against 36.90 reads WON, as the record beside it always said.
+> - The "Squads lock Tue 7:00 PM ET … week 207" push is gone: it was a Tuesday-night college game, and weekly squad leagues only play the NFL week.
+
+Founder (Oct 13, the leagues list): "If you have a lower score in a bullseye
+league, you are the winner." The Weekly Bullseye card read LOST over 32.60 v
+36.90 beside a 1-0 record: standings count lower-wins weeks (0482), but
+`verdictOf` compared raw points. **0495** adds `lower_wins` to
+`my_league_slate` (contest leagues ask `_contest_lower_wins`, others
+`league_lower_wins`); `verdictOf(game, lowerWins)` reads it on both clients.
+Probes sh9; `check-slate` asserts the 32.60 v 36.90 case.
+
+Founder, with two pushes: "I don't think any squads should lock on Tuesday?"
+`detectContestLock` took the first kickoff of every `season:week` in
+`nfl_slate`, and the college slate lives there at board week 200 + N (0371):
+college week 7's Tuesday game (board week 207, 7:00 PM ET) paged every NFL
+contest league. `contestSlateWeek` skips college weeks (contest leagues can't
+be college, 0365); test in `server/test/contest-recap.mjs`. No iPhone build.
+
+Open: the full scratch runner stops at its first suite: native-league 1a0
+(and 18a, convert-league cv2, practice-room) still expect the pre-0422
+"invite-only" refusal. 0495 was proven by applying every migration and
+running shelf-probes directly.
+
 ### v0.707.1 — No more "you" tags
 
 > - Team names no longer carry a "YOU" or "(you)" tag: your own team is in your colour where it needs telling apart — the standings, the rosters list, the auction's high bidder, the commissioner's seats, the contest matchup chips.

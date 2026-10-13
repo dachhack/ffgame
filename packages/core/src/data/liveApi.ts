@@ -3790,6 +3790,8 @@ export interface SlateSide {
 }
 export interface LeagueSlateRow {
   league_id: string; name: string; roster_id: number; week: number | null;
+  /** 0495: golf or a one-team-total Bullseye — the lower score wins. Absent before 0495. */
+  lower_wins?: boolean;
   /** Null for a bye, an odd league, or a week with no fixture for this seat —
    *  a card that prints a score is claiming a game was played. */
   game: { status: string; playoff: boolean; consolation: boolean; label: string | null;

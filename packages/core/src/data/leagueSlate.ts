@@ -32,13 +32,15 @@ export type Verdict = 'won' | 'lost' | 'tied' | 'leading' | 'trailing' | 'level'
  *
  *  Null when there is nothing to judge: no game, or a fixture whose scores
  *  have not been published (both sides null before the first kickoff). */
-export function verdictOf(game: LeagueSlateRow['game']): Verdict | null {
+export function verdictOf(game: LeagueSlateRow['game'], lowerWins = false): Verdict | null {
   if (!game) return null;
   const me = game.me?.points, opp = game.opp?.points;
   if (me == null || opp == null) return null;
   const done = game.status === 'final';
   if (me === opp) return done ? 'tied' : 'level';
-  if (me > opp) return done ? 'won' : 'leading';
+  // LOWER WINS (0495, founder: "If you have a lower score in a bullseye league,
+  // you are the winner"): golf and a one-team-total Bullseye, as the standings count it.
+  if (lowerWins ? me < opp : me > opp) return done ? 'won' : 'leading';
   return done ? 'lost' : 'trailing';
 }
 

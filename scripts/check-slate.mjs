@@ -38,6 +38,10 @@ ok(verdictOf(game(null, null)) === null,
   'before either side has a published score there is no verdict to give');
 ok(verdictOf(game(100, null)) === null, '…and one score alone is still not a comparison');
 ok(verdictOf(null) === null, 'a bye has no verdict');
+ok(verdictOf(game(32.6, 36.9), true) === 'won',
+  'a lower-wins league (Bullseye total, golf): 32.60 v 36.90 is WON — the founder\'s card read LOST beside a 1-0 record');
+ok(verdictOf(game(36.9, 32.6), true) === 'lost', '…and the higher score loses');
+ok(verdictOf(game(32.6, 36.9, 'live'), true) === 'leading', '…and live, the lower score leads');
 
 // ── the scores ──
 ok(scoreLabel(147.4) === '147.40', 'two decimals, like every other score in the product');
