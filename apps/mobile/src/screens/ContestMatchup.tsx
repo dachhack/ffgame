@@ -244,8 +244,15 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     const projected = known ? proj : null;
     // a one-team-total league's score IS the distance (v0.683.0): project that
     const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
-    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay };
+    // THE PENALTY LINE (v0.700.1, a member: "I was 93.2 point but 31.8 off target?" — the −10 no-shows ride in the
+    // distance, not the points; founder: "a penalty line instead of the unnecessary projected line"): the side's
+    // no-show penalties, counted the way the cards wear them.
+    const shows = (m.state?.slots ?? []).filter((x) => x.side === s && x.aim?.penalty != null && Math.abs(x.score) < 1e-9);
+    const pen = shows.reduce((a, x) => a + (x.aim?.penalty ?? 0), 0);
+    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay, pen, shows: shows.length };
   };
+  const final = m.status === 'final';
+  const penText = (x: { pen: number; shows: number }) => ` · −${x.pen} · ${x.shows} no-show${x.shows === 1 ? '' : 's'}`;
   /** A side's squad plays — mine from the seat's own rows, theirs from the matchup (shown once the week starts). */
   const squadPlays = (s: 'home' | 'away', mine: boolean): ContestPlayRow[] =>
     (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
@@ -259,7 +266,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
         {/* the cells stack (v0.680.2): side by side, two sides' labels met in the middle of a phone */}
         <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%' }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : alpha(t.text, 35) }}>{fmt(x.points)}</Text>
-          <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
+          <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.pen > 0 ? penText(x) : !final && x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
           {/* THE TEAM CHIP (v0.698.0): a fixed row under the projection, the chip in it while a squad play is on */}
           <View style={{ height: 16, justifyContent: 'center', alignItems: edge === 'left' ? 'flex-start' : 'flex-end', marginTop: 2 }}>
             {(() => { const sq = squadPlays(s, S.mine); return sq.length ? <InfoChip label="TEAM ⚡ UP" title={sq.length === 1 ? (contestPlayById(sq[0].id)?.name ?? sq[0].id) : 'Team plays'} actions={S.mine && myTable && !st.started ? sq.map((p) => ({ label: `TAKE BACK${sq.length > 1 ? ` ${(contestPlayById(p.id)?.name ?? p.id).toUpperCase()}` : ''}`, onPress: () => void disarm(p) })) : undefined}>{sq.map((p) => `${contestPlayById(p.id)?.icon ?? ''} ${contestPlayById(p.id)?.name ?? p.id}: ${contestPlayById(p.id)?.blurb ?? ''}`).join('\n\n') + (S.mine && myTable ? '\n\nA squad play goes back to your hand until the week’s first kickoff.' : '')}</InfoChip> : null; })()}
@@ -268,7 +275,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
         {bull && (
           <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%', marginTop: 4 }}>
             <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.ring != null ? t.text : alpha(t.text, 35) }}>{fmt(x.ring)}</Text>
-            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${isTotal ? `OFF 🎯 ${theCard?.total ?? ''}` : 'RING · 🎯 per spot'}${x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)}${isTotal ? ' off' : ''}` : ''}${x.toPlay ? ` · ${x.toPlay} to play` : ''}`}</Text>
+            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${isTotal ? `OFF 🎯 ${theCard?.total ?? ''}` : 'RING · 🎯 per spot'}${isTotal && x.pen > 0 && x.ring != null ? ` · ${Math.max(0, x.ring - x.pen).toFixed(1)} off + ${x.pen} penalty` : !final && x.ringProjected != null ? ` · proj ${x.ringProjected.toFixed(1)}${isTotal ? ' off' : ''}` : ''}${x.toPlay ? ` · ${x.toPlay} to play` : ''}`}</Text>
           </View>
         )}
       </View>

@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.700.1 — The penalty line on the dart scoreboard
+
+> - On a Bullseye matchup, the line under a side’s points now shows its no-show penalties (−20 · 2 no-shows) instead of a projection, and the distance line spells it out: 11.8 off + 20 penalty. A finished week no longer shows a “proj” that just repeats the score.
+
+A member, by text: "I was 93.2 point but 31.8 off target? The −10 hits
+weren’t factored into score I assume is the difference? I think we could
+make that clearer." Founder: "Maybe a penalty line instead of the
+unnecessary projected line?" The −10 no-shows ride in the distance, not the
+points (a penalty adds distance whichever side of the target you land, so
+it can’t be taken off the points). Both matchup scoreboards count the
+side’s no-shows the way the cards wear them (`aim.penalty` on a zero spot);
+the projection stays only while the week is live and the side carries no
+penalty.
+
 ### v0.700.0 — Drag a card: to another spot, or to the trash
 
 > - In My Team, press and hold a card to lift it, then drop it on the trash bar to clear the spot or on any lit spot: an open spot takes him, a spot whose player fits your old spot swaps the two.
