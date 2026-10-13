@@ -73,6 +73,7 @@ import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
 import { VETO_RULES, DEADLINE_RULES, type VetoRule, type DeadlineRule } from '@drip/core/data/shotgunWedding';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
+import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
 import { Overlay } from '../ui/Overlay';
 import { InfoChip, LabelInfo } from '../ui/InfoChip';
 import { SportLineup } from '../ui/SportLineup';
@@ -2488,6 +2489,8 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           </>)}
         </View>
       )}
+      {/* THE OTHER TEAMS' WEDDINGS (v0.706.2): the commissioner's hand — rewrite, call off — lives here now; My Team shows yours alone */}
+      {shotgun === true && <ShotgunWeddingCard leagueId={leagueId} scope="commish" />}
       {/* K/DST FILL (v0.225.0) — a setup decision about what the league
           rosters, so it sits with the game mode exactly as it does on web.
           PORTED DELIBERATELY PARTIALLY: the mode selector is the part that

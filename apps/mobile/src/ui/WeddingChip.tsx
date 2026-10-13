@@ -1,15 +1,16 @@
 // 💍 THE WEDDING CHIP (v0.705.0, founder: "For shotgun wedding we need chips in
-// matchup and my team for the impending wedding"). A small chip wherever the
-// week is read — the matchup board, the roster — while a wedding is pending:
-// yours first, else the league's. Its sheet says where it stands, who sends
-// whom, and the new vows on the table; TRADES ▸ opens the card that acts on it,
-// where the host can take you there. Renders nothing otherwise.
+// matchup and my team for the impending wedding"; v0.706.2: "Chip should take
+// you straight to the vows"). A plain chip wherever the week is read — the
+// matchup board, the roster — while YOUR wedding is pending; a tap goes to the
+// vows on My Team › Trades. Nothing for anyone outside the wedding, and no
+// sheet in between.
 import { useEffect, useState } from 'react';
 import { shotgunState } from '@drip/core/data/liveApi';
-import { weddingStatusLine, weddingSends, weddingCounterLine, type Wedding } from '@drip/core/data/shotgunWedding';
-import { InfoChip } from './InfoChip';
+import type { Wedding } from '@drip/core/data/shotgunWedding';
+import { tap } from './feedback';
+import { Chip } from './prims';
 
-export function WeddingChip({ leagueId, onOpen }: { leagueId: string; onOpen?: () => void }) {
+export function WeddingChip({ leagueId, onOpen }: { leagueId: string; onOpen: () => void }) {
   const [w, setW] = useState<Wedding | null>(null);
   useEffect(() => {
     let live = true;
@@ -17,9 +18,7 @@ export function WeddingChip({ leagueId, onOpen }: { leagueId: string; onOpen?: (
       .then((r) => {
         if (!live) return;
         const ws = r.ok && r.on !== false ? (r.weddings ?? []) : [];
-        // PRIVATE (v0.706.0): the two teams and the commissioner; nobody else sees a chip
-        const pending = ws.filter((x) => x.status === 'pending' && (x.my_seat != null || x.can_commish === true));
-        setW(pending.find((x) => x.my_seat != null) ?? pending[0] ?? null);
+        setW(ws.find((x) => x.status === 'pending' && x.my_seat != null) ?? null);
       })
       .catch(() => { if (live) setW(null); });
     void load();
@@ -27,12 +26,5 @@ export function WeddingChip({ leagueId, onOpen }: { leagueId: string; onOpen?: (
     return () => { live = false; clearInterval(id); };
   }, [leagueId]);
   if (!w) return null;
-  const mine = w.my_seat != null;
-  const counter = weddingCounterLine(w);
-  return (
-    <InfoChip label={mine ? '💍 YOUR WEDDING' : '💍 WEDDING'} title={`${w.home.team} ⇄ ${w.away.team}`}
-      actions={onOpen ? [{ label: mine ? 'THE VOWS ▸' : 'OPEN ▸', onPress: onOpen }] : undefined}>
-      {`${weddingStatusLine(w)}\n\n${weddingSends(w.home.team, w.home.gives)}.\n${weddingSends(w.away.team, w.away.gives)}.${counter ? `\n\n${counter}` : ''}`}
-    </InfoChip>
-  );
+  return <Chip label={w.counter ? '💍 NEW VOWS' : '💍 THE VOWS'} on a11y="your shotgun wedding" onPress={() => { tap(); onOpen(); }} />;
 }

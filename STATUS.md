@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.706.2 — The chip goes straight to the vows; your wedding alone
+
+> - The 💍 chip is a plain chip now: one tap and you are on your vows, no sheet in between. It shows only while your own wedding is pending.
+> - My Team › Trades shows your wedding alone. The commissioner handles the other teams’ weddings in Commish tools, under the shotgun wedding switch.
+
+Founder: "Chip should take you straight to the vows. Don't show the vows
+for the other teams." `WeddingChip` is a `Chip` (💍 THE VOWS, or 💍 NEW
+VOWS when the other side has proposed) for your pending wedding only;
+`ShotgunWeddingCard` takes `scope` — `mine` on My Team, `commish` in
+`CommishTools` for every other pending wedding with ✎ REWRITE and CALL OFF.
+
 ### v0.706.1 — The card really opens on the game log
 
 > - Player cards open on the Game log now; v0.703.2 set that default, but an older reset put every card back on the summary a moment later.

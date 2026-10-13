@@ -56,7 +56,10 @@ function TradeBox({ w, home, away, small }: { w: Wedding; home: WeddingPlayer[];
   );
 }
 
-export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; onChanged?: () => void }) {
+export function ShotgunWeddingCard({ leagueId, onChanged, scope = 'mine' }: { leagueId: string; onChanged?: () => void;
+  /** WHOSE WEDDINGS (v0.706.2, founder: "Don't show the vows for the other teams"): 'mine' on My Team — yours alone;
+   *  'commish' in Commish tools — every other pending wedding, with the commissioner's hand. */
+  scope?: 'mine' | 'commish' }) {
   const t = useTheme();
   const [ws, setWs] = useState<Wedding[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -97,7 +100,8 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
     finally { setBusy(false); }
   };
 
-  if (!ws?.some((w) => w.my_seat != null || w.can_commish === true)) return null;
+  const shown = (ws ?? []).filter((w) => (scope === 'mine' ? w.my_seat != null : w.my_seat == null && w.can_commish === true));
+  if (!shown.length) return null;
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : list.length >= 3 ? list : [...list, slug]);
   const Btn = ({ label, tone, onPress, disabled }: { label: string; tone: 'you' | 'opp' | 'plain'; onPress: () => void; disabled?: boolean }) => (
@@ -112,13 +116,11 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
 
   return (
     <Card style={{ marginBottom: 12 }}>
-      <Mono size={9} tone="faint" track={0.12}>💍 SHOTGUN WEDDING · WEEK {ws[0].week}</Mono>
+      <Mono size={9} tone="faint" track={0.12}>{scope === 'commish' ? `💍 THE LEAGUE’S WEDDINGS · WEEK ${shown[0].week}` : `💍 YOUR SHOTGUN WEDDING · WEEK ${shown[0].week}`}</Mono>
       {!!note && <Mono size={10} tone={note.startsWith('✓') ? 'you' : 'opp'} style={{ marginTop: 8 }}>{note}</Mono>}
-      {ws.map((w) => {
+      {shown.map((w) => {
         const mine = w.my_seat != null;
         const boss = w.can_commish === true;
-        // PRIVATE (v0.706.0): a wedding is the two teams' and the commissioner's; nobody else sees it here
-        if (!mine && !boss) return null;
         const iAmHome = w.my_seat === w.home.roster;
         const open = composing?.id === w.id ? composing.mode : null;
         const rows = open === 'commish' || !mine
