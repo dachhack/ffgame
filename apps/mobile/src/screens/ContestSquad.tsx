@@ -187,6 +187,32 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
     if (!st?.ok || st.roster_id == null || st.week == null) return;
     contestSwaps(leagueId, st.week, st.roster_id).then((r) => { if (r.ok) setSwaps(r.swaps ?? []); }).catch(() => {});
   }, [leagueId, st?.ok, st?.roster_id, st?.week, saved]);
+  // DRAG A CARD, THE HOOKS (v0.701.5, founder's screenshot: "Rendered more hooks than during the previous render" —
+  // v0.700.0 put these after the early returns below, so the hook count changed once the league loaded). Every hook
+  // the drag uses lives here, above every return; the handlers that read them follow the setup, below.
+  type Over = string | 'trash' | null;
+  const [drag, setDrag] = useState<{ slot: string; x: number; y: number; over: Over } | null>(null);
+  const dragRef = useRef<string | null>(null);        // armed by the long press, read by the pan responder
+  const panning = useRef(false);
+  const cardRefs = useRef<Record<string, View | null>>({});
+  const trashRef = useRef<View | null>(null);
+  const feltRef = useRef<View | null>(null);
+  const rects = useRef<Record<string, { x: number; y: number; w: number; h: number }>>({});
+  const feltAt = useRef({ x: 0, y: 0 });
+  const hitRef = useRef<(x: number, y: number) => Over>(() => null);
+  const dropRef = useRef<(x: number, y: number) => void>(() => {});
+  const playerLite = useCallback((slug: string) => { const q = byPlayer.get(slug); return q ? { slug: q.slug, pos: q.pos, team: q.team, exp: q.exp } : null; }, [byPlayer]);
+  const slotDefs = setup?.slots ?? [];
+  const moveOf = useCallback((from: string, to: string): ContestCardMove => contestCardMove(slotDefs, picks, from, to, playerLite, { locked, ghosted }), [slotDefs, picks, playerLite, locked, ghosted]);
+  const pan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponderCapture: () => false,
+    onMoveShouldSetPanResponderCapture: () => dragRef.current != null,
+    onPanResponderGrant: () => { panning.current = true; },
+    onPanResponderMove: (_e, g) => { const over = hitRef.current(g.moveX, g.moveY); setDrag((d) => (d ? { ...d, x: g.moveX, y: g.moveY, over } : d)); },
+    onPanResponderRelease: (_e, g) => { dropRef.current(g.moveX, g.moveY); },
+    onPanResponderTerminate: () => { dragRef.current = null; panning.current = false; setDrag(null); },
+    onPanResponderTerminationRequest: () => false,
+  }), []);
   if (!st) return <View style={{ flex: 1, backgroundColor: t.bg }}>{header}</View>;
   if (!st.ok || !setup?.cfg || !setup.slots.length || !ctx) {
     return (
@@ -291,17 +317,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
   // happen."). A long press lifts the card; the felt's pan responder takes the touch from there (the scroll view
   // stands still meanwhile), eligible spots light up, a bar at the top of the felt is the trash. The rule is the
   // engine's contestCardMove; a bump (the spot's player can't stand where the card came from) asks first.
-  type Over = string | 'trash' | null;
-  const [drag, setDrag] = useState<{ slot: string; x: number; y: number; over: Over } | null>(null);
-  const dragRef = useRef<string | null>(null);        // armed by the long press, read by the pan responder
-  const panning = useRef(false);
-  const cardRefs = useRef<Record<string, View | null>>({});
-  const trashRef = useRef<View | null>(null);
-  const feltRef = useRef<View | null>(null);
-  const rects = useRef<Record<string, { x: number; y: number; w: number; h: number }>>({});
-  const feltAt = useRef({ x: 0, y: 0 });
-  const playerLite = useCallback((slug: string) => { const q = byPlayer.get(slug); return q ? { slug: q.slug, pos: q.pos, team: q.team, exp: q.exp } : null; }, [byPlayer]);
-  const moveOf = useCallback((from: string, to: string): ContestCardMove => contestCardMove(slots, picks, from, to, playerLite, { locked, ghosted }), [slots, picks, playerLite, locked, ghosted]);
+  // (the hooks of the drag sit above the early returns, with the other hooks — v0.701.5)
   const measureAll = () => {
     feltRef.current?.measureInWindow((x, y) => { feltAt.current = { x, y }; });
     for (const [slot, v] of Object.entries(cardRefs.current)) v?.measureInWindow((x, y, w, h) => { rects.current[slot] = { x, y, w, h }; });
@@ -342,17 +358,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
     }
     commit(); setPicks(contestApplyCardMove(picks, from, over, mv));
   };
-  const hitRef = useRef(hitAt); hitRef.current = hitAt;
-  const dropRef = useRef(drop); dropRef.current = drop;
-  const pan = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponderCapture: () => false,
-    onMoveShouldSetPanResponderCapture: () => dragRef.current != null,
-    onPanResponderGrant: () => { panning.current = true; },
-    onPanResponderMove: (_e, g) => { const over = hitRef.current(g.moveX, g.moveY); setDrag((d) => (d ? { ...d, x: g.moveX, y: g.moveY, over } : d)); },
-    onPanResponderRelease: (_e, g) => { dropRef.current(g.moveX, g.moveY); },
-    onPanResponderTerminate: () => { dragRef.current = null; panning.current = false; setDrag(null); },
-    onPanResponderTerminationRequest: () => false,
-  }), []);
+  hitRef.current = hitAt;
+  dropRef.current = drop;
   const dragPlayer = drag && picks[drag.slot] ? byPlayer.get(picks[drag.slot]!) : null;
   const rows = active ? rankCandidates(players, ctx, { slot: active === 'any' ? null : active, tab, team: team || null, needle: search, sort: sort ?? undefined, locked, hideIneligible: eligibleOnly, ruledOut, saved }, salaryOf) : [];
   const sortNow: BuilderSort = sort ?? (bull && !isTotal ? 'aim' : 'proj');
