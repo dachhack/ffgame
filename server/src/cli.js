@@ -369,10 +369,15 @@ async function main() {
       // errand does classic, and says plainly what it skipped.
       const { db: dbOf } = await import('./supabase.js');
       const skip = new Set();
-      if (!args.includes('--include-drip')) {
+      // --contest-only (v0.701.2, founder: "Let's rescore all weekly comp leagues"): the weekly contest leagues
+      // alone (high, golf, bullseye) — a classic league's week is left as it stands.
+      const contestOnly = args.includes('--contest-only');
+      if (!args.includes('--include-drip') || contestOnly) {
         const { data: lgs } = await dbOf().from('league').select('id, settings_json');
         for (const l of lgs ?? []) {
-          if ((l.settings_json?.game_mode ?? 'drip') !== 'classic') skip.add(l.id);
+          const s = l.settings_json ?? {};
+          if (!args.includes('--include-drip') && (s.game_mode ?? 'drip') !== 'classic') skip.add(l.id);
+          if (contestOnly && !['high', 'golf', 'bullseye'].includes(s.contest)) skip.add(l.id);
         }
       }
       const slateN = await installWeekSlate(week, season);
@@ -386,7 +391,9 @@ async function main() {
       // Seats, not team names: this runs in a PUBLIC workflow log.
       const shift = (a, b) => (a == null || b == null ? '  (was unstamped)' : `  ${(b - a) >= 0 ? '+' : ''}${(b - a).toFixed(2)}`);
       console.log(`restamp: week ${week} (${season})${leagueId ? ` · league ${leagueId.slice(0, 8)}` : ' · every league'} — re-resolved ${n} matchup(s)`);
-      if (skip.size) console.log(`restamp: skipped ${skip.size} non-classic league(s) — a drip week cannot be re-resolved faithfully (--include-drip to override)`);
+      if (skip.size) console.log(contestOnly
+        ? `restamp: contest leagues only — skipped ${skip.size} other league(s)`
+        : `restamp: skipped ${skip.size} non-classic league(s) — a drip week cannot be re-resolved faithfully (--include-drip to override)`);
       let changed = 0;
       for (const m of moved.sort((x, y) => String(x.league_id).localeCompare(String(y.league_id)) || x.home_roster_id - y.home_roster_id)) {
         const same = m.was.home != null && m.was.away != null
@@ -772,6 +779,7 @@ async function main() {
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.report === false) argv.push('--no-report');
         if (req.include_drip === true) argv.push('--include-drip');
+        if (req.contest_only === true) argv.push('--contest-only');
       } else if (req.mode === 'restore') {
         // Paths in a request are repo-relative, like everywhere else in the
         // repo; the CLI runs from server/, so they are resolved one level up.

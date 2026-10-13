@@ -1,0 +1,8 @@
+{
+  "mode": "restamp",
+  "week": 4,
+  "season": "2026",
+  "confirm": "RESTAMP",
+  "contest_only": true,
+  "why": "Founder: 'Let's rescore all weekly comp leagues.' Week 4 of the weekly contest leagues (high, golf, bullseye) re-stamped under v0.701.x: a player hurt in his game (the injury report dated to his kickoff) no longer takes the dart's no-show penalty, and the plays now score on the worker. Contest leagues only (--contest-only); classic leagues keep their stored finals. Prints every matchup it moves."
+}
