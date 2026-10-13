@@ -94,8 +94,10 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // 2025 season that shipped inside the app and went with that bake in
   // v0.502.0; it is BACK as the live season (v0.641.0, founder: "Game logs
   // on the player cards?") — read from live_play on open, nothing shipped.
-  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>(req.tab ?? 'summary');
-  useEffect(() => { setTab(req.tab ?? 'summary'); }, [req.slug, req.tab]);
+  // THE GAME LOG FIRST (v0.703.2, founder: "open the player cards on the game log instead of the summary"):
+  // every card opens on his log unless the caller names a tab; the summary is one tap away.
+  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>(req.tab ?? 'log');
+  useEffect(() => { setTab(req.tab ?? 'log'); }, [req.slug, req.tab]);
   // The log, built only when its tab opens; reset when the sheet moves to
   // another man (the host reuses one, v0.456.0).
   const [log, setLog] = useState<GameLogWeek[] | null>(null);

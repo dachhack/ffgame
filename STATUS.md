@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.703.2 — Player cards open on the game log
+
+> - Every player card now opens on his Game log; the summary, team and history tabs are a tap away.
+
+Founder: "Let's open the player cards on the game log instead of the
+summary." The default tab in both hosts (`PlayerCardSheet` on the phone,
+`playerCard` on the web) is `log` unless the caller names one.
+
 ### v0.703.1 — The web felt is flat
 
 > - The card table on the web lost its drifting colour glows and vignette: a flat felt, like the phone’s.

@@ -91,8 +91,10 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // the depth charts to bring up that player's card") is the 0293 chart the
   // projected box already reads — "deliberately absent" while this app held
   // no depth order.
-  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>(req.tab ?? 'summary');
-  useEffect(() => { setTab(req.tab ?? 'summary'); }, [req.slug, req.tab]);
+  // THE GAME LOG FIRST (v0.703.2, founder: "open the player cards on the game log instead of the summary"):
+  // every card opens on his log unless the caller names a tab; the summary is one tap away.
+  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>(req.tab ?? 'log');
+  useEffect(() => { setTab(req.tab ?? 'log'); }, [req.slug, req.tab]);
   // A teammate clicked on the chart opens HIS card on this same modal (the
   // host reuses one, v0.456.0) — and lands on his summary, as any card does.
   useEffect(() => { setTab('summary'); }, [slug]);
