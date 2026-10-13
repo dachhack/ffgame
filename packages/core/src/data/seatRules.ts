@@ -17,11 +17,9 @@ export interface SeatRule {
   text?: string | null;
 }
 
-/** One spelling per NFL team (the SQL's _nfl_team_norm). */
-export const normTeam = (t: string | null | undefined): string => {
-  const u = (t ?? '').trim().toUpperCase();
-  return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'LVR' ? 'LV' : u;
-};
+/** One spelling per NFL team (the SQL's _nfl_team_norm) — the one table, teamCodes.ts (v0.707.0). */
+export { normTeam } from './teamCodes';
+import { normTeam } from './teamCodes';
 
 /** May this seat take this player? Mirrors seat_rule_error: positions bind
  *  everyone; team and experience bind NFL players only, and refuse an

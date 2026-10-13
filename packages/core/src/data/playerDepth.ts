@@ -20,6 +20,7 @@
 //
 // Same synchronous-cache shape as injuries and team overrides, because the
 // pool builders and render paths that read it cannot await.
+import { TeamMap, normTeam } from './teamCodes';
 
 export interface DepthRow { slug: string; team: string; pos: string; depth: number }
 
@@ -29,10 +30,10 @@ let byTeam = new Map<string, DepthRow[]>();
 /** Replace the cache (rows straight from player_depth). */
 export function setDepthChart(rows: DepthRow[]): void {
   bySlug = new Map();
-  byTeam = new Map();
+  byTeam = new TeamMap();
   for (const r of rows ?? []) {
     if (!r?.slug || !Number.isFinite(r.depth)) continue;
-    const row: DepthRow = { slug: r.slug, team: (r.team ?? '').toUpperCase(), pos: (r.pos ?? '').toUpperCase(), depth: r.depth };
+    const row: DepthRow = { slug: r.slug, team: normTeam(r.team), pos: (r.pos ?? '').toUpperCase(), depth: r.depth };
     bySlug.set(row.slug, row);
     const list = byTeam.get(row.team);
     if (list) list.push(row); else byTeam.set(row.team, [row]);
@@ -40,7 +41,7 @@ export function setDepthChart(rows: DepthRow[]): void {
   for (const list of byTeam.values()) list.sort((a, b) => a.depth - b.depth);
 }
 
-export function clearDepthChart(): void { bySlug = new Map(); byTeam = new Map(); }
+export function clearDepthChart(): void { bySlug = new Map(); byTeam = new TeamMap(); }
 
 /** True once a chart has been loaded — lets a caller tell "no rank for him"
  *  apart from "no chart at all", which are different failures. */
@@ -54,7 +55,7 @@ export function depthFor(slug: string): number | null {
 /** Everyone the chart ranks on a team, deepest first — the candidates a sheet
  *  can draw from even when the projection set has never heard of them. */
 export function depthForTeam(team: string): DepthRow[] {
-  return byTeam.get((team ?? '').toUpperCase()) ?? [];
+  return byTeam.get(team) ?? [];
 }
 
 /** THE CHART ON THE CARD (v0.640.0). Founder: "Are we able to add team depth

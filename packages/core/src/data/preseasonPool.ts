@@ -13,6 +13,7 @@
 // Each side pre-normalizes its player source into PoolRow (the server adapts
 // the raw Sleeper directory, the client its parsed PlayerMeta map) so slug
 // derivation stays with the side that owns its name conventions.
+import { TeamSet } from './teamCodes';
 
 export interface PoolRow {
   sid: string | null;  // Sleeper player id (null for synthetics)
@@ -36,8 +37,9 @@ export interface PoolEntry {
 const POS_ORDER: Record<string, number> = { QB: 0, RB: 1, WR: 2, TE: 3 };
 
 export function poolFromRows(rows: PoolRow[], slateTeams: Set<string>): PoolEntry[] {
+  const onSlate = new TeamSet(slateTeams); // LAR on a LA slate (v0.707.0)
   const skill = rows.filter((r) =>
-    r.slug && r.full && r.team && slateTeams.has(r.team) && POS_ORDER[r.pos] !== undefined);
+    r.slug && r.full && r.team && onSlate.has(r.team) && POS_ORDER[r.pos] !== undefined);
   skill.sort((a, b) =>
     a.team.localeCompare(b.team) || POS_ORDER[a.pos] - POS_ORDER[b.pos] || a.depth - b.depth || a.full.localeCompare(b.full));
   const out: PoolEntry[] = skill.map((p, i) =>

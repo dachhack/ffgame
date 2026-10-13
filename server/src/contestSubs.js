@@ -14,6 +14,7 @@ import { config } from './config.js';
 import { ruledOutSlugs } from './injuries.js';
 import { contestConfigOf, contestCard, contestAutoBuild } from '../../packages/core/src/engine/contest.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
+import { TeamMap, normTeam } from '../../packages/core/src/data/teamCodes.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[subs]', ...a);
 /** A human's ruled-out pick is swapped inside this window before his kickoff. */
@@ -25,7 +26,7 @@ export const AUTO_SUB_WINDOW_MS = 20 * 60_000;
  *  in: [{slug, name}], starters_json}]. */
 export function planSubs({ league, cfg, board, entries, seats, kicks, outs, card, now = Date.now() }) {
   const bySlug = new Map(board.map((b) => [b.slug, b]));
-  const kickOf = (team) => kicks.get(String(team ?? '').toUpperCase());
+  const kickOf = (team) => kicks.get(normTeam(team)); // the caller's map may be plain: normalise here too (v0.707.0)
   const locked = (team) => { const k = kickOf(team); return Number.isFinite(k) && k <= now; };
   const out = [];
   for (const e of entries) {
@@ -72,11 +73,11 @@ export async function sweepContestSubs(week, season, now = Date.now()) {
     ruledOutSlugs(now),
   ]);
   if (!boardRows?.length || !outs.size) return 0;
-  const kicks = new Map();
+  const kicks = new TeamMap();
   for (const g of slate ?? []) {
     const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
     if (!Number.isFinite(ms)) continue;
-    for (const t of [g.home, g.away]) if (t) kicks.set(String(t).toUpperCase(), Math.min(kicks.get(String(t).toUpperCase()) ?? Infinity, ms));
+    for (const t of [g.home, g.away]) if (t) kicks.set(t, Math.min(kicks.get(t) ?? Infinity, ms));
   }
   let made = 0;
   for (const lg of live) {

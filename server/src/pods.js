@@ -17,6 +17,7 @@ import { config } from './config.js';
 import { getWeekProjections } from './sleeper.js';
 import { weekKickoffMs, buildSlate } from './poll/scoreboard.js';
 import { REGULAR_SEASON } from './seasonType.js';
+import { normTeam, TeamMap } from '../../packages/core/src/data/teamCodes.ts';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
@@ -88,7 +89,7 @@ function bakedWeekFor(week) {
   }
   const rows = bakedWeekly && bakedWeekly.weeks && bakedWeekly.weeks[String(week)];
   if (!Array.isArray(rows) || !rows.length) return null;
-  const bySid = new Map(), defByTeam = new Map(), kByTeam = new Map();
+  const bySid = new Map(), defByTeam = new TeamMap(), kByTeam = new TeamMap(); // team maps normalise (v0.707.0)
   for (const r of rows) {
     const ppg = Number(r.ppg);
     if (!Number.isFinite(ppg)) continue;
@@ -102,7 +103,7 @@ function bakedWeekFor(week) {
 async function sleeperWeekFor(season, week, idx) {
   try {
     const d = await getWeekProjections(season, week);
-    const bySid = new Map(), defByTeam = new Map(), kByTeam = new Map();
+    const bySid = new Map(), defByTeam = new TeamMap(), kByTeam = new TeamMap(); // team maps normalise (v0.707.0)
     for (const [key, v] of Object.entries(d ?? {})) {
       const pts = Number(v?.pts_ppr);
       if (!Number.isFinite(pts) || pts <= 0) continue;
@@ -136,16 +137,22 @@ export function buildSalaryBoard(idx, slateTeams, weekly, extras = new Set(), ro
   // with a stat line on file, or the board would be every backup linebacker.
   const skill = new Set(['QB', 'RB', 'WR', 'TE']);
   const more = new Set([...extras].filter((p) => ['FB', 'DL', 'LB', 'DB'].includes(p)));
+  // THE RAMS (v0.707.0, a member: "Stafford is not a QB option in Bullseye or here but is not on bye"): the index
+  // says LAR where the slate says LA (#1095 again), so every Rams skill player failed this check and no board ever
+  // carried one. Matched normalised now, and the row wears the SLATE's code — the kickoff locks and the slate map
+  // the screens read are keyed by it.
+  const codeOf = new Map([...slateTeams].map((t) => [normTeam(String(t)), String(t).toUpperCase()]));
   for (const p of idx.allSlugs()) {
     if (!p.slug || !(skill.has(p.pos) || more.has(p.pos))) continue;
-    if (!p.team || !slateTeams.has(p.team)) continue;
+    const team = p.team ? codeOf.get(normTeam(String(p.team))) : null;
+    if (!team) continue;
     const seasonPpg = dealPpg(p.slug, p.pos, p.sid);
     const weekPpg = weekly?.bySid.get(String(p.sid));
     if (skill.has(p.pos)) {
       if (seasonPpg < MIN_DEAL_PPG && (weekPpg ?? 0) < MIN_DEAL_PPG) continue;
     } else if (['DL', 'LB', 'DB'].includes(p.pos) && !hasStatsForSlug(p.slug)) continue;
     const ppg = weekPpg ?? seasonPpg;
-    rows.push({ slug: p.slug, name: p.full, pos: p.pos, team: p.team, salary: salaryOf(ppg), proj: Math.round(ppg * 10) / 10, exp: p.exp ?? null });
+    rows.push({ slug: p.slug, name: p.full, pos: p.pos, team, salary: salaryOf(ppg), proj: Math.round(ppg * 10) / 10, exp: p.exp ?? null });
   }
   for (const t of slateTeams) {
     const kPpg = weekly?.kByTeam.get(t) ?? 7.5;
@@ -305,7 +312,7 @@ export async function ensurePods(week, season, idx) {
     // THE LOCK LEAD (v0.669.0): a drip pod seals picks an hour before kickoff;
     // a contest player locks AT his kickoff, like any DFS site.
     const lead = contest ? 0 : config.lockLeadMs;
-    const teamLocked = (team) => { const k = kicks?.[String(team ?? '').toUpperCase()]; return Number.isFinite(k) && k - lead <= Date.now(); };
+    const teamLocked = (team) => { const k = kicks?.get(team); return Number.isFinite(k) && k - lead <= Date.now(); };
     const lockAt = lockMs ? new Date(lockMs - lead).toISOString() : null;
     const lockPassed = lockMs != null && lockMs - lead <= Date.now();
     const podCatalog = contest ? leagueCatalogOf({ scoring: pod.settings_json?.scoring_classic ?? null, ppr: pod.settings_json?.ppr }) : null;
@@ -313,7 +320,7 @@ export async function ensurePods(week, season, idx) {
     // THE CPU'S POOL (v0.695.0, founder: "CPUs failed to set HC"): priced the league's own way, as the builder's
     // FILL FOR ME prices it (leagueWeekProj) — a head coach by his game this week, who the shared board carries
     // at 0 and the dart's auto-build therefore never picked.
-    const cpuPool = contest ? playable.map((r) => ({ ...r, proj: leagueWeekProj(r, podCatalog, r.pos === 'HC' ? (slate?.get(String(r.team ?? '').toUpperCase()) ?? null) : undefined) })) : playable;
+    const cpuPool = contest ? playable.map((r) => ({ ...r, proj: leagueWeekProj(r, podCatalog, r.pos === 'HC' ? (slate?.get(r.team) ?? null) : undefined) })) : playable;
     // DFS Bullseye (0462): AI seats and no-shows AIM at the card instead.
     const bullCfg = contest ? null : dfsBullseyeConfigOf(pod.settings_json);
     const card = bullCfg ? dfsCard(pod.id, week) : null;
@@ -490,14 +497,14 @@ export async function ensureSalaryBoard(season, week, idx) {
   const slateTeams = new Set(slateRows.flatMap((g) => [g.home, g.away]).filter(Boolean));
   if (!slateTeams.size) return { board: [], skipped: 'no slate' };
   // Each team's kickoff (ms), for the per-player lock the auto-sub honours.
-  const kicks = {};
+  const kicks = new TeamMap();
   // THE SLATE BY TEAM (v0.695.0): who each team plays and where, for pricing a head coach's week
-  const slate = new Map();
-  for (const g of slateRows) { if (g.home && g.away) { slate.set(String(g.home).toUpperCase(), { opp: g.away, home: true }); slate.set(String(g.away).toUpperCase(), { opp: g.home, home: false }); } }
+  const slate = new TeamMap();
+  for (const g of slateRows) { if (g.home && g.away) { slate.set(g.home, { opp: g.away, home: true }); slate.set(g.away, { opp: g.home, home: false }); } }
   for (const g of slateRows) {
     const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
     if (!Number.isFinite(ms)) continue;
-    for (const t of [g.home, g.away]) if (t) kicks[String(t).toUpperCase()] = Math.min(kicks[String(t).toUpperCase()] ?? Infinity, ms);
+    for (const t of [g.home, g.away]) if (t) kicks.set(t, Math.min(kicks.get(t) ?? Infinity, ms));
   }
 
   // The week's salary board: build + freeze on first sight of the week, then
@@ -577,6 +584,7 @@ export async function refreshBoardProj(season, week, idx, board, now = Date.now(
  *  touched. */
 const toppedUp = new Set();
 const toppedPos = new Map();   // `${season}|${week}` → positions this process has tried to add (v0.679.2)
+const toppedTeams = new Map();   // v0.707.0: slate teams this process has tried to people
 export async function topUpSalaryBoard(season, week, idx, slateTeams, board) {
   const key = `${season}|${week}`;
   if (!board.length) return board;
@@ -602,9 +610,16 @@ export async function topUpSalaryBoard(season, week, idx, slateTeams, board) {
     // (a board with no punters would otherwise be rebuilt every tick)
     const missingPos = [...wantPos].some((p) => !havePos.has(p) && !seenPos.has(p));
     for (const p of wantPos) if (!havePos.has(p)) seenPos.add(p);
-    if (!expFixes.length && !missingPos) return board;
+    // A SLATE TEAM WITH NOBODY ON THE BOARD (v0.707.0): the Rams, every week until now — the board was frozen
+    // without them. A team playing this week whose people are all missing gets them added, once per process.
+    const seenTeams = toppedTeams.get(key) ?? new Set();
+    toppedTeams.set(key, seenTeams);
+    const peopled = new Set(board.filter((r) => people.has(r.pos)).map((r) => normTeam(String(r.team ?? ''))));
+    const missingTeam = [...slateTeams].some((t) => !peopled.has(normTeam(String(t))) && !seenTeams.has(normTeam(String(t))));
+    for (const t of slateTeams) if (!peopled.has(normTeam(String(t)))) seenTeams.add(normTeam(String(t)));
+    if (!expFixes.length && !missingPos && !missingTeam) return board;
     let adds = [];
-    if (missingPos) {
+    if (missingPos || missingTeam) {
       const weekly = bakedWeekFor(week) ?? await sleeperWeekFor(season, week, idx);
       const have = new Set(board.map((r) => r.slug));
       adds = buildSalaryBoard(idx, slateTeams, weekly, extras, await teamRoleNames().catch(() => new Map())).filter((r) => !have.has(r.slug));

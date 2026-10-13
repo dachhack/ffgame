@@ -520,7 +520,7 @@ function FlagsEditor({ leagueId, onChanged, onClose }: {
       if (needle.length >= 2 && !slug.replace(/-/g, ' ').includes(needle)) continue;
       if (bulk) {
         if (fPos !== 'ALL' && b.pos !== fPos) continue;
-        if (fTeam !== 'ALL' && b.team !== fTeam) continue;
+        if (fTeam !== 'ALL' && b.team !== fTeam) continue; // team-code: same source — the filter's chips are the bio's own codes
         if (fTen !== 'ALL' && !tenureMatch(b.exp, fTen)) continue;
       }
       out.push(slug);

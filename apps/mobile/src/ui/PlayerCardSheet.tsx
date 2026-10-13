@@ -34,6 +34,7 @@ import { Overlay } from './Overlay';
 import { InjuryBadge } from './rosterGroup';
 import { CollegeCardSheet } from './CollegeCardSheet';
 import { isCollegeSlug } from '@drip/core/data/college';
+import { sameTeam } from '../../../../packages/core/src/data/teamCodes';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -338,7 +339,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
               if (week == null || !showTeam) return null;
               const g = nflGameForTeam(week, showTeam);
               if (!g) return row('NEXT UP', 'bye — no game this week');
-              const home = g.home === showTeam;
+              const home = sameTeam(g.home, showTeam);
               const opp = home ? g.away : g.home;
               const when = g.kickoff ? kickoffLabel(g.kickoff) : '';
               return row('NEXT UP', `${home ? 'vs' : '@'} ${opp}${when ? ` · ${when}` : ''}`);

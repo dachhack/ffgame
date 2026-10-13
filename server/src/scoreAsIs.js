@@ -20,6 +20,7 @@
 //      over count, and the rest play out on the normal tick.
 //   4. CHAT. One house line either way.
 import { db } from './supabase.js';
+import { TeamSet } from '../../packages/core/src/data/teamCodes.ts';
 import { stampFinals, injectWeekPlays, modeOfSettings } from './resolve.js';
 import { buildLeagueReport, postReport } from './report.js';
 import { installWeekSlate } from './rescore.js';
@@ -76,7 +77,7 @@ async function fetchMissingPlays(league, week, rosterSlugs, playerIndex, log) {
   const season = league.season;
   const college = league.settings_json?.calendar === 'college';
   const pool = ok(await db().from('league_pool').select('slug, team, level').eq('league_id', league.id).in('slug', rosterSlugs), 'pool');
-  const nflTeams = new Set(pool.filter((p) => p.level !== 'college' && p.team).map((p) => p.team.toUpperCase()));
+  const nflTeams = new TeamSet(pool.filter((p) => p.level !== 'college' && p.team).map((p) => p.team)); // (v0.707.0)
   const espnIds = pool.filter((p) => p.level === 'college').map((p) => p.slug.slice(2));
   const schools = new Set();
   if (espnIds.length) {

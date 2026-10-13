@@ -36,6 +36,11 @@ const idx = { allSlugs: () => [{ slug: 'star-rb', full: 'Star Back', pos: 'RB', 
 const weekly = { bySid: new Map([['1', 18], ['2', 4]]), kByTeam: new Map([['KC', 9]]), defByTeam: new Map([['KC', 8], ['BUF', 6]]), source: 'test' };
 const board = buildSalaryBoard(idx, new Set(['KC', 'BUF']), weekly, new Set(['HC']));
 ok('the worker board rows carry priced_proj = proj and a salary', board.every((r) => r.priced_proj === r.proj && r.salary >= SALARY_FLOOR) && board.some((r) => r.pos === 'HC'));
+// THE RAMS (v0.707.0): the index says LAR, the slate says LA — he is on the board, wearing the slate's code
+const rams = { allSlugs: () => [{ slug: 'ram-qb', full: 'Ram Quarterback', pos: 'QB', team: 'LAR', sid: '9', exp: 16 }, { slug: 'commander', full: 'Some Commander', pos: 'WR', team: 'WSH', sid: '10', exp: 2 }] };
+const ramsBoard = buildSalaryBoard(rams, new Set(['LA', 'WAS']), { bySid: new Map([['9', 20], ['10', 9]]), kByTeam: new Map(), defByTeam: new Map(), source: 'test' }, new Set());
+ok('a LAR player is on a board whose slate says LA, as LA', ramsBoard.find((r) => r.slug === 'ram-qb')?.team === 'LA', ramsBoard.map((r) => `${r.slug}:${r.team}`));
+ok('WSH on a WAS slate the same', ramsBoard.find((r) => r.slug === 'commander')?.team === 'WAS');
 
 if (fails) { console.log(`\nFAIL — ${fails} assertion(s) failed.`); process.exit(1); }
 console.log('\nPASS — the board prices scarcity and calibrates to the budget.');

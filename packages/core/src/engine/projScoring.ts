@@ -57,6 +57,7 @@ import { DEFAULT_CLASSIC_SCORING, normalizeClassicScoring, isRetSlot, scoringFor
 import { scopedAdjustFor, leagueScoring, scoringLeague, clearLeagueScoring, setLeagueScoring } from './leagueScoring';
 import { slugSleeperId } from '../data/slugMeta';
 import { isCollegeSlug } from '../data/college';
+import { normTeam } from '../data/teamCodes';
 
 export type { ProjStatLine, ProjKickLine, ProjDstLine, ProjReturnLine, ProjHcLine, ProjPuntLine };
 
@@ -259,10 +260,7 @@ export function hcGameOdds(slug: string, game: HcGame): { margin: number; win: n
   const loss = Math.max(0, 1 - win - TIE_RATE);
   return { margin, win, loss, tie: TIE_RATE };
 }
-const normTeamCode = (t: string): string => {
-  const u = (t ?? '').toUpperCase();
-  return (u === 'LAR' || u === 'STL' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'AZ' ? 'ARI' : u).toLowerCase();
-};
+const normTeamCode = (t: string): string => normTeam(t).toLowerCase(); // the one table (v0.707.0)
 /** A head coach's WEEK under a catalog: null when the slug is not a coach,
  *  0 on a bye (`game` null), else the matchup-aware number. */
 export function hcWeekPoints(slug: string, game: HcGame | null, sc: ClassicScoring): number | null {

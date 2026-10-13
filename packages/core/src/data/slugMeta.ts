@@ -8,20 +8,12 @@ import { PLAYER_BIO } from './playerBio';
 import { teamFor } from './playerTeam';
 import { BAKED_PBP_SEASON } from './realPbp';
 
-// Relocation / alt codes → the slate's codes (matches buildLeague.normTeam).
-//
-// AZ → ARI (v0.318.0) is the newest and was added on evidence rather than on
-// principle: StatHead found that nflverse's ROSTER files say `AZ` while its
-// SCHEDULE says `ARI`, and their weekly builder keyed matchups on the schedule
-// code — so all 34 Arizona defenders carried an all-null weekly strip and Budda
-// Baker projected nothing in any week of the season. They fixed it at source
-// and nothing reaches us as `AZ` today. This mapping is here so that if any
-// future feed does, it is a no-op instead of a silent slate-gating miss: an
-// unrecognised team code does not error here, it just never matches a game.
-export function normTeam(t: string): string {
-  const u = (t ?? '').toUpperCase();
-  return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'STL' ? 'LA' : u === 'AZ' ? 'ARI' : u;
-}
+// Relocation / alt codes → the slate's codes. THE TABLE LIVES IN teamCodes.ts
+// (v0.707.0) with TeamMap / TeamSet / sameTeam; re-exported here for the many
+// importers. AZ → ARI's story (v0.318.0: nflverse rosters said AZ, its schedule
+// ARI, and every Arizona defender projected nothing) is on the table itself.
+export { normTeam } from './teamCodes';
+import { normTeam } from './teamCodes';
 
 /** Strip the worker's namesake DISAMBIGUATOR off a slug, for display (0199.4
  *  mints `josh-johnson-qb` / `aj-green-cb` — the lowercased position — or

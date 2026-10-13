@@ -25,6 +25,7 @@ import { loadPlayerDirectory, type PlayerMeta } from './sleeperPlayers';
 import { teamFor } from './playerTeam';
 import { collegeDirectory, commishTopUpPool, leagueGameMode } from './liveApi';
 import { collegeSlug, collegeRuleAllows } from './college';
+import { TeamSet } from './teamCodes';
 
 export interface DraftPoolEntry {
   slug: string; full: string; pos: string; team: string; espnId?: string; exp?: number;
@@ -169,7 +170,7 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   const wantNfl = level !== 'college';
   const wantIdp = extras.includes('IDP');
   const wantFb = extras.includes('FB');
-  const teams = opts?.filter?.teams?.length ? new Set(opts.filter.teams.map((t) => t.toUpperCase())) : null;
+  const teams = opts?.filter?.teams?.length ? new TeamSet(opts.filter.teams) : null; // normalised both ways (v0.707.0)
   const minExp = opts?.filter?.min_exp ?? null;
   const maxExp = opts?.filter?.max_exp ?? null;
   const tenureOk = (exp?: number) => {
@@ -194,7 +195,7 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
     if (!isIdp && p.pos !== 'FB' && !POOL_POS.has(p.pos)) continue; // K/DST are team-keyed, added below
     const slug = slugFor(p.full);
     if (!slug) continue;
-    if (teams && (!p.team || !teams.has(p.team.toUpperCase()))) continue;
+    if (teams && (!p.team || !teams.has(p.team))) continue;
     if (!tenureOk(p.exp)) continue;
     const adp = ADP_BY_SID.get(p.id) ?? ADP_2026.get(slug);
     // No NFL team (unsigned FA / retired) → only keep if the draft market
@@ -233,7 +234,7 @@ export async function buildDraftPool(onProgress?: (note: string) => void, opts?:
   // keeps them all.
   const tenureFiltered = minExp != null || maxExp != null;
   const pseudo = (tenureFiltered || !wantNfl ? [] : [...kdstEntries(), ...hcPuntEntries(extras)])
-    .filter((e) => !teams || teams.has(e.team.toUpperCase()));
+    .filter((e) => !teams || teams.has(e.team));
   const rows: (DraftPoolEntry & { score: number; srank?: number })[] = wantNfl ? [...best.values(), ...pseudo] : [];
   // search_rank breaks score TIES before the slug does: two active name-twins
   // share a slug-keyed ADP, and the one Sleeper considers relevant must rank

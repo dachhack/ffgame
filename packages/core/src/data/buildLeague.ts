@@ -26,11 +26,8 @@ async function getJson<T>(url: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-// Provider team codes → the baked NFL slate's codes.
-function normTeam(t: string | null | undefined): string {
-  const u = String(t ?? '').toUpperCase();
-  return u === 'LAR' ? 'LA' : u === 'WSH' ? 'WAS' : u === 'JAC' ? 'JAX' : u === 'OAK' ? 'LV' : u === 'SD' ? 'LAC' : u === 'STL' ? 'LA' : u;
-}
+// Provider team codes → the baked NFL slate's codes: the one table (v0.707.0).
+import { normTeam } from './teamCodes';
 
 /** Engine player id for a normalized player — a baked slug when we have its real
  *  play-by-play (incl. every team K/DST), else a synthetic id. Crosswalk order is

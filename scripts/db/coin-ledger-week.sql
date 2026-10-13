@@ -9,6 +9,8 @@
 -- "Did I earn coin last week?" — the Weekly Cointest, week 5.
 -- ─────────────────────────────────────────────────────────────────────────────
 \pset pager off
+-- the pooled connection resolves nothing unqualified (first run: relation "league" does not exist)
+set search_path = public;
 \echo '── the league'
 select left(id::text, 8) as league, season, settings_json ->> 'contest' as contest, settings_json ->> 'contest_format' as format,
        settings_json ->> 'coin' as coin, settings_json -> 'coin_rules' as coin_rules
@@ -29,6 +31,13 @@ select w.roster_id as seat, w.coins,
   from team_wallet w join league g on g.id = w.league_id
  where g.id::text like '5551fed6%'
  order by w.roster_id;
+
+\echo '── THE RAMS (a member: "Stafford is not a QB option in Bullseye or here but is not on bye"): the week-6 board'
+select l.week, count(*) filter (where l.pos in ('QB','RB','WR','TE')) as skill_rows, string_agg(distinct l.team, ',') as teams_seen
+  from pod_salary l where l.season = '2026' and l.week in (5, 6) group by l.week order by l.week;
+select week, slug, pos, team, salary, proj from pod_salary where season = '2026' and week in (5, 6) and (team in ('LA', 'LAR') or slug like '%stafford%') order by week, pos, slug;
+select week, home, away, kickoff from nfl_slate where season = '2026' and week = 6 and (home in ('LA', 'LAR') or away in ('LA', 'LAR'));
+select player_slug, status, designation_date, team from injury_status where player_slug like '%stafford%';
 
 \echo '── did the week-5 recap post (the settle runs as it posts)?'
 select left(m.body, 90) as card, to_char(m.created_at at time zone 'America/New_York', 'Dy HH24:MI') as at_et

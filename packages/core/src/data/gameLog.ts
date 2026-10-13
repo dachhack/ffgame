@@ -64,7 +64,7 @@ export function buildGameLog(
     // if he has since changed teams. Then the slate, by his current team.
     const opponent = fg
       ? (normTeam(fg.home) === T ? `vs ${fg.away}` : normTeam(fg.away) === T ? `@ ${fg.home}` : `${fg.away} @ ${fg.home}`)
-      : g ? `${g.home === player.team ? 'vs' : '@'} ${g.home === player.team ? g.away : g.home}` : null;
+      : g ? `${normTeam(g.home) === T ? 'vs' : '@'} ${normTeam(g.home) === T ? g.away : g.home}` : null;
     out.push({
       week,
       opponent,
