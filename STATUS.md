@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.1 — No more "you" tags
+
+> - Team names no longer carry a "YOU" or "(you)" tag: your own team is in your colour where it needs telling apart — the standings, the rosters list, the auction's high bidder, the commissioner's seats, the contest matchup chips.
+> - Trades and shotgun vows name both teams — each side headed by its team, then SENDS — instead of YOU SEND / YOU GET, on the site and the phone.
+
+Founder: "There are a few places where the app and web say 'you' we don't
+need those." Follows v0.698.0 (team titles dropped "· YOU") and v0.704.1
+(the phone composer dropped YOU SEND / YOU GET). Removed: the contest
+matchup chips' "· YOU" (web, phone), the standings YOU badge (web), "(you)"
+after roster names (web LeagueHub, phone LeagueHome), the auction holder
+(web, phone; tinted `--you` instead), the multi-team builder (web, phone),
+the commissioner's seats (phone; tinted), the two-team composer and devy
+shares (web; phone shares), the wedding card and its composer (web; your
+side first). Left alone: sentences ("YOU LEAD", "YOUR MOVE"), the demo
+board's marketing YOU tag, the dev room. All JS; no iPhone build.
+
 ### v0.707.0 — The Rams are on the board
 
 > - Matthew Stafford, Puka Nacua and every other Ram are on the weekly salary board and in Bullseye from this week: the board had been comparing the Rams' two spellings (LAR on one feed, LA on the slate) and skipping them all.

@@ -144,7 +144,6 @@ export function LeagueOverview() {
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <Avatar name={t.name} accent={isYou ? 'var(--you)' : 'var(--dim)'} size={22} src={avatarUrl(t.ownerId)} />
                         <span className="grotesk" style={{ fontSize: 12.5, fontWeight: 700, color: isYou ? 'var(--you)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-                        {isYou && <span className="mono" style={{ fontSize: 8, color: 'var(--on-accent)', background: 'var(--you)', padding: '1px 4px', borderRadius: 2, letterSpacing: '0.1em' }}>YOU</span>}
                       </span>
                       <span className="mono" style={{ fontSize: 11, color: 'var(--mid)', textAlign: 'right' }}>{t.wins}-{t.losses}</span>
                       <span className="mono" style={{ fontSize: 11, color: 'var(--mid)', textAlign: 'right' }}>{t.pf.toFixed(0)}</span>

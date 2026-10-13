@@ -312,7 +312,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
           <Chip small label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />
           {(st.matchups ?? []).map((x) => (
-            <Chip key={x.id} small on={x.id === m.id} label={`${x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}${x.mine ? ' · YOU' : ''}`}
+            <Chip key={x.id} small on={x.id === m.id} label={x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}
               onPress={() => { tap(); setPick(x.mine ? null : x.id); }} />
           ))}
         </ScrollView>

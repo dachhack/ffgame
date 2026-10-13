@@ -802,7 +802,7 @@ function TeamsRosters({ leagueId, myRoster }: { leagueId: string; myRoster: numb
           <button onClick={() => setOpenRid(openRid === g.rid ? null : g.rid)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '10px 0', cursor: 'pointer' }}>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: g.mine ? 'var(--you)' : 'var(--text)', flex: 1, minWidth: 0 }}>
-              {g.name}{g.mine ? ' (you)' : ''}
+              {g.name}
               {owners.get(g.rid) && <span className="mono" style={{ fontSize: 9, fontWeight: 400, color: 'var(--faint)' }}> · {owners.get(g.rid)}</span>}
             </span>
             <span className="mono" style={{ fontSize: 9, color: 'var(--faint)' }}>{pay.get(g.rid) ? `${pay.get(g.rid)} · ` : ''}{g.players.length} players {openRid === g.rid ? '▾' : '▸'}</span>

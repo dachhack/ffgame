@@ -1461,8 +1461,8 @@ function CommishTeams({ leagueId, myRoster, onChanged, onSelfUnassigned }: {
         return (
           <View key={m.roster_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, marginTop: 5 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ fontSize: fs(12.5), fontWeight: '700', color: t.text }}>
-                {m.vampire ? '🧛 ' : ''}{m.team ?? `Roster ${m.roster_id}`}{self ? '  (you)' : ''}
+              <Text numberOfLines={1} style={{ fontSize: fs(12.5), fontWeight: '700', color: self ? t.you : t.text }}>
+                {m.vampire ? '🧛 ' : ''}{m.team ?? `Roster ${m.roster_id}`}
               </Text>
               <Mono size={8.5} tone={openSeat ? 'warn' : 'faint'}>
                 {m.enrolled ? (m.email ?? m.sleeper ?? 'seated') : m.claim_email ? `held for ${m.claim_email}` : m.controller === 'ai' ? 'open seat · 🤖 AI-run' : 'open seat'}

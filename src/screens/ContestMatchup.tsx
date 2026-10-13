@@ -320,7 +320,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         <button onClick={() => setFieldsOpen(true)} className="mono" style={{ ...chip(false), flexShrink: 0, whiteSpace: 'nowrap' }}>▦ FIELDS</button>
         {(st.matchups?.length ?? 0) > 1 && (st.matchups ?? []).map((x) => (
             <button key={x.id} onClick={() => setPick(x.id === (st.matchups ?? []).find((y) => y.mine)?.id ? null : x.id)} className="mono" style={{ ...chip(x.id === m.id), flexShrink: 0, whiteSpace: 'nowrap' }}>
-              {x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}{x.mine ? ' · YOU' : ''}
+              {x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}
             </button>
           ))}
       </div>
