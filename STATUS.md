@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.706.2 — The chip goes straight to the vows; your wedding alone
+
+> - The 💍 chip is a plain chip now: one tap and you are on your vows, no sheet in between. It shows only while your own wedding is pending.
+> - My Team › Trades shows your wedding alone. The commissioner handles the other teams’ weddings in Commish tools, under the shotgun wedding switch.
+
+Founder: "Chip should take you straight to the vows. Don't show the vows
+for the other teams." `WeddingChip` is a `Chip` (💍 THE VOWS, or 💍 NEW
+VOWS when the other side has proposed) for your pending wedding only;
+`ShotgunWeddingCard` takes `scope` — `mine` on My Team, `commish` in
+`CommishTools` for every other pending wedding with ✎ REWRITE and CALL OFF.
+
+### v0.706.1 — The card really opens on the game log
+
+> - Player cards open on the Game log now; v0.703.2 set that default, but an older reset put every card back on the summary a moment later.
+
+Founder's screenshot: "Still opens on the summary not the game log." Both
+hosts kept a second effect (a teammate tapped on the chart lands on his
+summary, v0.456.0) that ran after the landing effect and set `summary`
+on every open. One landing effect now, keyed on the request and the slug.
+
 ### v0.706.0 — The vows stay between the two teams
 
 > - A shotgun wedding’s new vows are now private: the league chat no longer announces them, only the other team is told (on their phone), and only the two teams and the commissioner see the wedding card or its chip. The league page no longer lists weddings.
