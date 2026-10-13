@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.701.4 — The web notification wears the DF too
+
+> - Web push notifications now show the italic DF in the status bar, the same mark the Android app wears, instead of the old football-and-drop.
+
+Founder: "the web version still has the old notification icon." The web
+push `badge` in `public/sw.js` still pointed at the drop silhouette
+(`badge-96.png`); v0.692.1 redrew only the app's copy. The DF mask is
+copied in as `badge-df-96.png` — a new name, so no browser serves the drop
+it cached under the old one — and the old file is gone.
+`scripts/gen-notification-icon.py`, which painted the drop into both, now
+refuses without `--the-drop`. The new badge reaches a browser with the next
+service-worker update, on the next load after this deploy.
+
 ### v0.701.3 — The week report knows when lower wins
 
 > - In a dart league scored on distance (and in golf), the week report now calls the smallest score the week’s best — “landed closest at 21.8”, “Closest to the number”, “Furthest off” — and gives each game and the standings to the lower side.
