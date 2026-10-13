@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.704.1 — The piles need no label
+
+> - The trade composer’s two piles drop their YOU SEND / YOU GET labels: yours is on the left with your FAAB box under it, theirs on the right.
+
+Founder: "no need for 'you send' or 'you get' if the faab is on that side
+it's obvious." `TradeCenter` on the phone.
+
 ### v0.704.0 — The trade composer, full screen
 
 > - Proposing a trade on the phone now fills the screen. The teams sit on one scrolling row with a ＋ chip for a third team, every player shows his face and opens his card with a tap (the box beside him picks him), and FAAB has a small box under each pile: what you send, what you ask.
