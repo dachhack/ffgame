@@ -226,6 +226,10 @@ export const modeOfSettings = (s) => ({
   contest: s?.contest === 'high' || s?.contest === 'golf' || s?.contest === 'bullseye' ? s.contest : null,
   contest_format: s?.contest_format === 'h2h' || s?.contest_format === 'board' ? s.contest_format : null,
   budget: Number.isFinite(Number(s?.budget)) ? Number(s.budget) : null,
+  // DRIP COIN (v0.699.2, founder: "Double or nothing still not showing the doubled score"): whether the league's
+  // coin is on. The resolver loads a week's plays only when it is — and this mapper never carried it, so no play
+  // ever scored on the worker (the board showed the chip; the stored final read the raw points).
+  coin: s?.coin === true,
 });
 async function leagueModeOf(leagueId, ctx) {
   if (ctx) return ctx.mode?.get(leagueId) ?? { mode: 'drip', ppr: 1, bestball: [], scoring: null, roster: null, slots: null, golf: false, bullseye: null, bullseye_radius: null, bullseye_deal: null };
@@ -583,6 +587,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const contestCfg = contestConfigOf({
     contest: gameMode.contest, contest_format: gameMode.contest_format, budget: gameMode.budget,
     roster_slots: gameMode.slots, dfs_bullseye: gameMode.dfs_bullseye, bullseye: gameMode.bullseye, bullseye_radius: gameMode.bullseye_radius,
+    coin: gameMode.coin,
   });
   let dfsTb = null;   // { home, away } tie-break distances (v0.660.1)
   if (contestCfg) {

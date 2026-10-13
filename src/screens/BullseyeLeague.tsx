@@ -21,9 +21,9 @@ import {
   contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, type ContestWallet, createContestLeague, contestWeekNow, joinContest, contestState, playoffState, type PlayoffState,
   setTeamName, leaveLeague, postLeagueListing,
   isAdmin, myFeatures, bullseyeMaxSeats, contestMoneyWord, recordWord, friendlyError,
-  type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
+  type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan, weekSlateByTeam,
 } from '@drip/core/data/liveApi';
-import { contestRedeal, coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
+import { contestRedeal, coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit, contestLandingWeek } from '@drip/core/engine/contest';
 import { ContestSquad, contestSetupOf } from './ContestSquad';
 import { ContestMatchup } from './ContestMatchup';
 import { ContestSettingsTiles } from './ContestSettings';
@@ -246,7 +246,20 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
   const [week, setWeek] = useState<number | null>(null);
   const wide = useWide(900);
   const load = useCallback(() => contestLeague(leagueId).then((r) => { setLg(r); return r; }), [leagueId]);
-  useEffect(() => { void load().then((r) => { if (r.ok && r.week != null) setWeek((w) => w ?? r.week!); }).catch(() => {}); }, [load]);
+  // THE WEEK TO LAND ON (v0.699.2, founder: "Give it a day to admire your win or study your loss"): the week just
+  // played, for a day after its last game; the week in play stays a tap away on the arrows.
+  useEffect(() => {
+    void load().then(async (r) => {
+      if (!r.ok || r.week == null) return;
+      let land = r.week;
+      if (r.weeks?.includes(r.week - 1)) {
+        const sl = await weekSlateByTeam(r.week - 1).catch(() => new Map<string, { kickoff: number | null }>());
+        const last = Math.max(0, ...[...sl.values()].map((g) => g.kickoff ?? 0));
+        land = contestLandingWeek(r.week, r.weeks, last > 0 ? last : null, Date.now());
+      }
+      setWeek((w) => w ?? land);
+    }).catch(() => {});
+  }, [load]);
   // Each arrival at the matchup room is a new deal (the flips replay).
   const [visit, setVisit] = useState(0);
   useEffect(() => { if (room === 'matchup') setVisit((v) => v + 1); }, [room]);

@@ -1,0 +1,7 @@
+{
+  "mode": "restamp",
+  "week": 5,
+  "season": "2026",
+  "confirm": "RESTAMP",
+  "why": "Founder: 'Double or nothing still not showing the doubled score.' The read-only diff (042) showed every week-5 matchup's stored final equal to a dry re-resolve under v0.699.1 — and that resolver never loaded a play: the worker's league mapper dropped the coin flag, so contestCfg.coin was false and the plays query was skipped (v0.699.2 carries it). Re-stamp week 5 under the fixed code: only matchups with an armed play move (the Weekly Cointest's Double or Nothing on Josh Allen, 29.7 past a 21.5 line, doubles to 59.4); everything else re-resolves to what it already stores. Contest leagues are classic by game_mode, so no --include-drip."
+}

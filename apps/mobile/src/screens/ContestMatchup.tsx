@@ -154,8 +154,9 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     // THE PENALTY CHIP (v0.685.2): a spot that posted nothing wears the dart's penalty, red — an empty spot too (v0.695.0)
     const lvr = m.state?.slots?.find((x) => x.side === s && x.slot === r.slot);
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
-    if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} chip={pen != null ? `−${pen}` : undefined} />;
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
+    // THE SPOT'S NUMBER, BEFORE THE PICK (v0.699.2): the tie-breaker chip on the open spot too
+    if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : undefined} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} />;
     const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert(pen != null ? 'No-show' : 'Tie-breaker', pen != null ? `This spot posted nothing, and a zero scores nothing: it adds ${pen} to the squad's distance.` : TB_NOTE)} /> : <View />;
     return <FlipCard key={`${s}-${r.slot}`} flipped={mine || !!r.slug} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={face} />;
   };

@@ -164,7 +164,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" onClick={onPick} selected={hot} />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={hot ? '▶ HERE' : false} onClick={onPick} />;
     return (
-      <div key={`${s}-${r.slot}-empty`} className="ct-wrap" onClick={onPick} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px dashed ${hot ? 'var(--you)' : 'color-mix(in srgb, var(--text) 25%, transparent)'}`, borderRadius: 10, cursor: onPick ? 'pointer' : 'default' }}>
+      <div key={`${s}-${r.slot}-empty`} className="ct-wrap" onClick={onPick} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px dashed ${hot ? 'var(--you)' : 'color-mix(in srgb, var(--text) 25%, transparent)'}`, borderRadius: 10, cursor: onPick ? 'pointer' : 'default' }}>
+        {/* THE SPOT'S NUMBER, BEFORE THE PICK (v0.699.2): the tie-breaker chip on the open spot too */}
+        {pen == null && tbc ? <span className="ct-tbchip" style={{ position: 'absolute', top: 6, right: 6 }} title="tie-breaker — tap for what it means" onClick={(e) => { e.stopPropagation(); setTbNote(TB_NOTE); }}>{String(tbc.target)}</span> : null}
         <span className="mono" style={{ fontSize: 9, color: hot ? 'var(--you)' : pen != null ? 'var(--warn, #c66)' : 'color-mix(in srgb, var(--text) 50%, transparent)', letterSpacing: '0.08em', fontWeight: pen != null ? 800 : 400 }}>{hot ? '▶ HERE' : pen != null ? `EMPTY · −${pen}` : 'EMPTY'}</span>
       </div>
     );

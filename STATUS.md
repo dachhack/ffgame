@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.699.2 — The plays reach the score, a day to admire the week, the spot’s number before the pick
+
+> - Power-ups now count in the stored score: the worker never loaded a week’s plays (the league’s coin setting was dropped on the way in), so Josh Allen’s Double or Nothing stayed 29.7 — week 5 is re-stamped and reads 59.4 over a struck 29.7.
+> - A league opens on the week just played for a day after its last game — admire the win or study the loss — with the new week a tap away on the arrows.
+> - The tie-breaker’s number sits on the open spot too: on the card back in My Team and on the empty spot in the matchup, before you pick.
+
+Founder: "Double or nothing still not showing the doubled score. The week
+already flipped over to week 6 in the weekly contest league. Give it a day
+to admire your win or study your loss." and "Let's put the spot target chip
+on the card in my team and on the spot in matchup before selections happen."
+The cause, confirmed on live data (ops 042, read-only): every week-5 stored
+final equalled a dry re-resolve under v0.699.1, and that resolve paid Allen
+29.70 — `modeOfSettings` never carried `coin`, so `contestCfg.coin` was
+false in `resolveMatchup` and the `contest_play` query was skipped; no play
+has scored on the worker since v0.685.0 (the board showed the chip from the
+row itself). The mapper carries it now (test in `bullseye.mjs`); ops 043
+re-stamps week 5 under the fix (only matchups with a play move). The week’s
+coin settlement and recap card are not re-run by a restamp. Engine:
+`contestLandingWeek(week, weeks, prevLastKickoffMs, now)`; both
+`BullseyeLeague` frames land there. Phone `CardBack`/`EmptyCard` and web
+`SealedCard`/the matchup’s empty spot take the gold tie-breaker chip.
+
 ### v0.699.1 — A play settles on his final, and the raw score is struck
 
 > - Double or Nothing and Floor now settle when the player’s own game ends, not only when the whole matchup turns final — Josh Allen’s 29.7 past a 21.5 line doubles as soon as Monday night is over. Where a play changed a spot’s score, the matchup and MY TEAM show the powered score with the raw score struck through under it. Web and phone.
