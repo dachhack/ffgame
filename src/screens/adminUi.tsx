@@ -209,7 +209,7 @@ export function InfoChip({ title, info, label }: { title: string; info: string;
     <>
       <button onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={`About ${title}`} className="mono"
         style={label
-          ? { background: 'color-mix(in srgb, #E9B959 18%, transparent)', border: '1px solid color-mix(in srgb, #E9B959 60%, transparent)', borderRadius: 999, cursor: 'pointer', padding: '2px 8px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: '#B8862E', lineHeight: 1.2 }
+          ? { background: 'color-mix(in srgb, #E9B959 18%, transparent)', border: '1px solid color-mix(in srgb, #E9B959 60%, transparent)', borderRadius: 999, cursor: 'pointer', padding: '2px 8px', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: '#B8862E', lineHeight: 1.2, whiteSpace: 'nowrap', flexShrink: 0 }
           : { background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: 12, fontWeight: 700, color: 'var(--dim)', lineHeight: 1 }}>
         {label ?? 'ⓘ'}
       </button>

@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.697.2 — The chip on one line
+
+> - The POWER ⬆️ chip no longer wraps its arrow onto a second line.
+
+Founder: "Let's not have it wrap." The labelled `InfoChip` is one line on
+both platforms (`white-space: nowrap`, `numberOfLines={1}`).
+
 ### v0.697.1 — The chip says POWER ⬆️
 
 > - The play chip on MY TEAM and the matchup now reads POWER ⬆️. Web and phone.
