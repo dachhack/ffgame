@@ -17,7 +17,8 @@ import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widg
 import { HeroesVillains } from '../ui/HeroesVillains';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
-import { Card, Chip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
+import { Card, Chip, ChipStrip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
+import { Overlay } from '../ui/Overlay';
 import { BrandLoading } from '../ui/BrandLoading';
 import { weekTitle } from '@drip/core/data/nflSlate';
 
@@ -79,9 +80,9 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
 }) {
   const t = useTheme();
   const [rows, setRows] = useState<Enrollment[] | null>(null);
-  // 🗄 THE SHELF (0239): archived leagues fold into a collapsed section at
-  // the bottom — per-user, reversible right from the row.
-  const [shelfOpen, setShelfOpen] = useState(false);
+  // 🗂 THE ARCHIVE (0239; v0.707.3 a chip beside ADD): archived leagues leave
+  // the list — per-user, reversible from the chip's sheet.
+  const [archOpen, setArchOpen] = useState(false);
   // Native leagues I commission but hold no seat in. A commissioner does not
   // need a team (0039 — redeeming the code is the whole qualification), and
   // before this list a seatless commissioner had no door into their league on
@@ -253,8 +254,13 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
           The words the chips no longer say are said to a SCREEN READER
           instead, where nothing is competing for width. flexWrap stays as the
           safety net: a future label that outgrows the row should fold, not
-          clip. */}
-      <View style={{ flexDirection: 'row', gap: 6, paddingHorizontal: 4, flexWrap: 'wrap' }}>
+          clip.
+
+          v0.707.3: one line that scrolls sideways (ChipStrip) instead of
+          wrapping, so the 🗂 chip sits to the right of ADD — founder: "a small
+          file chip to the right of add. Click it to manage which leagues are
+          archived and not shown in my leagues." */}
+      <ChipStrip bg={t.bg} style={{ paddingHorizontal: 4 }}>
         {(commishIds.size > 0 || managed.length > 0 || weeklyN > 0) && (
           <Chip label={`ALL ${rows.filter((e) => !e.archived).length + managed.length}`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
         )}
@@ -265,7 +271,8 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
         {weeklyN > 0 && <Chip label={`WEEKLY ${weeklyN}`} on={filter === 'weekly'} onPress={() => { tap(); setFilter('weekly'); }} />}
         <Chip label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard('browse'); }} />
         <Chip label="ADD" a11y="Add a league" onPress={() => { tap(); onAdd(); }} />
-      </View>
+        {rows.length > 0 && <Chip label={rows.some((e) => e.archived) ? `🗂 ${rows.filter((e) => e.archived).length}` : '🗂'} a11y="Archived leagues" on={archOpen} onPress={() => { tap(); setArchOpen(true); }} />}
+      </ChipStrip>
 
       {!!err && <Mono size={10.5} tone="opp">{err}</Mono>}
 
@@ -429,37 +436,29 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
         </View>
       ))}
 
-      {/* ARCHIVED (0239) — the shelf: leagues you tucked away, collapsed
-          until asked for, each one tap from coming back. */}
-      {rows.some((e) => e.archived) && (
-        <View style={{ marginTop: 4 }}>
-          <Pressable onPress={() => { tap(); setShelfOpen((v) => !v); }} style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}>
-            <Mono size={9.5} tone="faint" weight="700" track={0.08}>
-              ARCHIVED ({rows.filter((e) => e.archived).length}) {shelfOpen ? '▾' : '▸'}
-            </Mono>
-          </Pressable>
-          {shelfOpen && rows.filter((e) => e.archived).map((e) => (
-            <Pressable key={`arch-${e.league_id}-${e.sleeper_roster_id}`}
-              onPress={() => { tap(); onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, undefined, e.league?.kind); }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 10, padding: 11, marginTop: 6, opacity: 0.8 }}>
-              <Crest url={e.league?.avatar_url} name={e.league?.name} size={30} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: t.text }}>{e.league?.name ?? 'League'}</Text>
-                <Mono size={8.5} tone="faint">{e.league?.season ?? ''} · {e.team_name}</Mono>
-              </View>
-              <Pressable hitSlop={8}
-                onPress={() => {
-                  tap();
-                  void setLeagueArchived(e.league_id, false).catch(() => {});
-                  setRows((cur) => (cur ?? []).map((r) => r.league_id === e.league_id ? { ...r, archived: false } : r));
-                }}
-                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 5 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: t.you }}>UNARCHIVE</Text>
-              </Pressable>
-            </Pressable>
-          ))}
-        </View>
-      )}
+      {/* 🗂 ARCHIVE (0239's shelf, managed from the chip since v0.707.3): every
+          league you hold a seat in, each one tap from hidden or shown — just
+          for you; the seat and everyone else's view are untouched. */}
+      <Overlay visible={archOpen} title="🗂 Archive" subtitle={`${rows.filter((e) => e.archived).length} HIDDEN · ${rows.filter((e) => !e.archived).length} SHOWN`} onClose={() => setArchOpen(false)}>
+        {rows.map((e) => (
+          <View key={`arch-${e.league_id}-${e.sleeper_roster_id}`}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd, opacity: e.archived ? 0.7 : 1 }}>
+            <Crest url={e.league?.avatar_url} name={e.league?.name} size={30} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: t.text }}>{e.league?.name ?? 'League'}</Text>
+              <Mono size={8.5} tone="faint">{e.league?.season ?? ''} · {e.team_name}</Mono>
+            </View>
+            <Chip label={e.archived ? 'ARCHIVED' : 'SHOWN'} on={!e.archived} a11y={`${e.league?.name ?? 'League'}: ${e.archived ? 'archived, tap to show' : 'shown, tap to archive'}`}
+              onPress={() => {
+                tap();
+                const on = !e.archived;
+                const flip = (v: boolean) => setRows((cur) => (cur ?? []).map((r) => r.league_id === e.league_id ? { ...r, archived: v } : r));
+                flip(on);
+                void setLeagueArchived(e.league_id, on).then((r) => { if (!r?.ok) flip(!on); }).catch(() => flip(!on));
+              }} />
+          </View>
+        ))}
+      </Overlay>
 
       {/* The league board: browse open leagues, post yours, recruit friends.
           Below the league list because your own leagues are the daily visit;

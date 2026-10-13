@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.3 — 🗂 The archive, beside ADD
+
+> - A small 🗂 chip sits to the right of ADD on your leagues list. Tap it to choose which leagues are shown and which are archived: an archived league leaves your list, just for you, and comes back with one tap.
+> - The website gets the same chip, and now hides archived leagues too.
+
+Founder (Oct 13, the phone's leagues list): "Let's get a small file chip to
+the right of add. Click it to manage which leagues are archived and not shown
+in my leagues." Phone: the chip row is a `ChipStrip` (one line, scrolls
+sideways) so 🗂 stays beside ADD instead of wrapping; the chip carries the
+hidden count; its `Overlay` lists every seat with a SHOWN / ARCHIVED chip
+(`set_league_archived`, 0239, optimistic with revert). The collapsed ARCHIVED
+section at the foot of the list is gone, replaced by the sheet. Web: the
+leagues page never read `archived`; `LeagueHome` now hides archived seats and
+gets the same 🗂 button + `Sheet`. All JS; no iPhone build.
+
 ### v0.707.2 — Lower wins on the leagues list; no Tuesday lock
 
 > - In a Bullseye league scored on one total, and in golf, the leagues list now calls the lower score the win: a 32.60 against 36.90 reads WON, as the record beside it always said.
