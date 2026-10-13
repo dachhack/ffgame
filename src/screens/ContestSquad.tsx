@@ -464,12 +464,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
               const dim = 'color-mix(in srgb, var(--text) 75%, transparent)';
               return (
                 <div key={d.slot} style={{ width: 104, display: 'grid', gap: 4, justifyItems: 'center', alignContent: 'start' }}>
-                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap' }}>
+                  {/* THE PLAY CHIP rides the label row, above the card (v0.696.6, founder: "Don't even do the power up icon in
+                      my team. Put the chip at the top of the card."); tap it for the play's details. */}
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
                     {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
+                    {playOn(d.slot) && <InfoChip label={`${contestPlayById(playOn(d.slot)!.id)?.icon ?? '⚡'} PLAY`} title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
                   </span>
                   <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
                     {p
-                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} badge={playOn(d.slot) ? contestPlayById(playOn(d.slot)!.id)?.icon : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
+                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
                       : ghosted(d.slot)
                         ? <PlayerCard key="ghost" slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} flip idx={i} bank={lv ? lv.score : undefined} badge="👻" />
                         : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => openSheet(d.slot) : undefined} />}
@@ -480,8 +483,6 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                       : ghosted(d.slot) ? `a phantom · ${GHOST_POINTS} flat, no salary` : hint}
                     {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
                   </span>
-                  {/* THE PLAY CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see details") */}
-                  {playOn(d.slot) && <InfoChip label={`${contestPlayById(playOn(d.slot)!.id)?.icon ?? '⚡'} PLAY`} title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
                   {p && canTap && (
                     <button onClick={(e) => { e.stopPropagation(); setPicks({ ...picks, [d.slot]: null }); }} title="clear this spot" className="mono"
                       style={{ background: 'none', border: '1px solid color-mix(in srgb, var(--text) 30%, transparent)', borderRadius: 999, color: dim, fontSize: 10, cursor: 'pointer', padding: '2px 8px' }}>✕</button>

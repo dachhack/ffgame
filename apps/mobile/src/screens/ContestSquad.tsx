@@ -416,13 +416,18 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                 const dim = alpha(t.text, 75);
                 const ghost = !p && ghosted(d.slot);
                 const face = p
-                  ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} badge={playOn(d.slot) ? contestPlayById(playOn(d.slot)!.id)?.icon : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} />
+                  ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} />
                   : ghost ? <CardFace slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} mine points={lv ? lv.score : null} foot="$0" badge="👻" /> : <View />;
                 return (
                   <View key={d.slot} style={{ width: CARD_W + 6, alignItems: 'center', gap: 3 }}>
-                    <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.8, color: changed ? t.you : dim }}>
-                      {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
-                    </Text>
+                    {/* THE PLAY CHIP rides the label row, above the card (v0.696.6, founder: "Don't even do the power up icon in
+                        my team. Put the chip at the top of the card."); tap it for the play's details. */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.8, color: changed ? t.you : dim }}>
+                        {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
+                      </Text>
+                      {playOn(d.slot) && <InfoChip label={`${contestPlayById(playOn(d.slot)!.id)?.icon ?? '⚡'} PLAY`} title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
+                    </View>
                     <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }} style={{ borderRadius: 13, borderWidth: 2, borderColor: changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
                       <FlipCard key={`${d.slot}-${slug ?? (ghost ? 'ghost' : 'open')}`} flipped={!!p || ghost} idx={i} back={<CardBack seed={`${leagueId}|${d.slot}`} />} face={face} />
                       {!p && !ghost && (
@@ -439,8 +444,6 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       </Text>
                       {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
                     </View>
-                    {/* THE PLAY CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see details") */}
-                    {playOn(d.slot) && <InfoChip label={`${contestPlayById(playOn(d.slot)!.id)?.icon ?? '⚡'} PLAY`} title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
                     {p && canTap && (
                       <Pressable hitSlop={8} onPress={() => { tap(); setPicks({ ...picks, [d.slot]: null }); }} style={{ borderWidth: 1, borderColor: alpha(t.text, 30), borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
                         <Text style={{ fontFamily: MONO, fontSize: fs(9), color: dim }}>✕</Text>

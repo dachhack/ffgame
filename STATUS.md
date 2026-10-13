@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.6 — The play chip, at the top of the card
+
+> - On MY TEAM the play chip sits at the top of the card, beside the spot’s label, and the card itself no longer wears the play’s icon; the line under the card is gone. Tap the chip for the play’s details. Web and phone.
+> - The matchup table does the same: a PLAY chip beside the spot’s label for a play on it (yours, or theirs aimed at it once it shows), no icon on the card; the PLAYS card with TAKE BACK stays.
+
+Founder: "Don't even do the power up icon in my team. Put the chip at the
+top of the card", then "On the matchup screen, let's do the same, just an
+active power ups chip." Both `ContestSquad` screens move the `InfoChip`
+into the label row above the card and drop the card's `badge`; both
+`ContestMatchup` screens put it beside the spot's label (`playAt`,
+`playText`) and drop the badge too.
+
 ### v0.696.5 — The play chip
 
 > - A spot with a play on it now wears a small gold chip (the play’s icon and PLAY) under the card instead of the play’s name spelled out; tap it for the details — what the play does, his number to beat, and that it is taken back on MATCHUP until his kickoff. Web and phone.

@@ -156,7 +156,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
     if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} chip={pen != null ? `−${pen}` : undefined} />;
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
-    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} badge={pl ? contestPlayById(pl.id)?.icon : undefined} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert(pen != null ? 'No-show' : 'Tie-breaker', pen != null ? `This spot posted nothing, and a zero scores nothing: it adds ${pen} to the squad's distance.` : TB_NOTE)} /> : <View />;
+    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert(pen != null ? 'No-show' : 'Tie-breaker', pen != null ? `This spot posted nothing, and a zero scores nothing: it adds ${pen} to the squad's distance.` : TB_NOTE)} /> : <View />;
     return <FlipCard key={`${s}-${r.slot}`} flipped={mine || !!r.slug} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={face} />;
   };
   // While a play is aimed, only the spots it may land on now light up: mine for a spot play, theirs for Spy
@@ -177,6 +177,17 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   // inside of the card columns in larger numbers"): the spot, the score once
   // his game is on, the projection under it; a Bullseye spot's target and how
   // far off. A sealed pick shows nothing — a projection would give him away.
+  /** The play on a spot: mine on my spot, or the other side's aimed at it (Spy, Jinx) once it shows. */
+  const playAt = (s: 'home' | 'away', r: Row): { pl: ContestPlayRow; theirs: boolean } | null => {
+    const own = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target !== 'opp');
+    if (own) return { pl: own, theirs: false };
+    const aimed = (s === 'home' ? m.away_plays : m.home_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target === 'opp');
+    return aimed ? { pl: aimed, theirs: true } : null;
+  };
+  const playText = (pl: ContestPlayRow, theirs: boolean, mine: boolean) => {
+    const d = contestPlayById(pl.id);
+    return `${theirs ? `${mine ? 'Their' : 'The other side’s'} ${d?.name ?? pl.id}, aimed at this spot.\n\n` : ''}${d?.blurb ?? ''}${pl.proj != null ? `\n\nHis number to beat: ${Number(pl.proj).toFixed(1)}.` : ''}${!theirs && mine ? '\n\nTake it back in PLAYS above until his kickoff.' : ''}`;
+  };
   const numbersOf = (s: 'home' | 'away', r: Row, mine: boolean, edge: 'left' | 'right') => {
     const score = st.started ? scoreOf(s, r.slot) : null;   // an empty spot's zero row shows too (v0.695.0)
     const proj = r.slug ? projOf(r.slug) : null;
@@ -185,7 +196,12 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     const align = edge === 'left' ? 'flex-start' : 'flex-end';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: align, paddingLeft: edge === 'left' ? 8 : 4, paddingRight: edge === 'right' ? 8 : 4, minWidth: 0 }}>
-        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
+        {/* THE PLAY CHIP (v0.696.6, founder: "On the matchup screen, let's do the same: just an active power ups chip"):
+            beside the spot's label, no icon on the card; tap it for the play's details. */}
+        <View style={{ flexDirection: edge === 'left' ? 'row' : 'row-reverse', alignItems: 'center', gap: 4 }}>
+          <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
+          {(() => { const a = playAt(s, r); return a ? <InfoChip label={`${contestPlayById(a.pl.id)?.icon ?? '⚡'} PLAY`} title={contestPlayById(a.pl.id)?.name ?? a.pl.id}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
+        </View>
         <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : alpha(t.text, 35) }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
         <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: alpha(t.text, 65) }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}`}</Text>
       </View>
