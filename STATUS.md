@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.703.1 — The web felt is flat
+
+> - The card table on the web lost its drifting colour glows and vignette: a flat felt, like the phone’s.
+
+Founder: "Let's get rid of the gradient background on web too." `Felt`
+(`src/app/cardTable.tsx`) layered two blurred team-colour blobs and a
+radial vignette over the felt; the phone dropped the same in v0.682.2 and
+the drip matchup in v0.433.5. Now the felt tint alone — the deck’s colour
+over the theme’s ground — under the contest matchup and My Team.
+
 ### v0.703.0 — Tap a locked card for his game log; ▦ FIELDS on the contest matchup
 
 > - Once a player’s game has kicked off, one tap on his card — on the matchup and on My Team — opens his card on the Game log tab.

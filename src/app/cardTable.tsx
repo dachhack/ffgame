@@ -82,12 +82,7 @@ const CSS = `
    reads teal, prime warm, slate cool — without losing the felt-green heart. */
 .ctable{position:relative;border-radius:12px;overflow:hidden;padding:12px 10px 16px;
   background:color-mix(in srgb, var(--ct-felt, #0B1F1A) 80%, var(--bg, #0B1F1A));}
-.ctable .ct-blobs{position:absolute;inset:-30%;pointer-events:none;}
-.ctable .ct-blob{position:absolute;width:60%;height:60%;border-radius:50%;filter:blur(60px);opacity:.5;mix-blend-mode:screen;}
-.ctable .ct-b1{background:radial-gradient(circle,color-mix(in srgb, var(--you, #36E59B) 40%, var(--ct-felt, #0B1F1A)) 0%,transparent 62%);top:0;left:-5%;animation:ct-drift 39s linear infinite;}
-.ctable .ct-b2{background:radial-gradient(circle,color-mix(in srgb, var(--opp, #FF5266) 38%, var(--ct-felt, #0B1F1A)) 0%,transparent 60%);bottom:-8%;right:-5%;animation:ct-drift 51s linear infinite reverse;}
-@keyframes ct-drift{from{transform:rotate(0) translateX(8%) rotate(0)}to{transform:rotate(360deg) translateX(8%) rotate(-360deg)}}
-.ctable .ct-vig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%);}
+/* the drift blobs (.ct-blobs/.ct-b1/.ct-b2) and the vignette (.ct-vig) left with v0.703.1: the felt is flat */
 .ctable .ct-body{position:relative;}
 .ctable .ct-disp{font-family:'Lilita One',ui-rounded,system-ui,sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.05em;
   text-shadow:-1.2px -1.2px 0 #14100A,1.2px -1.2px 0 #14100A,-1.2px 1.2px 0 #14100A,1.2px 1.2px 0 #14100A,0 3px 0 #14100A;}
@@ -179,7 +174,7 @@ const CSS = `
   text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;}
 
 @media (prefers-reduced-motion: reduce){
-  .ctable .ct-card,.ctable .ct-blob{animation:none;}
+  .ctable .ct-card{animation:none;}
   .ctable .ct-dealin{animation:none;}
 }
 @media (max-width:400px){ .ctable .ct-wrap{width:92px;height:136px} .ctable .ct-art{width:62px;height:45px} .ctable .ct-mid{min-width:40px} }
@@ -459,9 +454,6 @@ const CSS = `
     radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp) 18%, transparent), transparent 60%),
     radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn) 14%, transparent), transparent 65%),
     color-mix(in srgb, color-mix(in srgb, var(--bg) 72%, #FFFFFF) 90%, var(--ct-felt, #0B1F1A));}
-/* Felt-component blobs: darken the light ground (multiply) instead of glowing. */
-:root[data-card-light="1"] .ctable .ct-blob{mix-blend-mode:multiply;opacity:.28;}
-:root[data-card-light="1"] .ctable .ct-vig{background:radial-gradient(120% 90% at 50% 40%,transparent 60%,rgba(60,40,20,.16) 100%);}
 /* mx-felt (hero board) layered ground + softer vignette. */
 :root[data-card-light="1"] .mx-felt .ct-feltlayers{
   background:
@@ -516,11 +508,12 @@ export function CardTableCss() {
 }
 
 /** The felt table surface: swirling backdrop + vignette around any content. */
+/** THE FELT IS FLAT ON THE WEB TOO (v0.703.1, founder: "Let's get rid of the gradient background on web too"):
+ *  the two drifting team-colour glows and the vignette are gone, as they went from the phone's felt in v0.682.2
+ *  and from the drip matchup in v0.433.5. The felt tint alone (.ctable), the deck's colour over the theme's ground. */
 export function Felt({ children }: { children: React.ReactNode }) {
   return (
     <div className="ctable">
-      <div className="ct-blobs"><div className="ct-blob ct-b1" /><div className="ct-blob ct-b2" /></div>
-      <div className="ct-vig" />
       <div className="ct-body">{children}</div>
     </div>
   );
