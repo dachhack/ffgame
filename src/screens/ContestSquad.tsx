@@ -466,9 +466,9 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                 <div key={d.slot} style={{ width: 104, display: 'grid', gap: 4, justifyItems: 'center', alignContent: 'start' }}>
                   {/* THE PLAY CHIP rides the label row, above the card (v0.696.6, founder: "Don't even do the power up icon in
                       my team. Put the chip at the top of the card."); tap it for the play's details. */}
-                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5, height: 16, overflow: 'visible' }}>
                     {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
-                    {playOn(d.slot) && <InfoChip label="POWER UP" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
+                    {playOn(d.slot) && <InfoChip label="⚡ UP" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
                   </span>
                   <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
                     {p
