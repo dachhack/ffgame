@@ -22,6 +22,12 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.697.1 — The chip says POWER ⬆️
+
+> - The play chip on MY TEAM and the matchup now reads POWER ⬆️. Web and phone.
+
+Founder: "Have the chip say POWER ⬆️."
+
 ### v0.697.0 — Kicks through the uprights; no college men in an NFL box
 
 > - Field goals on the fields: each end line now carries uprights, a made kick’s arc flies through the end zone and between them, and a miss reaches the goal line wide of them and finishes in a dotted line. Web and phone.
