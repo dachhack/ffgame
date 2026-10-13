@@ -456,7 +456,6 @@ const CSS = `
     color-mix(in srgb, color-mix(in srgb, var(--bg) 72%, #FFFFFF) 90%, var(--ct-felt, #0B1F1A));}
 /* Felt-component blobs: darken the light ground (multiply) instead of glowing. */
 :root[data-card-light="1"] .ctable .ct-blob{mix-blend-mode:multiply;opacity:.28;}
-:root[data-card-light="1"] .ctable .ct-vig{background:radial-gradient(120% 90% at 50% 40%,transparent 60%,rgba(60,40,20,.16) 100%);}
 /* mx-felt (hero board) layered ground + softer vignette. */
 :root[data-card-light="1"] .mx-felt .ct-feltlayers{
   background:
