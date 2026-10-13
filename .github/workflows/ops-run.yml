@@ -24,10 +24,15 @@ name: Run committed ops requests
 #   diff    { "week": 1, "league"?: uuid, "seat"?: n, "season"?: "2026" }
 #   restamp { "week": 1, "confirm": "RESTAMP", "league"?, "report"?, "include_drip"? }
 #   restore { "file": "scripts/db/restore/….json" }
+#   query   { "file": "scripts/db/….sql" } — READ ONLY (v0.706.3): the file runs
+#           through psql in a read-only session, like "Run a database query",
+#           which this integration cannot dispatch either. Seats, not names,
+#           in anything it prints: the log is public.
 # `restamp` still demands its confirm string — in the file, where a reviewer
 # reads it — because the gate is about intent, and intent is what a file is.
 #
-# Secrets required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (the worker's).
+# Secrets required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (the worker's);
+# SUPABASE_DB_URL for a `query` request.
 on:
   push:
     branches: [main]
@@ -55,6 +60,7 @@ jobs:
           AFTER: ${{ github.sha }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}   # v0.706.3: a read-only `query` request
           GH_ISSUES_TOKEN: ${{ secrets.GH_ISSUES_TOKEN }}   # v0.595.0: computer-context comments
         run: |
           set -euo pipefail
@@ -68,6 +74,17 @@ jobs:
             echo "════════ $f ════════"
             cat "../$f"
             echo ""
+            if [ "$(jq -r '.mode // empty' "../$f")" = "query" ]; then
+              # READ ONLY (v0.706.3): a scripts/db/ file through psql, the session set read-only — dbquery.yml's rule
+              q=$(jq -r '.file // empty' "../$f"); q="${q#./}"; q="${q#/}"
+              case "$q" in scripts/db/*.sql) ;; *) echo "::error::a query runs a scripts/db/*.sql file, not $q"; exit 1;; esac
+              case "$q" in *..*) echo "::error::no path climbing: $q"; exit 1;; esac
+              [ -f "../$q" ] || { echo "::error::no such file: $q"; exit 1; }
+              [ -n "${SUPABASE_DB_URL:-}" ] || { echo "::error::Set the SUPABASE_DB_URL repo secret."; exit 1; }
+              psql --version >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
+              PGOPTIONS='-c default_transaction_read_only=on' psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "../$q"
+              continue
+            fi
             npm run --silent cli -- ops-run "../$f"
           done
           echo ""
