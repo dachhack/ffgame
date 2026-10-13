@@ -178,6 +178,14 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
       : mx(xOf(cur.yl2, cur.tm2 ?? cur.tm)),
     color: accent ?? (cur.sc ? t.warn : cur.to ? t.fx.nuke : t.dimstrong),
   } : null;
+  // FIELD GOALS (v0.697.0, founder: "Made kicks should go through the uprights. Missed can finish in a dotted
+  // line"): a made kick flies through the end zone and between the posts on the end line; a miss reaches the
+  // goal line wide of them and finishes dotted to the end line.
+  const fgKick = !!cur && /Field Goal/.test(cur.ty);
+  const fgGood = fgKick && (!!cur!.sc || /\bGOOD\b/.test(cur!.txt));
+  const fgDir = arc && cur ? (mx(xOf(0, cur.tm)) >= arc.x1 ? 1 : -1) : 1;
+  if (arc && cur && fgKick) { const goal = mx(xOf(0, cur.tm)); arc.x2 = fgGood ? goal + fgDir * (EZ - 4) : goal; }
+  const fgTail = arc && fgKick && !fgGood ? arc.x2 + fgDir * (EZ - 4) : null;
   // Through playPath (v0.332.0) so the two ports cannot drift on geometry
   // they each used to own a copy of — and so `overlaps`, the property that
   // made a returned kick look like a doubled line, is asserted rather than
@@ -199,7 +207,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
   // The snap stays on the centre line; the far end moves to the named side.
   const SIDE_LANE = (BOT - TOP) * 0.22;
   const sideDy = playSideDy(playSide(cur?.txt), flip ? !attacksRight : attacksRight, SIDE_LANE);
-  const endY = MID + sideDy;
+  const endY = fgKick ? (fgGood ? MID : MID + (((cur?.pid ?? 0) & 1) ? -1 : 1) * 15) : MID + sideDy;
   // The lane is for a carry that DOUBLES BACK over its own flight, not for
   // every carry — see the web view. A pass's run-after continues the same way
   // and belongs in line with the arc.
@@ -310,6 +318,13 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
         <Rect x={FX} y={TOP} width={FW} height={BOT - TOP} fill={mix(t.you, 5, t.surface)} />
         <Rect x={ezAwayX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(awayCol)} />
         <Rect x={ezHomeX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(homeCol)} />
+        {/* THE UPRIGHTS (v0.697.0): on each end line, for a kick to fly through */}
+        {[4, W - 4].map((px) => { const tip = px < W / 2 ? 0.5 : W - 0.5; return (
+          <G key={`up-${px}`}>
+            <Line x1={px} y1={MID - 9} x2={px} y2={MID + 9} stroke={t.dim} strokeWidth={1.4} />
+            <Line x1={px} y1={MID - 9} x2={tip} y2={MID - 9} stroke={t.dim} strokeWidth={1.4} />
+            <Line x1={px} y1={MID + 9} x2={tip} y2={MID + 9} stroke={t.dim} strokeWidth={1.4} />
+          </G>); })}
         {redZone && (
           <Rect x={(flip ? !attacksRight : attacksRight) ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP} fill={alpha(t.fx.nuke, 32)} />
         )}
@@ -342,6 +357,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
               strokeDasharray={`${airLen}`}
               strokeDashoffset={air.interpolate({ inputRange: [0, 1], outputRange: [airLen, 0] }) as unknown as number}
             />
+            {fgTail != null && <Line x1={arc.x2} y1={endY} x2={fgTail} y2={endY} stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="2.5 3.5" />}
             {carrying && (
               <AnimatedPath
                 d={overlaps
@@ -357,7 +373,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
               : <Circle cx={arc.x1} cy={MID} r={3} fill={arc.color} />}
             {incomplete
               ? <SvgText x={arc.x2} y={endY + 3} fill={t.fx.nuke} fontSize={9} fontWeight="800" textAnchor="middle">✕</SvgText>
-              : <SvgText x={arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>}
+              : <SvgText x={fgTail ?? arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>}
           </G>
         )}
 
