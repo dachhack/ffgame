@@ -31,7 +31,9 @@ import { tradeConfirm, expiryLine, reviewLine, type ConfirmLeg } from '@drip/cor
 import { useTheme, alpha, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
+import { Image } from 'react-native';
 import { openPlayerCard } from './PlayerCardSheet';
+import { headshot } from '@drip/core/data/media';
 import { Overlay } from './Overlay';
 import { InjuryNow } from './rosterGroup';
 
@@ -78,6 +80,11 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   // answers (set = the sheet is composing a counter, not a fresh proposal).
   const [faabDraft, setFaabDraft] = useState('');
   const [faabDir, setFaabDir] = useState<1 | -1>(1);
+  // A FAAB BOX ON EACH SIDE (v0.704.0, founder: "just have a small input box on each side for FAAB"): what you
+  // send under your pile, what you ask under theirs; the offer carries the net. A three-way keeps its target row.
+  const [faabSend, setFaabSend] = useState('');
+  const [faabAsk, setFaabAsk] = useState('');
+  const [thirdOpen, setThirdOpen] = useState(false);
   const [expiryHours, setExpiryHours] = useState<number | null>(null);
   const [counterOf, setCounterOf] = useState<string | null>(null);
   // 0322: the seats beyond me and the partner. One of them turns the sheet
@@ -207,7 +214,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   };
 
   const capDollars = (parseInt(capDraft, 10) || 0) * capDir;
-  const faabDollars = (parseInt(faabDraft, 10) || 0) * faabDir;
+  const faabTwo = (parseInt(faabSend, 10) || 0) - (parseInt(faabAsk, 10) || 0);
+  const faabDollars = faabTwo !== 0 ? faabTwo : (parseInt(faabDraft, 10) || 0) * faabDir;
   const devyCash = (Number(devyCashDraft) || 0) * devyCashDir;
   const hasDevy = offersDevy(giveShares, getShares, devyCash);
   const nothingOffered = give.length + get.length + givePicks.length + getPicks.length
@@ -216,7 +224,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     setConfirming(false);
     setOpen(false); setCounterOf(null); setPartner(null); setGive([]); setGet([]);
     setGivePicks([]); setGetPicks([]); setNote('');
-    setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setExpiryHours(null);
+    setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setFaabSend(''); setFaabAsk(''); setThirdOpen(false); setExpiryHours(null);
     setExtraTeams([]); setDest({}); setPickDest({}); setFaabTarget(null);
     setGiveShares({}); setGetShares({}); setDevyCashDraft(''); setDevyCashDir(1);
   };
@@ -227,7 +235,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
     setCounterOf(x.id); setPartner(x.from_roster);
     setGive(x.get); setGet(x.give); setGivePicks([]); setGetPicks([]);
     setExtraTeams([]); setDest({}); setPickDest({}); setFaabTarget(null);
-    setNote(''); setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1);
+    setNote(''); setRetain({}); setCapDraft(''); setCapDir(1); setFaabDraft(''); setFaabDir(1); setFaabSend(''); setFaabAsk(''); setThirdOpen(false);
     setExpiryHours(null); setErr(null); setOpen(true);
   };
   // 0322: every seat in the deal, the proposer first; ≥3 switches the sheet.
@@ -359,19 +367,22 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         const p = poolBySlug.get(r.slug);
         const on = sel.includes(r.slug);
         return (
-          <Pressable key={r.slug} onPress={() => toggle(sel, set, r.slug)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
-            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View key={r.slug}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 4, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
+            {/* THE BOX picks him for the trade; HIS FACE AND NAME open his card (v0.704.0, founder: "Add (small)
+                player images and allow the player card pop up when you click on the player"). */}
+            <Pressable hitSlop={8} onPress={() => toggle(sel, set, r.slug)}>
+              <Text style={{ fontSize: fs(13), color: on ? t.you : t.dim }}>{on ? '☑' : '☐'}</Text>
+            </Pressable>
+            <Pressable onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: p?.full_name ?? r.slug, pos: p?.pos ?? '', team: p?.team ?? '' }); }}
+              style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: alpha(t.text, 10) }}>
+                {headshot(r.slug) ? <Image source={{ uri: headshot(r.slug)! }} style={{ width: 22, height: 22 }} resizeMode="cover" /> : null}
+              </View>
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
-                {on ? '☑' : '☐'} {p?.full_name ?? r.slug}
+                {p?.full_name ?? r.slug}
               </Text>
               <InjuryNow slug={r.slug} size={7.5} />
-            </View>
-            {/* ⓘ rather than the name itself: the whole row is the CHECKBOX
-                here, and stealing the name from it would make picking players
-                for a trade harder to hit. */}
-            <Pressable hitSlop={8} onPress={() => openPlayerCard({ slug: r.slug, name: p?.full_name ?? r.slug, pos: p?.pos ?? '', team: p?.team ?? '' })}>
-              <Mono size={9} tone="dim" weight="700">ⓘ</Mono>
             </Pressable>
             <Mono size={8} tone="faint">{p?.pos}</Mono>
             {dealTag(r.slug) != null && <Mono size={8} tone="dim" weight="700">{dealTag(r.slug)}</Mono>}
@@ -380,10 +391,20 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
                 <Text style={{ fontSize: fs(12), opacity: myWants.has(r.slug) ? 1 : 0.35 }}>👀</Text>
               </Pressable>
             )}
-          </Pressable>
+          </View>
         );
       })}
     </ScrollView>
+  );
+  /** A FAAB BOX (v0.704.0): the dollars a side puts in, under its pile. */
+  const faabBox = (val: string, set: (v: string) => void, hint: string | null) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+      <Mono size={7.5} tone="faint" track={0.1}>💵 FAAB $</Mono>
+      <TextInput value={val} keyboardType="number-pad" maxLength={5} placeholder="0" placeholderTextColor={t.faint}
+        onChangeText={(v) => set(v.replace(/[^0-9]/g, ''))}
+        style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 52 }} />
+      {!!hint && <Mono size={8} tone="faint">{hint}</Mono>}
+    </View>
   );
 
   const shown = trades.slice(0, 8);
@@ -651,7 +672,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
       )}
 
       {/* propose: partner → two checklists → note → send */}
-      <Overlay visible={open && myRoster != null}
+      <Overlay visible={open && myRoster != null} full
         title={confirming ? (counterOf ? 'Confirm your counter' : 'Confirm your offer')
           : counterOf ? 'Counter the offer' : isMulti ? `${teamsIn.length}-team trade` : 'Propose a trade'}
         subtitle={tradeReview === 'commish' ? 'Accepted trades go to the commissioner for a ruling.'
@@ -706,24 +727,29 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         <Mono size={9} tone="faint" track={0.1}>TRADE WITH</Mono>
         {/* A counter answers ONE offer, so its seats are already decided —
             changing them here would quietly make it a different proposal. */}
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+        {/* ONE ROW, NO WRAP (v0.704.0, founder: "make the team selector not wrap and just a small + chip to add the
+            third team"): the teams scroll sideways; the ＋ at the end opens the third-team row. */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }} contentContainerStyle={{ gap: 6, alignItems: 'center' }} keyboardShouldPersistTaps="handled">
           {teams.filter((x) => x.roster_id !== myRoster).map((x) => (
             <Chip key={x.roster_id} label={x.team ?? `Team ${x.roster_id}`} on={partner === x.roster_id}
               onPress={() => { if (!counterOf) { tap(); setPartner(x.roster_id); setGet([]); } }} />
           ))}
-        </View>
+          {partner != null && !counterOf && (
+            <Chip small label="＋" on={thirdOpen || extraTeams.length > 0} a11y="add a third team" onPress={() => { tap(); setThirdOpen((v) => !v); }} />
+          )}
+        </ScrollView>
         {/* A THIRD TEAM (0322). Adding one turns the two piles below into a
             per-seat builder: in a three-way "you get" means nothing, because
             every asset names where it goes. A counter stays two-seat. */}
-        {partner != null && !counterOf && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-            <Mono size={7.5} tone="faint" track={0.1}>＋ A THIRD TEAM</Mono>
+        {partner != null && !counterOf && (thirdOpen || extraTeams.length > 0) && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }} contentContainerStyle={{ gap: 6, alignItems: 'center' }} keyboardShouldPersistTaps="handled">
+            <Mono size={7.5} tone="faint" track={0.1}>THIRD TEAM</Mono>
             {teams.filter((x) => x.roster_id !== myRoster && x.roster_id !== partner).map((x) => (
               <Chip key={x.roster_id} label={x.team ?? `Team ${x.roster_id}`} on={extraTeams.includes(x.roster_id)}
                 onPress={() => { tap(); setExtraTeams((v) => v.includes(x.roster_id)
                   ? v.filter((y) => y !== x.roster_id) : [...v, x.roster_id]); }} />
             ))}
-          </View>
+          </ScrollView>
         )}
         {partner != null && !isMulti && (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
@@ -731,11 +757,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU SEND</Mono>
               {pickList(myRoster, give, setGive)}
               {pickAssetList(myRoster, givePicks, setGivePicks)}
+              {faabTrading && faabBox(faabSend, setFaabSend, myFaab != null ? `of $${myFaab}` : null)}
             </View>
             <View style={{ flex: 1 }}>
               <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU GET</Mono>
               {pickList(partner, get, setGet, true)}
               {pickAssetList(partner, getPicks, setGetPicks)}
+              {faabTrading && faabBox(faabAsk, setFaabAsk, null)}
             </View>
           </View>
         )}
@@ -889,18 +917,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
           </View>
         )}
-        {/* FAAB DOLLARS (0321) — the cap-room row's FAAB-league sibling. */}
-        {faabTrading && !isMulti && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-            <Mono size={7.5} tone="faint" track={0.1}>💵 FAAB $</Mono>
-            <Chip label="I SEND" on={faabDir === 1} onPress={() => { tap(); setFaabDir(1); }} />
-            <Chip label="I ASK" on={faabDir === -1} onPress={() => { tap(); setFaabDir(-1); }} />
-            <TextInput value={faabDraft} keyboardType="number-pad" maxLength={5} placeholder="0" placeholderTextColor={t.faint}
-              onChangeText={(v) => setFaabDraft(v.replace(/[^0-9]/g, ''))}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, fontSize: fs(12), color: t.text, backgroundColor: t.bg, width: 58 }} />
-            {myFaab != null && <Mono size={8.5} tone="faint">you have ${myFaab}</Mono>}
-          </View>
-        )}
+        {/* FAAB DOLLARS (0321) ride under each pile now (v0.704.0) — see faabBox. */}
         {/* WHAT IS IT WORTH (0328) — the two sides' projected points over
             replacement rather than a letter, so it can be argued with. */}
         {grade && (
