@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.698.1 — The chip in the theme’s ink
+
+> - The ⚡ UP chip is a touch bigger and wears the theme’s own colours: its ink as the pill, its paper as the text — dark on the light theme, and at home on the dark one.
+
+Founder: "Chip is a smidge too skinny and too dark… it should be dark but
+still fit the selected theme." 16px tall; web `var(--text)` on `var(--bg)`,
+phone `t.text` on `t.bg`.
+
 ### v0.698.0 — The matchup, cleared: plays live on the table
 
 > - The matchup loses the league’s description line and the PLAYS box. A play on a spot is its ⚡ UP chip beside the spot, and the chip’s sheet now carries TAKE BACK; a squad play (Hail Mary, Pick Six, the squad bonuses, Curse, Re-deal) shows as a TEAM ⚡ UP chip in a reserved row under the side’s projected points, with its own TAKE BACK until the week’s first kickoff. Team titles drop “· YOU”. Only a play being aimed, or a note, takes a line above the table. Web and phone.

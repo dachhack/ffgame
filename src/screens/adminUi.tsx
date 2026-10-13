@@ -211,7 +211,7 @@ export function InfoChip({ title, info, label, actions }: { title: string; info:
     <>
       <button onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={`About ${title}`} className="mono"
         style={label
-          ? { background: '#1F1A12', border: '1px solid #E9B959', borderRadius: 999, cursor: 'pointer', padding: '0 6px', height: 14, boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: '#E9B959', lineHeight: 1, whiteSpace: 'nowrap', flexShrink: 0, overflow: 'visible', textOverflow: 'clip', maxWidth: 'none' }
+          ? { background: 'color-mix(in srgb, var(--text) 88%, var(--surface))', border: '1px solid color-mix(in srgb, var(--text) 88%, var(--surface))', borderRadius: 999, cursor: 'pointer', padding: '0 7px', height: 16, boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--bg)', lineHeight: 1, whiteSpace: 'nowrap', flexShrink: 0, overflow: 'visible', textOverflow: 'clip', maxWidth: 'none' }
           : { background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: 12, fontWeight: 700, color: 'var(--dim)', lineHeight: 1 }}>
         {label ?? 'ⓘ'}
       </button>
