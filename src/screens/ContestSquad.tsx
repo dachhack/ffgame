@@ -468,7 +468,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                       my team. Put the chip at the top of the card."); tap it for the play's details. */}
                   <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
                     {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
-                    {playOn(d.slot) && <InfoChip label="POWER ⬆️" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
+                    {playOn(d.slot) && <InfoChip label="POWER UP" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
                   </span>
                   <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
                     {p

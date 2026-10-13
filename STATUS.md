@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.697.3 — The chip says POWER UP
+
+> - The play chip reads POWER UP, whole, on MY TEAM and the matchup; it no longer clips to “POWER …” in the matchup’s narrow column. Web and phone.
+
+Founder: "Maybe just 'Power Up'." The web chip also turns off the button's
+ellipsis clipping.
+
 ### v0.697.2 — The chip on one line
 
 > - The POWER ⬆️ chip no longer wraps its arrow onto a second line.
