@@ -259,19 +259,24 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
           v0.707.3: one line that scrolls sideways (ChipStrip) instead of
           wrapping, so the 🗂 chip sits to the right of ADD — founder: "a small
           file chip to the right of add. Click it to manage which leagues are
-          archived and not shown in my leagues." */}
-      <ChipStrip bg={t.bg} style={{ paddingHorizontal: 4 }}>
+          archived and not shown in my leagues." v0.707.4: tight chips and a 4dp
+          gap so the row fits whole again ("plenty of room if we decrease the
+          spacing"). Measured against the founder's 412dp screenshot (Roboto 13px
+          bold): ALL 11 · COMMISH 11 · WEEKLY 2 · FIND · ADD · 🗂 2 is ~424dp at
+          11dp sides and 6dp gaps, ~368dp at 6 and 4, inside the ~380dp the
+          row has. The strip's scroll stays as the safety net. */}
+      <ChipStrip bg={t.bg} gap={4} style={{ paddingHorizontal: 4 }}>
         {(commishIds.size > 0 || managed.length > 0 || weeklyN > 0) && (
-          <Chip label={`ALL ${rows.filter((e) => !e.archived).length + managed.length}`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
+          <Chip tight label={`ALL ${rows.filter((e) => !e.archived).length + managed.length}`} on={filter === 'all'} onPress={() => { tap(); setFilter('all'); }} />
         )}
         {(commishIds.size > 0 || managed.length > 0) && (
-          <Chip label={`COMMISH ${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length}`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
+          <Chip tight label={`COMMISH ${rows.filter((e) => !e.archived && commishIds.has(e.league_id)).length + managed.length}`} on={filter === 'commish'} onPress={() => { tap(); setFilter('commish'); }} />
         )}
         {/* WEEKLY (v0.662.0): squad-every-week leagues — pods, showdowns, DFS, Bullseye. */}
-        {weeklyN > 0 && <Chip label={`WEEKLY ${weeklyN}`} on={filter === 'weekly'} onPress={() => { tap(); setFilter('weekly'); }} />}
-        <Chip label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard('browse'); }} />
-        <Chip label="ADD" a11y="Add a league" onPress={() => { tap(); onAdd(); }} />
-        {rows.length > 0 && <Chip label={rows.some((e) => e.archived) ? `🗂 ${rows.filter((e) => e.archived).length}` : '🗂'} a11y="Archived leagues" on={archOpen} onPress={() => { tap(); setArchOpen(true); }} />}
+        {weeklyN > 0 && <Chip tight label={`WEEKLY ${weeklyN}`} on={filter === 'weekly'} onPress={() => { tap(); setFilter('weekly'); }} />}
+        <Chip tight label="FIND" a11y="Find a league" onPress={() => { tap(); onBoard('browse'); }} />
+        <Chip tight label="ADD" a11y="Add a league" onPress={() => { tap(); onAdd(); }} />
+        {rows.length > 0 && <Chip tight label={rows.some((e) => e.archived) ? `🗂 ${rows.filter((e) => e.archived).length}` : '🗂'} a11y="Archived leagues" on={archOpen} onPress={() => { tap(); setArchOpen(true); }} />}
       </ChipStrip>
 
       {!!err && <Mono size={10.5} tone="opp">{err}</Mono>}

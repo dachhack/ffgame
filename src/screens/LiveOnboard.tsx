@@ -189,6 +189,25 @@ export function LiveOnboard() {
     return () => clearInterval(id);
   }, [fieldsWeek]);
 
+  // 📱 GET THE APP (v0.632.1, founder: "move the 'get the app' chip to just to
+  // the left of the settings chip"). The same rule as before (v0.561.0): an
+  // iPhone sees TestFlight, an Android phone the APK, a desktop both —
+  // labelled by platform when both show. ON A PHONE (v0.707.4, founder: "put
+  // the get the app chip on mobile web below the fields chip where there is
+  // room") it sits under ▦ fields: beside the gear it ran into the wordmark.
+  const appOs = mobileOs();
+  const appUnderFields = appOs != null;
+  const appChips = session && view === 'home' ? (() => {
+    const both = appOs == null && !!IOS_TESTFLIGHT_URL;
+    const chip: React.CSSProperties = { fontSize: 9, letterSpacing: '0.08em', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap', color: 'var(--on-accent)', background: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 8px' };
+    return (<>
+      {appOs !== 'ios' && <a href={APK_ZIP_URL} className="mono" title="Downloads as a zip — unzip it and tap the APK inside. Installs over any earlier build." style={chip}>{both ? '📱 ANDROID APP' : '📱 GET THE APP'}</a>}
+      {IOS_TESTFLIGHT_URL && appOs !== 'android' && (
+        <a href={IOS_TESTFLIGHT_URL} target="_blank" rel="noopener noreferrer" className="mono" title="Opens TestFlight on your iPhone — install TestFlight if asked, then Drip Fantasy. Updates arrive automatically." style={chip}>{both ? '🍎 iOS APP' : '🍎 GET THE APP'}</a>
+      )}
+    </>);
+  })() : null;
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {fieldsWeek != null && <FieldBoard week={fieldsWeek} entries={[]} onClose={() => setFieldsWeek(null)} />}
@@ -197,6 +216,7 @@ export function LiveOnboard() {
           mark and no "LIVE", the gear on the right. Who you are and the way
           out of the session live in the gear's menu now. */}
       <header style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '10px 16px', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
         {session
           ? (view !== 'home'
             ? <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>my leagues</button>
@@ -205,26 +225,14 @@ export function LiveOnboard() {
             // week comes from the slate (core fieldsWeekFrom).
             : <button onClick={() => void openFields()} className="mono" title="Every game this week, as live fields" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>▦ fields</button>)
           : <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>demo</button>}
+        {appUnderFields && appChips}
+        </div>
         <div style={{ flex: 1 }} />
         <div style={{ position: 'absolute', left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
           <span className="grotesk" style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text)' }}>DRIP FANTASY</span>
           <VersionTag />
         </div>
-        {/* 📱 GET THE APP, beside the gear (v0.632.1, founder: "move the 'get
-            the app' chip to just to the left of the settings chip"). The same
-            rule as before (v0.561.0): an iPhone sees TestFlight, an Android
-            phone the APK, a desktop both — labelled by platform when both show. */}
-        {session && view === 'home' && (() => {
-          const os = mobileOs();
-          const both = os == null && !!IOS_TESTFLIGHT_URL;
-          const chip: React.CSSProperties = { fontSize: 9, letterSpacing: '0.08em', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap', color: 'var(--on-accent)', background: 'var(--you)', border: '1px solid var(--you)', borderRadius: 4, padding: '5px 8px' };
-          return (<>
-            {os !== 'ios' && <a href={APK_ZIP_URL} className="mono" title="Downloads as a zip — unzip it and tap the APK inside. Installs over any earlier build." style={chip}>{both ? '📱 ANDROID APP' : '📱 GET THE APP'}</a>}
-            {IOS_TESTFLIGHT_URL && os !== 'android' && (
-              <a href={IOS_TESTFLIGHT_URL} target="_blank" rel="noopener noreferrer" className="mono" title="Opens TestFlight on your iPhone — install TestFlight if asked, then Drip Fantasy. Updates arrive automatically." style={chip}>{both ? '🍎 iOS APP' : '🍎 GET THE APP'}</a>
-            )}
-          </>);
-        })()}
+        {!appUnderFields && appChips}
         <SiteSettings superAdmin={session && admin ? () => setView('admin') : undefined} />
       </header>
 
@@ -1590,7 +1598,7 @@ function SlateStrip({ row, glance }: { row?: LeagueSlateRow; glance?: WidgetSnap
     <div style={{ marginTop: 8, paddingTop: 7, borderTop: '1px solid var(--bd)', display: 'grid', gap: 2 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)' }}>
-          {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? `WEEK ${row.week}` : 'THIS WEEK')}
+          {g.label || (g.playoff ? 'PLAYOFF' : row?.week != null ? weekTitle(row.week) : 'THIS WEEK')}
         </span>
         {live && <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--opp)' }} />}
         <span style={{ flex: 1 }} />

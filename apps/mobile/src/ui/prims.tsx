@@ -60,7 +60,7 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
  *  The LABEL is the system font, not mono. Mono earns its place on data — a
  *  score, a clock, a count that should line up with the one under it — and on a
  *  control it just reads as a web dashboard. Same for the two buttons below. */
-export function Chip({ label, on, disabled, dim, onPress, a11y, small }: {
+export function Chip({ label, on, disabled, dim, onPress, a11y, small, tight }: {
   label: ReactNode; on?: boolean; disabled?: boolean; dim?: boolean; onPress?: () => void;
   /** Spoken name, for a chip whose label is an icon alone — the fill carries
    *  the state to the eye, and `selected` carries it to the screen reader. */
@@ -68,6 +68,9 @@ export function Chip({ label, on, disabled, dim, onPress, a11y, small }: {
   /** v0.638.1: a FILTER chip — one of a dozen in a strip above a list, where
    *  the list is the point. Two-thirds the height of a control chip. */
   small?: boolean;
+  /** v0.707.4: narrower sides, same height and type — a row that must hold
+   *  one more chip on a phone (the leagues list's ALL … ADD 🗂). */
+  tight?: boolean;
 }) {
   const t = useTheme();
   return (
@@ -89,7 +92,7 @@ export function Chip({ label, on, disabled, dim, onPress, a11y, small }: {
         overflow: 'hidden',
         backgroundColor: on ? t.you : t.bg,
         borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd,
-        borderRadius: small ? 11 : 14, paddingVertical: small ? 4 : 8, paddingHorizontal: small ? 9 : 11,
+        borderRadius: small ? 11 : 14, paddingVertical: small ? 4 : 8, paddingHorizontal: tight ? 6 : small ? 9 : 11,
         opacity: disabled ? 0.5 : dim ? 0.6 : pressed ? 0.75 : 1,
       })}
     >
