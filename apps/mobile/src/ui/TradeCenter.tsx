@@ -753,14 +753,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         )}
         {partner != null && !isMulti && (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            {/* no YOU SEND / YOU GET over the piles (v0.704.1, founder: "if the faab is on that side it's obvious") */}
             <View style={{ flex: 1 }}>
-              <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU SEND</Mono>
               {pickList(myRoster, give, setGive)}
               {pickAssetList(myRoster, givePicks, setGivePicks)}
               {faabTrading && faabBox(faabSend, setFaabSend, myFaab != null ? `of $${myFaab}` : null)}
             </View>
             <View style={{ flex: 1 }}>
-              <Mono size={9} tone="faint" track={0.1} style={{ marginBottom: 4 }}>YOU GET</Mono>
               {pickList(partner, get, setGet, true)}
               {pickAssetList(partner, getPicks, setGetPicks)}
               {faabTrading && faabBox(faabAsk, setFaabAsk, null)}
