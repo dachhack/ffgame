@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.701.2 — Re-score the weekly contest leagues
+
+> - Weeks 1 to 5 of the weekly contest leagues are re-scored under the current rules: a player hurt in his game takes no no-show penalty, and power-ups count in the stored score.
+
+Founder: "Let's rescore all weekly comp leagues." The restamp errand gains
+`--contest-only` (`contest_only: true` in a request): the weekly contest
+leagues alone (high, golf, bullseye), a classic league's week left as it
+stands. Ops 044–048 re-stamp weeks 1–5 (season 2026). A restamp does not
+re-run a week's coin settlement or its recap card.
+
 ### v0.701.1 — The report sheets sit in from the edge
 
 > - On the phone, the waiver-run and weekly-report sheets opened from chat now keep a side gutter, in line with the sheet’s title, instead of running to the edge of the screen.
