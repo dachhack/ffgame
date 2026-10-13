@@ -29,7 +29,7 @@ export function InfoChip({ title, children, label }: { title: string; children: 
         style={label
           ? { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(233,185,89,0.6)', backgroundColor: 'rgba(233,185,89,0.18)', paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'center' }
           : { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={label ? { fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.6, color: '#B8862E' } : { fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.dim }}>{label ?? 'ⓘ'}</Text>
+        <Text numberOfLines={1} style={label ? { fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.6, color: '#B8862E' } : { fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: t.dim }}>{label ?? 'ⓘ'}</Text>
       </Pressable>
       <Overlay visible={open} title={title} onClose={() => setOpen(false)}>
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
