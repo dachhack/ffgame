@@ -479,7 +479,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                   </div>
                   <span className="mono" style={{ fontSize: 9.5, color: dim, textAlign: 'center', lineHeight: 1.3, minHeight: 25 }}>
                     {p
-                      ? (lv ? `${lv.score.toFixed(1)}${lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}` : `${fmt$(p.salary)} · proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ''}`)
+                      ? (lv ? <>{lv.score.toFixed(1)}{lv.play && lv.raw != null && Math.abs(lv.raw - lv.score) > 1e-9 ? <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>{` ${lv.raw.toFixed(1)}`}</span> : null}{lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}</> : `${fmt$(p.salary)} · proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ''}`)
                       : ghosted(d.slot) ? `a phantom · ${GHOST_POINTS} flat, no salary` : hint}
                     {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}
                   </span>

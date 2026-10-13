@@ -193,6 +193,9 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
     const color = mine ? t.you : t.opp;
+    // THE RAW SCORE, STRUCK (v0.699.1, founder: "cross out the actual score and put the powered up score above it")
+    const lvr = st.started ? m.state?.slots?.find((x) => x.side === s && x.slot === r.slot) : null;
+    const raw = lvr?.play && lvr.raw != null && Math.abs(lvr.raw - lvr.score) > 1e-9 ? lvr.raw : null;
     const align = edge === 'left' ? 'flex-start' : 'flex-end';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: align, paddingLeft: edge === 'left' ? 8 : 4, paddingRight: edge === 'right' ? 8 : 4, minWidth: 0 }}>
@@ -203,6 +206,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
           {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} actions={myTable && mine && !a.theirs ? [{ label: 'TAKE BACK', onPress: () => void disarm(a.pl) }] : undefined}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
         </View>
         <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : alpha(t.text, 35) }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
+        {raw != null && <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: alpha(t.text, 50), textDecorationLine: 'line-through' }}>{raw.toFixed(1)}</Text>}
         <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: alpha(t.text, 65) }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}`}</Text>
       </View>
     );

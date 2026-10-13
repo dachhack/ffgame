@@ -623,6 +623,8 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       const k = kicks[team] ?? kicks[String(meta(slug)?.team ?? '').toUpperCase()];
       return Number.isFinite(k) && k <= nowMs && !(opts.doneTeams?.has(team));
     };
+    // HIS GAME IS OVER (v0.699.1): Double or Nothing and Floor settle on the player's own final, not the matchup's
+    const done = (slug) => !!opts.doneTeams?.size && opts.doneTeams.has(normTeam(meta(slug)?.team ?? ''));
     // THE PLAYS (0484): each side's armed plays, when the league's coin is on.
     let plays;
     if (contestCfg.coin) {
@@ -641,7 +643,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const r = scoreContest({ home: homeSquad, away: awaySquad }, contestCfg,
       (slug, slot, def) => classicPoints(player(slug), matchup.week, catalog, contestScoreAs(def), slot),
       { pending, live, card, tiebreak, plays, playsOf: (slug) => playEventsFor(matchup.week, slug), settled: matchup.status === 'final', tdValue,
-        posOf: (slug) => player(slug).pos, lateOf: (slug) => latePointsFor(player(slug), matchup.week, catalog, undefined, null) });
+        posOf: (slug) => player(slug).pos, lateOf: (slug) => latePointsFor(player(slug), matchup.week, catalog, undefined, null), done });
     for (const st of r.states) states.push({ game_window: st.window, home_score: st.home, away_score: st.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;
@@ -889,9 +891,13 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   const slotsFor = (win) => visSlots
     .filter((s) => s.win === win)
     .sort((x, y) => String(x.slot).localeCompare(String(y.slot)))
-    .map(({ side, slot, slug, metric, score, hot, nuked, aim }) => ({
+    .map(({ side, slot, slug, metric, score, hot, nuked, aim, play, raw }) => ({
       side, slot, slug, metric: metric ?? null, score: round(Number(score) || 0),
       ...(hot && !gameOver(slug) ? { hot: true } : {}), ...(nuked ? { nuked: true } : {}),
+      // THE PLAY AND THE RAW SCORE (v0.699.1): the row says which play touched it and what the spot scored before
+      // it, so the table can strike the raw score under the powered one. (Written since v0.685.0 by the scorer,
+      // dropped here until now — the PLAY bonus rows' icons fell back to ⚡ for the same reason.)
+      ...(play ? { play } : {}), ...(raw != null && Number.isFinite(Number(raw)) ? { raw: round(Number(raw)) } : {}),
       // BULLSEYE (v0.643.0): the spot's dart rides beside its real points.
       ...(aim ? { aim } : {}),
     }));
