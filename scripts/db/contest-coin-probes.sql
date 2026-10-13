@@ -81,7 +81,7 @@ begin
   -- SETTLE the head-to-head week (as the worker: no auth)
   perform probe_as(null);
   r := contest_settle_coin(h, wk); perform assert_ok(r, 'dc3 settled');
-  perform assert_true((r ->> 'seats')::int = 3, 'dc3b three human seats');
+  perform assert_true((r ->> 'seats')::int = 4, 'dc3b three human seats and the AI seat (0492: it earns too)');
   perform assert_true(dc_line(h, 1, wk, 'built') = 40 and dc_line(h, 2, wk, 'built') = 40 and dc_line(h, 3, wk, 'built') is null, 'dc4 built: a and b saved their own; c did not');
   perform assert_true(dc_line(h, 1, wk, 'bargain') = 15 and dc_line(h, 2, wk, 'bargain') is null, 'dc4b the bargain: R Three doubled his 6 for a');
   perform assert_true(dc_line(h, 1, wk, 'call') = 10 and dc_line(h, 2, wk, 'call') is null, 'dc4c the call: a''s cheapest spot beat the priciest');

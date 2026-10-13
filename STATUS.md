@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.699.0 — The AI seats play too
+
+> - In a weekly contest league with drip coin on, the AI seats now buy and play power-ups. Before the week’s first kickoff each AI seat with a squad spends from its own wallet on the play it judges best for that squad (an Underdog on its bottom-third man, a Hail Mary behind its quarterback, a Curse across the table, and so on), up to the week’s cap, under the same rules and offers as anyone — a play the commissioner turned off is never picked. Their plays show on the matchup like a member’s.
+> - AI seats earn drip coin like anyone: the week’s ranking and the season’s now count them, so they can keep buying. Their wallet opens with the league’s seed on their first play.
+
+Founder: "Let's add power up purchase and use to the AI seats in weekly
+contest leagues with drip coin." Engine: `aiContestPlays` (seeded, values
+each affordable play against the squad). Worker: `pods.js` picks and calls
+`ai_contest_play` for each AI seat before lock. Migration 0492: the arm's
+rules move into `_contest_arm_core`, shared by `contest_arm_play` and the
+new service-role `ai_contest_play` (seeds the seat's wallet on first use);
+`contest_settle_coin` includes AI seats. Probes ai0–ai10; the coin probe
+dc3b counts the AI seat; `server/test/ai-plays.mjs`. No iPhone build.
+
 ### v0.698.1 — The chip in the theme’s ink
 
 > - The ⚡ UP chip is a touch bigger and wears the theme’s own colours: its ink as the pill, its paper as the text — dark on the light theme, and at home on the dark one.

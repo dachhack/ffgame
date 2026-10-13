@@ -139,3 +139,77 @@ export function contestHandCard(d: ContestPlayDef, o: { variant?: string | null;
     : spot ? 'tap one of your spots' : undefined;
   return { usable, note, deadline: spot ? 'before his own kickoff' : 'before the first kickoff', action: contestPlayTarget(d, o.variant) === 'squad' ? 'arm' : 'apply' };
 }
+
+// ═══ THE AI'S PLAY (v0.699.0) ═════════════════════════════════════════════════
+// Founder: "Let's add power up purchase and use to the AI seats in weekly
+// contest leagues with drip coin." An AI seat buys and plays in one, from its
+// wallet, before the week's first kickoff. Each play it could afford is
+// valued roughly — what it is likely to be worth against the squad it built —
+// and the best, with a little seeded jitter so two seats don't play alike,
+// is chosen up to the week's cap. The worker calls ai_contest_play with the
+// picks; SQL applies every rule it applies to a human (the offer, the window,
+// Underdog's bottom third, the cap), so a bad pick is refused, never wrong.
+export interface AiPlayPick { id: ContestPlayId; slot: string | null }
+function seededRand(seed: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let a = h >>> 0;
+  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+export function aiContestPlays(o: {
+  offered: readonly ContestPlayDef[];
+  wallet: number; cap: number; held: readonly { id: string; slot?: string | null }[];
+  squad: Record<string, string | null>; slots: readonly { slot: string; pos: readonly string[] }[];
+  board: readonly { slug: string; pos: string; salary: number; proj: number }[];
+  contest: string; format: string; variant?: string | null; seed: string;
+}): AiPlayPick[] {
+  const rand = seededRand(o.seed);
+  const by = new Map(o.board.map((b) => [b.slug, b]));
+  // Underdog's line: the 34th-percentile salary of each position, as SQL draws it
+  const cut = new Map<string, number>();
+  for (const pos of new Set(o.board.map((b) => b.pos))) {
+    const s = o.board.filter((b) => b.pos === pos).map((b) => b.salary).sort((a, b) => a - b);
+    if (s.length) cut.set(pos, s[Math.min(s.length - 1, Math.floor(0.34 * (s.length - 1)))]);
+  }
+  const spots = o.slots.map((d) => { const slug = o.squad[d.slot] ?? null; const p = slug ? by.get(slug) : null; return { slot: d.slot, slug, pos: p?.pos ?? null, salary: p?.salary ?? 0, proj: p?.proj ?? 0 }; });
+  const filled = spots.filter((s) => s.slug && s.proj > 0);
+  const best = (pred: (s: typeof filled[number]) => boolean) => filled.filter(pred).sort((a, b) => b.proj - a.proj)[0] ?? null;
+  const has = (...pos: string[]) => filled.some((s) => pos.includes(s.pos ?? ''));
+  const top = best(() => true);
+  const empty = spots.find((s) => !s.slug) ?? null;
+  const h2h = o.format === 'h2h', bull = o.contest === 'bullseye';
+  const cands: { id: ContestPlayId; slot: string | null; value: number }[] = [];
+  const add = (id: ContestPlayId, slot: string | null, value: number) => { if (value > 0) cands.push({ id, slot, value }); };
+  const dog = best((s) => (cut.get(s.pos ?? '') ?? 0) >= s.salary);
+  if (dog) add('underdog', dog.slot, dog.proj * 0.5);
+  if (top) add('double-or-nothing', top.slot, top.proj * 0.3);
+  if (top) add('floor', top.slot, top.proj * 0.25);
+  const skill = best((s) => s.pos === 'RB' || s.pos === 'WR' || s.pos === 'TE');
+  if (skill) add('garbage-time', skill.slot, skill.proj * 0.3);
+  if (has('QB')) { add('hail-mary', null, 5); add('bomb-squad', null, 4); }
+  if (has('DEF', 'DST')) { add('pick-six', null, 6); add('goal-line-stand', null, 3); }
+  if (has('WR', 'TE')) add('trick-play', null, 3);
+  add('return-man', null, 3.5);
+  if (best((s) => s.pos === 'RB' && s.proj >= 15)) add('hat-trick', null, 4);
+  if (best((s) => (s.pos === 'RB' || s.pos === 'WR') && s.proj >= 14)) add('century-club', null, 5);
+  add('two-for-one', null, 3);
+  add('iron-grip', null, 6);
+  if (has('K')) add('long-boot', null, 4);
+  if (h2h) { add('curse', null, 8); const qb = spots.find((s) => s.pos === 'QB') ?? spots[0]; if (qb) add('jinx', qb.slot, 5); const weak = filled.slice().sort((a, b) => a.proj - b.proj)[0]; if (weak) add('mirror', weak.slot, 4); }
+  if (bull) { if (o.variant === 'total') add('magnet', null, 5); else if (top) add('magnet', top.slot, 5); }
+  if (empty) add('ghost', empty.slot, GHOST_POINTS * 0.8);
+  const price = new Map(o.offered.map((d) => [d.id, d.price]));
+  const usedIds = new Set(o.held.map((h) => h.id)), usedSlots = new Set(o.held.map((h) => h.slot).filter(Boolean));
+  let wallet = o.wallet, room = o.cap - o.held.length;
+  const out: AiPlayPick[] = [];
+  const ranked = cands.filter((c) => price.has(c.id)).map((c) => ({ ...c, score: c.value + rand() * 3 })).sort((a, b) => b.score - a.score);
+  for (const c of ranked) {
+    if (room <= 0) break;
+    const cost = price.get(c.id)!;
+    if (cost > wallet || usedIds.has(c.id) || (c.slot && usedSlots.has(c.slot))) continue;
+    out.push({ id: c.id, slot: c.slot });
+    usedIds.add(c.id); if (c.slot) usedSlots.add(c.slot);
+    wallet -= cost; room--;
+  }
+  return out;
+}
