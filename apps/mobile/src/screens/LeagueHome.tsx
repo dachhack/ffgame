@@ -460,7 +460,7 @@ function LeagueMenu({ leagueId, teamName, rosterId, native, commish, onGo, onSho
           out is ⚑ COMMISSIONER → delete the league. */}
       {/* 🗄 THE SHELF (0239, founder: "the ability to archive leagues") —
           one tap, reversible, per-user: the league folds into the leagues
-          list's ARCHIVED section. Everyone gets it, commissioner included:
+          list's 🗂 archive (the chip beside ADD). Everyone gets it, commissioner included:
           shelving touches nothing but your own list. */}
       <View style={{ marginTop: 22, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
         <Pressable onPress={() => { tap(); void setLeagueArchived(leagueId, true).catch(() => {}); onBack(); }}
@@ -468,7 +468,7 @@ function LeagueMenu({ leagueId, teamName, rosterId, native, commish, onGo, onSho
           <Mono size={9.5} weight="700" tone="faint">archive this league</Mono>
         </Pressable>
         <Mono size={8.5} tone="faint" style={{ textAlign: 'center', marginTop: 2, lineHeight: 12 }}>
-          Tucks it into ARCHIVED on your leagues list — just for you, undo any time.
+          Hides it from your leagues list — just for you; bring it back from 🗂 beside ADD.
         </Mono>
       </View>
       {!commish && (

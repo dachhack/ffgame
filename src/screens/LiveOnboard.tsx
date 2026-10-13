@@ -3,7 +3,7 @@ import { BullseyeSquad, SquadScreen } from './BullseyeContest';
 import { DevRoomBar, DevRoomScreen } from './DevRoom';
 import { BullseyeLeaguePage, BullseyeStart } from './BullseyeLeague';
 import { useStore } from '../app/store';
-import { SiteSettings, VersionTag, Img, Crest } from '../app/ui';
+import { SiteSettings, VersionTag, Img, Crest, Sheet } from '../app/ui';
 import { liveConfigured } from '@drip/core/data/liveConfig';
 import {
   sendMagicLink, verifyEmailOtp, signInWithProvider, signInPassword, signUpPassword, sendPasswordReset, updatePassword,
@@ -15,7 +15,7 @@ import {
   myMatchup, myMatchupFrom, matchupTeams, leagueResults, leagueStandings, defaultOpenWeek, myLeagueSlate,
   type Enrollment, type LeaguePreview, type PreviewRedeem, type LiveMatchup, type TeamInfo, type AdminLeague, type MatchupResult,
   type LeagueSlateRow,
-  leagueTouch, leagueDetailLine, leagueTypeLine, leagueLandingRoom,
+  leagueTouch, leagueDetailLine, leagueTypeLine, leagueLandingRoom, setLeagueArchived,
 } from '@drip/core/data/liveApi';
 import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, seatKey, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
@@ -1200,7 +1200,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate, glance }: {
+function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate, glance }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onManage: (leagueId: string) => void;
@@ -1217,6 +1217,23 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
   glance: Record<string, WidgetSnapshot>;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish' | 'weekly'>('all');
+  // 🗂 THE ARCHIVE (0239 on the phone; the web since v0.707.3, founder: "a
+  // small file chip to the right of add. Click it to manage which leagues are
+  // archived and not shown in my leagues"). Per-user: the seat and everyone
+  // else's view are untouched. `flips` holds this page's toggles over the
+  // server's flag until the next load brings them back.
+  const [archOpen, setArchOpen] = useState(false);
+  const [flips, setFlips] = useState<Record<string, boolean>>({});
+  const isArchived = (e: Enrollment) => flips[e.league_id] ?? e.archived === true;
+  const enrollments = seats.filter((e) => !isArchived(e));
+  const archivedN = seats.filter(isArchived).length;
+  const toggleArchive = (e: Enrollment) => {
+    const on = !isArchived(e);
+    setFlips((f) => ({ ...f, [e.league_id]: on }));
+    void setLeagueArchived(e.league_id, on)
+      .then((r) => { if (!r?.ok) setFlips((f) => ({ ...f, [e.league_id]: !on })); })
+      .catch(() => setFlips((f) => ({ ...f, [e.league_id]: !on })));
+  };
   // Which phone this is, for the app chips below — read once per mount.
   const enrolledIds = new Set(enrollments.map((e) => e.league_id));
   // How many seats you hold per league (v0.635.2): past one, each card names
@@ -1307,10 +1324,37 @@ function LeagueHome({ enrollments, commishLeagues, cards, commishIds, onPodBuild
           color: 'var(--you)', background: 'transparent',
           border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
         }}>ADD</button>
+        {seats.length > 0 && (
+          <button onClick={() => setArchOpen(true)} aria-label="Archived leagues" title="Archived leagues" className="mono" style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
+            color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 9px',
+          }}>🗂{archivedN > 0 ? ` ${archivedN}` : ''}</button>
+        )}
       </div>
+      {archOpen && (
+        <Sheet title="🗂 Archive" subtitle={`${archivedN} HIDDEN · ${seats.length - archivedN} SHOWN`} onClose={() => setArchOpen(false)} max={460}>
+          {seats.map((e) => {
+            const off = isArchived(e);
+            return (
+              <div key={`arch-${enrollKey(e)}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--bd)', opacity: off ? 0.7 : 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.league?.name ?? 'League'}</div>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{e.league?.season ?? ''} · {e.team_name}</div>
+                </div>
+                <button onClick={() => toggleArchive(e)} className="mono"
+                  aria-label={`${e.league?.name ?? 'League'}: ${off ? 'archived, click to show' : 'shown, click to archive'}`}
+                  style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', borderRadius: 999, padding: '5px 11px',
+                    color: off ? 'var(--dim)' : 'var(--on-accent)', background: off ? 'var(--surface)' : 'var(--you)', border: `1px solid ${off ? 'var(--bd)' : 'var(--you)'}` }}>
+                  {off ? 'ARCHIVED' : 'SHOWN'}
+                </button>
+              </div>
+            );
+          })}
+        </Sheet>
+      )}
       {/* NO LEAGUES YET (v0.614.0, founder: "No leagues: Open a league or
           join one above"). The chips above are the two doors. */}
-      {total === 0 && (
+      {total === 0 && archivedN === 0 && (
         <div style={{ background: 'var(--surface)', border: '1px dashed var(--bd)', borderRadius: 10, padding: '28px 18px', textAlign: 'center' }}>
           <div className="grotesk" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Open a league or join one above.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.6 }}>
