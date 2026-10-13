@@ -39,6 +39,8 @@ export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
   /** Board week for the live statline + injury report; omit on week-less surfaces. */
   week?: number;
+  /** THE TAB TO OPEN ON (v0.703.0, founder: "Single tap once the card locks, brings up the game log"). */
+  tab?: 'summary' | 'log' | 'team' | 'history';
   /** Signed-in account — lights the ★ (omitted → star hidden, e.g. demo). */
   userId?: string;
   /** The league the card was opened FROM, when there is one — it buys the two
@@ -89,7 +91,8 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // the depth charts to bring up that player's card") is the 0293 chart the
   // projected box already reads — "deliberately absent" while this app held
   // no depth order.
-  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>('summary');
+  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>(req.tab ?? 'summary');
+  useEffect(() => { setTab(req.tab ?? 'summary'); }, [req.slug, req.tab]);
   // A teammate clicked on the chart opens HIS card on this same modal (the
   // host reuses one, v0.456.0) — and lands on his summary, as any card does.
   useEffect(() => { setTab('summary'); }, [slug]);

@@ -39,6 +39,7 @@ import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, ChipStrip, Display, Mono } from '../ui/prims';
+import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { Overlay } from '../ui/Overlay';
 import { ShopModal } from '../ui/ShopModal';
 import { InfoChip } from '../ui/InfoChip';
@@ -507,7 +508,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       </Text>
                       {playOn(d.slot) && <InfoChip label="⚡ UP" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
                     </View>
-                    <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }}
+                    <Pressable disabled={!canTap && !(p && isLocked)}
+                      onPress={() => { tap(); if (p && isLocked) openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team, week, leagueId, tab: 'log' }); else openSheet(d.slot); }}
                       onLongPress={p && canTap ? () => startDrag(d.slot) : undefined} delayLongPress={280}
                       onPressOut={() => { setTimeout(() => { if (dragRef.current === d.slot && !panning.current) cancelDrag(); }, 0); }}
                       style={{ borderRadius: 13, borderWidth: 2, borderColor: canLand ? (drag?.over === d.slot ? t.you : alpha(t.you, 55)) : changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>

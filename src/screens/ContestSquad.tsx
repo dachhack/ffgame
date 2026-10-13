@@ -31,6 +31,7 @@ import { contestPlaysFor, contestPlayAsPowerup, contestRedeal, contestPlayById, 
   type ContestConfig,
 } from '@drip/core/engine/contest';
 import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
+import { openPlayerCard } from '../app/playerCard';
 import { ShopModal } from './LeagueOverview';
 import { InfoChip } from './adminUi';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
@@ -550,7 +551,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                     onPointerDown={p && canTap ? onCardPointerDown(d.slot) : undefined} onPointerMove={onCardPointerMove} onPointerUp={onCardPointerUp} onPointerCancel={() => endDrag()}
                     onClickCapture={(e) => { if (swallowClick.current) { e.stopPropagation(); e.preventDefault(); } }}>
                     {p
-                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
+                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : isLocked ? () => openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team, week, tab: 'log' }) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
                       : ghosted(d.slot)
                         ? <PlayerCard key="ghost" slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} flip idx={i} bank={lv ? lv.score : undefined} badge="👻" />
                         : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />}

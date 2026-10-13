@@ -17,6 +17,8 @@ import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { useTheme, MONO, fs, alpha } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Mono } from '../ui/prims';
+import { AllFieldsSheet } from '../ui/AllFieldsSheet';
+import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { InfoChip } from '../ui/InfoChip';
 import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
 import { CardBack, CardFace, EmptyCard, FeltTable, FlipCard, CARD_H } from '../ui/ContestCards';
@@ -67,6 +69,8 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     return () => { alive = false; };
   }, [leagueId, week, me]);
   const [slate, setSlate] = useState<Map<string, SlateSpot>>(new Map());
+  // ▦ FIELDS (v0.703.0, founder: "the all fields chip in the matchup screens for classic and weekly competitions")
+  const [fieldsOpen, setFieldsOpen] = useState(false);
   useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week]);
   const bySlug = useMemo(() => new Map(board.map((r) => [r.slug, r])), [board]);
   const slots = useMemo(() => classicSlotsFromSpec(st?.slots ?? null) ?? [], [st?.slots]);
@@ -167,7 +171,19 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   // and Jinx, each until that spot's player kicks off (contestSpotOpen, the twin of SQL _contest_play_window).
   const cardOf = (s: 'home' | 'away', r: Row, mine: boolean, i: number) => {
     const el = cardInner(s, r, mine, i);
-    if (!myTable || !arming || !armingDef) return el;
+    if (!myTable || !arming || !armingDef) {
+      // THE GAME LOG (v0.703.0, founder: "Single tap once the card locks, brings up the game log for that player"):
+      // a locked card opens his card on the Game log tab
+      if (r.slug && locked(r.slug)) {
+        const p = bySlug.get(r.slug); const slug = r.slug;
+        return (
+          <Pressable key={`log-${s}-${r.slot}`} onPress={() => { tap(); openPlayerCard({ slug, name: p?.name ?? slug, pos: p?.pos ?? 'FLEX', team: p?.team ?? '', week, leagueId, tab: 'log' }); }}>
+            {el}
+          </Pressable>
+        );
+      }
+      return el;
+    }
     const aimed = armingDef.target === 'opp' ? !mine : mine;
     const open = aimed && contestSpotOpen(arming, { slug: r.slug, locked: locked(r.slug) }, !!st.started);
     return (
@@ -288,8 +304,13 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     <View style={{ flex: 1, backgroundColor: t.bg }}>
     <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: hand.length ? HAND_TAB_H + 90 : 90 }} keyboardShouldPersistTaps="handled">
       {header}
+      {/* ▦ FIELDS (v0.703.0): every game of the week, the live drive charts, from here as from the classic board */}
+      {(st.matchups?.length ?? 0) <= 1 && (
+        <View style={{ flexDirection: 'row', gap: 6 }}><Chip small label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} /></View>
+      )}
       {(st.matchups?.length ?? 0) > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+          <Chip small label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />
           {(st.matchups ?? []).map((x) => (
             <Chip key={x.id} small on={x.id === m.id} label={`${x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}${x.mine ? ' · YOU' : ''}`}
               onPress={() => { tap(); setPick(x.mine ? null : x.id); }} />
@@ -328,6 +349,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
       </FeltTable>
       <Mono size={8.5} tone="faint" style={{ color: t.faint }}>{st.format === 'board' ? 'Every squad on the board, one at a time — pick one above.' : 'Pick another matchup above to watch it.'}</Mono>
     </ScrollView>
+    <AllFieldsSheet visible={fieldsOpen} week={week} onClose={() => setFieldsOpen(false)} />
     {/* THE HAND (v0.695.0): the plays in hand, fanned over the room bar; a squad play goes on at once, a spot play lights its spots */}
     {hand.length > 0 && (
       <PowerupHand lift={50} cards={hand} busyId={busy ? arming : null} defOf={(id) => contestPlayById(id)} armLabel="PLAY · TAKE BACK UNTIL KICKOFF"
