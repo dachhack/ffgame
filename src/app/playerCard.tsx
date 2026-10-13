@@ -34,6 +34,7 @@ import { isCollegeSlug } from '@drip/core/data/college';
 import { Ev, track } from '@drip/core/analytics';
 import { parsePlayerKey } from '@drip/core/sports/index';
 import { SportCardModal } from './sportCard';
+import { sameTeam } from '../../packages/core/src/data/teamCodes';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -341,7 +342,7 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
               if (week == null || !showTeam) return null;
               const g = nflGameForTeam(week, showTeam);
               if (!g) return row('NEXT UP', 'bye — no game this week');
-              const home = g.home === showTeam;
+              const home = sameTeam(g.home, showTeam);
               const when = g.kickoff ? kickoffLabel(g.kickoff) : '';
               return row('NEXT UP', `${home ? 'vs' : '@'} ${home ? g.away : g.home}${when ? ` · ${when}` : ''}`);
             })()}

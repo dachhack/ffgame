@@ -61,6 +61,20 @@ ok('frozen salaries and projections are untouched', before.every((b) => { const 
 ok('the writes are the exp fixes and the new rows only', upserts.length === 4 && upserts.filter((u) => u.pos === 'HC').length === 2 && upserts.every((u) => u.season === '2026' && u.week === 6));
 const again = await topUpSalaryBoard('2026', 6, idx, new Set(['KC', 'BUF']), board);
 ok('a second pass in the same process writes nothing', again === board && upserts.length === 4);
+// THE RAMS (v0.707.0): a slate team with nobody on the frozen board gets its people added — the index's LAR
+// against the slate's LA. The projections feed is cut, so his season rate prices him (a real slug the bake knows).
+const ramsIdx = { ...idx, allSlugs: () => [{ slug: 'matthew-stafford', full: 'Matthew Stafford', pos: 'QB', team: 'LAR', sid: '421', exp: 17 }] };
+const wide = await topUpSalaryBoard('2026', 7, ramsIdx, new Set(['KC', 'BUF', 'LA']), [
+  { season: '2026', week: 7, slug: 'qb-one', name: 'Q One', pos: 'QB', team: 'KC', salary: 8800, proj: 21.5, exp: 7 },
+  { season: '2026', week: 7, slug: 'kc-k', name: 'KC Kicker', pos: 'K', team: 'KC', salary: 4200, proj: 8, exp: null },
+  { season: '2026', week: 7, slug: 'kc-dst', name: 'KC D/ST', pos: 'DEF', team: 'KC', salary: 4000, proj: 7, exp: null },
+  { season: '2026', week: 7, slug: 'la-k', name: 'LA Kicker', pos: 'K', team: 'LA', salary: 4200, proj: 8, exp: null },
+  { season: '2026', week: 7, slug: 'la-dst', name: 'LA D/ST', pos: 'DEF', team: 'LA', salary: 4000, proj: 7, exp: null },
+]);
+const staff = wide.find((r) => r.slug === 'matthew-stafford');
+ok('a slate team with nobody on the board gets its people, as the slate codes them', !!staff && staff.team === 'LA', wide.map((r) => r.slug));
+const wide2 = await topUpSalaryBoard('2026', 7, ramsIdx, new Set(['KC', 'BUF', 'LA']), wide);
+ok('one try per team per process: the next pass adds nothing', wide2 === wide);
 
 if (fails) { console.log(`\nFAIL — ${fails} assertion(s) failed.`); process.exit(1); }
 console.log('\nPASS — a frozen board learns exp and the extra positions.');

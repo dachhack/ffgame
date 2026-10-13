@@ -104,7 +104,9 @@ export async function buildPlayerIndex(directory) {
         slug = posSfx && !used.has(posSfx) ? posSfx : `${base}-${e.sid}`;
       }
       used.add(slug);
-      bySleeperId.set(e.sid, { slug, full: e.full, pos: fantasyPos(e.p.position) ?? e.p.position, team: e.p.team, espnId: e.p.espn_id ? String(e.p.espn_id) : null, exp: expOf(e.p) });
+      // THE SLATE'S CODE at the source (v0.707.0): Sleeper says LAR / WSH / JAC; everything downstream keys by LA / WAS / JAX.
+      const team = normTeam(e.p.team ?? '') || null;
+      bySleeperId.set(e.sid, { slug, full: e.full, pos: fantasyPos(e.p.position) ?? e.p.position, team, espnId: e.p.espn_id ? String(e.p.espn_id) : null, exp: expOf(e.p) });
       if (e.p.espn_id) byEspnId.set(String(e.p.espn_id), slug);
       if (e.p.gsis_id && String(e.p.gsis_id).trim()) byGsis.set(String(e.p.gsis_id).trim(), slug);
       // depth (v0.416.0): Sleeper's own depth_chart_order, which is adjusted
@@ -116,10 +118,10 @@ export async function buildPlayerIndex(directory) {
         // THE GAME'S POSITION, not Sleeper's (v0.531.0): DE/DT → DL,
         // ILB/OLB → LB, CB/S → DB. The classic scorer branches on DL/LB/DB,
         // so a raw "CB" scored every tackle as 0.
-        full: e.full, pos: fantasyPos(e.p.position) ?? e.p.position, team: e.p.team, sid: e.sid, exp: expOf(e.p),
+        full: e.full, pos: fantasyPos(e.p.position) ?? e.p.position, team, sid: e.sid, exp: expOf(e.p),
         depth: Number.isFinite(Number(e.p.depth_chart_order)) ? Number(e.p.depth_chart_order) : null,
       });
-      const cand = { slug, team: normTeam(e.p.team ?? ''), rank: liveRank(e.p) };
+      const cand = { slug, team: team ?? '', rank: liveRank(e.p) };
       push(nameCands, normName(e.full), cand);
       // nflverse short-name key ("C.Jordan" → "c jordan").
       const parts = e.full.trim().split(/\s+/);
@@ -142,7 +144,7 @@ export async function buildPlayerIndex(directory) {
     const arr = map.get(key);
     if (!arr?.length) return null;
     const want = normTeam(team ?? '');
-    if (want) { const hit = arr.find((c) => c.team === want); if (hit) return hit.slug; }
+    if (want) { const hit = arr.find((c) => c.team === want); if (hit) return hit.slug; } // team-code: same source — both normalised above
     return arr[0].slug;
   };
   console.log(new Date().toISOString(), `player index: ${bySleeperId.size} players, ${collisions} colliding slugs disambiguated`);

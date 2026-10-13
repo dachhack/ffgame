@@ -22,6 +22,55 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.0 — The Rams are on the board
+
+> - Matthew Stafford, Puka Nacua and every other Ram are on the weekly salary board and in Bullseye from this week: the board had been comparing the Rams' two spellings (LAR on one feed, LA on the slate) and skipping them all.
+> - That matching mistake can't come back: every team lookup in the app, the site and the worker now goes through one shared table, and a check fails any build that compares team codes raw.
+
+A member (Oct 13): "Stafford is not a QB option in Bullseye or here but is
+not on bye." He never was: `buildSalaryBoard` compared the index's `LAR`
+to the slate's `LA` raw, so no Rams person ever made a salary board (the K
+and D/ST are minted from the slate's codes and were fine). Fixed, and the
+week-6 board heals itself: `topUpSalaryBoard` now adds the people of any
+slate team with nobody on the frozen board (`toppedTeams`, once per team
+per process), the way it already added a missing position.
+
+Then the founder: "Can we make sure that matching error never happens again
+at any place in the app or web?" So:
+
+- `packages/core/src/data/teamCodes.ts` — THE one table (`normTeam`,
+  `TEAM_ALIASES`), `sameTeam`, and `TeamMap` / `TeamSet`: a Map and a Set
+  that normalise keys on set AND get, so a slate keyed by LA answers LAR.
+  `slugMeta`, `seatRules`, `buildLeague` and `projScoring` had four copies
+  of the table (seatRules' knew LVR, the others didn't); all re-export or
+  import this one.
+- Normalised at the sources: the worker's player index now stores the
+  slate's code for every player (`LAR` → `LA` as Sleeper is read);
+  `weekGameLocks` / `weekSlateByTeam` (the screens' lock and matchup maps,
+  via pure `locksFromSlate` / `slateByTeam`), the board's slate/kick maps,
+  the weekly K/DEF projection maps, the push and auto-sub kickoff maps, the
+  StatHead schedule, the depth chart and the preseason pool are TeamMaps /
+  TeamSets. The seat wire's "already kicked off" filter (keyed on the
+  normalised `teamKickoffs` but looked up raw: a Rams free agent was never
+  "kicked"), the pool team filter, the game log's vs/@ line, the card's NEXT
+  UP line and the widget's leaders compare through `normTeam` / `sameTeam`.
+- `scripts/check-team-codes.mjs` (`check:teamcodes`, in `check:parity`):
+  round-trips every alias through the table, the maps and the real
+  builders; holds the SQL `_nfl_team` and scoreboard `TEAM_FIX` mirrors to
+  the table; and scans `src`, `apps/mobile/src`, `packages/core/src` and
+  `server/src` for the bug's shapes (`.has(x.team)`, `.get(x.team)`,
+  `o[x.team]`, `x.team === y`, `x.team.toUpperCase()` as a key) on lines
+  that neither normalise nor use a TeamMap-bound receiver. A line whose two
+  sides truly share a source wears `// team-code: same source — why` (two
+  today: the bio filter chips and the depth-chart change check).
+- Tests: `salary-pricing` (LAR / WSH on a LA / WAS slate land, wearing the
+  slate's code), `salary-topup` (a slate team with nobody on the board gets
+  its people once).
+- `scripts/db/coin-ledger-week.sql` sets `search_path` (ops 050 failed on
+  the pooled connection) and adds the Rams diagnostics; ops 051 reruns it.
+
+No iPhone build: TypeScript only.
+
 ### v0.706.3 — A read-only query errand
 
 > - Nothing in the app: the ops errands gained a read-only database query, for questions like “did I earn coin last week?”.

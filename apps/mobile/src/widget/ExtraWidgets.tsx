@@ -34,6 +34,7 @@ import { teamLogo } from '@drip/core/data/media';
 import type { FieldsLevel } from '@drip/core/data/fieldsWeek';
 import { C, fmt, shortClock, matchupDeepLink, WIDGET_CLICK } from './MatchupWidget';
 import type { LeagueAlert, FieldMine } from '@drip/core/data/widgetExtras';
+import { sameTeam } from '../../../../packages/core/src/data/teamCodes';
 
 export const ALERTS_WIDGET_NAME = 'Alerts';
 export const FIELDS_WIDGET_NAME = 'Fields';
@@ -291,7 +292,7 @@ function SheetCell({ pos, cell }: { pos: string; cell: ProjCell | null }) {
 function OpenedGame({ g }: { g: FieldGame }) {
   const recent = g.recent ?? [];
   const proj = g.state === 'pre' ? g.projSheet ?? [] : [];
-  const byTeam = (t: string) => (g.leaders ?? []).filter((l) => l.team === t);
+  const byTeam = (t: string) => (g.leaders ?? []).filter((l) => sameTeam(l.team, t));
   const section = (t: string) => <TextWidget text={t} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', letterSpacing: 0.12, marginTop: 6 }} />;
   return (
     <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginTop: 4, borderTopWidth: 1, borderColor: C.line }}>

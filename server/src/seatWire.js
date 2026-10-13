@@ -55,6 +55,7 @@ import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projecte
 import { modeOfSettings } from './resolve.js';
 import { teamKickoffs } from './lock.js';
 import { seatAgentsFor } from './agents.js';
+import { normTeam } from '../../packages/core/src/data/teamCodes.ts';
 
 /** How many claims a seat may have OUTSTANDING — pending ones included, not
  *  just the ones filed this run.
@@ -448,7 +449,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
         const teamKicks = teamKickoffs(slate);
         const nowMs = Date.now();
         const kickedIds = new Set(available
-          .filter((p) => { const t = p.team ? String(p.team).toUpperCase() : null; return t && Number.isFinite(teamKicks[t]) && teamKicks[t] <= nowMs; })
+          .filter((p) => { const t = normTeam(p.team); return t && Number.isFinite(teamKicks[t]) && teamKicks[t] <= nowMs; }) // teamKickoffs keys by the slate's code (v0.707.0)
           .map((p) => p.id));
         const valueOfWire = (p, d) => (kickedIds.has(p.id) ? 0 : valueOf(p, d));
         // The same week with NO injury discount (v0.561.4): whoever would

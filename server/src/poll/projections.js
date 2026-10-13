@@ -31,6 +31,7 @@
 // ids do not, and the one thing worse than no projection is somebody else's.
 import { db } from '../supabase.js';
 import { setLiveProjRate } from '../../../packages/core/src/engine/projScoring.ts';
+import { TeamMap } from '../../../packages/core/src/data/teamCodes.ts';
 
 // ── StatHead: one public JSON, rebuilt about every two hours ─────────────
 // The same file the `stathead` Python client reads (public/data/weekly-
@@ -63,7 +64,7 @@ export async function statheadFeed(season) {
  *  comes through at 0 WITH a status, because "he is out" is the answer and
  *  not missing data. */
 export function statheadRows(feed, week, playerIndex = null) {
-  const sched = feed?.teamWeeks ?? {};
+  const sched = new TeamMap(Object.entries(feed?.teamWeeks ?? {})); // the feed's codes vs the index's (v0.707.0)
   const rows = [];
   for (const p of feed?.players ?? []) {
     const sid = p?.sleeper;
@@ -71,7 +72,7 @@ export function statheadRows(feed, week, playerIndex = null) {
     const pts = (p.wk ?? [])[Number(week) - 1];
     if (pts == null) continue;                // bye week
     const ppg = Number(p.ppg);
-    const game = (sched[p.team] ?? []).find((g) => Number(g.w) === Number(week)) ?? null;
+    const game = (sched.get(p.team) ?? []).find((g) => Number(g.w) === Number(week)) ?? null;
     rows.push({
       key: String(sid), source: 'stathead',
       pts: Math.round(Number(pts) * 100) / 100,

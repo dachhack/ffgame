@@ -85,6 +85,7 @@ import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus'
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 import { LabelInfo } from './adminUi';
 import { BullseyeStart } from './BullseyeLeague';
+import { normTeam } from '../../packages/core/src/data/teamCodes';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 18 };
 const label: React.CSSProperties = { fontSize: 9, letterSpacing: '0.14em', color: 'var(--faint)', fontWeight: 700 };
@@ -3442,7 +3443,7 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
       // No selection = every position the LEAGUE can roster, not every
       // position there is. Picking chips narrows within that.
       && (posSel.size ? posSel.has(p.pos) : (!eligiblePos || eligiblePos.has(p.pos.toUpperCase())))
-      && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
+      && (nflTeam === 'ALL' || normTeam(p.team) === nflTeam)
       // Unknown tenure matches no band but ANY — the pool's no-guess rule,
       // the same one a 0172 rookies-only spot follows.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
@@ -3460,7 +3461,7 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
   /** The teams actually IN this pool, so the picker never offers an empty
    *  filter — a league whose pool is one conference should not list 32. */
   const poolTeams = useMemo(
-    () => [...new Set(pool.map((p) => p.team.toUpperCase()).filter(Boolean))].sort(),
+    () => [...new Set(pool.map((p) => normTeam(p.team)).filter(Boolean))].sort(),
     [pool]);
 
   const waivedFor = (p: LeaguePoolPlayer): number | null => {

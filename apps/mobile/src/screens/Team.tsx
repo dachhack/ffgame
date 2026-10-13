@@ -62,6 +62,7 @@ import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardsFromRows, type Bu
 import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc } from '@drip/core/data/liveApi';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { weekTitle } from '@drip/core/data/nflSlate';
+import { normTeam } from '../../../../packages/core/src/data/teamCodes';
 
 /** Every spot chip is this wide, so the player column starts at the same x on
  *  every row (v0.289.0).
@@ -661,7 +662,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
     const needle = q.trim().toLowerCase();
     const base = pool.filter((p) => (showOwned || !rostered.has(p.slug))
       && (posSel.size ? posSel.has(p.pos) : (!eligiblePos || eligiblePos.has(p.pos.toUpperCase())))
-      && (nflTeam === 'ALL' || p.team.toUpperCase() === nflTeam)
+      && (nflTeam === 'ALL' || normTeam(p.team) === nflTeam)
       // Unknown tenure matches no band but ANY — the pool's no-guess rule.
       && tenureMatches(tenure, expMap[p.slug] ?? null, p.pos)
       && levelClassMatch(p, level, cls)
@@ -677,7 +678,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   const confOpts = useMemo(() => confFilterOptions(pool), [pool]);
   /** The teams actually IN this pool, so the filter never offers an empty one. */
   const poolTeams = useMemo(
-    () => [...new Set(pool.map((p) => p.team.toUpperCase()).filter(Boolean))].sort(),
+    () => [...new Set(pool.map((p) => normTeam(p.team)).filter(Boolean))].sort(),
     [pool]);
 
   const waivedFor = (p: LeaguePoolPlayer): number | null => {

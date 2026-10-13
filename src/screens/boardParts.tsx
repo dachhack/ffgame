@@ -21,6 +21,7 @@ import { PuIcon, GameIcon, UI_ART } from '../app/gameIcons';
 import { openPlayerCard } from '../app/playerCard';
 import { FX_COLOR } from '@drip/core/data/demoNarration';
 import type { Pick, Player, Pos, WindowId, Metric } from '@drip/core/types';
+import { sameTeam } from '../../packages/core/src/data/teamCodes';
 
 /** ⓘ — opens the player card without stealing the row's own tap (pick/assign).
  *  A span, not a button: several hosts are already <button> rows and nested
@@ -73,8 +74,8 @@ function applyPoolFilter(players: Player[], f: PoolFilter, teamsOfGame: Map<stri
   const gameTeams = f.game ? teamsOfGame.get(f.game) : null;
   return players.filter((p) => {
     if (f.pos && p.pos !== f.pos) return false;
-    if (f.team && p.team !== f.team) return false;
-    if (gameTeams && !gameTeams.has(p.team)) return false;
+    if (f.team && !sameTeam(p.team, f.team)) return false;
+    if (gameTeams && ![...gameTeams].some((t) => sameTeam(t, p.team))) return false;
     if (!q) return true;
     // Match either display or full name, so "hardman" finds "M. Hardman" and
     // "mecole" finds it too.

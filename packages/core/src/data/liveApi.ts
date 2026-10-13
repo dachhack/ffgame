@@ -23,6 +23,7 @@ import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
 import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
 import type { WaiverRunReport } from './txnChat';
+import { TeamMap } from './teamCodes';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -775,8 +776,16 @@ export async function weekGameLocks(week: number, season = '2026',
   leadMs = 3_600_000): Promise<Map<string, number>> {
   const { data } = await (await client()).from('nfl_slate')
     .select('home, away, kickoff').eq('season', season).eq('week', week);
-  const m = new Map<string, number>();
-  for (const g of (data ?? []) as { home: string; away: string; kickoff: string | null }[]) {
+  return locksFromSlate((data ?? []) as SlateGameRow[], leadMs);
+}
+
+export interface SlateGameRow { home: string; away: string; kickoff: string | null }
+
+/** The lock map from slate rows — a TeamMap (v0.707.0), so a lookup by the
+ *  index's LAR finds the slate's LA. Pure, for the check. */
+export function locksFromSlate(rows: SlateGameRow[], leadMs = 3_600_000): Map<string, number> {
+  const m = new TeamMap<number>();
+  for (const g of rows) {
     if (!g.kickoff) continue;
     const lock = Date.parse(g.kickoff) - leadMs;
     m.set(g.home, lock); m.set(g.away, lock);
@@ -790,8 +799,13 @@ export interface SlateSpot { opp: string; home: boolean; kickoff: number | null 
 export async function weekSlateByTeam(week: number, season = '2026'): Promise<Map<string, SlateSpot>> {
   const { data } = await (await client()).from('nfl_slate')
     .select('home, away, kickoff').eq('season', season).eq('week', week);
-  const m = new Map<string, SlateSpot>();
-  for (const g of (data ?? []) as { home: string; away: string; kickoff: string | null }[]) {
+  return slateByTeam((data ?? []) as SlateGameRow[]);
+}
+
+/** The slate-by-team map from slate rows — a TeamMap (v0.707.0). Pure, for the check. */
+export function slateByTeam(rows: SlateGameRow[]): Map<string, SlateSpot> {
+  const m = new TeamMap<SlateSpot>();
+  for (const g of rows) {
     const k = g.kickoff ? Date.parse(g.kickoff) : null;
     m.set(g.home, { opp: g.away, home: true, kickoff: k });
     m.set(g.away, { opp: g.home, home: false, kickoff: k });

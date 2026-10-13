@@ -43,7 +43,7 @@ export async function syncDepthChart(playerIndex) {
   const upserts = [];
   for (const [slug, w] of want) {
     const h = have.get(slug);
-    if (!h || h.team !== w.team || h.pos !== w.pos || h.depth !== w.depth) {
+    if (!h || h.team !== w.team || h.pos !== w.pos || h.depth !== w.depth) { // team-code: same source — a change check against our own row
       upserts.push({ slug, ...w, updated_at: new Date().toISOString() });
     }
   }

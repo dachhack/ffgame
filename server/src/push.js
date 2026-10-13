@@ -32,6 +32,7 @@ import { apnsSend, apnsCreds } from './apns.js';
 import { sweepComputer, relayFixes } from './computer.js';
 import { sweepDevRoom } from './devRoom.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
+import { TeamMap } from '../../packages/core/src/data/teamCodes.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
 
@@ -604,8 +605,8 @@ async function detectRuledOut() {
   for (const g of slate) { const k = String(g.season); if (!weekOf.has(k) || g.week < weekOf.get(k)) weekOf.set(k, g.week); }
   const rows = [];
   for (const [season, week] of weekOf) {
-    const kicks = new Map();
-    for (const g of slate) if (String(g.season) === season && g.week === week) for (const t of [g.home, g.away]) kicks.set(String(t).toUpperCase(), Math.min(kicks.get(String(t).toUpperCase()) ?? Infinity, Date.parse(g.kickoff)));
+    const kicks = new TeamMap();
+    for (const g of slate) if (String(g.season) === season && g.week === week) for (const t of [g.home, g.away]) kicks.set(t, Math.min(kicks.get(t) ?? Infinity, Date.parse(g.kickoff)));
     const { data: leagues } = await db().from('league').select('id, name, contest_week, settings_json').in('kind', ['dfs', 'bullseye']).eq('season', season);
     const live = (leagues ?? []).filter((l) => l.contest_week == null || Number(l.contest_week) === week);
     if (!live.length) continue;
@@ -613,7 +614,7 @@ async function detectRuledOut() {
     const autoSub = new Map(live.map((l) => [l.id, l.settings_json?.auto_sub === true]));
     const { data: board } = await db().from('pod_salary').select('slug, name, team').eq('season', season).eq('week', week).in('slug', hurt.map((h) => h.player_slug));
     for (const b of board ?? []) {
-      const kick = kicks.get(String(b.team ?? '').toUpperCase());
+      const kick = kicks.get(b.team);
       if (!Number.isFinite(kick) || kick <= now) continue;   // on a bye, or already kicked off
       const { data: holding } = await db().from('sleeper_lineup').select('league_id, roster_id')
         .in('league_id', live.map((l) => l.id)).eq('week', week).contains('starters_json', JSON.stringify([{ player_slug: b.slug }]));
