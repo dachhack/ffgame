@@ -56,8 +56,11 @@ import { useTheme, fs } from '../theme.native';
 const DISMISS_DY = 110;
 const DISMISS_VY = 0.75;
 
-export function Overlay({ visible, title, subtitle, titleLeft, onClose, children, footer }: {
+export function Overlay({ visible, title, subtitle, titleLeft, onClose, children, footer, full = false }: {
   visible: boolean;
+  /** FULL SCREEN (v0.704.0, founder: "Make the screen full screen" — the trade composer): the sheet takes the whole
+   *  window, square-cornered, its header under the status bar. The slide and the drag-to-close stay. */
+  full?: boolean;
   title: ReactNode;
   subtitle?: ReactNode;
   /** Rendered left of the title — the web puts the player's team crest here. */
@@ -140,9 +143,8 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
             // Never taller than 92% — a sheet that reaches the status bar reads
             // as a screen, and the point of a sheet is that the board is still
             // behind it.
-            maxHeight: '92%',
+            ...(full ? { height: '100%', maxHeight: '100%', paddingTop: insets.top, borderTopLeftRadius: 0, borderTopRightRadius: 0 } : { maxHeight: '92%', borderTopLeftRadius: 20, borderTopRightRadius: 20 }),
             backgroundColor: t.surface,
-            borderTopLeftRadius: 20, borderTopRightRadius: 20,
             borderTopWidth: StyleSheet.hairlineWidth, borderColor: t.bdh,
             overflow: 'hidden',
             transform: [{
@@ -180,7 +182,7 @@ export function Overlay({ visible, title, subtitle, titleLeft, onClose, children
               footer below it is never the thing that gets cut. minHeight: 0 is
               required for that — without it a flex child refuses to shrink
               below its content and the clipping comes straight back. */}
-          <View style={{ flexShrink: 1, minHeight: 0 }}>{children}</View>
+          <View style={{ flexShrink: 1, minHeight: 0, ...(full ? { flex: 1 } : {}) }}>{children}</View>
 
           {/* The safe-area inset lives INSIDE the sheet now. The sheet is flush
               to the bottom edge, so without this its last row — which is where

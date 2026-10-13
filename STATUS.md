@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.704.0 — The trade composer, full screen
+
+> - Proposing a trade on the phone now fills the screen. The teams sit on one scrolling row with a ＋ chip for a third team, every player shows his face and opens his card with a tap (the box beside him picks him), and FAAB has a small box under each pile: what you send, what you ask.
+
+Founder: "Trade screen need some help. Let's make the team selector not
+wrap and just a small + chip to add the third team. Make the screen full
+screen. Add (small) player images and allow the player card pop up when
+you click on the player. Let's just have a small input box on each side
+for FAAB." `Overlay` takes `full` (whole window, square corners, header
+under the status bar). `TradeCenter`: horizontal team row with a ＋ chip
+that opens the third-team row; rows are a checkbox, a 22px headshot and
+the name (tap → `openPlayerCard`), the ⓘ gone; `faabSend`/`faabAsk` boxes
+under the piles, the offer carrying the net (a three-way keeps its target
+row and `faabDraft`).
+
 ### v0.703.2 — Player cards open on the game log
 
 > - Every player card now opens on his Game log; the summary, team and history tabs are a tap away.
