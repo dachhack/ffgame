@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/rams-board.sql",
+  "why": "Founder: 'Stafford not showing up in weekly contest leagues. Matching issue?' v0.707.0 deployed 19:24 UTC; its top-up should add the Rams' people to the frozen week-6 board on the worker's first pod tick. Read only, no names."
+}
