@@ -204,7 +204,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
             beside the spot's label, no icon on the card; tap it for the play's details. */}
         <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)', display: 'flex', alignItems: 'center', gap: 5, justifyContent: edge === 'left' ? 'flex-start' : 'flex-end' }}>
           {`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}
-          {(() => { const a = playAt(s, r); return a ? <InfoChip label="PLAY" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} info={playText(a.pl, a.theirs, mine)} /> : null; })()}
+          {(() => { const a = playAt(s, r); return a ? <InfoChip label="POWER ⬆️" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} info={playText(a.pl, a.theirs, mine)} /> : null; })()}
         </span>
         <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
         <span className="mono" style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>

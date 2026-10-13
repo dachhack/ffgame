@@ -426,7 +426,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', letterSpacing: 0.8, color: changed ? t.you : dim }}>
                         {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
                       </Text>
-                      {playOn(d.slot) && <InfoChip label="PLAY" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
+                      {playOn(d.slot) && <InfoChip label="POWER ⬆️" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
                     </View>
                     <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }} style={{ borderRadius: 13, borderWidth: 2, borderColor: changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
                       <FlipCard key={`${d.slot}-${slug ?? (ghost ? 'ghost' : 'open')}`} flipped={!!p || ghost} idx={i} back={<CardBack seed={`${leagueId}|${d.slot}`} />} face={face} />
