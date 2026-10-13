@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Bake the notification SILHOUETTE — a drop cut out of a football, white on transparent.
 
+SUPERSEDED (v0.692.1): the mark is now the italic DF, drawn by hand into
+apps/mobile/assets/notification-icon.png and copied to
+public/icons/pwa/badge-df-96.png (v0.701.4). Running this would paint the
+drop back over both; it refuses unless told --the-drop. Kept for the record.
+
     python3 scripts/gen-notification-icon.py
 
 Outputs (both committed, both the same 96x96 mask):
@@ -44,6 +49,9 @@ lines from the apex to that circle. Tangency is the whole trick: a hand-placed
 triangle leaves a visible kink where the straight edge meets the arc, and at
 18px a kink is the only thing you can see.
 """
+import sys
+if '--the-drop' not in sys.argv:
+    sys.exit('the notification mark is the italic DF now (v0.692.1); this script paints the old drop — pass --the-drop if you really mean it')
 import math
 import struct
 import zlib
