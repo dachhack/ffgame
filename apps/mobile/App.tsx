@@ -37,6 +37,7 @@ import { LivePicks } from './src/screens/LivePicks';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
 import { LeagueHome, LeagueSettingsSheet, type LeagueSettingsReq } from './src/screens/LeagueHome';
+import { onLeagueGo } from './src/ui/leagueNav';
 import { tap } from './src/ui/feedback';
 import { ChatChipDot } from './src/ui/unread';
 import { registerForPush } from './src/ui/push';
@@ -124,6 +125,8 @@ export function App() {
   // league is there when the user backs out of the board.
   const [leaguesEpoch, setLeaguesEpoch] = useState(0);
   const [view, setView] = useState<'home' | 'picks' | 'admin' | 'draft' | 'team' | 'chat' | 'commishtools' | 'board' | 'devroom' | 'bullseye' | 'bstart' | 'bsettings'>('picks');
+  // THE ROOM BUS (v0.706.0): a chip deep in a board can ask for a room; the shell answers
+  useEffect(() => onLeagueGo((room) => setView(room)), []);
   // THE DEV ROOM (v0.658.0): which room the screen opens on (null = the list).
   const [devRoomId, setDevRoomId] = useState<string | null>(null);
   // THE WEEKLY BULLSEYE (0462): the open contest's squad screen.

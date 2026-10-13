@@ -51,6 +51,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 
 import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
 import { WeddingChip } from '../ui/WeddingChip';
+import { takeTeamTab, requestVows } from '../ui/leagueNav';
 import { TradeCenter } from '../ui/TradeCenter';
 import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -317,7 +318,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   // The screen's TABS (v0.268.0): one area at a time, ROSTER first — the
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
-  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts' | 'devy'>('roster');
+  const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts' | 'devy'>(() => takeTeamTab() ?? 'roster');   // a room-bus request lands here (v0.706.0)
   // KEEPERS is a fourth tab (v0.296.5, founder) instead of a card under the
   // roster, and only in a league that keeps anyone: no count, no tab. The card
   // hides itself the same way, but a tab that opens onto nothing is worse than
@@ -967,7 +968,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Mono size={9} tone="faint" track={0.12}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</Mono>
           {/* 💍 THE WEDDING (v0.705.0): the impending shotgun wedding, while one is pending; TRADES ▸ goes to the card */}
-          {viewingMine && <WeddingChip leagueId={leagueId} onOpen={() => setTab('trades')} />}
+          {viewingMine && <WeddingChip leagueId={leagueId} onOpen={() => { requestVows(); setTab('trades'); }} />}
         </View>
         {!viewingMine && canStash && (
           <Mono size={8.5} tone="you" style={{ marginTop: 4 }}>Commissioner: you can move this team’s players to and from IR and the taxi squad below.</Mono>

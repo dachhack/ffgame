@@ -87,7 +87,7 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
     finally { setBusy(false); }
   };
 
-  if (!ws?.length) return null;
+  if (!ws?.some((w) => w.my_seat != null || w.can_commish === true)) return null;   // PRIVATE (v0.706.0)
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : list.length >= 3 ? list : [...list, slug]);
 
@@ -99,14 +99,8 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
         const mine = w.my_seat != null;
         const boss = w.can_commish === true;
         const counterFrom = w.counter ? (w.counter.from === w.home.roster ? w.home.team : w.counter.from === w.away.roster ? w.away.team : 'one side') : null;
-        if (!mine && !boss) {
-          return (
-            <div key={w.id} style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
-              <TradeBox w={w} home={w.home.gives} away={w.away.gives} small />
-              <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 5 }}>{weddingStatusShort(w)}</div>
-            </div>
-          );
-        }
+        // PRIVATE (v0.706.0): a wedding is the two teams' and the commissioner's; nobody else sees it here
+        if (!mine && !boss) return null;
         const iAmHome = w.my_seat === w.home.roster;
         const open = composing?.id === w.id ? composing.mode : null;
         // The composer's two rows: "you send / you get" for a team, the two

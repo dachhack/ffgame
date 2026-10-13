@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.706.0 — The vows stay between the two teams
+
+> - A shotgun wedding’s new vows are now private: the league chat no longer announces them, only the other team is told (on their phone), and only the two teams and the commissioner see the wedding card or its chip. The league page no longer lists weddings.
+> - The 💍 chip takes you straight to the vows: from the matchup it opens My Team on Trades with the composer up; from My Team it does the same in place.
+
+Founder: "Let's have the actual vows interaction occur on the my team
+page. Clicking the chip takes you to the vows interaction. The league
+page doesn't list the pending vows. Those stay private between the teams
+(and commish)." SQL 0494: `shotgun_counter` posts no league card and
+pushes the other team instead (`push_outbox`, kind `trades`);
+`shotgun_state` hands `counter` only to the two teams and the commissioner
+(bodies from 0453 and 0456; probes sw4d, sw4d2, sw4h2, sw4i2). Phone: a
+room bus (`ui/leagueNav.ts`: the shell installs `onLeagueGo`;
+`requestTeamTab`, `requestVows` wait for the screen that owns them);
+`WeddingChip` shows to the two teams and the commissioner only and goes
+to the vows; `ShotgunWeddingCard` opens its composer on request and
+renders nothing to anyone else; `LeagueHome` drops the card. Web card:
+the same nothing-for-others rule.
+
 ### v0.705.0 — The wedding chip, and vows like a trade
 
 > - While a shotgun wedding is pending, a 💍 chip on the matchup and on My Team says where it stands, who sends whom and any new vows on the table; from My Team it jumps to the Trades tab.
