@@ -31,9 +31,9 @@ import { setLeagueScoring, parseScoring } from '../../packages/core/src/engine/l
 import { setLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { leagueGolfZeroPtsOf } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueProjScoring, leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
-import { setLeagueFlags, setLeagueAdjustments } from '../../packages/core/src/data/commish.ts';
+import { setLeagueFlags, setLeagueAdjustments, hurtFor } from '../../packages/core/src/data/commish.ts';
 import { setLiveGameFeed, feedRowsToWeek } from '../../packages/core/src/data/gameFeed.ts';
-import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
+import { ruledOutSlugs, injuryStatusMap, hurtInGameSlugs } from './injuries.js';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
 import { installBullseye, bullseyeCardsFor, bullseyeCfgOf } from './bullseye.js';
 import { contestConfigOf, contestCard, contestSquadOf, scoreContest, contestTiebreak, contestScoreAs, contestRedeal } from '../../packages/core/src/engine/contest.ts';
@@ -249,7 +249,7 @@ async function leagueFlagsOf(leagueId, ctx) {
  *  them. */
 async function leagueAdjustmentsOf(leagueId, week, ctx) {
   if (ctx?.adjust) return ctx.adjust.get(leagueId) ?? [];
-  const { data } = await db().from('player_adjustment').select('week,slug,points')
+  const { data } = await db().from('player_adjustment').select('week,slug,points,hurt')
     .eq('league_id', leagueId).eq('week', week);
   return data ?? [];
 }
@@ -286,7 +286,7 @@ export async function prefetchTick(live, week) {
     db().from('sealed_pick').select('matchup_id,app_user_id,game_window,roster_slot,player_slug,metric_id,locked').in('matchup_id', matchupIds).not('player_slug', 'is', null),
     db().from('player_flag').select('league_id,slug,label,rules').in('league_id', leagueIds),
     db().from('seat_agent').select('league_id,roster_id,agent_user_id').in('league_id', leagueIds),
-    db().from('player_adjustment').select('league_id,week,slug,points').in('league_id', leagueIds).eq('week', week),
+    db().from('player_adjustment').select('league_id,week,slug,points,hurt').in('league_id', leagueIds).eq('week', week),
   ]);
   const members = new Map();   // leagueId -> Map(roster -> member)
   for (const m of mem.data ?? []) {
@@ -525,7 +525,13 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
   let slotRows = []; // per-slot detail: { win, side, slot, slug, metric, score }
   let homeTotal = 0, awayTotal = 0;
   const gameMode = await leagueModeOf(matchup.league_id, ctx);
-  const adjustRows = gameMode.mode === 'classic' ? await leagueAdjustmentsOf(matchup.league_id, matchup.week, ctx) : [];
+  let adjustRows = gameMode.mode === 'classic' ? await leagueAdjustmentsOf(matchup.league_id, matchup.week, ctx) : [];
+  // HURT IN HIS GAME (v0.701.0): the worker's own waivers, from the injury report dated to his game, ride the same
+  // rows as the commissioner's — the engine's dart reads one cache (hurtFor).
+  if (gameMode.mode === 'classic' && (gameMode.bullseye || gameMode.dfs_bullseye || gameMode.contest === 'bullseye')) {
+    const hurt = await hurtInGameSlugs(matchup.week);
+    if (hurt.size) adjustRows = [...adjustRows, ...[...hurt].filter((slug) => !adjustRows.some((r) => r.slug === slug && r.hurt)).map((slug) => ({ week: matchup.week, slug, points: 0, hurt: true }))];
+  }
   let coin = null; // weekly drip-coin per side (only the real-engine H2H path earns it)
   const toLive = (p) => ({ win: p.win, slot: p.slot, player: player(p.slug), metricId: p.metric || 'rush' });
 
@@ -648,7 +654,8 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const r = scoreContest({ home: homeSquad, away: awaySquad }, contestCfg,
       (slug, slot, def) => classicPoints(player(slug), matchup.week, catalog, contestScoreAs(def), slot),
       { pending, live, card, tiebreak, plays, playsOf: (slug) => playEventsFor(matchup.week, slug), settled: matchup.status === 'final', tdValue,
-        posOf: (slug) => player(slug).pos, lateOf: (slug) => latePointsFor(player(slug), matchup.week, catalog, undefined, null), done });
+        posOf: (slug) => player(slug).pos, lateOf: (slug) => latePointsFor(player(slug), matchup.week, catalog, undefined, null), done,
+        hurt: (slug) => hurtFor(slug, matchup.week) });
     for (const st of r.states) states.push({ game_window: st.window, home_score: st.home, away_score: st.away });
     slotRows = r.slots;
     homeTotal = r.home; awayTotal = r.away;

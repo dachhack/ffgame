@@ -22,7 +22,7 @@
 // This module owns every default; SQL stores sanitized overrides only.
 import type { Player, Pos } from '../types';
 import { playsForPlayer, type RawPlay } from './sim';
-import { flagRulesFor, flagFor, adjustmentFor } from '../data/commish';
+import { flagRulesFor, flagFor, adjustmentFor, hurtFor } from '../data/commish';
 import { golfValue, zeroFill, leagueIsGolf, leagueGolfZeroPts } from './golf';
 import { golfExpectedScore } from './golfFloor';
 import { leagueBullseye, aimValue, applyBullseye, bullseyeTargetFor, setBullseyeRoster, type BullseyeSummary } from './bullseye';
@@ -926,7 +926,9 @@ export interface ClassicPick { slot: string; player: Player }
 /** `aim` (v0.643.0) is the spot's DART under bullseye (bullseye.ts): the
  *  target it was thrown at, how far it landed, and what it banked. `score`
  *  stays the player's real points either way. */
-export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string | null; metric: null; score: number; aim?: { target: number; dist: number; ring: number; penalty?: number };
+export interface ClassicSlotScore { win: string; side: 'home' | 'away'; slot: string; slug: string | null; metric: null; score: number;
+  /** The dart (0446): `penalty` on a no-show zero; `hurt` (v0.701.0) on a zero waived because he was hurt in his game. */
+  aim?: { target: number; dist: number; ring: number; penalty?: number; hurt?: boolean };
   /** THE PLAYS (v0.685.0): the contest play that touched this row, and the raw score before it. */ play?: string; raw?: number }
 export interface ClassicResult {
   home: number; away: number;
@@ -1662,5 +1664,5 @@ export function resolveClassicMatchup(home: ClassicSide, away: ClassicSide, week
   // Applied HERE so every caller (the worker's resolve, both boards, the
   // dry-run twin, the probes) inherits it and none can forget.
   const bull = leagueBullseye();
-  return bull ? applyBullseye(result, bull, slots.length, { home: home.rosterId, away: away.rosterId }) : result;
+  return bull ? applyBullseye(result, bull, slots.length, { home: home.rosterId, away: away.rosterId }, { hurt: (slug) => hurtFor(slug, week) }) : result;
 }

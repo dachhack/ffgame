@@ -30,6 +30,7 @@ import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { copyText } from './copy';
 import { Card, Chip, Mono, PrimaryButton } from './prims';
+import { InfoChip } from './InfoChip';
 import { LabelInfo } from './InfoChip';
 import { rescoreHeadline, autofillWarning, sideLine } from '@drip/core/data/rescore';
 import { fixSlots, fixChosen, fixOptions, fixPayload, fixChanged, type FixSlot } from '@drip/core/data/lineupFix';
@@ -878,6 +879,8 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
   const [pick, setPick] = useState<{ slug: string; name: string } | null>(null);
   const [pts, setPts] = useState('');
   const [why, setWhy] = useState('');
+  // HURT IN HIS GAME (v0.701.0): the dart's no-show penalty waived on his spot this week
+  const [hurt, setHurt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const load = (search?: string) => leaguePlayerAdjustments(leagueId, week, search?.trim() || undefined).then((r) => {
@@ -885,15 +888,15 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
     setRows(r.adjustments ?? []); setFound(r.found ?? []);
   }).catch((e) => setMsg(friendlyError(e)));
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId, week]);
-  const save = async (slug: string, points: number, note: string) => {
+  const save = async (slug: string, points: number, note: string, hurtIn = false) => {
     if (busy) return;
     setBusy(true); setMsg(null);
     try {
-      const r = await commishSetPlayerAdjustment(leagueId, week, slug, points, note);
+      const r = await commishSetPlayerAdjustment(leagueId, week, slug, points, note, hurtIn);
       if (!r.ok) { warn(); setMsg(friendlyError(r.error ?? 'failed')); return; }
       commit();
       setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
-      setPick(null); setPts(''); setWhy(''); setFound([]); setQ('');
+      setPick(null); setPts(''); setWhy(''); setHurt(false); setFound([]); setQ('');
     } catch (e) { warn(); setMsg(friendlyError(e)); }
     finally { setBusy(false); void load(); }
   };
@@ -908,7 +911,7 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
       {rows?.map((a) => (
         <View key={a.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Text style={{ flex: 1, fontSize: fs(12), color: t.text }}>
-            {a.name}<Text style={{ fontWeight: '700', color: a.points > 0 ? t.you : t.warn }}>{` ${a.points > 0 ? '+' : ''}${a.points}`}</Text>
+            {a.name}{a.points !== 0 && <Text style={{ fontWeight: '700', color: a.points > 0 ? t.you : t.warn }}>{` ${a.points > 0 ? '+' : ''}${a.points}`}</Text>}{a.hurt ? ' 🩹' : ''}
             <Text style={{ color: t.faint }}>{` — ${a.note}`}</Text>
           </Text>
           <Chip label="REMOVE" on={false} disabled={busy} onPress={() => { tap(); void save(a.slug, 0, ''); }} />
@@ -924,8 +927,12 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
               maxLength={200} style={{ ...input, flex: 1 }} />
           </View>
           <Row>
-            <Chip label="SAVE" on disabled={busy || !Number.isFinite(n) || n === 0 || !why.trim()}
-              onPress={() => { tap(); void save(pick.slug, n, why); }} />
+            <Chip label="🩹 HURT IN HIS GAME" on={hurt} onPress={() => { tap(); setHurt((v) => !v); }} />
+            <InfoChip title="Hurt in his game">He got hurt in his game: his zero takes no no-show penalty under the dart this week. The worker waives it on its own when the injury report dates his injury to his game; this covers what the report misses.</InfoChip>
+          </Row>
+          <Row>
+            <Chip label="SAVE" on disabled={busy || (hurt ? (pts.trim() !== '' && (!Number.isFinite(n) || (n !== 0 && !why.trim()))) : (!Number.isFinite(n) || n === 0 || !why.trim()))}
+              onPress={() => { tap(); void save(pick.slug, Number.isFinite(n) ? n : 0, why, hurt); }} />
             <Chip label="CANCEL" on={false} onPress={() => { tap(); setPick(null); }} />
           </Row>
         </View>
@@ -939,7 +946,7 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
       {!pick && found.map((p) => (
         <Pressable key={p.slug} onPress={() => {
           tap(); const had = rows?.find((a) => a.slug === p.slug);
-          setPick(p); setPts(had ? String(had.points) : ''); setWhy(had?.note ?? '');
+          setPick(p); setPts(had && had.points !== 0 ? String(had.points) : ''); setWhy(had && had.points !== 0 ? had.note : ''); setHurt(had?.hurt === true);
         }} style={{ paddingVertical: 6 }}>
           <Text style={{ fontSize: fs(12), color: t.text }}>
             {p.name}<Text style={{ color: t.faint }}>{` ${p.pos} · ${p.team}${p.owner ? ` · ${p.owner}` : ' · free agent'}  ›`}</Text>

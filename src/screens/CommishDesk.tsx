@@ -927,6 +927,8 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
   const [pick, setPick] = useState<{ slug: string; name: string } | null>(null);
   const [pts, setPts] = useState('');
   const [why, setWhy] = useState('');
+  // HURT IN HIS GAME (v0.701.0): the dart's no-show penalty waived on his spot this week
+  const [hurt, setHurt] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const load = (search?: string) => leaguePlayerAdjustments(leagueId, week, search?.trim() || undefined).then((r) => {
@@ -934,14 +936,14 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
     setRows(r.adjustments ?? []); setFound(r.found ?? []);
   }).catch((e) => setMsg(errMsg(e, 'could not load')));
   useEffect(() => { void load(); /* eslint-disable-next-line */ }, [leagueId, week]);
-  const save = async (slug: string, points: number, note: string) => {
+  const save = async (slug: string, points: number, note: string, hurtIn = false) => {
     if (busy) return;
     setBusy(true); setMsg(null);
     try {
-      const r = await commishSetPlayerAdjustment(leagueId, week, slug, points, note);
+      const r = await commishSetPlayerAdjustment(leagueId, week, slug, points, note, hurtIn);
       if (!r.ok) { setMsg(r.error ?? 'failed'); return; }
       setMsg(`✓ saved${r.rescore ? ` — week ${week}'s finals change when you re-score it below` : ''}`);
-      setPick(null); setPts(''); setWhy(''); setFound([]); setQ('');
+      setPick(null); setPts(''); setWhy(''); setHurt(false); setFound([]); setQ('');
     } catch (e) { setMsg(errMsg(e, 'failed')); }
     finally { setBusy(false); void load(); }
   };
@@ -955,7 +957,7 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
       </div>
       {rows?.map((a) => (
         <div key={a.slug} style={{ ...row, flexWrap: 'wrap' }}>
-          <span style={{ ...cell, flex: '1 1 160px' }}>{a.name} <b style={{ color: a.points > 0 ? 'var(--you)' : 'var(--warn)' }}>{a.points > 0 ? '+' : ''}{a.points}</b>
+          <span style={{ ...cell, flex: '1 1 160px' }}>{a.name} {a.points !== 0 && <b style={{ color: a.points > 0 ? 'var(--you)' : 'var(--warn)' }}>{a.points > 0 ? '+' : ''}{a.points}</b>}{a.hurt ? ' 🩹' : ''}
             <span style={{ color: 'var(--faint)' }}> — {a.note}</span></span>
           <button onClick={() => void save(a.slug, 0, '')} disabled={busy} className="mono" style={btn(false)}>remove</button>
         </div>
@@ -967,7 +969,9 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
             style={{ ...inp, width: 80, padding: '5px 8px', fontSize: 12.5 }} />
           <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="why — the league sees this" maxLength={200}
             style={{ ...inp, flex: 1, minWidth: 160, padding: '5px 8px', fontSize: 12.5 }} />
-          <button onClick={() => void save(pick.slug, n, why)} disabled={busy || !Number.isFinite(n) || n === 0 || !why.trim()}
+          <button onClick={() => setHurt((v) => !v)} className="mono" style={btn(hurt)}
+            title="He got hurt in his game: his zero takes no no-show penalty under the dart this week. The worker waives it on its own when the injury report dates his injury to his game; this covers what the report misses.">🩹 hurt in his game</button>
+          <button onClick={() => void save(pick.slug, Number.isFinite(n) ? n : 0, why, hurt)} disabled={busy || (hurt ? (pts.trim() !== '' && (!Number.isFinite(n) || (n !== 0 && !why.trim()))) : (!Number.isFinite(n) || n === 0 || !why.trim()))}
             className="mono" style={btn(true)}>save</button>
           <button onClick={() => setPick(null)} className="mono" style={btn(false)}>cancel</button>
         </div>
@@ -981,7 +985,7 @@ export function AdjustBox({ leagueId, week }: { leagueId: string; week: number }
       {!pick && found.map((p) => (
         <div key={p.slug} style={row}>
           <span style={{ ...cell, flex: 1 }}>{p.name} <span style={{ color: 'var(--faint)' }}>{p.pos} · {p.team}{p.owner ? ` · ${p.owner}` : ' · free agent'}</span></span>
-          <button onClick={() => { const had = rows?.find((a) => a.slug === p.slug); setPick(p); setPts(had ? String(had.points) : ''); setWhy(had?.note ?? ''); }}
+          <button onClick={() => { const had = rows?.find((a) => a.slug === p.slug); setPick(p); setPts(had && had.points !== 0 ? String(had.points) : ''); setWhy(had && had.points !== 0 ? had.note : ''); setHurt(had?.hurt === true); }}
             className="mono" style={btn(false)}>adjust</button>
         </div>
       ))}

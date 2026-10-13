@@ -30,6 +30,7 @@ function squadRows(entry: unknown, slots: { slot: string }[]): Row[] {
 }
 
 /** THE TIE-BREAKER CHIP (v0.682.2): what the number on the card means. */
+const HURT_NOTE = 'He got hurt in his game, so his zero is not a no-show: it adds nothing to the squad’s distance.';
 const TB_NOTE = 'This spot is your tie-breaker: its player aims at this number. If the matchup ties on rings, the squad whose tie-breaker lands closer to its own number wins.';
 
 export function ContestMatchup({ leagueId, week, header }: { leagueId: string; week: number;
@@ -154,10 +155,12 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     // THE PENALTY CHIP (v0.685.2): a spot that posted nothing wears the dart's penalty, red — an empty spot too (v0.695.0)
     const lvr = m.state?.slots?.find((x) => x.side === s && x.slot === r.slot);
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
+    // HURT IN HIS GAME (v0.701.0): his zero took no penalty — the chip says why
+    const hurtRow = lvr?.aim?.hurt === true;
     const tbc = tbs[s]?.slot === r.slot ? tbs[s] : null;
     // THE SPOT'S NUMBER, BEFORE THE PICK (v0.699.2): the tie-breaker chip on the open spot too
     if (!r.slug && !r.sealed) return <EmptyCard key={`${s}-${r.slot}`} label={labels[r.slot] ?? r.slot} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : undefined} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} />;
-    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert(pen != null ? 'No-show' : 'Tie-breaker', pen != null ? `This spot posted nothing, and a zero scores nothing: it adds ${pen} to the squad's distance.` : TB_NOTE)} /> : <View />;
+    const face = r.slug ? <CardFace slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} mine={mine} locked={!mine && !!r.slug} chip={pen != null ? `−${pen}` : hurtRow ? '🩹' : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => Alert.alert(pen != null ? 'No-show' : hurtRow ? 'Hurt in his game' : 'Tie-breaker', pen != null ? `This spot posted nothing, and a zero scores nothing: it adds ${pen} to the squad's distance.` : hurtRow ? HURT_NOTE : TB_NOTE)} /> : <View />;
     return <FlipCard key={`${s}-${r.slot}`} flipped={mine || !!r.slug} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={face} />;
   };
   // While a play is aimed, only the spots it may land on now light up: mine for a spot play, theirs for Spy

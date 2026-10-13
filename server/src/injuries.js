@@ -17,6 +17,8 @@
 // lock-time fill and the resolve-time aiSide rebuild — had no injury
 // awareness at all and could field a player ruled OUT. Now all five ask here.
 import { db } from './supabase.js';
+import { config } from './config.js';
+import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
 
 // PAGED READS (v0.489.4). PostgREST answers any select with at most 1000 rows,
 // silently, and BOTH reads below want the whole table. injury_status had no
@@ -73,3 +75,49 @@ export async function injuryStatusMap(now = Date.now()) {
 
 /** Test hook: drop the caches so the next call re-reads. */
 export function clearRuledOutCache() { cache = null; statusCache = null; }
+
+
+// ── HURT IN HIS GAME (v0.701.0) ──────────────────────────────────────────────
+// Founder: "We need a way to not apply the 0 penalty to players who were
+// injured during their game." The dart's −10 is for a no-show; a player who
+// took the field and got hurt posted what he posted. The worker's own ESPN
+// report dates each designation: one dated on or after his team's kickoff
+// (and within the game's few days — a re-stamp weeks later must not read a
+// later injury into this week) is an injury in that game. The commissioner's
+// waiver (player_adjustment.hurt, 0493) covers what the report misses.
+const HURT_WINDOW_MS = 4 * 24 * 3600_000;
+/** Pure: the slugs hurt in their game this week. `rows` are injury_status rows
+ *  (player_slug, status, designation_date, team); `kickoffs` team → ms. */
+export function hurtInGame(rows, kickoffs, now = Date.now()) {
+  const out = new Set();
+  // both sides normalised (LA and LAR are one team, #1095)
+  const kick = {};
+  for (const [team, ms] of Object.entries(kickoffs ?? {})) kick[normTeam(String(team).toUpperCase())] = ms;
+  for (const r of rows ?? []) {
+    const at = r?.designation_date ? Date.parse(r.designation_date) : NaN;
+    if (!Number.isFinite(at)) continue;
+    const team = normTeam(String(r.team ?? '').toUpperCase());
+    const k = kick[team];
+    if (!Number.isFinite(k) || k > now) continue;
+    if (at >= k && at <= k + HURT_WINDOW_MS) out.add(r.player_slug);
+  }
+  return out;
+}
+let hurtCache = null; // { at, week, set }
+/** The week's hurt-in-game slugs, from the report and the slate; cached a minute. */
+export async function hurtInGameSlugs(week, season = config.season, now = Date.now()) {
+  if (hurtCache && hurtCache.week === week && now - hurtCache.at < TTL_MS) return hurtCache.set;
+  const [inj, sl] = await Promise.all([
+    allRows((from, to) => db().from('injury_status').select('player_slug,status,designation_date,team').order('player_slug').range(from, to)),
+    db().from('nfl_slate').select('home,away,kickoff').eq('season', String(season)).eq('week', week),
+  ]);
+  if (inj.error || sl.error) return hurtCache?.set ?? new Set();
+  const kickoffs = {};
+  for (const g of sl.data ?? []) {
+    const ms = g.kickoff ? Date.parse(g.kickoff) : NaN;
+    if (!Number.isFinite(ms)) continue;
+    for (const team of [g.home, g.away]) if (team) kickoffs[normTeam(String(team).toUpperCase())] = ms;
+  }
+  hurtCache = { at: now, week, set: hurtInGame(inj.rows, kickoffs, now) };
+  return hurtCache.set;
+}

@@ -103,5 +103,30 @@ begin
   r := commish_set_player_adjustment(lid, 96, 'aj-12', 0, null);
   perform aj_true((r ->> 'removed')::boolean = false, 'a6 removing nothing');
   perform aj_true((select count(*) from league_message where league_id = lid) = n + 1, 'a6 and quietly');
+
+  -- ── a7. HURT IN HIS GAME (0493): the waiver on the same row ──
+  r := commish_set_player_adjustment(lid, 96, 'aj-12', 0, null, true);
+  perform aj_ok(r, 'a7 waive with no points and no reason');
+  perform aj_true((r ->> 'hurt')::boolean, 'a7 the answer says hurt');
+  perform aj_true((select hurt from player_adjustment where league_id = lid and week = 96 and slug = 'aj-12'), 'a7 the row says hurt');
+  perform aj_true((select points from player_adjustment where league_id = lid and week = 96 and slug = 'aj-12') = 0, 'a7 at zero points');
+  select body into line from league_message where league_id = lid order by created_at desc, id desc limit 1;
+  perform aj_true(line = '🩹 The commissioner waived the no-show penalty on Adjust Player 12 for week 96 — hurt in his game', 'a7 in words: ' || line);
+  r := league_player_adjustments(lid, 96);
+  perform aj_true((r #>> '{adjustments,0,hurt}')::boolean, 'a7 the read says hurt');
+  perform aj_ok(commish_set_player_adjustment(lid, 96, 'aj-12', 3, 'and a stat fix', true), 'a7 points and the waiver together');
+  perform aj_true((select points from player_adjustment where league_id = lid and week = 96 and slug = 'aj-12') = 3
+    and (select hurt from player_adjustment where league_id = lid and week = 96 and slug = 'aj-12'), 'a7 both kept');
+  select body into line from league_message where league_id = lid order by created_at desc, id desc limit 1;
+  perform aj_true(line like '%+3.0 — and a stat fix · hurt in his game: no no-show penalty', 'a7 both in words: ' || line);
+  perform aj_ok(commish_set_player_adjustment(lid, 96, 'aj-12', 3, 'stat fix only', false), 'a7 waiver off, points stay');
+  perform aj_true(not (select hurt from player_adjustment where league_id = lid and week = 96 and slug = 'aj-12'), 'a7 waiver off');
+  perform aj_ok(commish_set_player_adjustment(lid, 96, 'aj-12', 0, null, true), 'a7 back to the waiver alone');
+  r := commish_set_player_adjustment(lid, 96, 'aj-12', 0, null, false);
+  perform aj_ok(r, 'a7 remove');
+  perform aj_true(not exists (select 1 from player_adjustment where league_id = lid and week = 96 and slug = 'aj-12'), 'a7 gone');
+  select body into line from league_message where league_id = lid order by created_at desc, id desc limit 1;
+  perform aj_true(line = '🩹 The commissioner put the no-show penalty back on Adjust Player 12 for week 96', 'a7 put back in words: ' || line);
+  perform aj_refused(commish_set_player_adjustment(lid, 96, 'aj-12', 3, null, true), 'say why', 'a7 points still need a reason');
 end $$;
 select 'ALL ADJUST PROBES PASS';

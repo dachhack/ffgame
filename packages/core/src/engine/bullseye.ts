@@ -348,10 +348,15 @@ export function applyBullseye(
   r: ClassicResult, bull: BullseyeInstall, slotCount: number,
   /** Per-team deal: which roster each side is, so each aims at its own card. */
   rids?: { home?: number | null; away?: number | null },
+  /** HURT IN HIS GAME (v0.701.0, founder: "a way to not apply the 0 penalty to players who were injured during
+   *  their game"): a zero from a player who took the field and got hurt is not a no-show — no penalty, the row
+   *  marked `hurt`. The caller knows who (the injury report dated to his game, or the commissioner). */
+  opts: { hurt?: (slug: string) => boolean } = {},
 ): ClassicResult {
   const { cfg } = bull;
   const n = Math.max(1, slotCount);
   const penalty = bullseyePenalty(cfg.radius);
+  const hurtRow = (x: ClassicSlotScore): boolean => !!x.slug && isZeroScore(x.score) && opts.hurt?.(x.slug) === true;
   const side = (which: 'home' | 'away'): { rows: ClassicSlotScore[]; dart: SideDart } => {
     const rid = which === 'home' ? rids?.home : rids?.away;
     const card = (rid != null ? bull.cards?.[rid] : undefined) ?? bull.card;
@@ -360,7 +365,7 @@ export function applyBullseye(
     // THE ZERO PENALTY: every spot that posted nothing — a row at 0.0, or a
     // spot with no row at all (unfilled, no zero-fill). The resolver runs on
     // final numbers, so every zero here is a no-show.
-    const zeros = Math.max(0, n - mine.length) + mine.filter((x) => isZeroScore(x.score)).length;
+    const zeros = Math.max(0, n - mine.length) + mine.filter((x) => isZeroScore(x.score) && !hurtRow(x)).length;
     const dist = round1(Math.abs(points - card.total) + penalty * zeros);
     if (cfg.variant === 'total') {
       // THE DISTANCE IS THE SCORE (v0.683.0, founder: "why are there rings?
@@ -371,7 +376,7 @@ export function applyBullseye(
       // higher winning; bullseyeLowerWins tells every ranking which way is
       // up.) Rows carry no per-spot aim: no spot was aiming at anything alone;
       // a zero row still carries its penalty so the board can say so.
-      const rows = mine.map((x) => (isZeroScore(x.score) ? { ...x, aim: { target: card.total, dist: 0, ring: 0, penalty } } : x));
+      const rows = mine.map((x) => (isZeroScore(x.score) ? { ...x, aim: { target: card.total, dist: 0, ring: 0, ...(hurtRow(x) ? { hurt: true } : { penalty }) } } : x));
       return { rows, dart: { target: card.total, dist, ring: dist, points, zeros, penalty } };
     }
     let ring = 0;
@@ -381,7 +386,7 @@ export function applyBullseye(
       const rs = ringScore(x.score, target, cfg.radius);
       ring += rs;
       const zero = isZeroScore(x.score);
-      return { ...x, aim: { target, dist: round1(Math.abs(x.score - target)), ring: rs, ...(zero ? { penalty } : {}) } };
+      return { ...x, aim: { target, dist: round1(Math.abs(x.score - target)), ring: rs, ...(zero ? (hurtRow(x) ? { hurt: true } : { penalty }) : {}) } };
     });
     return { rows, dart: { target: card.total, dist, ring: round1(Math.max(0, ring - penalty * zeros)), points, zeros, penalty } };
   };
