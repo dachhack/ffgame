@@ -38,6 +38,8 @@ import { isCollegeSlug } from '@drip/core/data/college';
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
   week?: number; userId?: string;
+  /** THE TAB TO OPEN ON (v0.703.0, founder: "Single tap once the card locks, brings up the game log"). */
+  tab?: 'summary' | 'log' | 'team' | 'history';
   /** The league this card was opened FROM, when there is one. It buys the two
    *  panels a bare NFL card can't have: who owns him here, and what this
    *  league has done with him (0186's register). Optional — the demo board and
@@ -92,7 +94,8 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // 2025 season that shipped inside the app and went with that bake in
   // v0.502.0; it is BACK as the live season (v0.641.0, founder: "Game logs
   // on the player cards?") — read from live_play on open, nothing shipped.
-  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>('summary');
+  const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>(req.tab ?? 'summary');
+  useEffect(() => { setTab(req.tab ?? 'summary'); }, [req.slug, req.tab]);
   // The log, built only when its tab opens; reset when the sheet moves to
   // another man (the host reuses one, v0.456.0).
   const [log, setLog] = useState<GameLogWeek[] | null>(null);

@@ -14,7 +14,7 @@
 // the table walks the week's other matchups (every seat's squad on a
 // leaderboard); the week arrows live in the league frame.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
+import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot, weekGameFeeds } from '@drip/core/data/liveApi';
 import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById, contestRedeal, contestPlaysFor, contestPlayCap, contestSpotOpen, contestHandCard, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
@@ -24,6 +24,9 @@ import { classicSlotsFromSpec, type ClassicScoring } from '@drip/core/engine/cla
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { CardTableCss, Felt, PlayerCard, SealedCard, PowerupHand, type HandCard } from '../app/cardTable';
 import { InfoChip } from './adminUi';
+import { FieldBoard, type FieldBoardEntry } from '../app/FieldView';
+import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
+import { openPlayerCard } from '../app/playerCard';
 
 const card: CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: 14 };
 const small: CSSProperties = { fontSize: 10, color: 'var(--faint)' };
@@ -79,6 +82,12 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     return () => { alive = false; };
   }, [leagueId, week, me]);
   const [slate, setSlate] = useState<Map<string, SlateSpot>>(new Map());
+  // ▦ FIELDS (v0.703.0, founder: "the all fields chip in the matchup screens for classic and weekly competitions"):
+  // the week's feeds are installed when the board opens — this screen scores off the worker's state, not the feed.
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [feedTick, setFeedTick] = useState(0);
+  const loadFeeds = useCallback(() => weekGameFeeds(week).then((gf) => { setLiveGameFeed(week, feedRowsToWeek(gf)); setFeedTick((n) => n + 1); }).catch(() => {}), [week]);
+  useEffect(() => { if (fieldsOpen) void loadFeeds(); }, [fieldsOpen, loadFeeds]);
   useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week]);
   const bySlug = useMemo(() => new Map(board.map((r) => [r.slug, r])), [board]);
   const slots = useMemo(() => classicSlotsFromSpec(st?.slots ?? null) ?? [], [st?.slots]);
@@ -163,7 +172,10 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
     // HURT IN HIS GAME (v0.701.0): his zero took no penalty — the chip says why
     const hurtRow = lvr?.aim?.hurt === true;
-    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} chip={pen != null ? `−${pen}` : hurtRow ? '🩹' : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(hurtRow ? HURT_NOTE : TB_NOTE); }} onClick={onPick} selected={hot} />;
+    // THE GAME LOG (v0.703.0): a locked card, not being aimed at, opens his card on the Game log tab
+    const slug = r.slug;
+    const logOpen = slug && !onPick && locked(slug) ? () => openPlayerCard({ slug, name: p?.name ?? slug, pos: p?.pos ?? 'FLEX', team: p?.team ?? '', week, tab: 'log' }) : undefined;
+    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} chip={pen != null ? `−${pen}` : hurtRow ? '🩹' : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(hurtRow ? HURT_NOTE : TB_NOTE); }} onClick={onPick ?? logOpen} selected={hot} />;
     if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" onClick={onPick} selected={hot} />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={hot ? '▶ HERE' : false} onClick={onPick} />;
     return (
@@ -303,15 +315,22 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <CardTableCss />
-      {(st.matchups?.length ?? 0) > 1 && (
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', alignItems: 'center', paddingBottom: 4 }}>
-          {(st.matchups ?? []).map((x) => (
+      {/* ▦ FIELDS (v0.703.0): every game of the week, the live drive charts, from here as from the classic board */}
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', alignItems: 'center', paddingBottom: 4 }}>
+        <button onClick={() => setFieldsOpen(true)} className="mono" style={{ ...chip(false), flexShrink: 0, whiteSpace: 'nowrap' }}>▦ FIELDS</button>
+        {(st.matchups?.length ?? 0) > 1 && (st.matchups ?? []).map((x) => (
             <button key={x.id} onClick={() => setPick(x.id === (st.matchups ?? []).find((y) => y.mine)?.id ? null : x.id)} className="mono" style={{ ...chip(x.id === m.id), flexShrink: 0, whiteSpace: 'nowrap' }}>
               {x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}{x.mine ? ' · YOU' : ''}
             </button>
           ))}
-        </div>
-      )}
+      </div>
+      {fieldsOpen && (() => {
+        void feedTick;   // re-render once the feeds land
+        const entries: FieldBoardEntry[] = [];
+        for (const side of [L, R] as const) for (const r of side.rows) { if (r.slug) entries.push({ playerId: r.slug, team: bySlug.get(r.slug)?.team ?? null, side: side.mine ? 'you' : 'their', clock: Number.MAX_SAFE_INTEGER }); }
+        const scheduled = [...slate.entries()].filter(([, g]) => g.home).map(([team, g]) => ({ home: team, away: g.opp, kickoff: g.kickoff != null ? new Date(g.kickoff).toISOString() : null }));
+        return <FieldBoard week={week} entries={entries} scheduled={scheduled} onClose={() => setFieldsOpen(false)} onRefresh={() => void loadFeeds()} />;
+      })()}
       {tbNote && (
         <div style={{ ...card, display: 'flex', gap: 10, alignItems: 'baseline' }}>
           <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', flex: 1 }}>{tbNote}</span>

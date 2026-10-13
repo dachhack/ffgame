@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.703.0 — Tap a locked card for his game log; ▦ FIELDS on the contest matchup
+
+> - Once a player’s game has kicked off, one tap on his card — on the matchup and on My Team — opens his card on the Game log tab.
+> - The weekly contest matchup has the ▦ FIELDS chip: every game of the week with its live drive chart, on the week you are looking at.
+
+Founder: "Single tap once the card locks, brings up the game log for that
+player on matchup and my team screens. We also need the all fields chip in
+the matchup screens for classic and weekly competitions." The player card
+request takes `tab` (phone `PlayerCardSheet`, web `playerCard`); a locked
+card that is not being aimed at opens it on `log` (`ContestMatchup`,
+`ContestSquad`, both hosts). Phone: `AllFieldsSheet` takes `week`, and the
+contest matchup mounts it behind a ▦ FIELDS chip beside the matchup
+picker. Web: the contest matchup mounts `FieldBoard` with both squads’
+players as entries and the slate as fixtures, installing the week’s feeds
+when it opens. The classic board already carried the chip (v0.412.0).
+
 ### v0.702.0 — The rules-of-hooks check
 
 > - A new check in the battery, and on every push that touches a screen, fails a change that declares a hook after an early return, under a condition or inside a callback — the mistake that crashed My Team for a day.

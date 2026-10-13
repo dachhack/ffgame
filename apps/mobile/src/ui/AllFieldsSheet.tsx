@@ -20,7 +20,8 @@ import { Chip, Mono } from './prims';
 import { Overlay } from './Overlay';
 import { FieldsList } from './FieldsList';
 
-export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function AllFieldsSheet({ visible, onClose, week: weekProp }: { visible: boolean; onClose: () => void;
+  /** THE MATCHUP'S WEEK (v0.703.0): a board opens the sheet on the week it shows; without one, the fields week. */ week?: number | null }) {
   const t = useTheme();
   const [week, setWeek] = useState<number | null>(null);
   const [feeds, setFeeds] = useState<GameFeedRow[] | null>(null);
@@ -38,13 +39,15 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
   const levelRef = useRef(level);
 
   const load = useCallback(async (wk?: number | null) => {
-    let w = wk ?? week;
+    let w = wk ?? week ?? (level === 'nfl' ? weekProp ?? null : null);
     if (w == null) {
       const rows = await slateWeeks(String(LIVE_SEASON)).catch(() => []);
-      if (level === 'cfb') await loadCollegeLogos();
       w = fieldsWeekFrom(rows, Date.now(), level);
       if (levelRef.current !== level) return;
       if (w == null) { setFeeds([]); return; }
+    }
+    if (week !== w) {
+      if (level === 'cfb') await loadCollegeLogos();
       const slate = await liveSlate(w, String(LIVE_SEASON)).catch(() => []);
       if (levelRef.current !== level) return;
       setRuntimeSlate(w, slate.map((g) => ({ away: g.away, home: g.home, aScore: 0, hScore: 0, win: g.win as WindowId, kickoff: g.kickoff ? Date.parse(g.kickoff) : undefined })));
@@ -59,7 +62,7 @@ export function AllFieldsSheet({ visible, onClose }: { visible: boolean; onClose
     setLiveGameFeed(w, feedRowsToWeek(gf));
     if (lp.length) setLivePlays(w, liveRowsToPbp(lp));
     setFeeds(gf);
-  }, [week, level]);
+  }, [week, level, weekProp]);
 
   useEffect(() => {
     if (!visible) return;
