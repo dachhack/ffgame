@@ -14,7 +14,7 @@ import {
   shotgunState, shotgunDecline, shotgunCounter, shotgunAcceptCounter, shotgunCommishEdit, shotgunCommishDecline, friendlyError,
 } from '@drip/core/data/liveApi';
 import {
-  weddingStatusShort, weddingPlayerTag, type Wedding, type WeddingPlayer, type WeddingSide,
+  weddingStatusShort, type Wedding, type WeddingPlayer, type WeddingSide,
 } from '@drip/core/data/shotgunWedding';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14, marginBottom: 12 };
@@ -25,11 +25,6 @@ const btn = (tone: 'you' | 'opp' | 'plain', busy: boolean): React.CSSProperties 
   border: `1px solid ${tone === 'you' ? 'var(--you)' : tone === 'opp' ? 'var(--opp)' : 'var(--bd)'}`,
   color: tone === 'you' ? 'var(--on-accent)' : tone === 'opp' ? 'var(--opp)' : 'var(--text)',
   background: tone === 'you' ? 'var(--you)' : 'var(--bg)',
-});
-const chip = (on: boolean): React.CSSProperties => ({
-  fontSize: 10, padding: '4px 9px', borderRadius: 999, cursor: 'pointer',
-  border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`, color: on ? 'var(--you)' : 'var(--dim)',
-  background: on ? 'color-mix(in srgb, var(--you) 10%, var(--surface))' : 'var(--surface)',
 });
 
 // THE TRADE BOX (v0.656.4, founder: "get rid of the walls of text"): the two
@@ -174,16 +169,27 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
                     This replaces the trade that goes through at the deadline. The deadline and who can call it off stay as announced.
                   </div>
                 )}
-                {rows.map((r, i) => (
-                  <div key={r.label}>
-                    <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginTop: i ? 10 : 0 }}>{r.label}</div>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
-                      {(r.list ?? []).map((p) => (
-                        <button key={p.slug} className="mono" style={chip(r.pick.includes(p.slug))} onClick={() => toggle(r.pick, r.set, p.slug)}>{weddingPlayerTag(p)}</button>
-                      ))}
+                {/* THE STANDARD TRADE INTERACTION (v0.705.0): the two rosters side by side as checklists, the trade
+                    composer's rows; one to three each way. */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {rows.map((r) => (
+                    <div key={r.label} style={{ flex: '1 1 150px', minWidth: 140 }}>
+                      <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 4 }}>{r.label}</div>
+                      <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 6, padding: 6 }}>
+                        {(r.list ?? []).map((p) => {
+                          const on = r.pick.includes(p.slug);
+                          return (
+                            <button key={p.slug} onClick={() => toggle(r.pick, r.set, p.slug)} className="mono"
+                              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', background: on ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'none', border: 'none', borderRadius: 4, padding: '4px 5px', cursor: 'pointer' }}>
+                              <span style={{ fontSize: 11, color: on ? 'var(--you)' : 'var(--text)', fontWeight: on ? 700 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{on ? '☑' : '☐'} {p.name}</span>
+                              <span style={{ fontSize: 8.5, color: 'var(--faint)' }}>{p.pos ?? ''}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
                 <button className="mono" disabled={busy || !pickH.length || !pickA.length} style={{ ...btn('you', busy), marginTop: 10 }}
                   onClick={() => void act(open === 'commish'
                     ? () => shotgunCommishEdit(w.id, pickH, pickA)

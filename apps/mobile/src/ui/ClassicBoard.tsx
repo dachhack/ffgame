@@ -47,6 +47,7 @@ import {
 import { useTheme, MONO } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
+import { WeddingChip } from './WeddingChip';
 import { NoGame } from './NoGame';
 import { InjuryNow } from './rosterGroup';
 import { Overlay } from './Overlay';
@@ -1796,6 +1797,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
             fed by classic's starters. Only offered once feeds exist: a chip
             into an empty sheet would read as broken. */}
         {fieldGames.length > 0 && <Chip label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />}
+        {/* 💍 THE WEDDING (v0.705.0): the impending shotgun wedding, while one is pending */}
+        {variant === 'match' && <WeddingChip leagueId={leagueId} />}
       </View>
       {browsing && matchup && (
         <Pressable onPress={() => { tap(); setViewRid(null); }} accessibilityRole="button"
