@@ -23,6 +23,8 @@ export interface WeekReport {
   week: number;
   league: string;
   format: ReportFormat;
+  /** LOWER WINS (v0.701.3): a golf league, or a dart league scored on distance — the best score is the smallest. */
+  lowerWins?: boolean;
   headline: string;
   results: ReportGame[];
   standings: ReportStanding[];
@@ -66,6 +68,9 @@ export interface WeekReportInput {
   slots?: ReportSlotRow[];
   eliminated?: number[];
   bites?: { vampire: number; victim: number; take: string; give: string }[];
+  /** LOWER WINS (v0.701.3): golf, or a dart league scored on distance. The week's best is the smallest score;
+   *  a game goes to the lower side; the standings count it so. */
+  lowerWins?: boolean;
 }
 
 const r1 = (n: unknown): number => Math.round((Number(n) || 0) * 10) / 10;
@@ -87,6 +92,8 @@ const nameOf = (names: WeekReportInput['names'], roster: number): string => {
 export function buildWeekReport(input: WeekReportInput): WeekReport {
   const { week, names } = input;
   const format: ReportFormat = input.format === 'guillotine' || input.format === 'vampire' ? input.format : 'standard';
+  const lower = input.lowerWins === true;
+  const better = (a: number, b: number) => (lower ? a < b : a > b);   // is a the better score?
   const team = (roster: number, score: unknown): ReportTeam => ({ roster, name: nameOf(names, roster), score: r1(score) });
 
   // This week's results — a seat against itself (a bye row) is not a game.
@@ -96,11 +103,13 @@ export function buildWeekReport(input: WeekReportInput): WeekReport {
       const home = team(m.home_roster_id, m.home_final), away = team(m.away_roster_id, m.away_final);
       return { home, away, margin: r1(Math.abs(home.score - away.score)) };
     })
-    .sort((a, b) => Math.max(b.home.score, b.away.score) - Math.max(a.home.score, a.away.score));
+    .sort((a, b) => (lower
+      ? Math.min(a.home.score, a.away.score) - Math.min(b.home.score, b.away.score)
+      : Math.max(b.home.score, b.away.score) - Math.max(a.home.score, a.away.score)));
 
   const scored: ReportTeam[] = results.flatMap((g) => [g.home, g.away]);
-  const top = scored.length ? scored.reduce((a, b) => (b.score > a.score ? b : a)) : undefined;
-  const low = scored.length ? scored.reduce((a, b) => (b.score < a.score ? b : a)) : undefined;
+  const top = scored.length ? scored.reduce((a, b) => (better(b.score, a.score) ? b : a)) : undefined;
+  const low = scored.length ? scored.reduce((a, b) => (better(a.score, b.score) ? b : a)) : undefined;
   const closest = results.length ? results.reduce((a, b) => (b.margin < a.margin ? b : a)) : undefined;
   const blowout = results.length > 1 ? results.reduce((a, b) => (b.margin > a.margin ? b : a)) : undefined;
 
@@ -116,9 +125,9 @@ export function buildWeekReport(input: WeekReportInput): WeekReport {
     const h = row(m.home_roster_id), a = row(m.away_roster_id);
     const hs = r1(m.home_final), as = r1(m.away_final);
     h.pf = r1(h.pf + hs); h.pa = r1(h.pa + as); a.pf = r1(a.pf + as); a.pa = r1(a.pa + hs);
-    if (hs > as) { h.w++; a.l++; } else if (as > hs) { a.w++; h.l++; } else { h.t++; a.t++; }
+    if (hs === as) { h.t++; a.t++; } else if (better(hs, as)) { h.w++; a.l++; } else { a.w++; h.l++; }
   }
-  const standings = [...tbl.values()].sort((x, y) => y.w - x.w || x.l - y.l || y.pf - x.pf || x.roster - y.roster);
+  const standings = [...tbl.values()].sort((x, y) => y.w - x.w || x.l - y.l || (lower ? x.pf - y.pf : y.pf - x.pf) || x.roster - y.roster);
 
   // MVP: the week's single best slot, credited to the seat that started him.
   let mvp: ReportMvp | undefined;
@@ -129,7 +138,7 @@ export function buildWeekReport(input: WeekReportInput): WeekReport {
     mvp = { slug: s.slug, name: slugPretty(s.slug), team: nameOf(names, roster), score, metric: s.metric ?? null };
   }
 
-  const out: WeekReport = { v: 1, week, league: input.league, format, headline: '', results, standings };
+  const out: WeekReport = { v: 1, week, league: input.league, format, ...(lower ? { lowerWins: true } : {}), headline: '', results, standings };
   if (top) out.top = top;
   if (low) out.low = low;
   if (closest) out.closest = closest;
@@ -159,9 +168,10 @@ export function reportHasScores(r: Pick<WeekReport, 'results'>): boolean {
 export function headlineOf(r: WeekReport): string {
   if (!r.results.length || !reportHasScores(r)) return `Week ${r.week} closed with no games scored.`;
   const bits: string[] = [];
-  if (r.top) bits.push(`${r.top.name} led the week with ${fmt(r.top.score)}`);
+  if (r.top) bits.push(r.lowerWins ? `${r.top.name} landed closest at ${fmt(r.top.score)}` : `${r.top.name} led the week with ${fmt(r.top.score)}`);
   if (r.closest && r.results.length > 1) {
-    const [w, l] = r.closest.home.score >= r.closest.away.score ? [r.closest.home, r.closest.away] : [r.closest.away, r.closest.home];
+    const homeBest = r.lowerWins ? r.closest.home.score <= r.closest.away.score : r.closest.home.score >= r.closest.away.score;
+    const [w, l] = homeBest ? [r.closest.home, r.closest.away] : [r.closest.away, r.closest.home];
     bits.push(r.closest.margin === 0
       ? `${w.name} and ${l.name} tied at ${fmt(w.score)}`
       : r.closest.margin <= 5
@@ -181,8 +191,8 @@ export function reportBody(r: WeekReport): string {
 export interface ReportRow { label: string; value: string; sub?: string; hot?: boolean }
 export interface ReportSection { title: string; rows: ReportRow[] }
 
-const gameRow = (g: ReportGame): ReportRow => {
-  const homeWon = g.home.score > g.away.score, tie = g.home.score === g.away.score;
+const gameRow = (g: ReportGame, lower = false): ReportRow => {
+  const homeWon = lower ? g.home.score < g.away.score : g.home.score > g.away.score, tie = g.home.score === g.away.score;
   return {
     label: `${g.home.name} vs ${g.away.name}`,
     value: `${fmt(g.home.score)}–${fmt(g.away.score)}`,
@@ -194,11 +204,11 @@ const gameRow = (g: ReportGame): ReportRow => {
 export function reportSections(r: WeekReport): ReportSection[] {
   const out: ReportSection[] = [];
   const marks: ReportRow[] = [];
-  if (r.top) marks.push({ label: 'High score', value: fmt(r.top.score), sub: r.top.name, hot: true });
+  if (r.top) marks.push({ label: r.lowerWins ? 'Closest to the number' : 'High score', value: fmt(r.top.score), sub: r.top.name, hot: true });
   if (r.mvp) marks.push({ label: 'MVP', value: fmt(r.mvp.score), sub: `${r.mvp.name} · ${r.mvp.team}${r.mvp.metric ? ` · ${r.mvp.metric}` : ''}` });
   if (r.closest && r.results.length > 1) marks.push({ label: 'Closest game', value: `by ${fmt(r.closest.margin)}`, sub: `${r.closest.home.name} vs ${r.closest.away.name}` });
   if (r.blowout) marks.push({ label: 'Blowout', value: `by ${fmt(r.blowout.margin)}`, sub: `${r.blowout.home.name} vs ${r.blowout.away.name}` });
-  if (r.low) marks.push({ label: 'Low score', value: fmt(r.low.score), sub: r.low.name });
+  if (r.low) marks.push({ label: r.lowerWins ? 'Furthest off' : 'Low score', value: fmt(r.low.score), sub: r.low.name });
   if (marks.length) out.push({ title: 'The week', rows: marks });
   if (r.format === 'guillotine') {
     out.push({ title: 'Guillotine', rows: r.eliminated
@@ -210,7 +220,7 @@ export function reportSections(r: WeekReport): ReportSection[] {
       ? r.bites.map((b) => ({ label: `${b.vampire} bit ${b.victim}`, value: b.take, sub: `gave back ${b.give}` }))
       : [{ label: 'Bites', value: '—', sub: 'no blood drawn this week' }] });
   }
-  if (r.results.length) out.push({ title: 'Results', rows: r.results.map(gameRow) });
+  if (r.results.length) out.push({ title: 'Results', rows: r.results.map((g) => gameRow(g, r.lowerWins === true)) });
   if (r.standings.length) {
     out.push({ title: 'Standings', rows: r.standings.map((s, i) => ({
       label: `${i + 1}. ${s.name}`,

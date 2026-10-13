@@ -1,0 +1,6 @@
+{
+  "mode": "report",
+  "league": "12dc3802",
+  "week": 5,
+  "why": "The week-5 restamp (048) rebuilt the Weekly Bullseye League's report with the classic builder, which named the seat furthest from the number as the week's leader (36.9 'led the week'). v0.701.3 teaches the report that a dart league's best score is the smallest; this rebuilds that one report and its chat line."
+}

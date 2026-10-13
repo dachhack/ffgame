@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.701.3 — The week report knows when lower wins
+
+> - In a dart league scored on distance (and in golf), the week report now calls the smallest score the week’s best — “landed closest at 21.8”, “Closest to the number”, “Furthest off” — and gives each game and the standings to the lower side.
+
+The week-5 re-score (048) moved four Weekly Bullseye matchups and rebuilt
+the league’s report with the classic builder, which named the seat
+furthest from the number the leader. `buildWeekReport` takes `lowerWins`
+(the worker reads it from the league: `golf`, or `contestLowerWins` of the
+contest config); results, headline, labels and standings follow it. New
+ops mode `report` (`report-week <week> --league=<uuid or prefix>`) rebuilds
+one league week’s report and chat line; ops 049 rebuilds that one. Test:
+`week-report-lower.mjs`.
+
 ### v0.701.2 — Re-score the weekly contest leagues
 
 > - Weeks 1 to 5 of the weekly contest leagues are re-scored under the current rules: a player hurt in his game takes no no-show penalty, and power-ups count in the stored score.
