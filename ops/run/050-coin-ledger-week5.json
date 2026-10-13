@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/coin-ledger-week.sql",
+  "why": "Founder: 'Did I earn coin last week?' — the Weekly Cointest's coin ledger for weeks 5 and 6, the purses, and whether the week-5 recap (which settles the coin) posted. Read only; seats, not names."
+}

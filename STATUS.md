@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.706.3 — A read-only query errand
+
+> - Nothing in the app: the ops errands gained a read-only database query, for questions like “did I earn coin last week?”.
+
+Founder: "Did I earn coin last week?" The query workflow can’t be
+dispatched by this integration (403, as every dispatch), so `ops-run`
+takes `{ "mode": "query", "file": "scripts/db/….sql" }`: the file runs
+through psql with the session read-only (`default_transaction_read_only`),
+confined to `scripts/db/*.sql`, needing `SUPABASE_DB_URL`. Ops 050 runs
+`scripts/db/coin-ledger-week.sql` — the Weekly Cointest’s ledger for weeks
+5–6, every purse, and whether the week-5 recap posted. Seats, not names:
+the log is public.
+
 ### v0.706.2 — The chip goes straight to the vows; your wedding alone
 
 > - The 💍 chip is a plain chip now: one tap and you are on your vows, no sheet in between. It shows only while your own wedding is pending.
