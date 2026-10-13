@@ -454,8 +454,6 @@ const CSS = `
     radial-gradient(60% 55% at 85% 92%, color-mix(in srgb, var(--opp) 18%, transparent), transparent 60%),
     radial-gradient(55% 60% at 55% 45%, color-mix(in srgb, var(--warn) 14%, transparent), transparent 65%),
     color-mix(in srgb, color-mix(in srgb, var(--bg) 72%, #FFFFFF) 90%, var(--ct-felt, #0B1F1A));}
-/* Felt-component blobs: darken the light ground (multiply) instead of glowing. */
-:root[data-card-light="1"] .ctable .ct-blob{mix-blend-mode:multiply;opacity:.28;}
 /* mx-felt (hero board) layered ground + softer vignette. */
 :root[data-card-light="1"] .mx-felt .ct-feltlayers{
   background:
