@@ -200,6 +200,10 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     const align = edge === 'left' ? 'flex-start' : 'flex-end';
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: align, paddingLeft: edge === 'left' ? 8 : 4, paddingRight: edge === 'right' ? 8 : 4, minWidth: 0 }}>
+        {/* LEVEL WITH THE OTHER SIDE (v0.699.2, founder: "move all the numbers and text down a smidge so all the final
+            score numbers line up"): the column is centred, so the struck line lifted the big number half a line; a
+            blank twin of that line above the stack puts it back level. */}
+        {raw != null && <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', opacity: 0 }}>{raw.toFixed(1)}</Text>}
         {/* THE PLAY CHIP (v0.696.6, founder: "On the matchup screen, let's do the same: just an active power ups chip"):
             beside the spot's label, no icon on the card; tap it for the play's details. */}
         <View style={{ flexDirection: edge === 'left' ? 'row' : 'row-reverse', alignItems: 'center', gap: 4 }}>
