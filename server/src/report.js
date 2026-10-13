@@ -13,6 +13,7 @@
 // nothing, so a restart or a re-run never says the same week twice.
 import { db } from './supabase.js';
 import { buildWeekReport, reportBody, reportHasScores, weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
+import { contestConfigOf, contestLowerWins } from '../../packages/core/src/engine/contest.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[report]', ...a);
 
@@ -178,13 +179,18 @@ export async function buildLeagueReport(league, week, weekRows) {
     }
   }
   const format = league.settings_json?.format;
+  // LOWER WINS (v0.701.3, founder: "Let's rescore all weekly comp leagues" — the rebuilt dart report named the
+  // furthest seat as the leader): a golf league, or a contest league scored on distance.
+  const s = league.settings_json ?? {};
+  const ccfg = contestConfigOf(s, league.kind);
+  const lowerWins = s.golf === true || (!!ccfg && contestLowerWins(ccfg));
   // The season's finals for the standings, plus THIS week's rows as handed in
   // (a forced build reads a week whose rows may not be 'final' yet; the
   // builder ignores any row without both finals).
   const seen = new Set(weekRows.map((m) => m.id));
   const matchups = [...weekRows, ...(finals ?? []).filter((m) => !seen.has(m.id))];
   return buildWeekReport({
-    week, league: league.name ?? 'League', format, names,
+    week, league: league.name ?? 'League', format, names, lowerWins,
     matchups,
     slots,
     eliminated: (cuts ?? []).map((c) => c.roster_id),

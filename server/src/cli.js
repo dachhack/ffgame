@@ -846,12 +846,15 @@ async function main() {
         argv.push('wire-audit', `--league=${need('league')}`, `--player=${need('player')}`);
         if (req.issue) argv.push(`--issue=${req.issue}`);
         if (req.days) argv.push(`--days=${req.days}`);
+      } else if (req.mode === 'report') {
+        // v0.701.3: rebuild one league week's report and chat line
+        argv.push('report-week', need('week'), `--league=${need('league')}`);
       } else if (req.mode === 'college-report') {
         // v0.550.1: read-only — plays stored for rostered college players.
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | set-lineup | offboard-sweep | wire-audit`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | report | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | set-lineup | offboard-sweep | wire-audit`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });
@@ -1140,6 +1143,28 @@ async function main() {
       const r = await runDeclared(year, (...a) => console.log(...a));
       console.log(`declared-sweep ${year}: ${r.added} new of ${r.listed} listed` + (r.error ? ` — ${r.error}` : ''));
       if (r.error) process.exitCode = 1;
+      break;
+    }
+    case 'report-week': {
+      // ↻ REBUILD ONE LEAGUE WEEK'S REPORT (v0.701.3): the stored payload and
+      // the chat line, replaced. For a report whose words were wrong when it
+      // was built (the dart's "led the week" before lower-wins).
+      //   node src/cli.js report-week <week> --league=<uuid or its first characters>
+      const { buildLeagueReport, postReport } = await import('./report.js');
+      const { db } = await import('./supabase.js');
+      const week = Number(args.filter((a) => !a.startsWith('--'))[0]);
+      const key = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9);
+      if (!Number.isFinite(week) || !key) { console.error('usage: report-week <week> --league=<uuid or prefix>'); break; }
+      const { data: lgs } = await db().from('league').select('id, name, season, kind, settings_json');
+      const hit = (lgs ?? []).filter((l) => String(l.id).startsWith(key));
+      if (hit.length !== 1) { console.log(`report-week: ${hit.length} league(s) match ${JSON.stringify(key)} — name one`); process.exitCode = 1; break; }
+      const lg = hit[0];
+      const { data: rows } = await db().from('matchup').select('id, league_id, week, home_roster_id, away_roster_id, home_final, away_final, status')
+        .eq('league_id', lg.id).eq('week', week);
+      if (!rows?.length) { console.log(`report-week: ${lg.id.slice(0, 8)} has no week ${week}`); process.exitCode = 1; break; }
+      const report = await buildLeagueReport(lg, week, rows);
+      await postReport(lg, week, report, { force: true });
+      console.log(`report-week: ${lg.id.slice(0, 8)} wk${week} rebuilt — ${report.headline}`);
       break;
     }
     case 'college-report': {
