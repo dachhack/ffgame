@@ -94,10 +94,11 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   // THE GAME LOG FIRST (v0.703.2, founder: "open the player cards on the game log instead of the summary"):
   // every card opens on his log unless the caller names a tab; the summary is one tap away.
   const [tab, setTab] = useState<'summary' | 'log' | 'team' | 'history'>(req.tab ?? 'log');
-  useEffect(() => { setTab(req.tab ?? 'log'); }, [req.slug, req.tab]);
+  // (one landing effect — a second one below used to put every card back on the summary, v0.706.1)
+  useEffect(() => { setTab(req.tab ?? 'log'); }, [req.slug, req.tab, slug]);
   // A teammate clicked on the chart opens HIS card on this same modal (the
   // host reuses one, v0.456.0) — and lands on his summary, as any card does.
-  useEffect(() => { setTab('summary'); }, [slug]);
+  // a teammate tapped on the chart lands on the log too (v0.706.1): the landing effect above keys on `slug`
   // The chart is a module cache; this redraws once it is in.
   const [depthVer, setDepthVer] = useState(0);
   useEffect(() => { let alive = true; ensureDepthChart().then(() => { if (alive) setDepthVer((v) => v + 1); }).catch(() => {}); return () => { alive = false; }; }, []);
