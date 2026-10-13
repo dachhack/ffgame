@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.701.0 — Hurt in his game: no no-show penalty
+
+> - A player who got hurt in his game no longer takes the dart’s −10 for a zero: the worker reads it from the injury report when his designation is dated to his game, and his card wears a 🩹 instead of the −10.
+> - The commissioner can waive it by hand too: the stat-correction tool has a “hurt in his game” switch, for the cases the report misses.
+
+Founder: "We need a way to not apply the 0 penalty to players who were
+injured during their game." Engine: `applyBullseye(..., { hurt })` leaves a
+hurt player’s zero out of the no-show count and marks the row `aim.hurt`;
+`scoreContest` takes `hurt`; the classic path reads `hurtFor(slug, week)`
+from the adjustment cache (`commish.ts`), where the commissioner’s rows and
+the worker’s own ride together. Worker: `hurtInGame(rows, kickoffs, now)` in
+`injuries.js` — an injury_status designation dated on or after his team’s
+kickoff and within four days of it (a re-stamp weeks later must not read a
+later injury into the week); `hurtInGameSlugs(week)` joins the report to
+the slate, cached a minute; `resolveMatchup` folds them into the dart
+leagues’ adjustment rows. SQL 0493: `player_adjustment.hurt` (a row may sit
+at 0 points with it), `commish_set_player_adjustment(…, p_hurt)` (dropped,
+recreated, regranted), `league_player_adjustments` returns `hurt`; applied on
+the scratch chain, `adjust-probes.sql` a7. Screens: the commissioner desks’
+switch (web + phone), the 🩹 chip on the matchup card. Tests:
+`bullseye-hurt.mjs`.
+
 ### v0.700.1 — The penalty line on the dart scoreboard
 
 > - On a Bullseye matchup, the line under a side’s points now shows its no-show penalties (−20 · 2 no-shows) instead of a projection, and the distance line spells it out: 11.8 off + 20 penalty. A finished week no longer shows a “proj” that just repeats the score.

@@ -817,7 +817,9 @@ export interface BullseyeContest {
   variant?: DfsVariant; radius?: number; entries?: number; first_lock?: string | null; started?: boolean;
   me?: { roster_id: number; team: string | null; entered: boolean } | null;
 }
-export interface DfsSlotScore { side: 'home' | 'away'; slot: string; slug: string | null; score: number; aim?: { target: number; dist: number; ring: number; penalty?: number };
+export interface DfsSlotScore { side: 'home' | 'away'; slot: string; slug: string | null; score: number;
+  /** the dart: `penalty` on a no-show zero; `hurt` (v0.701.0) on a zero waived because he was hurt in his game */
+  aim?: { target: number; dist: number; ring: number; penalty?: number; hurt?: boolean };
   /** THE PLAYS (0484): the play that touched this row, and the raw score before it; a `PLAY` slot row is an event bonus. */ play?: string; raw?: number }
 export interface DfsBullseyeState {
   ok: boolean; error?: string; on?: boolean; kind?: string; name?: string; week?: number; season?: string;
@@ -3418,7 +3420,8 @@ export const commishSetWaiverHold = (leagueId: string, slug: string, mode: 'free
 /** THE COMMISSIONER'S POINT ADJUSTMENTS (0355): points added to or taken off
  *  one player's week, classic leagues only. classicPoints adds them once the
  *  host installs them (setLeagueAdjustments). */
-export interface PlayerAdjustment { week: number; slug: string; name: string; points: number; note: string; set_at: string }
+export interface PlayerAdjustment { week: number; slug: string; name: string; points: number; note: string; set_at: string;
+  /** HURT IN HIS GAME (v0.701.0): the dart's no-show penalty is waived on his spot this week. */ hurt?: boolean }
 export interface AdjustCandidate { slug: string; name: string; pos: string; team: string; owner: string | null }
 /** `search` (commissioner only) also finds pool players to adjust. */
 export const leaguePlayerAdjustments = (leagueId: string, week?: number | null, search?: string) =>
@@ -3426,9 +3429,9 @@ export const leaguePlayerAdjustments = (leagueId: string, week?: number | null, 
     'league_player_adjustments', { p_league_id: leagueId, p_week: week ?? null, p_search: search ?? null });
 /** points 0 removes it. `rescore` says the week is stamped and keeps its old
  *  finals until it is re-scored. */
-export const commishSetPlayerAdjustment = (leagueId: string, week: number, slug: string, points: number, note: string) =>
-  tracked(rpc<{ ok: boolean; error?: string; points?: number; note?: string; rescore?: boolean; removed?: boolean }>(
-    'commish_set_player_adjustment', { p_league_id: leagueId, p_week: week, p_slug: slug, p_points: points, p_note: note }),
+export const commishSetPlayerAdjustment = (leagueId: string, week: number, slug: string, points: number, note: string, hurt = false) =>
+  tracked(rpc<{ ok: boolean; error?: string; points?: number; note?: string; rescore?: boolean; removed?: boolean; hurt?: boolean }>(
+    'commish_set_player_adjustment', { p_league_id: leagueId, p_week: week, p_slug: slug, p_points: points, p_note: note, p_hurt: hurt }),
     Ev.commishAction, { tool: 'point_adjust' });
 
 /** THE COMMISSIONER FIXES A LINEUP (0356): one seat's classic lineup for a

@@ -196,9 +196,12 @@ const ok = (name, cond, got) => {
   ok('…as does its status map', /\.select\('player_slug,status'\)\.order\('player_slug'\)\.range/.test(worker));
   // Ordered by the primary key: without a total order, two pages can overlap
   // or skip, which is a truncation that moves around instead of holding still.
+  // Three on the worker since v0.701.0: the ruled-out set, the status map,
+  // and the hurt-in-game read (status, designation date and team).
   ok('every paged read is ordered on the primary key',
-    (worker.match(/\.order\('player_slug'\)/g) ?? []).length === 2
+    (worker.match(/\.order\('player_slug'\)/g) ?? []).length === 3
     && (api.match(/\.order\('player_slug'\)/g) ?? []).length === 2);
+  ok('the hurt-in-game read pages and is ordered too', /select\('player_slug,status,designation_date,team'\)\.order\('player_slug'\)\.range/.test(worker));
 }
 
 if (fails) { console.log(`\n${fails} INJURY MERGE ASSERTION(S) FAILED`); process.exit(1); }

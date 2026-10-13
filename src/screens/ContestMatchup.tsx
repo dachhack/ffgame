@@ -43,6 +43,7 @@ export function squadRows(entry: unknown, slots: { slot: string }[]): Row[] {
 }
 
 /** THE TIE-BREAKER CHIP (v0.682.2): what the number on the card means. */
+const HURT_NOTE = 'He got hurt in his game, so his zero is not a no-show: it adds nothing to the squad’s distance.';
 const TB_NOTE = 'This spot is your tie-breaker: its player aims at this number. If the matchup ties on rings, the squad whose tie-breaker lands closer to its own number wins.';
 
 export function ContestMatchup({ leagueId, week }: { leagueId: string; week: number }) {
@@ -160,7 +161,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     // THE PENALTY CHIP (v0.685.2): a spot that posted nothing wears the dart's penalty, red
     const lvr = m.state?.slots?.find((x) => x.side === s && x.slot === r.slot);
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
-    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} chip={pen != null ? `−${pen}` : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(TB_NOTE); }} onClick={onPick} selected={hot} />;
+    // HURT IN HIS GAME (v0.701.0): his zero took no penalty — the chip says why
+    const hurtRow = lvr?.aim?.hurt === true;
+    if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} chip={pen != null ? `−${pen}` : hurtRow ? '🩹' : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(hurtRow ? HURT_NOTE : TB_NOTE); }} onClick={onPick} selected={hot} />;
     if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" onClick={onPick} selected={hot} />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={hot ? '▶ HERE' : false} onClick={onPick} />;
     return (

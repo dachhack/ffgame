@@ -263,6 +263,8 @@ export function scoreContest(
      *  with a line to beat — Double or Nothing, Floor — settles when the player's own game ends, not only when the
      *  whole matchup is final (which a Monday game held off until Tuesday). The worker hands the done teams. */
     done?: (slug: string) => boolean;
+    /** HURT IN HIS GAME (v0.701.0): a zero from him is not a no-show — the dart waives the penalty. */
+    hurt?: (slug: string) => boolean;
   } = {},
 ): ClassicResult & { tiebreak: { home: number | null; away: number | null } } {
   const pending = opts.pending ?? (() => false);
@@ -380,7 +382,7 @@ export function scoreContest(
       if (shift) rows.push({ win: 'wk', side: 'home', slot: 'PLAY', slug: null, metric: null, score: shift, play: 'magnet' });
     }
     const pts = rows.reduce((s, r) => s + r.score, 0);
-    const res = applyBullseye({ home: pts, away: 0, slots: rows, states: [{ window: 'wk', home: pts, away: 0 }] }, bull, Math.max(1, counted[side]));
+    const res = applyBullseye({ home: pts, away: 0, slots: rows, states: [{ window: 'wk', home: pts, away: 0 }] }, bull, Math.max(1, counted[side]), undefined, { hurt: opts.hurt });
     // a bonus helps the dart: it comes off a one-team total's distance, or onto a per-spot ring
     const ring = bonus[side] ? (lower ? Math.max(0, Math.round((res.home - bonus[side]) * 10) / 10) : Math.round((res.home + bonus[side]) * 10) / 10) : res.home;
     return { ring, rows: [...res.slots.filter((r) => r.side === 'home').map((r) => ({ ...r, side })), ...bonusRows[side].map((r) => ({ ...r, score: Math.abs(r.score) }))], summary: res.bullseye?.home };

@@ -76,20 +76,31 @@ export function flagsLeague(): string | null {
 // that clears it on exit leaves nothing behind for the next league to inherit.
 let adjLeague: string | null = null;
 let adjustments = new Map<string, number>();
+// HURT IN HIS GAME (v0.701.0): the player-weeks whose dart zero is waived — the commissioner's rows, and the
+// worker's own from the injury report. Same cache, same place, so no board and no resolve can disagree.
+let hurtSet = new Set<string>();
 const adjKey = (week: number, slug: string) => `${week}|${slug}`;
 
-export function setLeagueAdjustments(leagueId: string, rows: { week: number; slug: string; points: number | string }[]): void {
+export function setLeagueAdjustments(leagueId: string, rows: { week: number; slug: string; points: number | string; hurt?: boolean | null }[]): void {
   adjLeague = leagueId;
   adjustments = new Map();
+  hurtSet = new Set();
   for (const r of rows) {
     const p = Math.round(Number(r.points) * 10) / 10;
     if (Number.isFinite(p) && p !== 0) adjustments.set(adjKey(Number(r.week), r.slug), p);
+    if (r.hurt === true) hurtSet.add(adjKey(Number(r.week), r.slug));
   }
 }
 
 export function clearLeagueAdjustments(): void {
   adjLeague = null;
   adjustments = new Map();
+  hurtSet = new Set();
+}
+
+/** Was this player hurt in his game this week — his dart zero waived? */
+export function hurtFor(slug: string, week: number): boolean {
+  return hurtSet.has(adjKey(week, slug));
 }
 
 /** The commissioner's adjustment to this player's week, 0 when none. */
