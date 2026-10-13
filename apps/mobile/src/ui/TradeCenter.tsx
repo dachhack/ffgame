@@ -361,8 +361,13 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   // partner's list — each row grows a 👀 mark-interest toggle, so browsing a
   // roster mid-propose doubles as scouting (close without sending and the
   // marks stand).
-  const pickList = (rid: number | null, sel: string[], set: (v: string[]) => void, wantable = false) => (
-    <ScrollView style={{ maxHeight: 180, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 4 }} nestedScrollEnabled>
+  // THE WHOLE PILE (v0.704.2, founder: "Plenty of room to display more of the roster" / "Draft picks should be in
+  // the roster list, not a separate window"): the list fills the sheet's height, and a side's tradeable draft
+  // picks — rookie futures (0183) and startup slots (0190) — are rows at the bottom of the same list, when the
+  // commissioner has pick trading on.
+  const pickList = (rid: number | null, sel: string[], set: (v: string[]) => void, wantable = false,
+    picks?: { sel: PickAssetRow[]; set: (v: PickAssetRow[]) => void }) => (
+    <ScrollView style={{ flex: 1, minHeight: 160, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 4 }} nestedScrollEnabled>
       {rosters.filter((r) => r.roster_id === rid).map((r) => {
         const p = poolBySlug.get(r.slug);
         const on = sel.includes(r.slug);
@@ -394,6 +399,18 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           </View>
         );
       })}
+      {picks && pickTradingOn && assets.filter((a) => a.owner === rid).map((a) => {
+        const on = picks.sel.some((x) => samePick(x, a));
+        return (
+          <Pressable key={`pick-${a.season}:${a.round}:${a.orig}`} onPress={() => togglePick(picks.sel, picks.set, a)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 4, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
+            <Text style={{ fontSize: fs(13), color: on ? t.you : t.dim }}>{on ? '☑' : '☐'}</Text>
+            <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(t.text, 10) }}><Text style={{ fontSize: fs(11) }}>🎟</Text></View>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>{pickAssetLabel(a, a.owner)}</Text>
+            <Mono size={8} tone="faint">PICK</Mono>
+          </Pressable>
+        );
+      })}
     </ScrollView>
   );
   /** A FAAB BOX (v0.704.0): the dollars a side puts in, under its pile. */
@@ -408,33 +425,6 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   );
 
   const shown = trades.slice(0, 8);
-
-  // A side's tradeable draft picks — rookie futures (0183) and startup slots
-  // (0190), in one list, which is what lets one offer carry both. Renders
-  // nothing until there is something to trade, and nothing at all when the
-  // commissioner has the switch off (better than offering picks the server
-  // will refuse on submit).
-  const pickAssetList = (rid: number | null, sel: PickAssetRow[], set: (v: PickAssetRow[]) => void) => {
-    if (!pickTradingOn) return null;
-    const owned = assets.filter((a) => a.owner === rid);
-    if (owned.length === 0) return null;
-    return (
-      <View style={{ marginTop: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 4 }}>
-        <Mono size={7.5} tone="faint" track={0.1} style={{ marginBottom: 2 }}>DRAFT PICKS</Mono>
-        {owned.map((a) => {
-          const on = sel.some((x) => samePick(x, a));
-          return (
-            <Pressable key={`${a.season}:${a.round}:${a.orig}`} onPress={() => togglePick(sel, set, a)}
-              style={{ borderRadius: 4, paddingHorizontal: 5, paddingVertical: 5, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
-              <Text style={{ fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
-                {on ? '☑' : '☐'} {pickAssetLabel(a, a.owner)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  };
 
   return (
     <Card>
@@ -723,7 +713,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             {!!note.trim() && <Mono size={9.5} tone="dim" style={{ lineHeight: 15 }}>✎ “{note.trim()}”</Mono>}
           </ScrollView>
         )}
-        <ScrollView style={{ flexGrow: 0, ...(confirming ? { display: 'none' } : {}) }} contentContainerStyle={{ padding: 14 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        <ScrollView style={{ flex: 1, ...(confirming ? { display: 'none' } : {}) }} contentContainerStyle={{ padding: 14, flexGrow: 1 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
         <Mono size={9} tone="faint" track={0.1}>TRADE WITH</Mono>
         {/* A counter answers ONE offer, so its seats are already decided —
             changing them here would quietly make it a different proposal. */}
@@ -752,16 +742,14 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
           </ScrollView>
         )}
         {partner != null && !isMulti && (
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flex: 1, minHeight: 240 }}>
             {/* no YOU SEND / YOU GET over the piles (v0.704.1, founder: "if the faab is on that side it's obvious") */}
             <View style={{ flex: 1 }}>
-              {pickList(myRoster, give, setGive)}
-              {pickAssetList(myRoster, givePicks, setGivePicks)}
+              {pickList(myRoster, give, setGive, false, { sel: givePicks, set: setGivePicks })}
               {faabTrading && faabBox(faabSend, setFaabSend, myFaab != null ? `of $${myFaab}` : null)}
             </View>
             <View style={{ flex: 1 }}>
-              {pickList(partner, get, setGet, true)}
-              {pickAssetList(partner, getPicks, setGetPicks)}
+              {pickList(partner, get, setGet, true, { sel: getPicks, set: setGetPicks })}
               {faabTrading && faabBox(faabAsk, setFaabAsk, null)}
             </View>
           </View>

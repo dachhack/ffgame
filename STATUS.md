@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.704.2 — The whole roster, picks included
+
+> - The trade composer’s two piles now fill the screen, so most of a roster shows without scrolling, and a side’s tradeable draft picks sit at the bottom of its roster list instead of in a box of their own.
+
+Founder: "Plenty of room to display more of the roster" and "Draft picks
+should be in the roster list, not a separate window." The composer’s
+scroll view and the piles row flex to the sheet’s height (the lists lose
+their 180px cap); `pickList` takes the side’s pick selection and renders
+the picks as rows under the players; `pickAssetList` is gone.
+
 ### v0.704.1 — The piles need no label
 
 > - The trade composer’s two piles drop their YOU SEND / YOU GET labels: yours is on the left with your FAAB box under it, theirs on the right.
