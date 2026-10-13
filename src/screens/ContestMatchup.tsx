@@ -255,11 +255,17 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const projected = known ? proj : null;
     // a one-team-total league's score IS the distance (v0.683.0): project that
     const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
-    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay, bonus: bonusRows.map((b) => `${contestPlayById(b.play ?? '')?.icon ?? '⚡'} ${b.score > 0 ? '+' : ''}${b.score}`).join(' ') };
+    // THE PENALTY LINE (v0.700.1, a member: "I was 93.2 point but 31.8 off target?" — the −10 no-shows ride in the
+    // distance, not the points; founder: "a penalty line instead of the unnecessary projected line")
+    const shows = (m.state?.slots ?? []).filter((x) => x.side === s && x.aim?.penalty != null && Math.abs(x.score) < 1e-9);
+    const pen = shows.reduce((a, x) => a + (x.aim?.penalty ?? 0), 0);
+    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay, pen, shows: shows.length, bonus: bonusRows.map((b) => `${contestPlayById(b.play ?? '')?.icon ?? '⚡'} ${b.score > 0 ? '+' : ''}${b.score}`).join(' ') };
   };
   /** A side's squad plays — mine from the seat's own rows, theirs from the matchup (shown once the week starts). */
   const squadPlays = (s: 'home' | 'away', mine: boolean): ContestPlayRow[] =>
     (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
+  const final = m.status === 'final';
+  const penText = (x: { pen: number; shows: number }) => ` · −${x.pen} · ${x.shows} no-show${x.shows === 1 ? '' : 's'}`;
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const t = tally(s, S);
     const color = S.mine ? 'var(--you)' : 'var(--opp)';
@@ -273,7 +279,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         <div style={{ display: 'grid', gap: 6, justifyItems: edge === 'left' ? 'start' : 'end' }}>
           <div style={cell}>
             <span className="mono" style={{ ...big, color: t.points != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.points)}</span>
-            <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}${t.bonus ? ` · ${t.bonus}` : ''}`}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.pen > 0 ? penText(t) : !final && t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}${t.bonus ? ` · ${t.bonus}` : ''}`}</span>
             {/* THE TEAM CHIP (v0.698.0, founder: "reserve some space under the projected points for a Team ⚡Up chip when
                 there is one active"): a fixed row, the chip in it while a squad play is on — tap for the plays and TAKE BACK */}
             <div style={{ height: 16, display: 'flex', alignItems: 'center', justifyContent: edge === 'left' ? 'flex-start' : 'flex-end', marginTop: 2 }}>
@@ -283,7 +289,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
           {bull && (
             <div style={cell}>
               <span className="mono" style={{ ...big, color: t.ring != null ? 'var(--text)' : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.ring)}</span>
-              <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${isTotal ? `OFF 🎯 ${theCard?.total ?? ''}` : 'RING · 🎯 per spot'}${t.ringProjected != null ? ` · proj ${t.ringProjected.toFixed(1)}${isTotal ? ' off' : ''}` : ''}${t.toPlay ? ` · ${t.toPlay} to play` : ''}`}</span>
+              <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${isTotal ? `OFF 🎯 ${theCard?.total ?? ''}` : 'RING · 🎯 per spot'}${isTotal && t.pen > 0 && t.ring != null ? ` · ${Math.max(0, t.ring - t.pen).toFixed(1)} off + ${t.pen} penalty` : !final && t.ringProjected != null ? ` · proj ${t.ringProjected.toFixed(1)}${isTotal ? ' off' : ''}` : ''}${t.toPlay ? ` · ${t.toPlay} to play` : ''}`}</span>
             </div>
           )}
         </div>
