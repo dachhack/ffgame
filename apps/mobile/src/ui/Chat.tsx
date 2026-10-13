@@ -215,7 +215,8 @@ export function WaiverRunSheet({ leagueId, at, onClose }: { leagueId: string; at
     <Overlay visible title="📋 The waiver run"
       subtitle={`${when.toLocaleString()}${mode ? ` · ${mode === 'faab' ? 'FAAB' : mode === 'standings' ? 'REVERSE STANDINGS' : 'ROLLING PRIORITY'}` : ''}`}
       onClose={onClose}>
-      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 30 }}>
+      {/* the body sits in from the edge as far as the sheet's title does (v0.701.1, founder: "too close to the edge") */}
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 30 }}>
         {!!err && <Mono size={10} tone="opp" style={{ lineHeight: 15 }}>{err}</Mono>}
         {!rep && !err && <Mono size={10} tone="faint">Loading…</Mono>}
         {rep?.found === false && (
@@ -260,7 +261,8 @@ export function ReportSheet({ leagueId, week, onClose }: { leagueId: string; wee
   const sections = rep ? reportSections(rep) : [];
   return (
     <Overlay visible title={`📋 Week ${week} report`} subtitle={rep ? `${rep.league.toUpperCase()} · ${rep.format.toUpperCase()}` : 'LOADING'} onClose={onClose}>
-      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 12 }}>
+      {/* the body sits in from the edge as far as the sheet's title does (v0.701.1, founder: "too close to the edge") */}
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
         {!!err && <Mono size={10} tone="opp">{err}</Mono>}
         {!err && !rep && <Mono size={10} tone="faint">Loading…</Mono>}
         {rep && <Text style={{ fontSize: 13.5, lineHeight: 20, color: t.text, marginBottom: 12 }}>{rep.headline}</Text>}

@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.701.1 — The report sheets sit in from the edge
+
+> - On the phone, the waiver-run and weekly-report sheets opened from chat now keep a side gutter, in line with the sheet’s title, instead of running to the edge of the screen.
+
+Founder: "These waiver and weekly reports in chat pop up too close to the
+edge of the screen." The week report’s scroll body had only a bottom
+padding and the waiver run’s a 14; both now take the Overlay header’s 16
+on each side (`apps/mobile/src/ui/Chat.tsx`).
+
 ### v0.701.0 — Hurt in his game: no no-show penalty
 
 > - A player who got hurt in his game no longer takes the dart’s −10 for a zero: the worker reads it from the injury report when his designation is dated to his game, and his card wears a 🩹 instead of the −10.
