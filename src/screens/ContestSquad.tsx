@@ -203,6 +203,27 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
   }, [leagueId, st?.ok, st?.roster_id, st?.week, saved]);
   // THE SQUAD CARD (v0.676.0): share the squad once the week's games are on.
   const [shared, setShared] = useState<string | null>(null);
+  // DRAG A CARD, THE HOOKS (v0.701.5: v0.700.0 put these after the early returns below, so the hook count changed
+  // once the league loaded — "Rendered more hooks than during the previous render"). Every hook the drag uses lives
+  // here, above every return; the handlers that read them follow the setup, below.
+  type Over = string | 'trash' | null;
+  const [drag, setDrag] = useState<{ slot: string; x: number; y: number; over: Over } | null>(null);
+  const [bump, setBump] = useState<{ from: string; to: string; mv: ContestCardMove & { kind: 'bump' } } | null>(null);
+  const dragRef = useRef<string | null>(null);
+  const holdTimer = useRef<number | null>(null);
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
+  const swallowClick = useRef(false);
+  const playerLite = useCallback((slug: string) => { const q = byPlayer.get(slug) as { slug: string; pos: string; team?: string | null; exp?: number | null } | undefined; return q ? { slug: q.slug, pos: q.pos, team: q.team ?? null, exp: q.exp ?? null } : null; }, [byPlayer]);
+  const slotDefs = setup?.slots ?? [];
+  const moveOf = useCallback((from: string, to: string): ContestCardMove => contestCardMove(slotDefs, picks, from, to, playerLite, { locked, ghosted }), [slotDefs, picks, playerLite, locked, ghosted]);
+  // a finger that is dragging a card must not scroll the page; a long press must not open the context menu
+  useEffect(() => {
+    if (!drag) return;
+    const stop = (e: Event) => e.preventDefault();
+    document.addEventListener('touchmove', stop, { passive: false });
+    document.addEventListener('contextmenu', stop);
+    return () => { document.removeEventListener('touchmove', stop); document.removeEventListener('contextmenu', stop); };
+  }, [drag]);
   if (!st) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!st.ok) return <div style={{ padding: 24 }}><div className="mono" style={{ color: 'var(--warn, #c66)', fontSize: 12 }}>{st.error}</div><button onClick={onBack} style={{ marginTop: 10 }}>← BACK</button></div>;
   if (!setup?.cfg || !setup.slots.length || !ctx) return <div style={{ padding: 24 }}><div className="mono" style={small}>This league has no spots to fill yet — its commissioner sets the roster.</div><button onClick={onBack}>← BACK</button></div>;
@@ -297,15 +318,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
   // happen."). Press and hold lifts the card (mouse or finger); it rides the pointer, eligible spots light up, a bar
   // at the top of the felt is the trash. The rule is the engine's contestCardMove; a bump (the spot's player can't
   // stand where the card came from) asks first, in a note under the felt.
-  type Over = string | 'trash' | null;
-  const [drag, setDrag] = useState<{ slot: string; x: number; y: number; over: Over } | null>(null);
-  const [bump, setBump] = useState<{ from: string; to: string; mv: ContestCardMove & { kind: 'bump' } } | null>(null);
-  const dragRef = useRef<string | null>(null);
-  const holdTimer = useRef<number | null>(null);
-  const pressAt = useRef<{ x: number; y: number } | null>(null);
-  const swallowClick = useRef(false);
-  const playerLite = useCallback((slug: string) => { const q = byPlayer.get(slug) as { slug: string; pos: string; team?: string | null; exp?: number | null } | undefined; return q ? { slug: q.slug, pos: q.pos, team: q.team ?? null, exp: q.exp ?? null } : null; }, [byPlayer]);
-  const moveOf = useCallback((from: string, to: string): ContestCardMove => contestCardMove(slots, picks, from, to, playerLite, { locked, ghosted }), [slots, picks, playerLite, locked, ghosted]);
+  // (the hooks of the drag sit above the early returns, with the other hooks — v0.701.5)
   const overAt = (x: number, y: number): Over => {
     const from = dragRef.current;
     for (const el of document.elementsFromPoint(x, y)) {
@@ -350,14 +363,6 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
     if (holdTimer.current != null) { window.clearTimeout(holdTimer.current); holdTimer.current = null; }
     pressAt.current = null;
   };
-  // a finger that is dragging a card must not scroll the page; a long press must not open the context menu
-  useEffect(() => {
-    if (!drag) return;
-    const stop = (e: Event) => e.preventDefault();
-    document.addEventListener('touchmove', stop, { passive: false });
-    document.addEventListener('contextmenu', stop);
-    return () => { document.removeEventListener('touchmove', stop); document.removeEventListener('contextmenu', stop); };
-  }, [drag]);
   const dragPlayer = drag && picks[drag.slot] ? byPlayer.get(picks[drag.slot]!) : null;
   const put = (slug: string, slot: string | null) => {
     if (!slot) return;

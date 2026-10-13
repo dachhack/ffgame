@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.701.5 — My Team opens again
+
+> - My Team crashed on opening ("Rendered more hooks than during the previous render") since v0.700.0; it opens again, with the card drag intact.
+
+Founder's screenshot. v0.700.0 declared the drag's hooks (`useState`,
+`useRef`, `useCallback`, `useMemo`, the web's `useEffect`) after the
+screen's early returns (no state yet, league not ready), so the hook count
+changed once the league loaded — React's rules-of-hooks error. Every hook
+of the drag now sits above the returns with the screen's other hooks; the
+handlers that read them stay below, after the setup. Phone and web.
+
 ### v0.701.4 — The web notification wears the DF too
 
 > - Web push notifications now show the italic DF in the status bar, the same mark the Android app wears, instead of the old football-and-drop.
