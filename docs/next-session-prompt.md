@@ -9,11 +9,14 @@ You're continuing **Drip Fantasy** — real-time H2H fantasy football, live at
 (super admin: mlporritt@gmail.com) drives, usually from a phone, usually with a
 screenshot. Ship small, verified increments.
 
-**State at handoff: `v0.375.3`, everything merged and deployed.** Migrations
-through **0262** applied (next: **0263**); latest APK delivered is
-**versionCode 36914** (carries v0.375.1 — the founder still needs an APK for
-v0.375.3's app-side box-score taps when they next ask). Work branch:
-`claude/whats-next-jssmqa` (reset onto merged `main`).
+**State at handoff: `v0.707.0`, everything merged and deployed (Oct 13).**
+Migrations through **0494** applied (next: **0495**); ops errands through
+**052** (next: **053**); latest APK is versionCode 40385; TestFlight's iOS
+runtime is v0.656.3's (`apps/mobile/ios-build-runtime.txt`). Work branch:
+`ccr-9ea4c0a9-m5lxbd` (resynced onto merged `main`). **HANDOFF.md's top
+section ("The contest-week live-fire arc") is the current state; the
+numbers elsewhere in this prompt are from August and only the discipline
+still holds.**
 
 **The forcing function: first lock is Sep 9, 2026.** Everything competes with
 that date. The founder is live-playtesting through the NFL preseason (PRE 4
@@ -211,38 +214,33 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
 
 ## What to pick up
 
-1. **Port the targeted APPLY flows to the app.** The app's slot cards wear a
-   tappable ⚡N chip listing every power-up on the card (v0.375.1), but
-   applying targeted plays (jinx, ghost, underdog, battle plays…) is still
-   web-only — the chips are display-only. The web's flow lives in
-   `Matchup.tsx` (`applyToSpot`/`SPOT_APPLY`); the app's hand
-   (`apps/mobile/src/ui/PowerupHand.tsx`) arms team buffs only. The founder
-   has acknowledged this gap; it's the biggest app-parity item left.
-2. **APK on next ask** carries v0.375.3's app-side box-score name taps (and
-   anything newer). versionCode 36915.
-3. **Rebake `proj2026.ts` + `adp2026.ts` weekly through Sep 9** — all three
-   files ride one get_projections pull (`projStats2026.ts` too); split pulls
-   fail the proj-scoring suite. Auto-slot, seat agents, previews and keeper
-   defaults all rank by these numbers.
-4. **Live-fire the dynasty loop** on a real league before the season relies on
-   it — probes cover the SQL end to end; no production league has ever rolled
-   over. Needs the founder.
-5. **Mobile lock-language copy for pre cards** rides the next APK-worthy
-   change (web got the "locks 1h before kickoff" language; app copy is
-   close but worth a pass).
-6. **PII minimization, if the founder wants it**: both hosts send `email` as a
-   PostHog identify trait (web `LiveOnboard.tsx:106`, app `App.tsx:216`).
-   Dropping it is a two-line change; the Supabase user id links sessions fine.
-   Full PII audit is in the 2026-08-29 session transcript / HANDOFF.
-7. Older backlog, still real: waiting-room notifications (offered, not
-   built); waiver-sweep wedge S2; BYE-cutline 0247 display regression;
-   golf-vs-guillotine/vampire interactions; 2027 rollover polish.
+1. **Week 6 settles Tuesday Oct 20** — the first live week for the auto
+   "hurt in his game" (v0.701.0, the 🩹), the landing week's flip on
+   Wednesday (v0.699.2), the result cards, and the coin lines. **In week 5
+   nobody in the Weekly Cointest got "built your squad" or a streak coin**
+   (ops 051): if that repeats, the `built` rule in `contestCoin.ts` is not
+   firing — probe before touching it.
+2. **The Rams** (v0.707.0) are on the week-6 and week-7 boards, confirmed
+   by ops 052. Team codes now go through `packages/core/src/data/teamCodes.ts`
+   and `check:teamcodes` fails a raw comparison; waive a one-source line
+   with `// team-code: same source — why`, never by loosening the scan.
+3. **The first shotgun wedding through the private vows** (0494): the 💍
+   chip → My Team › Trades, the other team's push, the commissioner's
+   view under the shotgun switch.
+4. **Production reads** are committed ops errands now (`ops/run/NNN.json`,
+   `mode: query`, a SQL file under `scripts/db/` that starts with
+   `set search_path = public;`). Workflow dispatch is 403 from a cloud
+   session; the errand runs on merge to main and only new files run.
+5. Older, still real: the app's targeted APPLY flows for classic power-ups
+   (web-only), PII minimization of the PostHog identify trait, waiting-room
+   notifications, the 2027 rollover polish.
 
-_Done and merged this arc (v0.338 → v0.375.3): see HANDOFF.md's top section —
-the preseason practice economy, the card model for unlocks, Underdog as a slot
-modifier, the three power-up timing scopes on the lock clock, reveal-at-kickoff
-(0262), Sleeper-style stat lines, the box-score browser with tappable names,
-and the app's always-dealt hand with ⚡N chips._
+_Done and merged Oct 12–13 (v0.699.2 → v0.707.0): see HANDOFF.md's top
+section — power-ups reaching the stored score and the re-score of weeks
+1–5, the landing week, hurt-in-his-game, the card drag and the rules-of-hooks
+check, locked cards opening the game log, the full-screen trade composer,
+the private shotgun vows and the 💍 chip, the query errand, and the Rams
+with the one team-code table and its check._
 
 ## How the founder works
 

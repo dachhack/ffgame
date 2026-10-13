@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-11 · Build `v0.679.2` · migrations through `0480`_
+_Last updated: 2026-10-13 · Build `v0.707.0` · migrations through `0494` (next `0495`) · ops errands through `052` (next `053`)_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -8,6 +8,155 @@ _Last updated: 2026-10-11 · Build `v0.679.2` · migrations through `0480`_
 > behind it, newest section first. Everything below the v0.375.3 section's
 > design decisions still hold, but only the kickoff prompt's pick-up list is
 > current.
+
+## The contest-week live-fire arc (v0.699.2 → v0.707.0, Oct 12–13)
+
+One session on branch `ccr-9ea4c0a9-m5lxbd`, founder-driven from the phone
+during week 5's settle and week 6's open, shipped as 25 squash-merged PRs
+(#1269–#1291; the same branch carried v0.696.2–v0.699.1 from the session
+before). `STATUS.md` has the per-version reasoning. **Everything is merged
+and deployed on main (`dccbc95` = v0.707.0 + ops 052).** No PR is open.
+
+### Where things stand (end of session)
+
+- **The Rams are on the board (v0.707.0, confirmed live).** A member:
+  "Stafford is not a QB option in Bullseye or here but is not on bye."
+  `buildSalaryBoard` compared Sleeper's `LAR` to the slate's `LA` raw, so
+  no Rams PERSON had ever made a salary board (weeks 1–6 carried only
+  `la-k` / `la-dst` / `la-hc`). Ops 051 proved the gap, ops 052 proved the
+  heal: the deployed worker's first pod tick added 11 Rams to the frozen
+  week-6 board (Stafford $4,900 / 22.2) and week 7 has him from the start.
+  CPU squads dealt before 19:25 UTC Oct 13 stay as dealt, by design.
+- **Team codes are one table now.** `packages/core/src/data/teamCodes.ts`:
+  `normTeam`, `TEAM_ALIASES`, `sameTeam`, and `TeamMap` / `TeamSet` that
+  normalise keys on set AND get. The worker's player index stores the
+  slate's code at the source; `weekGameLocks` / `weekSlateByTeam`, the
+  board's slate and kick maps, the K/DEF projection maps, the push and
+  auto-sub kickoff maps, the StatHead schedule, the depth chart and the
+  preseason pool are TeamMaps. **`check:teamcodes` (in `check:parity`)
+  fails any raw `x.has(p.team)` / `x.get(p.team)` / `p.team === y` /
+  `p.team.toUpperCase()`-as-key in `src`, `apps/mobile/src`,
+  `packages/core/src`, `server/src`.** The way out is to normalise, to use
+  a receiver the file binds to a TeamMap, or, when both sides truly share a
+  source, the waiver `// team-code: same source — why` (two exist). The
+  SQL mirror is `_nfl_team` (0414), the scoreboard's is `TEAM_FIX`; the
+  check holds both to the table. Non-NFL paths (`/college/`, `/golf/`,
+  `/sports/`) are skipped.
+- **Ops errands have a read-only `query` mode (v0.706.3).**
+  `ops/run/NNN-*.json` with `{"mode":"query","file":"scripts/db/x.sql"}`
+  runs psql read-only on push to main (only NEWLY ADDED files run). Every
+  SQL file needs `set search_path = public;` after `\pset pager off`: the
+  pooled connection resolves nothing unqualified (ops 050 died on
+  `relation "league" does not exist`). Existing files:
+  `coin-ledger-week.sql` (a league's ledger, purses, week-5 lines, the
+  Rams diagnostics), `rams-board.sql`. Logs: `gh api
+  repos/dachhack/ffgame/actions/jobs/<id>/logs`. Public logs → seats, never
+  names or user ids.
+- **Drip coin, first live week (v0.699.2 → v0.701.2).** The worker never
+  loaded a week's plays (`modeOfSettings` dropped `coin`), so no power-up
+  reached a stored score; fixed, and ops 043–049 re-scored weeks 1–5 of the
+  weekly contest leagues (`restamp --contest-only`, the `report` mode with
+  `lowerWins` for dart leagues). **Open question from the ledger (ops
+  051): in the Weekly Cointest, week 5 paid only the losing lines and
+  bargains; NOBODY got "built your squad" (40) or a streak coin.** If
+  anyone saved a squad by hand before kickoff that rule did not fire —
+  unconfirmed; probe `contestCoin.ts`'s `built` against the week-5
+  `contest_entry` saves before you touch the rule. The founder (seat 1)
+  earned nothing in week 5 because he won; wallet 120 = 200 earned − 80
+  Double or Nothing.
+- **Hurt in his game (v0.701.0, 0493):** the worker reads the injury report
+  (designation dated to his game) and the dart takes no no-show penalty;
+  `hurtInGame` / `hurtInGameSlugs` in `server/src/injuries.js`, the 🩹 on
+  the card, the commissioner's "hurt in his game" switch on the stat
+  correction. **First automatic fire is week 6** — check a 🩹 lands and the
+  week report's penalties agree after Monday night.
+- **Landing week (v0.699.2):** a contest league opens on the week just
+  played for a day after its last game (`contestLandingWeek`). First
+  natural flip is Wednesday morning after week 6 — the week-5 one was
+  forced by the fix landing mid-week.
+- **The card table on the phone:** long-press drag to the trash bar or an
+  eligible spot (v0.700.0, `contestCardMove` / `contestApplyCardMove` in
+  `engine/contest.ts`) — crashed My Team once (hooks after an early return,
+  v0.701.5) and is now guarded by **`check:hooks`** (`scripts/check-hooks.mjs`,
+  TS compiler API, with `--selftest`; also a PR workflow). Tap a locked
+  card → his game log (v0.703.0/.2/v0.706.1: every player card opens on
+  the Game log; an old `setTab('summary')` reset in both hosts was the
+  reason it kept opening on the summary). ▦ FIELDS chip on the contest
+  matchup. The web felt is flat (v0.703.1).
+- **Trade composer (v0.704.x):** full screen, one scrolling team row with a
+  ＋ chip for a third team, headshots that open the card, FAAB box per side,
+  no YOU SEND / YOU GET, draft picks inside the roster list.
+- **Shotgun wedding (v0.705.0 → v0.706.2, 0494):** vows are PRIVATE to the
+  two teams and the commissioner (`shotgun_counter` no longer in the league
+  chat; push kind `trades` to the other team). The 💍 `WeddingChip` shows
+  only while YOUR wedding is pending and goes straight to the vows: from
+  the matchup it opens My Team › Trades with the composer up
+  (`requestVows` / `takeVows` on the room bus `ui/leagueNav.ts`); the
+  commissioner handles other teams' weddings in Commish tools under the
+  shotgun switch (`ShotgunWeddingCard scope='commish'`). No live wedding
+  has run through it yet.
+- **Icons:** the web push badge is the italic DF (`public/icons/pwa/
+  badge-df-96.png`, `sw.js`, v0.701.4); Android APK 40385 carries the
+  native notification icon. **No iPhone build was needed by anything in
+  this arc** (all JS); TestFlight's runtime is still v0.656.3's.
+- **Mooney's two reports are the week's pattern:** screenshots of the dart
+  scoreboard ("93.2 vs 31.8") → the penalty line (v0.700.1); "Stafford not
+  a QB option" → the Rams. Reproduce against data before fixing (CLAUDE.md):
+  the query errand is now the fastest way.
+
+### What to watch first next session
+
+1. Week 6 settles Tuesday Oct 20: the 🩹 auto-hurt, the result cards, the
+   landing week's flip on Wednesday, the coin lines (and whether `built` /
+   `streak` pay anyone this time — if not, that's the bug).
+2. The Rams in Bullseye leagues: a board read lists Stafford now; anyone
+   still not seeing him is on a stale screen, not a stale board.
+3. The first shotgun wedding that goes through the private vows.
+4. `check:teamcodes` on the next PR that touches a team lookup: the scan is
+   line-based and regex; if it flags a line that is genuinely one-source,
+   waive it with the comment rather than loosening the shapes.
+
+### The branch workflow this session used
+
+Develop on `ccr-9ea4c0a9-m5lxbd`; commit with `git commit -F` from a
+scratchpad file (the two trailers); push; `mcp__github__create_pull_request`;
+poll `gh api repos/dachhack/ffgame/commits/<sha>/check-runs` and
+`pulls/<n>` (`mergeable_state: clean`); `mcp__github__merge_pull_request`
+(squash, `expectedHeadSha`); then resync:
+
+```sh
+git fetch origin main && git checkout -B ccr-9ea4c0a9-m5lxbd origin/main \
+ && git merge -s ours --no-edit origin/ccr-9ea4c0a9-m5lxbd \
+ && git push -u origin ccr-9ea4c0a9-m5lxbd
+```
+
+Then `gh api "repos/dachhack/ffgame/actions/runs?branch=main&head_sha=<sha>"`
+for the deploys (worker, Pages, OTA, APK gate, ops). A SQL-and-JSON-only
+PR gets NO check runs; merge on `clean`. Workflow dispatch is 403 from here
+(gh and the MCP alike): anything that must run on production is a committed
+ops errand. The battery before every push: web and mobile `tsc`,
+`(cd server && npm test)`, `check:parity` (hooks + teamcodes are in it),
+`check:changelog` (every version needs its `### vX.Y.Z — title` entry with
+`> - ` lines), `check:ios-runtime` when `apps/mobile/` or the lockfile
+changed, and the vite build.
+
+### Rules the founder set this arc, in their words
+
+- "Remove walls of text in the app and site and do tiny info chips
+  instead. Make that a standard." (CLAUDE.md has it.)
+- "Give it a day to admire your win or study your loss." (the landing week)
+- "Maybe a penalty line instead of the unnecessary projected line?"
+- "We need a way to not apply the 0 penalty to players who were injured
+  during their game."
+- "no need for 'you send' or 'you get' — if the faab is on that side it's
+  obvious." / "Draft picks should be in the roster list, not a separate
+  window."
+- "The league page doesn't list the pending vows. Those stay private
+  between the teams (and commish)." / "Don't show the vows for the other
+  teams."
+- "Let's open the player cards on the game log instead of the summary."
+- "Can we make sure that matching error never happens again at any place
+  in the app or web?" → one table, one check.
 
 ## The weekly contest suite arc (v0.664.0 → v0.670.1, Oct 11)
 
