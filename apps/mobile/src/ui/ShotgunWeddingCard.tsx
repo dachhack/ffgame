@@ -8,7 +8,8 @@
 // SAY YES to the other side's vows; everyone else's a smaller box each, except
 // for the commissioner (0456), who sees every pending wedding in full with
 // ✎ REWRITE (change the trade outright) and CALL OFF, whatever the veto rule.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { takeVows } from './leagueNav';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { headshot } from '@drip/core/data/media';
 import { openPlayerCard } from './PlayerCardSheet';
@@ -73,6 +74,17 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
+  // THE WAY IN (v0.706.0, founder: "Clicking the chip takes you to the vows interaction"): a chip asked for the
+  // composer; it opens on your pending wedding once the card has it.
+  const wantVows = useRef(takeVows());
+  useEffect(() => {
+    if (!ws || !wantVows.current) return;
+    const w = ws.find((x) => x.status === 'pending' && x.my_seat != null && x.can_counter);
+    if (!w) return;
+    wantVows.current = false;
+    setComposing({ id: w.id, mode: 'vows' });
+    setPickH(w.home.gives.map((p) => p.slug)); setPickA(w.away.gives.map((p) => p.slug));
+  }, [ws]);
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
     if (busy) return;
@@ -85,7 +97,7 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
     finally { setBusy(false); }
   };
 
-  if (!ws?.length) return null;
+  if (!ws?.some((w) => w.my_seat != null || w.can_commish === true)) return null;
   const toggle = (list: string[], set: (v: string[]) => void, slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : list.length >= 3 ? list : [...list, slug]);
   const Btn = ({ label, tone, onPress, disabled }: { label: string; tone: 'you' | 'opp' | 'plain'; onPress: () => void; disabled?: boolean }) => (
@@ -105,14 +117,8 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
       {ws.map((w) => {
         const mine = w.my_seat != null;
         const boss = w.can_commish === true;
-        if (!mine && !boss) {
-          return (
-            <View key={w.id} style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: t.bd }}>
-              <TradeBox w={w} home={w.home.gives} away={w.away.gives} small />
-              <Mono size={9.5} tone="faint" style={{ marginTop: 5 }}>{weddingStatusShort(w)}</Mono>
-            </View>
-          );
-        }
+        // PRIVATE (v0.706.0): a wedding is the two teams' and the commissioner's; nobody else sees it here
+        if (!mine && !boss) return null;
         const iAmHome = w.my_seat === w.home.roster;
         const open = composing?.id === w.id ? composing.mode : null;
         const rows = open === 'commish' || !mine

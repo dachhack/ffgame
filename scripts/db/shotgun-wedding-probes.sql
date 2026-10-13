@@ -132,7 +132,9 @@ begin
   perform sw_refused(shotgun_counter(w1, '["sw-1","sw-2"]', '["sw-5","sw-6"]'), 'original', 'sw4a the original is not new vows');
   perform sw_refused(shotgun_counter(w1, '[]', '["sw-5"]'), 'one to three', 'sw4b one to three each way');
   perform sw_ok(shotgun_counter(w1, '["sw-1"]', '["sw-7"]'), 'sw4c B proposes Groom 1 for Groom 7');
-  perform sw_true(sw_last_card(lid) like '💍 SW-B proposed new vows to SW-A: SW-A sends Groom 1; SW-B sends Groom 7.%', 'sw4d the league hears the offer');
+  -- PRIVATE (0494): the league does not hear new vows; the other team is told on their phone
+  perform sw_true(sw_last_card(lid) not like '%proposed new vows%', 'sw4d the league does not hear the offer');
+  perform sw_true(exists (select 1 from push_outbox p where p.dedupe_key like 'wedding:counter:' || w1 || ':%' and p.title like '💍 New vows from SW-B%'), 'sw4d2 SW-A is told on their phone');
   perform sw_refused(shotgun_accept_counter(w1), 'only SW-A', 'sw4e B cannot say yes to its own vows');
   perform sw_as('01');
   r := shotgun_state(lid);
@@ -140,11 +142,14 @@ begin
   perform sw_true((r -> 'weddings' -> 0 ->> 'id')::uuid = w1 and (r -> 'weddings' -> 0 ->> 'can_decline')::boolean
                   and (r -> 'weddings' -> 0 ->> 'can_accept')::boolean, 'sw4g …A''s own first, which A may call off or accept');
   perform sw_true(jsonb_array_length(r -> 'weddings' -> 0 -> 'rosters' -> 'home') = 4, 'sw4h …with both rosters for composing vows');
+  perform sw_true((r -> 'weddings' -> 0 -> 'counter' ->> 'from')::int = b, 'sw4h2 …and the new vows on the table');
   -- (A is also the commissioner, so since 0456 it sees both rosters on every
   -- pending wedding; a plain member sees none on a wedding that isn't theirs.)
   perform sw_as('03');
   perform sw_true((select x -> 'rosters' from jsonb_array_elements(shotgun_state(lid) -> 'weddings') x
                     where (x ->> 'id')::uuid = w1) = 'null'::jsonb, 'sw4i …and no rosters for a member on a wedding that isn''t theirs');
+  perform sw_true((select x -> 'counter' from jsonb_array_elements(shotgun_state(lid) -> 'weddings') x
+                    where (x ->> 'id')::uuid = w1) = 'null'::jsonb, 'sw4i2 …nor the new vows (0494)');
   perform sw_as('01');
   r := shotgun_accept_counter(w1);
   perform sw_ok(r, 'sw4j A says yes');

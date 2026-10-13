@@ -17,7 +17,8 @@ export function WeddingChip({ leagueId, onOpen }: { leagueId: string; onOpen?: (
       .then((r) => {
         if (!live) return;
         const ws = r.ok && r.on !== false ? (r.weddings ?? []) : [];
-        const pending = ws.filter((x) => x.status === 'pending');
+        // PRIVATE (v0.706.0): the two teams and the commissioner; nobody else sees a chip
+        const pending = ws.filter((x) => x.status === 'pending' && (x.my_seat != null || x.can_commish === true));
         setW(pending.find((x) => x.my_seat != null) ?? pending[0] ?? null);
       })
       .catch(() => { if (live) setW(null); });
@@ -30,7 +31,7 @@ export function WeddingChip({ leagueId, onOpen }: { leagueId: string; onOpen?: (
   const counter = weddingCounterLine(w);
   return (
     <InfoChip label={mine ? '💍 YOUR WEDDING' : '💍 WEDDING'} title={`${w.home.team} ⇄ ${w.away.team}`}
-      actions={onOpen ? [{ label: 'TRADES ▸', onPress: onOpen }] : undefined}>
+      actions={onOpen ? [{ label: mine ? 'THE VOWS ▸' : 'OPEN ▸', onPress: onOpen }] : undefined}>
       {`${weddingStatusLine(w)}\n\n${weddingSends(w.home.team, w.home.gives)}.\n${weddingSends(w.away.team, w.away.gives)}.${counter ? `\n\n${counter}` : ''}`}
     </InfoChip>
   );

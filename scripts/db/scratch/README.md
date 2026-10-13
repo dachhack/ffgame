@@ -39,7 +39,7 @@ psql -h /tmp -p 5499 -U postgres -d t -q -v ON_ERROR_STOP=1 -f scripts/db/scratc
   the team search (0473); `flow16` the commissioner's week fixes (0474); `flow17` the no-show rule and
   the entry deadline (0475). The bracket (0476) leans on the classic playoff
   stack, so it is probed on the full chain instead:
-  `scripts/db/contest-playoffs-probes.sql` in the runner — as are 0477–0493
+  `scripts/db/contest-playoffs-probes.sql` in the runner — as are 0477–0494
   (`contest-prizes-`, `contest-swaps-`, `contest-matchup-`,
   `contest-entries-`, `contest-distance-`, `contest-coin-`,
   `contest-plays-probes.sql`), which copy bodies from 0476 and later.
