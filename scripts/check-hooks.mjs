@@ -79,8 +79,9 @@ function check(file, text, report) {
   const hooksUnder = (node, out, cond = false) => {
     node.forEachChild((c) => {
       if (isFn(c)) return;
-      if (ts.isCallExpression(c)) { const h = hookCallName(c); if (h) out.push({ call: c, name: h, cond }); }
-      hooksUnder(c, out, cond || (CONDITIONAL(node) && skippable(node, c)));
+      const cc = cond || (CONDITIONAL(node) && skippable(node, c));   // the child's own standing, not its parent's
+      if (ts.isCallExpression(c)) { const h = hookCallName(c); if (h) out.push({ call: c, name: h, cond: cc }); }
+      hooksUnder(c, out, cc);
     });
     return out;
   };
