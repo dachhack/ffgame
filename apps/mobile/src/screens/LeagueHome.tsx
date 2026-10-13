@@ -628,7 +628,7 @@ function TeamsSheet({ visible, leagueId, myRoster, onClose, onMessage, onTrade }
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11 }}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: g.mine ? t.you : t.text }}>
-                  {g.name}{g.mine ? ' (you)' : ''}
+                  {g.name}
                 </Text>
                 {/* The MEMBER behind the seat (0238, founder: "show the name
                     of the league member who owns each team") */}

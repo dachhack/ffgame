@@ -1938,8 +1938,7 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="grotesk" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>{lp?.full_name ?? lot.slug}<InjuryNow slug={lot.slug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /></div>
                     <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', marginTop: 3 }}>
-                      ${lot.bid} — {teamName(lot.roster_id) ?? `Team ${lot.roster_id}`}
-                      {iHold && <span style={{ color: 'var(--you)', fontWeight: 700 }}> (you)</span>}
+                      ${lot.bid} — <span style={iHold ? { color: 'var(--you)', fontWeight: 700 } : undefined}>{teamName(lot.roster_id) ?? `Team ${lot.roster_id}`}</span>
                     </div>
                   </div>
                   {left != null && (
@@ -4909,12 +4908,12 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             {partner != null && !isMulti && (
               <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 150px', minWidth: 140 }}>
-                  <div className="mono" style={{ ...label, marginBottom: 5 }}>YOU SEND</div>
+                  <div className="mono" style={{ ...label, marginBottom: 5 }}>{myRoster != null ? teamName(myRoster).toUpperCase() : 'MY TEAM'} SENDS</div>
                   {pickList(myRoster, give, setGive)}
                   {pickAssetList(myRoster, givePicks, setGivePicks)}
                 </div>
                 <div style={{ flex: '1 1 150px', minWidth: 140 }}>
-                  <div className="mono" style={{ ...label, marginBottom: 5 }}>YOU GET</div>
+                  <div className="mono" style={{ ...label, marginBottom: 5 }}>{teamName(partner).toUpperCase()} SENDS</div>
                   {pickList(partner, get, setGet, true)}
                   {pickAssetList(partner, getPicks, setGetPicks)}
                 </div>
@@ -4924,7 +4923,8 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             {partner != null && !isMulti && !counterOf && shares && (
               <div style={{ marginTop: 12, border: '1px solid var(--bd)', borderRadius: 6, padding: 8 }}>
                 <div className="mono" style={{ ...label, marginBottom: 4 }}>🎓 DEVY SHARES</div>
-                {([[myRoster, giveShares, setGiveShares, 'YOU SEND'], [partner, getShares, setGetShares, 'YOU GET']] as const).map(([rid, val, setVal, lbl]) => {
+                {([[myRoster, giveShares, setGiveShares], [partner, getShares, setGetShares]] as const).map(([rid, val, setVal]) => {
+                  const lbl = `${rid != null ? teamName(rid).toUpperCase() : 'MY TEAM'} SENDS`;
                   const stakes = (shares.players ?? []).filter((p) => !p.graduated_to)
                     .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) })).filter((x) => !!x.h);
                   return (
@@ -4964,7 +4964,7 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
             {isMulti && teamsIn.map((rid) => (
               <div key={`leg-${rid}`} style={{ marginTop: 12, border: '1px solid var(--bd)', borderRadius: 6, padding: 8 }}>
                 <div className="mono" style={{ ...label, marginBottom: 5 }}>
-                  {teamName(rid)} SENDS{rid === myRoster ? ' (you)' : ''}
+                  {teamName(rid)} SENDS
                 </div>
                 <div style={{ maxHeight: 180, overflowY: 'auto' }}>
                   {rosters.filter((r) => r.roster_id === rid).map((r) => {

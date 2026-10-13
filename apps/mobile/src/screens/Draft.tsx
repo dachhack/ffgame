@@ -794,7 +794,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                       <InjuryNow slug={lot.slug} size={8} />
                     </View>
                     <Mono size={9.5} style={{ marginTop: 2 }}>
-                      ${lot.bid} — {teamName(lot.roster_id) ?? `Team ${lot.roster_id}`}{iHold ? ' (you)' : ''}
+                      ${lot.bid} — <Text style={iHold ? { color: t.you, fontWeight: '700' } : undefined}>{teamName(lot.roster_id) ?? `Team ${lot.roster_id}`}</Text>
                     </Mono>
                   </View>
                   {left != null && (

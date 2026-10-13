@@ -758,7 +758,8 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
         {partner != null && !isMulti && !counterOf && shares && (
           <View style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 7 }}>
             <Mono size={7.5} tone="faint" track={0.1}>🎓 DEVY SHARES</Mono>
-            {([[myRoster, giveShares, setGiveShares, 'YOU SEND'], [partner, getShares, setGetShares, 'YOU GET']] as const).map(([rid, val, setVal, label]) => {
+            {([[myRoster, giveShares, setGiveShares], [partner, getShares, setGetShares]] as const).map(([rid, val, setVal]) => {
+              const label = `${rid != null ? teamName(rid).toUpperCase() : 'MY TEAM'} SENDS`;
               const stakes = (shares.players ?? []).filter((p) => !p.graduated_to)
                 .map((p) => ({ p, h: p.holders.find((h) => h.roster_id === rid) })).filter((x) => !!x.h);
               return (
@@ -799,7 +800,7 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             next team round the ring; one tap moves it anywhere in the room. */}
         {isMulti && teamsIn.map((rid) => (
           <View key={`leg-${rid}`} style={{ marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 6 }}>
-            <Mono size={8} tone="faint" track={0.1}>{(teamName(rid) ?? '').toUpperCase()} SENDS{rid === myRoster ? ' (YOU)' : ''}</Mono>
+            <Mono size={8} tone="faint" track={0.1}>{(teamName(rid) ?? '').toUpperCase()} SENDS</Mono>
             <ScrollView style={{ maxHeight: 170, marginTop: 4 }} nestedScrollEnabled>
               {rosters.filter((r) => r.roster_id === rid).map((r) => {
                 const to = dest[r.slug];

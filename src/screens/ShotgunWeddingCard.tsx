@@ -29,7 +29,7 @@ const btn = (tone: 'you' | 'opp' | 'plain', busy: boolean): React.CSSProperties 
 
 // THE TRADE BOX (v0.656.4, founder: "get rid of the walls of text"): the two
 // sides side by side, a player to a row, instead of "X sends …" sentences.
-function Side({ side, gives, you, get, small }: { side: WeddingSide; gives: WeddingPlayer[]; you: boolean; get: boolean; small?: boolean }) {
+function Side({ side, gives, you, small }: { side: WeddingSide; gives: WeddingPlayer[]; you: boolean; small?: boolean }) {
   return (
     <div style={{ flex: '1 1 0', minWidth: 0, padding: small ? '7px 9px' : '9px 11px', borderRadius: 7,
       background: you ? 'color-mix(in srgb, var(--you) 8%, var(--bg))' : 'var(--bg)', border: `1px solid ${you ? 'color-mix(in srgb, var(--you) 40%, var(--bd))' : 'var(--bd)'}` }}>
@@ -37,7 +37,7 @@ function Side({ side, gives, you, get, small }: { side: WeddingSide; gives: Wedd
         <span style={{ fontSize: small ? 11.5 : 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{side.team}</span>
         {side.score != null && <span className="mono" style={{ fontSize: 10, color: 'var(--faint)', flex: 'none' }}>{side.score}</span>}
       </div>
-      <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: you ? 'var(--you)' : 'var(--faint)', marginTop: 2 }}>{you ? 'YOU SEND' : get ? 'YOU GET' : 'SENDS'}</div>
+      <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: you ? 'var(--you)' : 'var(--faint)', marginTop: 2 }}>SENDS</div>
       {gives.length ? gives.map((p) => (
         <div key={p.slug} style={{ display: 'flex', gap: 6, alignItems: 'baseline', marginTop: 4 }}>
           {p.pos && <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--dim)', width: 22, flex: 'none' }}>{p.pos}</span>}
@@ -50,9 +50,9 @@ function Side({ side, gives, you, get, small }: { side: WeddingSide; gives: Wedd
 function TradeBox({ w, home, away, small }: { w: Wedding; home: WeddingPlayer[]; away: WeddingPlayer[]; small?: boolean }) {
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', marginTop: small ? 6 : 10 }}>
-      <Side side={w.home} gives={home} you={w.my_seat === w.home.roster} get={w.my_seat === w.away.roster} small={small} />
+      <Side side={w.home} gives={home} you={w.my_seat === w.home.roster} small={small} />
       <div style={{ alignSelf: 'center', color: 'var(--faint)', fontSize: 14, flex: 'none' }}>⇄</div>
-      <Side side={w.away} gives={away} you={w.my_seat === w.away.roster} get={w.my_seat === w.home.roster} small={small} />
+      <Side side={w.away} gives={away} you={w.my_seat === w.away.roster} small={small} />
     </div>
   );
 }
@@ -103,13 +103,11 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
         if (!mine && !boss) return null;
         const iAmHome = w.my_seat === w.home.roster;
         const open = composing?.id === w.id ? composing.mode : null;
-        // The composer's two rows: "you send / you get" for a team, the two
-        // teams by name for the commissioner.
-        const rows = open === 'commish' || !mine
-          ? [{ label: `${w.home.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.home, pick: pickH, set: setPickH },
-             { label: `${w.away.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.away, pick: pickA, set: setPickA }]
-          : [{ label: 'YOU SEND (1–3)', list: iAmHome ? w.rosters?.home : w.rosters?.away, pick: iAmHome ? pickH : pickA, set: iAmHome ? setPickH : setPickA },
-             { label: 'YOU GET (1–3)', list: iAmHome ? w.rosters?.away : w.rosters?.home, pick: iAmHome ? pickA : pickH, set: iAmHome ? setPickA : setPickH }];
+        // The composer's two rows, each team by name — your own first when it's
+        // your wedding (no "you send / you get").
+        const homeRow = { label: `${w.home.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.home, pick: pickH, set: setPickH };
+        const awayRow = { label: `${w.away.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.away, pick: pickA, set: setPickA };
+        const rows = open === 'commish' || !mine || iAmHome ? [homeRow, awayRow] : [awayRow, homeRow];
         const openComposer = (mode: 'vows' | 'commish') => {
           if (open === mode) { setComposing(null); return; }
           setComposing({ id: w.id, mode }); setNote(null);
