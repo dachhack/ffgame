@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.697.4 — The chip is ⚡ UP, and the cards line up
+
+> - The play chip reads ⚡ UP and is no taller than the spot’s label, so a card with a play on it sits level with the rest of its row. Web and phone, MY TEAM and the matchup.
+
+Founder: "Just do lightning icon UP. Let's make sure adding the chip
+doesn't change the row height of the card. I want them to all align." The
+labelled `InfoChip` is a fixed 14px pill; MY TEAM's label row is a fixed
+height with or without it; the matchup's label cell never clips it.
+
 ### v0.697.3 — The chip says POWER UP
 
 > - The play chip reads POWER UP, whole, on MY TEAM and the matchup; it no longer clips to “POWER …” in the matchup’s narrow column. Web and phone.

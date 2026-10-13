@@ -200,7 +200,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
             beside the spot's label, no icon on the card; tap it for the play's details. */}
         <View style={{ flexDirection: edge === 'left' ? 'row' : 'row-reverse', alignItems: 'center', gap: 4 }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
-          {(() => { const a = playAt(s, r); return a ? <InfoChip label="POWER UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
+          {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
         </View>
         <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : alpha(t.text, 35) }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
         <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: alpha(t.text, 65) }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}`}</Text>
