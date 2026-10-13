@@ -1513,7 +1513,7 @@ function SlateStrip({ row, glance }: { row?: LeagueSlateRow; glance?: WidgetSnap
   // final (v0.510.0); the opponent's only when their lineup could be read.
   const proj = glance?.projected && glance.phase !== 'final' && glance.them ? glance : null;
   const projOf = (mine: boolean) => (!proj ? null : mine ? proj.me.score : proj.themLive ? null : proj.them!.score);
-  const v = verdictOf(g);
+  const v = verdictOf(g, row?.lower_wins === true);
   const tone = v === 'won' || v === 'leading' ? 'var(--you)'
     : v === 'lost' || v === 'trailing' ? 'var(--opp)' : 'var(--mid)';
   const word = v === 'won' ? 'WON' : v === 'lost' ? 'LOST' : v === 'tied' ? 'TIED'

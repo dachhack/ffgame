@@ -136,5 +136,8 @@ ok('lock: per seat — three read as a list with commas; a one-seat member keeps
 const noneOf = P.contestLockRows(L, 7, 'last', kick, multi, new Set([3, 4, 5, 6]));
 ok('lock: per seat — every seat built, no push', !noneOf.some((r) => r.app_user_id === 'u4'), noneOf);
 
+// NOT A COLLEGE WEEK (v0.707.2, founder: "I don't think any squads should lock on Tuesday?"): college week 7's
+// Tuesday-night game sits in nfl_slate at board week 207 and paged every NFL contest league.
+ok('lock: a college board week (207) is never a contest lock; NFL and preseason weeks are', !P.contestSlateWeek(207) && !P.contestSlateWeek(216) && P.contestSlateWeek(6) && P.contestSlateWeek(18) && P.contestSlateWeek(103));
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

@@ -33,6 +33,7 @@ import { sweepComputer, relayFixes } from './computer.js';
 import { sweepDevRoom } from './devRoom.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 import { TeamMap } from '../../packages/core/src/data/teamCodes.ts';
+import { isCollegeWeek } from '../../packages/core/src/data/nflSlate.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
 
@@ -537,6 +538,12 @@ export function contestLockBand(firstKickMs, now) {
   if (toLock > DAY_MS - DAY_BAND_MS && toLock <= DAY_MS + DAY_BAND_MS) return 'day';
   return null;
 }
+/** PURE: is this nfl_slate week one a contest league can play? Not a college
+ *  week (board week 200 + N, 0371): college leagues are classic-only (0365),
+ *  so no contest plays one. Founder (Oct 13): "I don't think any squads should
+ *  lock on Tuesday?" — college week 7's Tuesday-night kickoff (board week 207)
+ *  had paged every NFL contest league "Squads lock Tue 7:00 PM ET … week 207". */
+export const contestSlateWeek = (week) => !isCollegeWeek(Number(week));
 /** PURE: the push rows for one league's members without a squad. */
 export function contestLockRows(league, week, band, lockMs, members, entered) {
   const lockLabel = new Date(lockMs).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
@@ -633,6 +640,7 @@ async function detectContestLock() {
   const now = Date.now();
   const first = new Map(); // `${season}:${week}` → earliest kickoff ms
   for (const g of slate ?? []) {
+    if (!contestSlateWeek(g.week)) continue;
     const k = `${g.season}:${g.week}`;
     const ms = Date.parse(g.kickoff);
     if (!first.has(k) || ms < first.get(k)) first.set(k, ms);

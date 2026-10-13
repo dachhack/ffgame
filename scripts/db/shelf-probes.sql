@@ -9,6 +9,9 @@
 --   • sh7 report_chat defaults ON for a league that predates the setting —
 --         the 0343 NULL trap, which cost a whole fleet its waiver schedule;
 --   • sh8 …and the commissioner can turn it off; a manager cannot.
+--   • sh9 (0495) lower_wins rides the row: false for a classic league, true
+--         for a one-team-total Bullseye contest, false for a high-score
+--         contest that carries a stale bullseye key.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -26,7 +29,7 @@ update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": tr
 do $$
 declare r jsonb; lid uuid; other uuid; sl jsonb; mine jsonb; g jsonb; seas text := '2026';
         me uuid := '00000000-0000-0000-0000-000000004701';
-        mid uuid; wk int := 88;
+        mid uuid; wk int := 88; kind0 text;
 begin
   perform sh_as('01');
   r := create_native_league('Shelf', seas, 2, 8, 60, 'snake', 200, 15, 1, null, null, null, 'classic');
@@ -119,6 +122,20 @@ begin
   -- and the probe being sloppy.
   perform sh_true((commish_set_report_chat(lid, true) ->> 'ok')::boolean, 'sh8 …and back on again');
   perform sh_true(league_report_chat(lid), 'sh8 …and that takes too');
+
+  -- ── sh9. 0495: which way is winning ──
+  -- Founder: "If you have a lower score in a bullseye league, you are the
+  -- winner." The card's verdict reads this; the standings already did.
+  select x into mine from jsonb_array_elements(my_league_slate() -> 'leagues') x where (x ->> 'league_id')::uuid = lid;
+  perform sh_true((mine ->> 'lower_wins')::boolean is false, 'sh9 a classic league: higher wins: ' || mine::text);
+  select kind into kind0 from league where id = lid;
+  update league set kind = 'dfs', settings_json = coalesce(settings_json, '{}'::jsonb) || '{"contest":"bullseye","bullseye":"total"}' where id = lid;
+  select x into mine from jsonb_array_elements(my_league_slate() -> 'leagues') x where (x ->> 'league_id')::uuid = lid;
+  perform sh_true((mine ->> 'lower_wins')::boolean, 'sh9 a one-team-total Bullseye contest: lower wins: ' || coalesce(mine::text, 'off the shelf'));
+  update league set settings_json = settings_json || '{"contest":"high"}' where id = lid;
+  select x into mine from jsonb_array_elements(my_league_slate() -> 'leagues') x where (x ->> 'league_id')::uuid = lid;
+  perform sh_true((mine ->> 'lower_wins')::boolean is false, 'sh9 a high-score contest with a stale bullseye key: higher wins');
+  update league set kind = kind0, settings_json = settings_json - 'contest' - 'bullseye' where id = lid;
 
   delete from league_message where league_id = lid;
   delete from matchup where league_id = lid;
