@@ -439,7 +439,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(8), color: dim, textAlign: 'center', lineHeight: fs(11), minHeight: fs(22), maxWidth: CARD_W + 6 }}>
                         {p
-                          ? (lv ? `${lv.score.toFixed(1)}${lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}` : `proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ` · ${valueOf(p).toFixed(2)}/$1k`}`)
+                          ? (lv ? <>{lv.score.toFixed(1)}{lv.play && lv.raw != null && Math.abs(lv.raw - lv.score) > 1e-9 ? <Text style={{ textDecorationLine: 'line-through', opacity: 0.7 }}>{` ${lv.raw.toFixed(1)}`}</Text> : null}{lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}</> : `proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ` · ${valueOf(p).toFixed(2)}/$1k`}`)
                           : ghost ? `a phantom · ${GHOST_POINTS} flat, no salary` : hint}
                       </Text>
                       {p && <InjuryTag key={injTick} week={week} slug={p.slug} />}

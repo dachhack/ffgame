@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.699.1 — A play settles on his final, and the raw score is struck
+
+> - Double or Nothing and Floor now settle when the player’s own game ends, not only when the whole matchup turns final — Josh Allen’s 29.7 past a 21.5 line doubles as soon as Monday night is over. Where a play changed a spot’s score, the matchup and MY TEAM show the powered score with the raw score struck through under it. Web and phone.
+
+Founder: "Looks like the double or nothing didn't actually work. We need to
+cross out the actual score and put the powered up score above it." Engine:
+`scoreContest` takes `done(slug)` and settles the two line plays on it;
+the worker hands the done teams. The worker's slot rows now carry `play`
+and `raw` (the scorer wrote them since v0.685.0; the write dropped them —
+the PLAY bonus rows' icons fell back to ⚡ for the same reason). Four
+screens strike the raw score under the powered one.
+
 ### v0.699.0 — The AI seats play too
 
 > - In a weekly contest league with drip coin on, the AI seats now buy and play power-ups. Before the week’s first kickoff each AI seat with a squad spends from its own wallet on the play it judges best for that squad (an Underdog on its bottom-third man, a Hail Mary behind its quarterback, a Curse across the table, and so on), up to the week’s cap, under the same rules and offers as anyone — a play the commissioner turned off is never picked. Their plays show on the matchup like a member’s.

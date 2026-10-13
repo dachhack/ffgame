@@ -198,6 +198,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const proj = r.slug ? projOf(r.slug) : null;
     const target = bull && !isTotal ? theCard?.targets[r.slot] ?? null : null;
     const color = mine ? 'var(--you)' : 'var(--opp)';
+    // THE RAW SCORE, STRUCK (v0.699.1, founder: "cross out the actual score and put the powered up score above it")
+    const lvr = st.started ? m.state?.slots?.find((x) => x.side === s && x.slot === r.slot) : null;
+    const raw = lvr?.play && lvr.raw != null && Math.abs(lvr.raw - lvr.score) > 1e-9 ? lvr.raw : null;
     return (
       <div style={{ display: 'grid', gap: 1, alignContent: 'center', textAlign: edge, padding: edge === 'left' ? '0 4px 0 10px' : '0 10px 0 4px', minWidth: 0 }}>
         {/* THE PLAY CHIP (v0.696.6, founder: "On the matchup screen, let's do the same: just an active power ups chip"):
@@ -207,6 +210,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
           {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} info={playText(a.pl, a.theirs, mine)} actions={myTable && mine && !a.theirs ? [{ label: 'TAKE BACK', onPress: () => void disarm(a.pl) }] : undefined} /> : null; })()}
         </span>
         <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
+        {raw != null && <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'color-mix(in srgb, var(--text) 50%, transparent)', textDecoration: 'line-through' }}>{raw.toFixed(1)}</span>}
         <span className="mono" style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>
           {proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}
           {target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}

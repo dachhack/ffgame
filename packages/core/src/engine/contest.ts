@@ -259,6 +259,10 @@ export function scoreContest(
     /** THE SECOND DEAL (v0.696.0): a player's position (Trick Play) and his fourth-quarter-and-overtime points (Garbage Time). */
     posOf?: (slug: string) => string | undefined;
     lateOf?: (slug: string) => number;
+    /** HIS GAME IS OVER (v0.699.1, founder: "Looks like the double or nothing didn't actually work"): a spot play
+     *  with a line to beat — Double or Nothing, Floor — settles when the player's own game ends, not only when the
+     *  whole matchup is final (which a Monday game held off until Tuesday). The worker hands the done teams. */
+    done?: (slug: string) => boolean;
   } = {},
 ): ClassicResult & { tiebreak: { home: number | null; away: number | null } } {
   const pending = opts.pending ?? (() => false);
@@ -303,7 +307,7 @@ export function scoreContest(
       else if (slug && playOn(d.slot, 'double-or-nothing')) {
         const don = playOn(d.slot, 'double-or-nothing')!;
         play = 'double-or-nothing';
-        if (opts.settled) score = don.proj != null && raw > don.proj ? Math.round(raw * 2 * 10) / 10 : 0;
+        if (opts.settled || opts.done?.(slug)) score = don.proj != null && raw > don.proj ? Math.round(raw * 2 * 10) / 10 : 0;
       } else if (slug && opts.settled && cfg.contest === 'bullseye' && cfg.bullseye?.variant !== 'total' && playOn(d.slot, 'magnet') && opts.card?.targets[d.slot] != null) {
         // MAGNET, per spot: the dart lands half as far from its number
         const tg = opts.card.targets[d.slot];
@@ -312,7 +316,7 @@ export function scoreContest(
         // FLOOR (v0.696.0): at the final the spot scores at least his projection
         const f = playOn(d.slot, 'floor')!;
         play = 'floor';
-        if (opts.settled && f.proj != null && raw < f.proj) score = Math.round(f.proj * 10) / 10;
+        if ((opts.settled || opts.done?.(slug)) && f.proj != null && raw < f.proj) score = Math.round(f.proj * 10) / 10;
       } else if (slug && playOn(d.slot, 'garbage-time')) {
         // GARBAGE TIME (v0.696.0): his fourth-quarter and overtime points count twice
         play = 'garbage-time';

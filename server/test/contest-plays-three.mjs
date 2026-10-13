@@ -46,6 +46,13 @@ let r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [{ id: 'floor', s
 ok('Floor at the final: 5 short of an 8 projection scores 8', r.home === 20 + 10 + 8 && r.slots.find((x) => x.side === 'home' && x.slot === 'S3').play === 'floor', r.home);
 r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [{ id: 'floor', slot: 'S3', proj: 8 }], away: [] }, settled: false });
 ok('…reads raw before the final', r.home === 35, r.home);
+// HIS GAME IS OVER (v0.699.1): a line-to-beat play settles on the player's own final
+r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [{ id: 'double-or-nothing', slot: 'S1', proj: 15 }], away: [] }, settled: false, done: (s) => s === 'qb' });
+ok('Double or Nothing settles when his game is over, before the matchup is final: 20 past 15 doubles', r.home === 40 + 10 + 5, r.home);
+r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [{ id: 'double-or-nothing', slot: 'S1', proj: 15 }], away: [] }, settled: false, done: () => false });
+ok('…and reads raw while he is still playing', r.home === 35, r.home);
+r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [{ id: 'floor', slot: 'S3', proj: 8 }], away: [] }, settled: false, done: (s) => s === 'wr' });
+ok('Floor too: 5 short of 8 holds at 8 once his game is over', r.home === 20 + 10 + 8 && r.slots.find((x) => x.side === 'home' && x.slot === 'S3').raw === 5, r.home);
 r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [{ id: 'garbage-time', slot: 'S2' }], away: [] }, lateOf: (s) => (s === 'rb' ? 4 : 0) });
 ok('Garbage Time: the back’s 4 fourth-quarter points count twice', r.home === 20 + 14 + 5, r.home);
 r = scoreContest(squads, cfg(), pointsOf, { plays: { home: [{ id: 'mirror', slot: 'S2' }], away: [] }, settled: true });
