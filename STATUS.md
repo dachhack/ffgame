@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.702.0 — The rules-of-hooks check
+
+> - A new check in the battery, and on every push that touches a screen, fails a change that declares a hook after an early return, under a condition or inside a callback — the mistake that crashed My Team for a day.
+
+Founder: "let's add the rules-of-hooks check." `scripts/check-hooks.mjs`,
+on the TypeScript compiler the repo already ships (no ESLint, no new
+dependency): in a component (`LikeThis`) or a hook (`useLikeThis`) every
+hook call sits at the top level of the body — not in an if / loop / switch
+/ try / `?:` / the right of `&&` `||` `??`, not in a nested function, not
+after a statement that can return; a hook call in a function named neither
+way is reported too. `npm run check:hooks` (self-test first, then
+`src`, `apps/mobile/src`, `packages/core/src`), chained into
+`check:parity`; `.github/workflows/check-hooks.yml` runs it on every push
+touching those trees. Run against the v0.700.0 screen as it shipped, it
+finds all 13 hooks after the return. The tree passes after one rename: the
+sim store’s `useConsumable` (an action, not a hook) is `spendConsumable`.
+
 ### v0.701.5 — My Team opens again
 
 > - My Team crashed on opening ("Rendered more hooks than during the previous render") since v0.700.0; it opens again, with the card drag intact.
