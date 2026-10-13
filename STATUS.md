@@ -34,7 +34,10 @@ each affordable play against the squad). Worker: `pods.js` picks and calls
 rules move into `_contest_arm_core`, shared by `contest_arm_play` and the
 new service-role `ai_contest_play` (seeds the seat's wallet on first use);
 `contest_settle_coin` includes AI seats. Probes ai0–ai10; the coin probe
-dc3b counts the AI seat; `server/test/ai-plays.mjs`. No iPhone build.
+dc3b counts the AI seat; `server/test/ai-plays.mjs`. Also: the box score's
+week-level gate from v0.697.0 is dropped (it read the parity probes' synthetic
+week numbers as college and emptied every box, `check:boxgame`); the game-id
+rule carries the fix on its own. No iPhone build.
 
 ### v0.698.1 — The chip in the theme’s ink
 
