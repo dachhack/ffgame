@@ -50,6 +50,7 @@ import { AvatarGrid } from '../ui/AvatarGrid';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 
 import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
+import { WeddingChip } from '../ui/WeddingChip';
 import { TradeCenter } from '../ui/TradeCenter';
 import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -963,7 +964,11 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
             ))}
           </ChipStrip>
         )}
-        <Mono size={9} tone="faint" track={0.12}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</Mono>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Mono size={9} tone="faint" track={0.12}>{viewingMine ? 'MY ROSTER' : (shownName ?? `TEAM ${shownRid}`).toUpperCase()} ({shown.length}{cap != null ? `/${cap}` : ''})</Mono>
+          {/* 💍 THE WEDDING (v0.705.0): the impending shotgun wedding, while one is pending; TRADES ▸ goes to the card */}
+          {viewingMine && <WeddingChip leagueId={leagueId} onOpen={() => setTab('trades')} />}
+        </View>
         {!viewingMine && canStash && (
           <Mono size={8.5} tone="you" style={{ marginTop: 4 }}>Commissioner: you can move this team’s players to and from IR and the taxi squad below.</Mono>
         )}

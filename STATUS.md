@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.705.0 — The wedding chip, and vows like a trade
+
+> - While a shotgun wedding is pending, a 💍 chip on the matchup and on My Team says where it stands, who sends whom and any new vows on the table; from My Team it jumps to the Trades tab.
+> - Proposing new vows (or the commissioner rewriting them) now looks like a trade: the two rosters side by side with a checkbox, his face and his name, one to three each way.
+
+Founder: "For shotgun wedding we need chips in matchup and my team for
+the impending wedding. Let's also make the new vows proposal look like
+the standard trade interaction." Phone: `WeddingChip` (`InfoChip`, polls
+`shotgunState` a minute apart, your pending wedding first) on
+`ClassicBoard` (match variant) beside ▦ FIELDS and on `Team`’s roster
+header with TRADES ▸. The composer in `ShotgunWeddingCard` on both hosts
+is the trade composer’s rows (phone: checkbox + 22px headshot + name →
+his card; web: the trade’s checklist), the chip lists gone.
+
 ### v0.704.2 — The whole roster, picks included
 
 > - The trade composer’s two piles now fill the screen, so most of a roster shows without scrolling, and a side’s tradeable draft picks sit at the bottom of its roster list instead of in a box of their own.

@@ -9,16 +9,18 @@
 // for the commissioner (0456), who sees every pending wedding in full with
 // ✎ REWRITE (change the trade outright) and CALL OFF, whatever the veto rule.
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { headshot } from '@drip/core/data/media';
+import { openPlayerCard } from './PlayerCardSheet';
 import {
   shotgunState, shotgunDecline, shotgunCounter, shotgunAcceptCounter, shotgunCommishEdit, shotgunCommishDecline, friendlyError,
 } from '@drip/core/data/liveApi';
 import {
-  weddingStatusShort, weddingPlayerTag, type Wedding, type WeddingPlayer, type WeddingSide,
+  weddingStatusShort, type Wedding, type WeddingPlayer, type WeddingSide,
 } from '@drip/core/data/shotgunWedding';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
-import { Card, Chip, Mono } from './prims';
+import { Card, Mono } from './prims';
 
 // THE TRADE BOX (v0.656.4, founder: "get rid of the walls of text"): the two
 // sides side by side, a player to a row. Twin of the web's TradeBox.
@@ -160,14 +162,36 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
                 {open === 'commish' && (
                   <Mono size={10} tone="dim" style={{ marginBottom: 8 }}>This replaces the trade that goes through at the deadline. The deadline and who can call it off stay as announced.</Mono>
                 )}
-                {rows.map((r, i) => (
-                  <View key={r.label}>
-                    <Mono size={9} tone="faint" track={0.1} style={{ marginTop: i ? 10 : 0 }}>{r.label}</Mono>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
-                      {(r.list ?? []).map((p) => <Chip key={p.slug} small label={weddingPlayerTag(p)} on={r.pick.includes(p.slug)} onPress={() => toggle(r.pick, r.set, p.slug)} />)}
+                {/* THE STANDARD TRADE INTERACTION (v0.705.0, founder: "make the new vows proposal look like the standard
+                    trade interaction"): the two rosters side by side, a checkbox, his face and his name (tap → his card),
+                    one to three each way. */}
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {rows.map((r) => (
+                    <View key={r.label} style={{ flex: 1, minWidth: 0 }}>
+                      <Mono size={8.5} tone="faint" track={0.1} style={{ marginBottom: 4 }}>{r.label}</Mono>
+                      <ScrollView style={{ maxHeight: 280, borderWidth: 1, borderColor: t.bd, borderRadius: 6, padding: 4 }} nestedScrollEnabled>
+                        {(r.list ?? []).map((p) => {
+                          const on = r.pick.includes(p.slug);
+                          return (
+                            <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 4, backgroundColor: on ? alpha(t.you, 14) : 'transparent' }}>
+                              <Pressable hitSlop={8} onPress={() => { tap(); toggle(r.pick, r.set, p.slug); }}>
+                                <Text style={{ fontSize: 13, color: on ? t.you : t.dim }}>{on ? '☑' : '☐'}</Text>
+                              </Pressable>
+                              <Pressable onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos ?? '', team: p.team ?? '' }); }}
+                                style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: alpha(t.text, 10) }}>
+                                  {headshot(p.slug) ? <Image source={{ uri: headshot(p.slug)! }} style={{ width: 22, height: 22 }} resizeMode="cover" /> : null}
+                                </View>
+                                <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 11.5, color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>{p.name}</Text>
+                              </Pressable>
+                              <Mono size={8} tone="faint">{p.pos ?? ''}</Mono>
+                            </View>
+                          );
+                        })}
+                      </ScrollView>
                     </View>
-                  </View>
-                ))}
+                  ))}
+                </View>
                 <View style={{ marginTop: 10, flexDirection: 'row' }}>
                   <Btn label={open === 'commish' ? 'REWRITE THE VOWS' : 'SEND NEW VOWS'} tone="you" disabled={!pickH.length || !pickA.length}
                     onPress={() => void act(open === 'commish'
