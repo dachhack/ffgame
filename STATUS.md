@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.697.0 — Kicks through the uprights; no college men in an NFL box
+
+> - Field goals on the fields: each end line now carries uprights, a made kick’s arc flies through the end zone and between them, and a miss reaches the goal line wide of them and finishes in a dotted line. Web and phone.
+> - The box score no longer seats a college player in an NFL game. A Saturday game’s plays are mirrored into the NFL week, and the fallback that matched plays by their number and clock took an Ohio State tight end’s first target (play 40 at 15:00) for the Rams game’s opening kickoff (also play 40 at 15:00), listing him as “WR C 5141656”. A college slug is never in an NFL game, and a player whose every play names another game is elsewhere.
+
+Founder: "Why are we getting IDs instead of player names" and "Made kicks
+should go through the uprights. Missed can finish in a dotted line."
+`gameBoxScore`: the week's level gates college slugs (`weekLevel`,
+`isCollegeSlug`), and a player whose plays all carry a game id other than
+the feed's is skipped before the play-number fallback; confirmed against
+ESPN's summaries (MD@OSU play 40, BUF@LA play 40, both 15:00) and
+`server/test/box-college-bleed.mjs`, which fails on the old code. Both
+`FieldView`s: `fgKick`/`fgGood`, the arc's end through the posts or wide
+at the goal line, a dotted tail to the end line on a miss, and the uprights
+drawn on each end line.
+
 ### v0.696.7 — The chip just says PLAY
 
 > - The play chip on MY TEAM and the matchup reads PLAY alone, no icon: it says a play is on the spot, and the tap tells which. Web and phone.

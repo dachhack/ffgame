@@ -360,6 +360,14 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
       : mx(xOf(cur.yl2, cur.tm2 ?? cur.tm)),
     color: accent ?? (cur.sc ? 'var(--warn)' : cur.to ? 'var(--fx-nuke)' : 'var(--dimstrong)'),
   } : null;
+  // FIELD GOALS (v0.697.0, founder: "Made kicks should go through the uprights. Missed can finish in a dotted
+  // line"): a made kick flies through the end zone and between the posts on the end line; a miss reaches the
+  // goal line wide of them and finishes dotted to the end line. The app's FieldView draws the same.
+  const fgKick = !!cur && /Field Goal/.test(cur.ty);
+  const fgGood = fgKick && (!!cur!.sc || /\bGOOD\b/.test(cur!.txt));
+  const fgDir = arc && cur ? (mx(xOf(0, cur.tm)) >= arc.x1 ? 1 : -1) : 1;
+  if (arc && cur && fgKick) { const goal = mx(xOf(0, cur.tm)); arc.x2 = fgGood ? goal + fgDir * (EZ - 4) : goal; }
+  const fgTail = arc && fgKick && !fgGood ? arc.x2 + fgDir * (EZ - 4) : null;
   // Split point: where the ball stopped FLYING and started being CARRIED.
   // Completed pass with YAC → the catch point (air arc, then run-after line).
   // Kick/punt with a return → the field/catch spot (kick arc, then runback
@@ -393,7 +401,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   // on-screen one is the same expression the ▶/◀ marker uses.
   const SIDE_LANE = (BOT - TOP) * 0.22;
   const sideDy = playSideDy(playSide(cur?.txt), flip ? !attacksRight : attacksRight, SIDE_LANE);
-  const endY = midY + sideDy;
+  const endY = fgKick ? (fgGood ? midY : midY + (((cur?.pid ?? 0) & 1) ? -1 : 1) * 15) : midY + sideDy;
   // ── THE LANE IS FOR DOUBLING BACK, NOT FOR EVERY CARRY (v0.333.0) ────────
   // v0.332.0 put EVERY carried phase on its own lane, which was an
   // over-application of a fix aimed at kick returns. For a pass the run-after
@@ -479,6 +487,13 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
             return (
               <>
                 <rect x={ezAwayX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(awayCol)} />
+                {/* THE UPRIGHTS (v0.697.0): on each end line, for a kick to fly through */}
+                {[4, W - 4].map((px) => { const tip = px < W / 2 ? 0.5 : W - 0.5; return (
+                  <g key={`up-${px}`} stroke="var(--dim)" strokeWidth={1.4}>
+                    <line x1={px} y1={midY - 9} x2={px} y2={midY + 9} />
+                    <line x1={px} y1={midY - 9} x2={tip} y2={midY - 9} />
+                    <line x1={px} y1={midY + 9} x2={tip} y2={midY + 9} />
+                  </g>); })}
                 <rect x={ezHomeX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(homeCol)} />
                 {redZone && (
                   <rect x={(flip ? !attacksRight : attacksRight) ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP}
@@ -529,6 +544,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
                 : `M ${arc.x1} ${midY} L ${arc.x2} ${endY}`}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
                 pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .55s ease both' }} />
+              {fgTail != null && <line x1={arc.x2} y1={endY} x2={fgTail} y2={endY} stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="2.5 3.5" />}
               {carrying && (
                 <path d={overlaps
                   ? `M ${catchX} ${endY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
@@ -543,7 +559,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
                   play was carried, or it would float above the runback. */}
               {incomplete
                 ? <text x={arc.x2} y={endY + 3} fill="var(--fx-nuke)" fontSize={9} fontWeight={800} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>✕</text>
-                : <text x={arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
+                : <text x={fgTail ?? arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
             </g>
           )}
           {/* line of scrimmage + ball marker (transitions to each new spot) */}
