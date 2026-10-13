@@ -22,6 +22,12 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.697.5 — A dark chip, so the bolt shows
+
+> - The ⚡ UP chip is dark with a gold edge and gold text, so the bolt reads. Web and phone.
+
+Founder: "Chip needs to be dark so we can see the bolt."
+
 ### v0.697.4 — The chip is ⚡ UP, and the cards line up
 
 > - The play chip reads ⚡ UP and is no taller than the spot’s label, so a card with a play on it sits level with the rest of its row. Web and phone, MY TEAM and the matchup.
