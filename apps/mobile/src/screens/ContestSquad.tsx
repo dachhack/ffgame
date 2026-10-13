@@ -9,8 +9,9 @@
 // value / salary, every player's eligibility said in words (the spot's
 // filter, the pool filter, your seat's rule), FILL FOR ME for the open spots,
 // and the week's injuries. The engine is engine/contestBuilder.ts.
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, PanResponder, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import { contestCardMove, contestApplyCardMove, type ContestCardMove } from '@drip/core/engine/contest';
 import {
   contestState, addContestEntry, contestBuyPlay, type ContestPlayRow, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
@@ -33,7 +34,7 @@ import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projectedRing, tiebreakDistance } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
 import { useTheme, MONO, fs, alpha } from '../theme.native';
-import { FeltTable, CardBack, CardFace, FlipCard, CARD_W } from '../ui/ContestCards';
+import { FeltTable, CardBack, CardFace, FlipCard, CARD_W, CARD_H } from '../ui/ContestCards';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { tap, commit, warn } from '../ui/feedback';
@@ -285,6 +286,74 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
     setPicks(next);
     setActive(null);
   };
+  // DRAG A CARD (v0.700.0, founder: "Long press on a card and you can drag it to a trash can or any eligible
+  // swappable spot. If you move it to a spot that can't swap back trash that card with a info note about what will
+  // happen."). A long press lifts the card; the felt's pan responder takes the touch from there (the scroll view
+  // stands still meanwhile), eligible spots light up, a bar at the top of the felt is the trash. The rule is the
+  // engine's contestCardMove; a bump (the spot's player can't stand where the card came from) asks first.
+  type Over = string | 'trash' | null;
+  const [drag, setDrag] = useState<{ slot: string; x: number; y: number; over: Over } | null>(null);
+  const dragRef = useRef<string | null>(null);        // armed by the long press, read by the pan responder
+  const panning = useRef(false);
+  const cardRefs = useRef<Record<string, View | null>>({});
+  const trashRef = useRef<View | null>(null);
+  const feltRef = useRef<View | null>(null);
+  const rects = useRef<Record<string, { x: number; y: number; w: number; h: number }>>({});
+  const feltAt = useRef({ x: 0, y: 0 });
+  const playerLite = useCallback((slug: string) => { const q = byPlayer.get(slug); return q ? { slug: q.slug, pos: q.pos, team: q.team, exp: q.exp } : null; }, [byPlayer]);
+  const moveOf = useCallback((from: string, to: string): ContestCardMove => contestCardMove(slots, picks, from, to, playerLite, { locked, ghosted }), [slots, picks, playerLite, locked, ghosted]);
+  const measureAll = () => {
+    feltRef.current?.measureInWindow((x, y) => { feltAt.current = { x, y }; });
+    for (const [slot, v] of Object.entries(cardRefs.current)) v?.measureInWindow((x, y, w, h) => { rects.current[slot] = { x, y, w, h }; });
+  };
+  const startDrag = (slot: string) => {
+    measureAll();
+    dragRef.current = slot; panning.current = false;
+    const r = rects.current[slot];
+    tap();
+    setDrag({ slot, x: r ? r.x + r.w / 2 : 0, y: r ? r.y + r.h / 2 : 0, over: null });
+  };
+  const cancelDrag = () => { dragRef.current = null; panning.current = false; setDrag(null); };
+  const hitAt = (x: number, y: number): Over => {
+    const from = dragRef.current;
+    for (const [slot, r] of Object.entries(rects.current)) {
+      if (slot === 'trash' || slot === from) continue;
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return slot;
+    }
+    const tr = rects.current.trash;
+    if (tr && x >= tr.x && x <= tr.x + tr.w && y >= tr.y && y <= tr.y + tr.h) return 'trash';
+    return null;
+  };
+  const drop = (x: number, y: number) => {
+    const from = dragRef.current; const over = hitAt(x, y);
+    cancelDrag();
+    if (!from || !over) return;
+    const mover = picks[from] ? byPlayer.get(picks[from]!) : null;
+    if (!mover) return;
+    if (over === 'trash') { warn(); setPicks({ ...picks, [from]: null }); return; }
+    const mv = moveOf(from, over);
+    if (mv.kind === 'no') { warn(); setNote(`${mover.name} can’t go to ${labels[over]} — ${mv.why}`); return; }
+    if (mv.kind === 'bump') {
+      const other = byPlayer.get(mv.other);
+      Alert.alert(`${other?.name ?? 'He'} comes off the squad`,
+        `${mover.name} takes ${labels[over]}. ${other?.name ?? 'The player there'} can’t move to ${labels[from]} (it ${mv.why}), so he leaves the squad and ${labels[from]} opens up.`,
+        [{ text: 'KEEP IT', style: 'cancel' }, { text: 'MOVE HIM', onPress: () => { commit(); setPicks(contestApplyCardMove(picks, from, over, mv)); } }]);
+      return;
+    }
+    commit(); setPicks(contestApplyCardMove(picks, from, over, mv));
+  };
+  const hitRef = useRef(hitAt); hitRef.current = hitAt;
+  const dropRef = useRef(drop); dropRef.current = drop;
+  const pan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponderCapture: () => false,
+    onMoveShouldSetPanResponderCapture: () => dragRef.current != null,
+    onPanResponderGrant: () => { panning.current = true; },
+    onPanResponderMove: (_e, g) => { const over = hitRef.current(g.moveX, g.moveY); setDrag((d) => (d ? { ...d, x: g.moveX, y: g.moveY, over } : d)); },
+    onPanResponderRelease: (_e, g) => { dropRef.current(g.moveX, g.moveY); },
+    onPanResponderTerminate: () => { dragRef.current = null; panning.current = false; setDrag(null); },
+    onPanResponderTerminationRequest: () => false,
+  }), []);
+  const dragPlayer = drag && picks[drag.slot] ? byPlayer.get(picks[drag.slot]!) : null;
   const rows = active ? rankCandidates(players, ctx, { slot: active === 'any' ? null : active, tab, team: team || null, needle: search, sort: sort ?? undefined, locked, hideIneligible: eligibleOnly, ruledOut, saved }, salaryOf) : [];
   const sortNow: BuilderSort = sort ?? (bull && !isTotal ? 'aim' : 'proj');
   const activeDef = active && active !== 'any' ? slots.find((d) => d.slot === active) ?? null : null;
@@ -292,7 +361,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       {header}
-      <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 90 }}
+      <ScrollView contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 90 }} scrollEnabled={!drag}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load().catch(() => {}); setRefreshing(false); }} tintColor={t.you} />}>
         <Card style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
@@ -403,8 +472,11 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
               face up, an open one the deck's back with ＋ PICK on it; buying a
               player deals him in (the card turns). The numbers sit under each. */}
           <FeltTable>
+            <View ref={feltRef} {...pan.panHandlers} style={{ position: 'relative' }}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
               {slots.map((d, i) => {
+                const landing = drag && drag.slot !== d.slot ? moveOf(drag.slot, d.slot) : null;
+                const canLand = !!landing && landing.kind !== 'no';
                 const slug = picks[d.slot];
                 const p = slug ? byPlayer.get(slug) : null;
                 const target = theCard?.targets[d.slot];
@@ -419,7 +491,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                   ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} />
                   : ghost ? <CardFace slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} mine points={lv ? lv.score : null} foot="$0" badge="👻" /> : <View />;
                 return (
-                  <View key={d.slot} style={{ width: CARD_W + 6, alignItems: 'center', gap: 3 }}>
+                  <View key={d.slot} ref={(r) => { cardRefs.current[d.slot] = r; }} style={{ width: CARD_W + 6, alignItems: 'center', gap: 3, opacity: drag?.slot === d.slot ? 0.35 : 1 }}>
                     {/* THE PLAY CHIP rides the label row, above the card (v0.696.6, founder: "Don't even do the power up icon in
                         my team. Put the chip at the top of the card."); tap it for the play's details. */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 16 }}>
@@ -428,7 +500,10 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       </Text>
                       {playOn(d.slot) && <InfoChip label="⚡ UP" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
                     </View>
-                    <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }} style={{ borderRadius: 13, borderWidth: 2, borderColor: changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
+                    <Pressable disabled={!canTap} onPress={() => { tap(); openSheet(d.slot); }}
+                      onLongPress={p && canTap ? () => startDrag(d.slot) : undefined} delayLongPress={280}
+                      onPressOut={() => { setTimeout(() => { if (dragRef.current === d.slot && !panning.current) cancelDrag(); }, 0); }}
+                      style={{ borderRadius: 13, borderWidth: 2, borderColor: canLand ? (drag?.over === d.slot ? t.you : alpha(t.you, 55)) : changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
                       <FlipCard key={`${d.slot}-${slug ?? (ghost ? 'ghost' : 'open')}`} flipped={!!p || ghost} idx={i} back={<CardBack seed={`${leagueId}|${d.slot}`} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} />} face={face} />
                       {!p && !ghost && (
                         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center' }}>
@@ -452,6 +527,19 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                   </View>
                 );
               })}
+            </View>
+            {/* THE TRASH, while a card is up; and the card itself, riding the finger */}
+            {drag && (
+              <View ref={trashRef} onLayout={() => trashRef.current?.measureInWindow((x, y, w, h) => { rects.current.trash = { x, y, w, h }; })}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5, height: 44, borderRadius: 10, borderWidth: 2, borderStyle: 'dashed', borderColor: drag.over === 'trash' ? t.warn : 'rgba(255,255,255,0.8)', backgroundColor: drag.over === 'trash' ? alpha(t.warn, 45) : 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(10), fontWeight: '800', letterSpacing: 1, color: '#fff' }}>{drag.over === 'trash' ? '🗑 LET GO TO REMOVE' : '🗑 DROP HERE TO REMOVE'}</Text>
+              </View>
+            )}
+            {drag && dragPlayer && (
+              <View pointerEvents="none" style={{ position: 'absolute', zIndex: 6, left: drag.x - feltAt.current.x - CARD_W / 2, top: drag.y - feltAt.current.y - CARD_H / 2, transform: [{ scale: 1.08 }, { rotateZ: '-3deg' }], shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 }}>
+                <CardFace slug={dragPlayer.slug} name={dragPlayer.name} pos={dragPlayer.pos} team={dragPlayer.team} mine foot={fmt$(dragPlayer.salary)} />
+              </View>
+            )}
             </View>
           </FeltTable>
           {editable && (
