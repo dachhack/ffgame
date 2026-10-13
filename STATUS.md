@@ -22,6 +22,13 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.696.7 — The chip just says PLAY
+
+> - The play chip on MY TEAM and the matchup reads PLAY alone, no icon: it says a play is on the spot, and the tap tells which. Web and phone.
+
+Founder: "We don't need the icon for the power up on the chip, just the
+chip so we know power ups are present."
+
 ### v0.696.6 — The play chip, at the top of the card
 
 > - On MY TEAM the play chip sits at the top of the card, beside the spot’s label, and the card itself no longer wears the play’s icon; the line under the card is gone. Tap the chip for the play’s details. Web and phone.
