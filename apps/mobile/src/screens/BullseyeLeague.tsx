@@ -12,7 +12,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, Share, Switch, Text, Text
 import {
   contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, type ContestWallet, createContestLeague, contestWeekNow, joinContest, contestState,
   setTeamName, leaveLeague, postLeagueListing,
-  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
+  isAdmin, myFeatures, bullseyeMaxSeats, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestRedeal, coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
@@ -263,13 +263,12 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
     // scroll since v0.695.0, so the hand at its foot pins over the room bar.
     return (
       <ContestMatchup key={`${week}-${visit}`} leagueId={leagueId} week={week}
-        header={<><Mono size={9} tone="dim">{contestLeagueLine(lg.bullseye)}</Mono><WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} /></>} />
+        header={<WeekArrows weeks={weeks} week={week} current={lg.week ?? null} onWeek={setWeek} />} />
     );
   }
   return (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ padding: 12, gap: 10, paddingBottom: 90 }} keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={false} onRefresh={() => { void load(); }} />}>
-      <Mono size={9} tone="dim">{contestLeagueLine(lg.bullseye)}</Mono>
       {room === 'settings' ? (
         <>
           <SettingsRoom lg={lg} onCommish={() => onRoom('commish')} onLeft={onGone} />

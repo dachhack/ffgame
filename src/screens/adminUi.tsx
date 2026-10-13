@@ -200,7 +200,9 @@ export function TabBar<T extends string>({ tabs, active, onSelect, style, wrap =
 // ── ⓘ — the explainer, folded away (v0.350.4) ────────────────────────────────
 // Web twin of the app's ui/InfoChip: a control gets its LABEL and one ⓘ; the
 // paragraph lives in a modal that opens on demand. Dynamic STATE stays inline.
-export function InfoChip({ title, info, label }: { title: string; info: string;
+export function InfoChip({ title, info, label, actions }: { title: string; info: string;
+  /** v0.698.0: buttons at the foot of the sheet (TAKE BACK a play); each closes the sheet and runs. */
+  actions?: { label: string; onPress: () => void }[];
   /** A LABELLED CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see
    *  details"): a small gold pill reading `label` in place of the ⓘ — a state that is itself the way to its story. */
   label?: string }) {
@@ -219,6 +221,14 @@ export function InfoChip({ title, info, label }: { title: string; info: string;
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: 'min(440px, 100%)', maxHeight: '80vh', overflowY: 'auto', marginBottom: 0 }}>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
             <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--text)', marginTop: 10, whiteSpace: 'pre-line' }}>{info}</div>
+            {!!actions?.length && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 14 }}>
+                {actions.map((a) => (
+                  <button key={a.label} onClick={() => { setOpen(false); a.onPress(); }} className="mono"
+                    style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'transparent', border: '1px solid color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '6px 14px', cursor: 'pointer' }}>{a.label}</button>
+                ))}
+              </div>
+            )}
             <div style={{ textAlign: 'center', marginTop: 12 }}>
               <button onClick={() => setOpen(false)} className="mono" style={linkBtn}>close</button>
             </div>

@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import {
   contestLeague, contestBoard, contestBoardFind, bullseyeMyWeeks, addContestEntry, type ContestSeat, type ContestWallet, createContestLeague, contestWeekNow, joinContest, contestState, playoffState, type PlayoffState,
   setTeamName, leaveLeague, postLeagueListing,
-  isAdmin, myFeatures, bullseyeMaxSeats, contestLeagueLine, contestMoneyWord, recordWord, friendlyError,
+  isAdmin, myFeatures, bullseyeMaxSeats, contestMoneyWord, recordWord, friendlyError,
   type BullseyeLeague, type BullseyeLeagueBoard, type BullseyeBoardRow, type BullseyeSeasonRow, type ContestMyWeek, type ContestInfo, type ContestKind, type ContestFormat, type DfsVariant, type BullseyeSpan,
 } from '@drip/core/data/liveApi';
 import { contestRedeal, coinReasonWord, contestCard, contestTiebreak, CONTEST_WORD, CONTEST_FORMAT_WORD, CONTEST_EMOJI, CONTEST_BUDGET_DEFAULT, CONTEST_MIN_SPEND_DEFAULT, contestCredit } from '@drip/core/engine/contest';
@@ -271,7 +271,6 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
         <div className="grotesk" style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 24 }}>{CONTEST_EMOJI[b.contest ?? 'bullseye']}</div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lg.name}</div>
-          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 2, letterSpacing: '0.06em' }}>{contestLeagueLine(b)}</div>
         </div>
         {lg.commish && (
           <button onClick={() => setRoom('commish')} className="mono" title="Commissioner tools"

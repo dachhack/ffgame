@@ -186,7 +186,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   };
   const playText = (pl: ContestPlayRow, theirs: boolean, mine: boolean) => {
     const d = contestPlayById(pl.id);
-    return `${theirs ? `${mine ? 'Their' : 'The other side’s'} ${d?.name ?? pl.id}, aimed at this spot.\n\n` : ''}${d?.blurb ?? ''}${pl.proj != null ? `\n\nHis number to beat: ${Number(pl.proj).toFixed(1)}.` : ''}${!theirs && mine ? '\n\nTake it back in PLAYS above until his kickoff.' : ''}`;
+    return `${theirs ? `${mine ? 'Their' : 'The other side’s'} ${d?.name ?? pl.id}, aimed at this spot.\n\n` : ''}${d?.blurb ?? ''}${pl.proj != null ? `\n\nHis number to beat: ${Number(pl.proj).toFixed(1)}.` : ''}${!theirs && mine ? '\n\nTAKE BACK puts it back in your hand until his kickoff.' : ''}`;
   };
   const numbersOf = (s: 'home' | 'away', r: Row, mine: boolean, edge: 'left' | 'right') => {
     const score = st.started ? scoreOf(s, r.slot) : null;   // an empty spot's zero row shows too (v0.695.0)
@@ -200,7 +200,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
             beside the spot's label, no icon on the card; tap it for the play's details. */}
         <View style={{ flexDirection: edge === 'left' ? 'row' : 'row-reverse', alignItems: 'center', gap: 4 }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
-          {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
+          {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} actions={myTable && mine && !a.theirs ? [{ label: 'TAKE BACK', onPress: () => void disarm(a.pl) }] : undefined}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
         </View>
         <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : alpha(t.text, 35) }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
         <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: alpha(t.text, 65) }}>{`${proj != null && !r.sealed ? `proj ${proj.toFixed(1)}` : ''}${target != null && score != null ? ` · ${Math.abs(score - target).toFixed(1)} off` : ''}`}</Text>
@@ -237,17 +237,24 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
     return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay };
   };
+  /** A side's squad plays — mine from the seat's own rows, theirs from the matchup (shown once the week starts). */
+  const squadPlays = (s: 'home' | 'away', mine: boolean): ContestPlayRow[] =>
+    (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const x = tally(s, S);
     const color = S.mine ? t.you : t.opp;
     const dim = alpha(t.text, 65);
     return (
       <View style={{ flex: 1, minWidth: 0, gap: 2, alignItems: edge === 'left' ? 'flex-start' : 'flex-end' }}>
-        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: S.mine ? t.you : alpha(t.text, 80) }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</Text>
+        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: S.mine ? t.you : alpha(t.text, 80) }}>{S.team.toUpperCase()}</Text>
         {/* the cells stack (v0.680.2): side by side, two sides' labels met in the middle of a phone */}
         <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%' }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : alpha(t.text, 35) }}>{fmt(x.points)}</Text>
           <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
+          {/* THE TEAM CHIP (v0.698.0): a fixed row under the projection, the chip in it while a squad play is on */}
+          <View style={{ height: 16, justifyContent: 'center', alignItems: edge === 'left' ? 'flex-start' : 'flex-end', marginTop: 2 }}>
+            {(() => { const sq = squadPlays(s, S.mine); return sq.length ? <InfoChip label="TEAM ⚡ UP" title={sq.length === 1 ? (contestPlayById(sq[0].id)?.name ?? sq[0].id) : 'Team plays'} actions={S.mine && myTable && !st.started ? sq.map((p) => ({ label: `TAKE BACK${sq.length > 1 ? ` ${(contestPlayById(p.id)?.name ?? p.id).toUpperCase()}` : ''}`, onPress: () => void disarm(p) })) : undefined}>{sq.map((p) => `${contestPlayById(p.id)?.icon ?? ''} ${contestPlayById(p.id)?.name ?? p.id}: ${contestPlayById(p.id)?.blurb ?? ''}`).join('\n\n') + (S.mine && myTable ? '\n\nA squad play goes back to your hand until the week’s first kickoff.' : '')}</InfoChip> : null; })()}
+          </View>
         </View>
         {bull && (
           <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%', marginTop: 4 }}>
@@ -270,32 +277,14 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
           ))}
         </ScrollView>
       )}
-      {myTable && (
-        <Card style={{ gap: 6 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Mono size={9} tone="faint" weight="700" track={0.1}>PLAYS</Mono>
-            <Mono size={8.5} tone="faint">{`${hand.reduce((a, c) => a + c.qty, 0)} in hand · ${plays.length} of ${cap} played`}</Mono>
-            <InfoChip title="Plays">{'Your hand sits at the foot of the screen. Tap a card to play it: a squad play goes on at once; a spot play lights up the spots it can land on — tap one. Only a player who hasn’t kicked off can take a play; the rest dim. TAKE BACK puts a play back in your hand on the same clock. Buy more in the shop on MY TEAM.'}</InfoChip>
-          </View>
-          {armingDef && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Mono size={8.5} tone="you" style={{ flex: 1 }}>{`${armingDef.blurb} Tap ${armingDef.target === 'opp' ? 'one of their lit spots' : 'a lit spot'}.`}</Mono>
-              <Chip small dim label="CANCEL" onPress={() => { tap(); setArming(null); }} />
-            </View>
-          )}
-          {note && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Mono size={8.5} tone="dim" style={{ flex: 1 }}>{note}</Mono>
-              <Chip small dim label="✕" onPress={() => { tap(); setNote(null); }} />
-            </View>
-          )}
-          {plays.map((x) => (
-            <View key={`${x.id}-${x.slot ?? ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Mono size={9} tone="dim" style={{ flex: 1 }}>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''}`}</Mono>
-              {(!st.started || !!x.slot) && <Chip small dim disabled={busy} label="TAKE BACK" onPress={() => { tap(); void disarm(x); }} />}
-            </View>
-          ))}
-        </Card>
+      {/* THE PLAYS LIVE ON THE TABLE (v0.698.0): a spot play's chip by its spot, a squad play's under the side's score,
+          each with TAKE BACK in its sheet. Only a play being aimed, or a note, takes a line here. */}
+      {myTable && (armingDef || note) && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {armingDef
+            ? <><Mono size={8.5} tone="you" style={{ flex: 1 }}>{`▶ tap ${armingDef.target === 'opp' ? 'one of their lit spots' : 'a lit spot'} for ${armingDef.name}`}</Mono><Chip small dim label="CANCEL" onPress={() => { tap(); setArming(null); }} /></>
+            : <><Mono size={8.5} tone="dim" style={{ flex: 1 }}>{note}</Mono><Chip small dim label="✕" onPress={() => { tap(); setNote(null); }} /></>}
+        </View>
       )}
       <FeltTable>
         {/* the scoreboard: each side's points and projection, and for Bullseye how far off the target (v0.680.1) */}

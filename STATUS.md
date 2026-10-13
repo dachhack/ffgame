@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.698.0 — The matchup, cleared: plays live on the table
+
+> - The matchup loses the league’s description line and the PLAYS box. A play on a spot is its ⚡ UP chip beside the spot, and the chip’s sheet now carries TAKE BACK; a squad play (Hail Mary, Pick Six, the squad bonuses, Curse, Re-deal) shows as a TEAM ⚡ UP chip in a reserved row under the side’s projected points, with its own TAKE BACK until the week’s first kickoff. Team titles drop “· YOU”. Only a play being aimed, or a note, takes a line above the table. Web and phone.
+
+Founder: "We don't need the 'DFS · highest score…' text or the plays white
+box. The power up chip can be where you take back power ups. We don't need
+'YOU' on the team titles. We should reserve some space under the projected
+points like for a 'Team ⚡Up' chip when there is one active." `InfoChip`
+gains `actions` (buttons at the foot of the sheet) on both platforms;
+`ContestMatchup` (web and phone) drops the PLAYS card for a one-line
+arming/note strip, puts TAKE BACK in the spot chip, and adds `squadPlays`
+and the fixed 16px row with the TEAM chip; `contestLeagueLine` leaves the
+league frames.
+
 ### v0.697.5 — A dark chip, so the bolt shows
 
 > - The ⚡ UP chip is dark with a gold edge and gold text, so the bolt reads. Web and phone.
