@@ -174,7 +174,7 @@ function BoardRoomBar({ ctx, league, navigate }: {
 const EMPTY_REC: Record<string, never> = {};
 
 export function Matchup({ week, initialPhase, demo = false }: { week: number; initialPhase: Phase; demo?: boolean }) {
-  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, useConsumable, hydrateInventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
+  const { youTeamId: YOU, navigate, liveCtx, activeLeague, loadSimLeague, coins, creditWeek, inventory, grantPowerup, spendConsumable, hydrateInventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin } = useStore();
   // CLASSIC LEAGUES DO NOT PLAY THIS SCREEN (v0.234.0). LivePicks has branched
   // on league_game_mode since 0157 — but THIS screen, which serves the
   // `matchup` route (the one "my leagues → a league → the matchup" actually
@@ -1440,7 +1440,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     // Sim/demo: a locked (unlock) metric consumes one of its powerup the first
     // time it's set, and switching off refunds it.
     if (!liveCtx) {
-      if (m?.lock && pk?.metricId !== metricId && !useConsumable(m.lock)) return;
+      if (m?.lock && pk?.metricId !== metricId && !spendConsumable(m.lock)) return;
       const prevM = player && pk?.metricId ? metricById(player.pos, pk.metricId) : null;
       if (prevM?.lock && prevM.id !== metricId) refundUnlock(prevM.lock);
     }

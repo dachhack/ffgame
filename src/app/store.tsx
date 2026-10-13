@@ -218,7 +218,7 @@ interface Store {
    *  charges the real DB wallet separately, then grants the item). */
   grantPowerup: (id: string) => void;
   /** Consume one of a held powerup. Returns false if none held. */
-  useConsumable: (id: string) => boolean;
+  spendConsumable: (id: string) => boolean;
   /** Replace the hand with a fresh server read (live board). The hand the
    *  board deals comes from THIS ledger; a card the server consumed through an
    *  RPC of its own (arm_unlock, apply_underdog) has to land here too, or the
@@ -654,7 +654,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Persist the armed buff set server-side on the hero board (survives reload).
   const pushBuffs = (buffs: string[]): void => { if (liveCtx) heroSetBuffs(liveCtx.matchupId, buffs).catch(() => {}); };
 
-  const useConsumable = (id: string): boolean => {
+  const spendConsumable = (id: string): boolean => {
     if ((inventory[id] ?? 0) <= 0) return false;
     const nextInv = { ...inventory, [id]: inventory[id] - 1 };
     setInventory(nextInv); persist({ inv: nextInv }); syncInv(id, -1);
@@ -859,7 +859,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Store>(
-    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, liveNote, liveScoring, commishVer, reloadCommish, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, useConsumable, hydrateInventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
+    () => ({ theme, setTheme, iconSet, setIconSet, cardSkin, setCardSkin, bigText, setBigText, viewAs, setViewAs, route, navigate, sleeperUser, setSleeperUser, activeLeague, isSimLeague, liveCtx, loadSimLeague, exitSimLeague, injuryVer, liveNote, liveScoring, commishVer, reloadCommish, youTeamId, setYouTeam, demoWeek, setDemoWeek, coins, creditWeek, inventory, buyPowerup, grantPowerup, spendConsumable, hydrateInventory, applied, applyExtraSlot, applyMetricSwap, applyPlayerSwap, setBackupTarget, setLineup, armBuff, disarmBuff, setDoubleOrNothing, remapDoubleOrNothing, setSpy, setSpyRevealed, applyByeSteal, applyMulligan, applyEmp, applyRivalry, removeRivalry, applySlotListPu, removeSlotListPu, applyLiveSlotPu, armClutch, clearDoubleOrNothing, clearSpy, clearByeSteal, removeExtraSlot, refundUnlock, resetDripCoin }),
     [theme, iconSet, cardSkin, bigText, viewAs, route, sleeperUser, activeLeague, isSimLeague, liveCtx, injuryVer, liveNote, liveScoring, commishVer, youTeamId, demoWeek, coins, inventory, applied],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

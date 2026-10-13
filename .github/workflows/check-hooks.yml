@@ -1,0 +1,26 @@
+name: Rules of hooks
+# THE RULES OF HOOKS (v0.702.0). A hook declared after an early return, under a
+# condition or in a callback renders fine once and crashes on the next render
+# ("Rendered more hooks than during the previous render", v0.701.5). The
+# battery's check:hooks runs on the TypeScript compiler the repo ships; this
+# runs it on every push that touches a screen, so a PR fails instead of a phone.
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'apps/mobile/src/**'
+      - 'packages/core/src/**'
+      - 'scripts/check-hooks.mjs'
+      - '.github/workflows/check-hooks.yml'
+jobs:
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Every hook at the top of its component, before any return
+        run: npm run check:hooks
