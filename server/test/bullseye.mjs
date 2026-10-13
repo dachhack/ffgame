@@ -68,3 +68,13 @@ assert.strictEqual(installBullseye(LEAGUE, 6, on, new Map(), [7, 8]).cards[7], u
 clearLeagueBullseye();
 
 console.log('bullseye worker tests passed');
+
+// ── DRIP COIN reaches the resolver (v0.699.2) ──────────────────────────────
+// Founder: "Double or nothing still not showing the doubled score." The week-5
+// read-only diff re-resolved every stored final exactly — and never loaded a
+// play, because this mapper dropped `coin` and the resolver gates the plays
+// query on contestCfg.coin. The flag rides through now.
+assert.strictEqual(modeOfSettings({ game_mode: 'classic', contest: 'bullseye', coin: true }).coin, true, 'coin on survives the mapper');
+assert.strictEqual(modeOfSettings({ game_mode: 'classic', contest: 'bullseye' }).coin, false, 'coin off by default');
+assert.strictEqual(modeOfSettings({ game_mode: 'classic', coin: 'true' }).coin, false, 'only a real boolean turns it on');
+console.log('bullseye: coin reaches the resolver — ok');

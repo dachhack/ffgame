@@ -67,3 +67,17 @@ r = scoreContest({ home: squads.home, away: squads.home }, cfg({ contest_format:
 ok('a seat alone on the board mirrors and curses nobody', r.home === 35, r.home);
 if (fails) { console.error(`${fails} failed`); process.exit(1); }
 console.log('contest-plays-three: all passed');
+
+// ── THE WEEK TO LAND ON (v0.699.2) ──────────────────────────────────────────
+// Founder: "Give it a day to admire your win or study your loss." A league
+// frame opens on the week just played for 28 hours after its last kickoff.
+{
+  const { contestLandingWeek } = await import('../../packages/core/src/engine/contest.ts');
+  const H = 3600_000; const last = Date.UTC(2026, 9, 13, 0, 15);   // Monday night's kickoff
+  ok('the morning after: the week just played', contestLandingWeek(6, [1, 2, 3, 4, 5, 6], last, last + 10 * H) === 5);
+  ok('27 hours on: still the week just played', contestLandingWeek(6, [1, 2, 3, 4, 5, 6], last, last + 27 * H) === 5);
+  ok('28 hours on: the week in play', contestLandingWeek(6, [1, 2, 3, 4, 5, 6], last, last + 28 * H) === 6);
+  ok('no previous week played: the week in play', contestLandingWeek(1, [1], null, last + H) === 1);
+  ok('the previous week not in the list: the week in play', contestLandingWeek(6, [6], last, last + H) === 6);
+  ok('no kickoff known: the week in play', contestLandingWeek(6, [5, 6], null, last + H) === 6);
+}

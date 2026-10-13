@@ -41,7 +41,19 @@ export function FeltTable({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function CardBack({ seed }: { seed: string }) {
+/** THE SPOT'S NUMBER, BEFORE THE PICK (v0.699.2, founder: "put the spot target chip on the card in my team ... before
+ *  selections happen"): the tie-breaker chip rides the back too, top-right, so the number is there as you choose. */
+function BackChip({ chip, onChip }: { chip?: string | null; onChip?: () => void }) {
+  if (chip == null) return null;
+  return (
+    <Pressable hitSlop={8} onPress={onChip} style={{ position: 'absolute', top: 6, right: 6, zIndex: 3, backgroundColor: '#2A2010', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 1 }}>
+      <Text style={{ fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: '#FFD86B' }}>{chip}</Text>
+    </Pressable>
+  );
+}
+
+export function CardBack({ seed, chip, onChip }: { seed: string;
+  /** the tie-breaker's number on an open spot (v0.699.2); a tap explains it */ chip?: string | null; onChip?: () => void }) {
   // a touch of per-card lean so the column doesn't sit in lockstep
   let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   const lean = ((h % 5) - 2) * 0.6;
@@ -54,6 +66,7 @@ export function CardBack({ seed }: { seed: string }) {
     return (
       <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: SKIN_FELT[skin], borderWidth: 2, borderColor: '#000', overflow: 'hidden', transform: [{ rotateZ: `${lean}deg` }] }}>
         <Image source={art} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        <BackChip chip={chip} onChip={onChip} />
       </View>
     );
   }
@@ -61,6 +74,7 @@ export function CardBack({ seed }: { seed: string }) {
     <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: '#0F6B47', borderWidth: 2, borderColor: '#000', overflow: 'hidden', transform: [{ rotateZ: `${lean}deg` }], alignItems: 'center', justifyContent: 'center' }}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 5, left: 5, right: 5, bottom: 5, borderRadius: 7, borderWidth: 1.5, borderColor: GOLD, opacity: 0.8 }} />
       <View pointerEvents="none" style={{ position: 'absolute', top: 9, left: 9, right: 9, bottom: 9, borderRadius: 5, borderWidth: 0.7, borderColor: GOLD, opacity: 0.45 }} />
+      <BackChip chip={chip} onChip={onChip} />
       {/* the lattice: four rows of diamonds */}
       {[0, 1, 2, 3, 4].map((r) => (
         <View key={r} pointerEvents="none" style={{ position: 'absolute', top: 14 + r * 24, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', opacity: 0.35 }}>
@@ -142,12 +156,16 @@ export function FlipCard({ flipped, idx = 0, back, face }: { flipped: boolean; i
 }
 
 /** An empty spot on the table. */
-export function EmptyCard({ label, chip }: { label: string;
-  /** THE PENALTY (v0.695.0): the dart's no-show charge on an empty spot, red, top-right. */ chip?: string }) {
+export function EmptyCard({ label, chip, chipTone = 'warn', onChip }: { label: string;
+  /** THE PENALTY (v0.695.0): the dart's no-show charge on an empty spot, red, top-right — or, 'gold' (v0.699.2), the
+   *  tie-breaker's number on the spot before a pick, a tap explaining it. */ chip?: string; chipTone?: 'gold' | 'warn'; onChip?: () => void }) {
   const t = useTheme();
+  const warn = !!chip && chipTone === 'warn';
   return (
-    <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: chip ? alpha(t.warn, 60) : alpha(t.text, 30), alignItems: 'center', justifyContent: 'center' }}>
-      {!!chip && <Text style={{ position: 'absolute', top: 6, right: 6, fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: t.warn }}>{chip}</Text>}
+    <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: warn ? alpha(t.warn, 60) : alpha(t.text, 30), alignItems: 'center', justifyContent: 'center' }}>
+      {!!chip && (warn
+        ? <Text style={{ position: 'absolute', top: 6, right: 6, fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: t.warn }}>{chip}</Text>
+        : <BackChip chip={chip} onChip={onChip} />)}
       <Text style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 60), letterSpacing: 1 }}>{`${label.toUpperCase()} · EMPTY`}</Text>
       <Text style={{ color: t.faint, fontSize: 1 }}> </Text>
     </View>

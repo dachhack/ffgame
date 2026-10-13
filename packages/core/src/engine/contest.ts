@@ -482,3 +482,14 @@ function mulberry(seed: string): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** THE WEEK TO LAND ON (v0.699.2). Founder: "Give it a day to admire your win
+ *  or study your loss." A league frame opens on the week just played for a day
+ *  after its last game ended (28 hours past its last kickoff), then on the week
+ *  in play. The week in play stays reachable through the arrows the whole
+ *  time: this only chooses where the frame opens. Pure. */
+export function contestLandingWeek(week: number, weeks: readonly number[] | null | undefined, prevLastKickoffMs: number | null, nowMs: number): number {
+  const prev = week - 1;
+  if (!weeks?.includes(prev) || prevLastKickoffMs == null || !Number.isFinite(prevLastKickoffMs)) return week;
+  return nowMs < prevLastKickoffMs + 28 * 3600_000 ? prev : week;
+}
