@@ -16,7 +16,9 @@ import { Overlay } from './Overlay';
 /** A small ⓘ that opens a pop-up with the full story. Put it beside a
  *  section label; pass the explanation as children (plain string is fine —
  *  paragraphs separated by blank lines read best). */
-export function InfoChip({ title, children, label }: { title: string; children: ReactNode;
+export function InfoChip({ title, children, label, actions }: { title: string; children: ReactNode;
+  /** v0.698.0: buttons at the foot of the sheet (TAKE BACK a play); each closes the sheet and runs. */
+  actions?: { label: string; onPress: () => void }[];
   /** A LABELLED CHIP (v0.696.5, founder: "just do a chip if power ups are active and you can click it to see
    *  details"): a small gold pill reading `label` in place of the ⓘ — a state that is itself the way to its story. */
   label?: string }) {
@@ -36,6 +38,16 @@ export function InfoChip({ title, children, label }: { title: string; children: 
           {typeof children === 'string'
             ? <Text style={{ fontSize: fs(13.5), lineHeight: fs(20), color: t.text }}>{children}</Text>
             : children}
+          {!!actions?.length && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+              {actions.map((a) => (
+                <Pressable key={a.label} onPress={() => { tap(); setOpen(false); a.onPress(); }}
+                  style={{ borderRadius: 999, borderWidth: 1, borderColor: t.you, paddingHorizontal: 14, paddingVertical: 7 }}>
+                  <Text style={{ fontFamily: MONO, fontSize: fs(10.5), fontWeight: '700', letterSpacing: 0.6, color: t.you }}>{a.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </Overlay>
     </>

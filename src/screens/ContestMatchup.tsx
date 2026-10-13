@@ -191,7 +191,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   };
   const playText = (pl: ContestPlayRow, theirs: boolean, mine: boolean) => {
     const d = contestPlayById(pl.id);
-    return `${theirs ? `${mine ? 'Their' : 'The other side’s'} ${d?.name ?? pl.id}, aimed at this spot.\n\n` : ''}${d?.blurb ?? ''}${pl.proj != null ? `\n\nHis number to beat: ${Number(pl.proj).toFixed(1)}.` : ''}${!theirs && mine ? '\n\nTake it back in PLAYS above until his kickoff.' : ''}`;
+    return `${theirs ? `${mine ? 'Their' : 'The other side’s'} ${d?.name ?? pl.id}, aimed at this spot.\n\n` : ''}${d?.blurb ?? ''}${pl.proj != null ? `\n\nHis number to beat: ${Number(pl.proj).toFixed(1)}.` : ''}${!theirs && mine ? '\n\nTAKE BACK puts it back in your hand until his kickoff.' : ''}`;
   };
   const numbersOf = (s: 'home' | 'away', r: Row, mine: boolean, edge: 'left' | 'right') => {
     const score = st.started ? scoreOf(s, r.slot) : null;   // an empty spot's zero row shows too (v0.695.0)
@@ -204,7 +204,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
             beside the spot's label, no icon on the card; tap it for the play's details. */}
         <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)', display: 'flex', alignItems: 'center', gap: 5, justifyContent: edge === 'left' ? 'flex-start' : 'flex-end', overflow: 'visible', whiteSpace: 'nowrap' }}>
           {`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}
-          {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} info={playText(a.pl, a.theirs, mine)} /> : null; })()}
+          {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} info={playText(a.pl, a.theirs, mine)} actions={myTable && mine && !a.theirs ? [{ label: 'TAKE BACK', onPress: () => void disarm(a.pl) }] : undefined} /> : null; })()}
         </span>
         <span className="mono" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, color: score != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</span>
         <span className="mono" style={{ fontSize: 11, color: 'color-mix(in srgb, var(--text) 65%, transparent)' }}>
@@ -248,6 +248,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const ringProjected = !bull || !known ? null : isTotal ? (theCard ? Math.abs(proj - theCard.total) : null) : ringProj;
     return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay, bonus: bonusRows.map((b) => `${contestPlayById(b.play ?? '')?.icon ?? '⚡'} ${b.score > 0 ? '+' : ''}${b.score}`).join(' ') };
   };
+  /** A side's squad plays — mine from the seat's own rows, theirs from the matchup (shown once the week starts). */
+  const squadPlays = (s: 'home' | 'away', mine: boolean): ContestPlayRow[] =>
+    (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const t = tally(s, S);
     const color = S.mine ? 'var(--you)' : 'var(--opp)';
@@ -256,12 +259,17 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const cell = { display: 'grid', gap: 1, textAlign: edge } as const;
     return (
       <div style={{ display: 'grid', gap: 3, textAlign: edge, minWidth: 0 }}>
-        <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: S.mine ? 'var(--you)' : 'color-mix(in srgb, var(--text) 80%, transparent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${S.team.toUpperCase()}${S.mine ? ' · YOU' : ''}`}</span>
+        <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: S.mine ? 'var(--you)' : 'color-mix(in srgb, var(--text) 80%, transparent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{S.team.toUpperCase()}</span>
         {/* the cells stack, always (v0.686.0, founder: "the scores always stacked in two rows") */}
         <div style={{ display: 'grid', gap: 6, justifyItems: edge === 'left' ? 'start' : 'end' }}>
           <div style={cell}>
             <span className="mono" style={{ ...big, color: t.points != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.points)}</span>
             <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}${t.bonus ? ` · ${t.bonus}` : ''}`}</span>
+            {/* THE TEAM CHIP (v0.698.0, founder: "reserve some space under the projected points for a Team ⚡Up chip when
+                there is one active"): a fixed row, the chip in it while a squad play is on — tap for the plays and TAKE BACK */}
+            <div style={{ height: 16, display: 'flex', alignItems: 'center', justifyContent: edge === 'left' ? 'flex-start' : 'flex-end', marginTop: 2 }}>
+              {(() => { const sq = squadPlays(s, S.mine); return sq.length ? <InfoChip label="TEAM ⚡ UP" title={sq.length === 1 ? (contestPlayById(sq[0].id)?.name ?? sq[0].id) : 'Team plays'} info={sq.map((x) => `${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}: ${contestPlayById(x.id)?.blurb ?? ''}`).join('\n\n') + (S.mine && myTable ? '\n\nA squad play goes back to your hand until the week’s first kickoff.' : '')} actions={S.mine && myTable && !st.started ? sq.map((x) => ({ label: `TAKE BACK${sq.length > 1 ? ` ${(contestPlayById(x.id)?.name ?? x.id).toUpperCase()}` : ''}`, onPress: () => void disarm(x) })) : undefined} /> : null; })()}
+            </div>
           </div>
           {bull && (
             <div style={cell}>
@@ -292,26 +300,14 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
           <button onClick={() => setTbNote(null)} className="mono" style={chip(false)}>✕</button>
         </div>
       )}
-      {myTable && (
-        <div style={{ ...card, display: 'grid', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)' }}>PLAYS</span>
-            <span className="mono" style={small}>{`${hand.reduce((a, c) => a + c.qty, 0)} in hand · ${plays.length} of ${cap} played`}</span>
-            <InfoChip title="Plays" info={'Your hand sits at the foot of the screen. Tap a card to play it: a squad play goes on at once; a spot play lights up the spots it can land on — tap one. Only a player who hasn’t kicked off can take a play; the rest dim. TAKE BACK puts a play back in your hand on the same clock. Buy more in the shop on MY TEAM.'} />
-            {arming && <button onClick={() => setArming(null)} className="mono" style={{ ...chip(true), marginLeft: 'auto' }}>{`▶ tap ${armingDef?.target === 'opp' ? 'one of their lit spots' : 'a lit spot'} for ${armingDef?.name ?? ''} · CANCEL`}</button>}
-          </div>
-          {arming && <span className="mono" style={small}>{armingDef?.blurb}</span>}
-          {note && <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}><span className="mono" style={{ ...small, color: 'var(--dim)', flex: 1 }}>{note}</span><button onClick={() => setNote(null)} className="mono" style={chip(false)}>✕</button></div>}
-          {plays.length > 0 && (
-            <div className="mono" style={{ ...small, display: 'grid', gap: 3 }}>
-              {plays.map((x) => (
-                <div key={`${x.id}-${x.slot ?? ''}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span>{`${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}${x.slot ? ` on ${contestPlayById(x.id)?.target === 'opp' ? 'their ' : ''}${labels[x.slot] ?? x.slot}` : ''}${x.proj != null ? ` · beats ${Number(x.proj).toFixed(1)}` : ''}`}</span>
-                  {(!st.started || !!x.slot) && <button disabled={busy} onClick={() => void disarm(x)} className="mono" style={chip(false)}>TAKE BACK</button>}
-                </div>
-              ))}
-            </div>
-          )}
+      {/* THE PLAYS LIVE ON THE TABLE (v0.698.0, founder: "We don't need the plays white box. The power up chip can be
+          where you take back power ups"): a spot play's chip sits by its spot, a squad play's under the side's score, each
+          with TAKE BACK in its sheet. Only a play being aimed, or a note, takes a line here. */}
+      {myTable && (arming || note) && (
+        <div className="mono" style={{ ...small, display: 'flex', gap: 8, alignItems: 'center' }}>
+          {arming
+            ? <><span style={{ flex: 1, color: 'var(--you)' }}>{`▶ tap ${armingDef?.target === 'opp' ? 'one of their lit spots' : 'a lit spot'} for ${armingDef?.name ?? ''}`}</span><button onClick={() => setArming(null)} className="mono" style={chip(false)}>CANCEL</button></>
+            : <><span style={{ flex: 1, color: 'var(--dim)' }}>{note}</span><button onClick={() => setNote(null)} className="mono" style={chip(false)}>✕</button></>}
         </div>
       )}
       <Felt>
