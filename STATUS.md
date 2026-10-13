@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.699.3 — The powered-up score sits level with the other side
+
+> - On the matchup, a spot with a powered-up score (the raw score struck beneath it) now lines up with the other side’s score instead of sitting half a line high.
+
+Founder: "For the crossed out score, move all the numbers and text down a
+smidge so all the final score numbers line up." The numbers column is
+centred in the card’s height, so the struck line lifted the big number by
+half a line; a blank twin of that line above the stack puts it back level,
+phone and web. Also asked: "I still see the old notification icon" — that
+icon is native (v0.692.1) and lives only in APK build 40385 (built
+2026-10-12 23:20 UTC from v0.696.1, after the icon landed; `expo prebuild`
+runs fresh and the expo-notifications plugin wires the drawable for both
+FCM and local notifications). No update carries it; the app’s What’s new
+sheet shows "A NEWER ANDROID BUILD" with the ⬇ GET button when the phone’s
+build is older (v0.696.3). Nothing to rebuild.
+
 ### v0.699.2 — The plays reach the score, a day to admire the week, the spot’s number before the pick
 
 > - Power-ups now count in the stored score: the worker never loaded a week’s plays (the league’s coin setting was dropped on the way in), so Josh Allen’s Double or Nothing stayed 29.7 — week 5 is re-stamped and reads 59.4 over a struck 29.7.

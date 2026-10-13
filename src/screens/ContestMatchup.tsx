@@ -205,6 +205,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const raw = lvr?.play && lvr.raw != null && Math.abs(lvr.raw - lvr.score) > 1e-9 ? lvr.raw : null;
     return (
       <div style={{ display: 'grid', gap: 1, alignContent: 'center', textAlign: edge, padding: edge === 'left' ? '0 4px 0 10px' : '0 10px 0 4px', minWidth: 0 }}>
+        {/* LEVEL WITH THE OTHER SIDE (v0.699.2): the column is centred, so the struck line lifted the big number half a
+            line; a blank twin of that line above the stack puts it back level. */}
+        {raw != null && <span className="mono" style={{ fontSize: 12, fontWeight: 700, opacity: 0 }} aria-hidden>{raw.toFixed(1)}</span>}
         {/* THE PLAY CHIP (v0.696.6, founder: "On the matchup screen, let's do the same: just an active power ups chip"):
             beside the spot's label, no icon on the card; tap it for the play's details. */}
         <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em', color: 'color-mix(in srgb, var(--text) 65%, transparent)', display: 'flex', alignItems: 'center', gap: 5, justifyContent: edge === 'left' ? 'flex-start' : 'flex-end', overflow: 'visible', whiteSpace: 'nowrap' }}>
