@@ -20,7 +20,7 @@ import { REGULAR_SEASON } from './seasonType.js';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
-import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds, contestPlayoffs } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds, contestPlayoffs, contestPlaysFor, contestPlayCap, aiContestPlays, contestCoinRules } from '../../packages/core/src/engine/contest.ts';
 import { leagueWeekProj } from '../../packages/core/src/engine/contestBuilder.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { priceBoard } from '../../packages/core/src/engine/salaryPricing.ts';
@@ -295,7 +295,7 @@ export async function ensurePods(week, season, idx) {
   const playable = board.filter((r) => !outs.has(r.slug));
   const lockMs = await weekKickoffMs(season, week, REGULAR_SEASON).catch(() => null);
 
-  let dealt = 0, made = 0, subbed = 0;
+  let dealt = 0, made = 0, subbed = 0, aiPlays = 0;
   for (const pod of pods) {
     const contest = pod.kind === 'dfs' || pod.kind === 'bullseye' ? contestConfigOf(pod.settings_json, pod.kind) : null;
     // A LEADERBOARD league (v0.673.0) is here for its no-shows only: a seat
@@ -405,6 +405,36 @@ export async function ensurePods(week, season, idx) {
         }
         if (fixes.length) { await db().from('sleeper_lineup').upsert(fixes, { onConflict: 'league_id,week,roster_id' }); subbed += fixes.length; }
       }
+      // THE AI'S PLAY (v0.699.0, founder: "add power up purchase and use to the AI seats in weekly contest leagues with
+      // drip coin"): before the week's first kickoff, each AI seat with a squad and room under the cap buys and plays
+      // from its wallet — the engine picks (aiContestPlays), ai_contest_play applies every rule a human's play meets.
+      if (aiSeats.size && contest.coin && !lockPassed) {
+        try {
+          const ids = [...aiSeats];
+          const [{ data: entriesP }, { data: played }, { data: wallets }] = await Promise.all([
+            db().from('sleeper_lineup').select('roster_id, starters_json').eq('league_id', pod.id).eq('week', week).in('roster_id', ids),
+            db().from('contest_play').select('roster_id, play_id, slot').eq('league_id', pod.id).eq('week', week).in('roster_id', ids),
+            db().from('team_wallet').select('roster_id, coins').eq('league_id', pod.id).in('roster_id', ids),
+          ]);
+          const off = Array.isArray(pod.settings_json?.plays_off) ? pod.settings_json.plays_off : [];
+          const offered = contestPlaysFor(contest.format, contest.contest, off);
+          const cap = contestPlayCap(contest.format);
+          const seedCoin = Number(contestCoinRules(pod.settings_json?.coin_rules ?? null).seed ?? 0);
+          for (const e of entriesP ?? []) {
+            const held = (played ?? []).filter((p) => p.roster_id === e.roster_id).map((p) => ({ id: p.play_id, slot: p.slot }));
+            if (held.length >= cap) continue;
+            const w = (wallets ?? []).find((x) => x.roster_id === e.roster_id);
+            const wallet = w ? Number(w.coins) : seedCoin;   // no wallet yet: ai_contest_play seeds it on the first play
+            const rowsE = Array.isArray(e.starters_json) ? e.starters_json : [];
+            const squad = Object.fromEntries(contest.slots.map((d) => [d.slot, rowsE.find((r) => r?.slot === d.slot)?.player_slug ?? null]));
+            const picks = aiContestPlays({ offered, wallet, cap, held, squad, slots: contest.slots, board: cpuPool, contest: contest.contest, format: contest.format, variant: contest.bullseye?.variant ?? null, seed: `${pod.id}|w${week}|ai${e.roster_id}` });
+            for (const pk of picks) {
+              const { data: r, error } = await db().rpc('ai_contest_play', { p_league: pod.id, p_week: week, p_roster: e.roster_id, p_play: pk.id, p_slot: pk.slot });
+              if (r?.ok) aiPlays += 1; else console.log(new Date().toISOString(), 'ai play', pod.id, e.roster_id, pk.id, pk.slot ?? '', r?.error ?? error?.message ?? '?');
+            }
+          }
+        } catch (e) { console.log(new Date().toISOString(), 'ai plays', pod.id, e?.message ?? e); }
+      }
     }
 
     // PLAYOFFS (v0.674.0): a season head-to-head contest league plays the
@@ -442,7 +472,7 @@ export async function ensurePods(week, season, idx) {
       if (rows.length) { await db().from('matchup').upsert(rows, { onConflict: 'league_id,week,home_roster_id,away_roster_id' }); made += rows.length; }
     }
   }
-  return { pods: pods.length, dealt, matchups: made, tossed, subbed };
+  return { pods: pods.length, dealt, matchups: made, tossed, subbed, aiPlays };
 }
 
 /** The week's salary board: built and FROZEN on first sight of the week, then

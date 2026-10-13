@@ -278,4 +278,35 @@ begin
   delete from contest_play where league_id = h and week = wk;
 end $$;
 
+-- ═══ THE AI SEATS PLAY (0492) ═══════════════════════════════════════════════
+-- An AI seat buys and plays in one from its wallet (seeded on its first play
+-- when it has none), under the member's rules and cap; a human seat is not
+-- the AI's to play; the member's arm still runs through the shared core.
+do $$
+declare r jsonb; h uuid; wk int; bal numeric; seedv numeric; want numeric;
+begin
+  perform probe_as('a');
+  select id into h from league where name = 'CP H2H' order by created_at desc limit 1;
+  select max(week) into wk from matchup where league_id = h;
+  update nfl_slate set kickoff = now() + interval '2 days' where season = '2026' and week = wk;
+  delete from contest_play where league_id = h and week = wk;
+  r := ai_contest_play(h, wk, 1, 'hail-mary'); perform assert_err(r, 'ai0 a human seat is not the AI''s to play');
+  perform assert_true(r ->> 'error' like '%AI seat%', 'ai1 …and says so: ' || (r ->> 'error'));
+  seedv := (_contest_coin_rules((select l from league l where l.id = h)) ->> 'seed')::numeric;
+  update team_wallet set coins = 200 where league_id = h and roster_id = 3;
+  bal := cp_bal(h, 3);
+  want := case when exists (select 1 from team_wallet where league_id = h and roster_id = 3) then bal else seedv end - 35;
+  r := ai_contest_play(h, wk, 3, 'hail-mary'); perform assert_ok(r, 'ai2 an AI seat buys and plays a squad play in one');
+  perform assert_true(exists (select 1 from contest_play where league_id = h and week = wk and roster_id = 3 and play_id = 'hail-mary' and by_user is null), 'ai3 …the row is the seat''s, by nobody');
+  perform assert_true(cp_bal(h, 3) = want, 'ai4 …paid from its wallet (the seed when it had none): ' || cp_bal(h, 3) || ' vs ' || want);
+  r := ai_contest_play(h, wk, 3, 'hail-mary'); perform assert_err(r, 'ai5 the same play twice is refused');
+  r := ai_contest_play(h, wk, 3, 'pick-six'); perform assert_ok(r, 'ai6 a second play, under the head-to-head cap');
+  r := ai_contest_play(h, wk, 3, 'trick-play'); perform assert_err(r, 'ai7 …a third is over the cap');
+  r := ai_contest_play(h, wk, 4, 'floor', 'S1'); perform assert_err(r, 'ai8 Floor on an AI seat with no squad wants a player');
+  update team_wallet set coins = 500 where league_id = h and roster_id = 1;
+  r := contest_arm_play(h, wk, 'double-or-nothing', 'S5'); perform assert_ok(r, 'ai9 a member''s play still arms through the shared core');
+  perform assert_ok(contest_disarm_play(h, wk, 'double-or-nothing', 'S5'), 'ai10 …and comes back');
+  delete from contest_play where league_id = h and week = wk;
+end $$;
+
 select 'ALL CONTEST-PLAYS PROBES PASSED';

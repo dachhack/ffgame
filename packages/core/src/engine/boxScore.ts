@@ -25,8 +25,6 @@ import { realPbpSlugs } from '../data/realPbp';
 import { gameFeedFor, allGameFeeds } from '../data/gameFeed';
 import { slugMeta, normTeam } from '../data/slugMeta';
 import { teamFor } from '../data/playerTeam';
-import { isCollegeSlug } from '../data/college';
-import { weekLevel } from '../data/fieldsWeek';
 import type { Pos } from '../theme';
 
 export interface BoxRow {
@@ -181,14 +179,7 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
   const playMatches = (pid: number | null | undefined, clock: number): boolean =>
     pid != null && (pidClocks.get(pid) ?? []).some((c) => Math.abs(c - clock) <= 3);
 
-  // A COLLEGE MAN IS NEVER IN AN NFL GAME (v0.697.0, founder: "Why are we getting IDs instead of player names"):
-  // a college game's rows are mirrored into the NFL week that holds its kickoff (0372), keyed c-<espn id>, and
-  // the fallback below — play number and clock — cannot tell them apart: ESPN numbers plays within a game, so
-  // play 40 at 15:00 is every game's opening snap, and an Ohio State tight end's first target sat in BUF@LA's
-  // box as "C 5141656". The week's level decides whose box this is; the game-id rule below catches the rest.
-  const college = weekLevel(week) === 'cfb';
   for (const slug of realPbpSlugs(week)) {
-    if (isCollegeSlug(slug) !== college) continue;
     const meta = slugMeta(slug);
     // THE COLUMN READS THE CURRENT TEAM, NOT THE 2025 TAG (v0.369.5, founder:
     // "Tua is on the falcons. How hard would it be to actually use a player
@@ -212,10 +203,16 @@ export function gameBoxScore(week: number, home: string, away: string, clock: nu
     // The GAME-ID join answers first (v0.369.0): a play gid that names any of
     // the week's feed games is decisive evidence, exactly.
     const knownGids = [...new Set(plays.map((p) => p.gid).filter((g): g is string => !!g && weekGids.has(g)))];
-    // …AND A PLAY THAT NAMES ANOTHER GAME IS NOT THIS GAME'S (v0.697.0): when every play of his carries a game
-    // id and none is this feed's, he is elsewhere — whether or not the week's feeds know his game (a mirrored
-    // college game's feed is not among them), and before the play-number fallback can be fooled.
-    const gids = plays.map((p) => p.gid).filter((g): g is string => !!g);
+    // A PLAY THAT NAMES ANOTHER GAME IS NOT THIS GAME'S (v0.697.0, founder: "Why are we getting IDs instead of
+    // player names"): a college game's rows are mirrored into the NFL week that holds its kickoff (0372), keyed
+    // c-<espn id>, and the play-number fallback below cannot tell them apart — ESPN numbers plays within a game,
+    // so play 40 at 15:00 is every game's opening snap, and an Ohio State tight end's first target sat in BUF@LA's
+    // box as "C 5141656". When every play of his carries a game id and none is this feed's, he is elsewhere —
+    // whether or not the week's feeds know his game (a mirrored college game's feed is not among them). (v0.699.0
+    // dropped a week-level gate that sat beside this: it read the probes' synthetic week numbers as college and
+    // emptied every box — check:boxgame — and the game id already answers the real case.)
+    // (A real game id is numeric — ESPN's; the board sim's flat 'SIM' names no game and proves nothing either way.)
+    const gids = plays.map((p) => p.gid).filter((g): g is string => !!g && /^\d+$/.test(g));
     if (feedGid && gids.length === plays.length && !gids.includes(feedGid)) continue;
     const matchedPlays = withPid.filter((p) => playMatches(p.pid, p.clock));
     const inGame = feedGid && knownGids.length ? knownGids.includes(feedGid)
