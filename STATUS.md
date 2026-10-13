@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.700.0 — Drag a card: to another spot, or to the trash
+
+> - In My Team, press and hold a card to lift it, then drop it on the trash bar to clear the spot or on any lit spot: an open spot takes him, a spot whose player fits your old spot swaps the two.
+> - Drop him on a spot whose player can’t swap back and a note says what happens first: that player comes off the squad and your old spot opens up. Move him, or keep it.
+
+Founder: "Long press on a card and you can drag it to a trash can or any
+eligible swappable spot. If you move it to a spot that can't swap back
+trash that card with a info note about what will happen." Engine:
+`contestCardMove(slots, picks, from, to, playerOf, {locked, ghosted})` →
+move | swap | bump | no, and `contestApplyCardMove`; `contestSlotWants(d)`
+words a spot ("RB", "QB/RB/WR/TE · rookies only"). Phone: the card's long
+press arms a PanResponder on the felt (capture on move; the scroll view
+stands still), the trash is a bar laid over the top of the felt, eligible
+spots light up, the bump is an Alert. Web: press-and-hold on pointer
+events, `elementsFromPoint` on `data-drop-slot`/`data-drop-trash`, the
+bump an inline note with MOVE HIM / KEEP IT. Test: `contest-move.mjs`.
+
 ### v0.699.3 — The powered-up score sits level with the other side
 
 > - On the matchup, a spot with a powered-up score (the raw score struck beneath it) now lines up with the other side’s score instead of sitting half a line high.

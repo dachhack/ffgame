@@ -8,7 +8,7 @@
 // the league's catalog prices each player. Pure: the worker scores with it,
 // both clients preview with it, the probe checks it.
 import { applyBullseye, bullseyeConfigOf, dealBullseyeCard, type BullseyeCard, type BullseyeConfig } from './bullseye';
-import { leagueSlotDefs, slotAllows, slotDisplayName, isRetSlot, type ClassicResult, type ClassicSlotDef, type ClassicSlotScore, type SlotSpec } from './classic';
+import { leagueSlotDefs, slotAllows, slotDisplayName, slotFilterLabel, isRetSlot, type ClassicResult, type ClassicSlotDef, type ClassicSlotScore, type SlotSpec } from './classic';
 import { tiebreakDistance, type BoardPlayer } from './dfsBullseye';
 import { contestEventBonus, contestJinxValue, GHOST_POINTS, type ContestPlay, type ContestPlayId, type PlayEvent } from './contestPlays';
 export { CONTEST_PLAYS, contestPlayById, contestPlayCap, contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestRedeal, contestSpotPlay, contestSpotOpen, contestHandCard, aiContestPlays, type AiPlayPick, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId, type HandCardState } from './contestPlays';
@@ -401,6 +401,49 @@ export const contestSlotAllows = (d: ClassicSlotDef, p: { slug: string; pos: str
   slotAllows({ pos: d.pos, flt: d.flt }, { id: p.slug, pos: p.pos, team: p.team ?? null, exp: p.exp });
 
 export interface ContestBoardPlayer extends BoardPlayer { exp?: number | null }
+
+/** What a spot takes, in words — "RB/WR/TE", "rookies only", "BUF/MIA only". */
+export const contestSlotWants = (d: ClassicSlotDef): string =>
+  [d.pos.map((p) => p.toUpperCase()).join('/'), slotFilterLabel(d.flt).toLowerCase()].filter(Boolean).join(' · ');
+
+/** DRAG A CARD (v0.700.0, founder: "Long press on a card and you can drag it to a trash can or any eligible swappable
+ *  spot. If you move it to a spot that can't swap back trash that card with a info note about what will happen.").
+ *  What dropping the card in `from` onto the spot `to` would do: `move` into an open spot, `swap` the two, or `bump`
+ *  — the spot's player can't stand in the spot being vacated, so he leaves the squad (the caller confirms that one,
+ *  with the note). `no` says why not. Pure: the budget is untouched by a swap and only eased by a bump. */
+export type ContestCardMove =
+  | { kind: 'move' }
+  | { kind: 'swap'; other: string }
+  | { kind: 'bump'; other: string; why: string }
+  | { kind: 'no'; why: string };
+export function contestCardMove(
+  slots: readonly ClassicSlotDef[], picks: Record<string, string | null | undefined>, from: string, to: string,
+  playerOf: (slug: string) => { slug: string; pos: string; team?: string | null; exp?: number | null } | null | undefined,
+  opts: { locked?: (slug: string) => boolean; ghosted?: (slot: string) => boolean } = {},
+): ContestCardMove {
+  if (from === to) return { kind: 'no', why: 'same spot' };
+  const fromDef = slots.find((d) => d.slot === from); const toDef = slots.find((d) => d.slot === to);
+  const mover = picks[from] ? playerOf(picks[from]!) : null;
+  if (!fromDef || !toDef || !mover) return { kind: 'no', why: 'nothing to move' };
+  if (opts.locked?.(mover.slug)) return { kind: 'no', why: 'his game has locked' };
+  if (opts.ghosted?.(to)) return { kind: 'no', why: 'that spot holds a ghost' };
+  if (!contestSlotAllows(toDef, mover)) return { kind: 'no', why: `takes ${contestSlotWants(toDef)}` };
+  const otherSlug = picks[to] ?? null;
+  if (!otherSlug) return { kind: 'move' };
+  const other = playerOf(otherSlug);
+  if (!other) return { kind: 'move' };
+  if (opts.locked?.(other.slug)) return { kind: 'no', why: 'his game has locked' };
+  if (contestSlotAllows(fromDef, other)) return { kind: 'swap', other: other.slug };
+  return { kind: 'bump', other: other.slug, why: `takes ${contestSlotWants(fromDef)}` };
+}
+/** The picks after that move: the bumped player leaves; a swap trades; a move leaves `from` open. */
+export function contestApplyCardMove(picks: Record<string, string | null>, from: string, to: string, mv: ContestCardMove): Record<string, string | null> {
+  if (mv.kind === 'no') return picks;
+  const next = { ...picks };
+  next[to] = picks[from] ?? null;
+  next[from] = mv.kind === 'swap' ? (picks[to] ?? null) : null;
+  return next;
+}
 
 /** THE AUTO-BUILD — an AI seat, or a no-show at lock, in a head-to-head
  *  league. Spot by spot, the fewest-candidates spot first, always reserving

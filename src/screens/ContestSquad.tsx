@@ -17,7 +17,8 @@
 //
 // The pre-0466 BullseyeSquad (BullseyeContest.tsx) stays for a salary-cap
 // league that merely plays Bullseye; this one is for contest leagues.
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { contestCardMove, contestApplyCardMove, type ContestCardMove } from '@drip/core/engine/contest';
 import {
   contestState, addContestEntry, contestBuyPlay, type ContestPlayRow, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
   contestSwaps, contestBoard, contestLeague, type SwapRow,
@@ -291,6 +292,73 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
     const d = slot === 'any' ? null : slots.find((x) => x.slot === slot);
     setTab(d && d.pos.length === 1 ? d.pos[0] : 'ALL');
   };
+  // DRAG A CARD (v0.700.0, founder: "Long press on a card and you can drag it to a trash can or any eligible
+  // swappable spot. If you move it to a spot that can't swap back trash that card with a info note about what will
+  // happen."). Press and hold lifts the card (mouse or finger); it rides the pointer, eligible spots light up, a bar
+  // at the top of the felt is the trash. The rule is the engine's contestCardMove; a bump (the spot's player can't
+  // stand where the card came from) asks first, in a note under the felt.
+  type Over = string | 'trash' | null;
+  const [drag, setDrag] = useState<{ slot: string; x: number; y: number; over: Over } | null>(null);
+  const [bump, setBump] = useState<{ from: string; to: string; mv: ContestCardMove & { kind: 'bump' } } | null>(null);
+  const dragRef = useRef<string | null>(null);
+  const holdTimer = useRef<number | null>(null);
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
+  const swallowClick = useRef(false);
+  const playerLite = useCallback((slug: string) => { const q = byPlayer.get(slug) as { slug: string; pos: string; team?: string | null; exp?: number | null } | undefined; return q ? { slug: q.slug, pos: q.pos, team: q.team ?? null, exp: q.exp ?? null } : null; }, [byPlayer]);
+  const moveOf = useCallback((from: string, to: string): ContestCardMove => contestCardMove(slots, picks, from, to, playerLite, { locked, ghosted }), [slots, picks, playerLite, locked, ghosted]);
+  const overAt = (x: number, y: number): Over => {
+    const from = dragRef.current;
+    for (const el of document.elementsFromPoint(x, y)) {
+      const spot = (el as HTMLElement).dataset?.dropSlot;
+      if (spot && spot !== from) return spot;
+      if ((el as HTMLElement).dataset?.dropTrash != null) return 'trash';
+    }
+    return null;
+  };
+  const endDrag = () => { dragRef.current = null; setDrag(null); if (holdTimer.current != null) { window.clearTimeout(holdTimer.current); holdTimer.current = null; } pressAt.current = null; };
+  const dropAt = (over: Over) => {
+    const from = dragRef.current;
+    endDrag();
+    if (!from || !over) return;
+    const mover = picks[from] ? byPlayer.get(picks[from]!) : null;
+    if (!mover) return;
+    if (over === 'trash') { setPicks({ ...picks, [from]: null }); return; }
+    const mv = moveOf(from, over);
+    if (mv.kind === 'no') { setNote(`${mover.name} can’t go to ${labels[over]} — ${mv.why}`); return; }
+    if (mv.kind === 'bump') { setBump({ from, to: over, mv }); return; }
+    setPicks(contestApplyCardMove(picks, from, over, mv));
+  };
+  const onCardPointerDown = (slot: string) => (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    pressAt.current = { x: e.clientX, y: e.clientY };
+    const el = e.currentTarget; const id = e.pointerId; const x = e.clientX; const y = e.clientY;
+    if (holdTimer.current != null) window.clearTimeout(holdTimer.current);
+    holdTimer.current = window.setTimeout(() => {
+      holdTimer.current = null;
+      dragRef.current = slot; swallowClick.current = true;
+      try { el.setPointerCapture(id); } catch { /* a pointer that already ended */ }
+      setDrag({ slot, x, y, over: null });
+    }, 320);
+  };
+  const onCardPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current) { const over = overAt(e.clientX, e.clientY); setDrag((d) => (d ? { ...d, x: e.clientX, y: e.clientY, over } : d)); return; }
+    const a = pressAt.current;
+    if (a && holdTimer.current != null && Math.hypot(e.clientX - a.x, e.clientY - a.y) > 8) { window.clearTimeout(holdTimer.current); holdTimer.current = null; }
+  };
+  const onCardPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current) { dropAt(overAt(e.clientX, e.clientY)); window.setTimeout(() => { swallowClick.current = false; }, 0); return; }
+    if (holdTimer.current != null) { window.clearTimeout(holdTimer.current); holdTimer.current = null; }
+    pressAt.current = null;
+  };
+  // a finger that is dragging a card must not scroll the page; a long press must not open the context menu
+  useEffect(() => {
+    if (!drag) return;
+    const stop = (e: Event) => e.preventDefault();
+    document.addEventListener('touchmove', stop, { passive: false });
+    document.addEventListener('contextmenu', stop);
+    return () => { document.removeEventListener('touchmove', stop); document.removeEventListener('contextmenu', stop); };
+  }, [drag]);
+  const dragPlayer = drag && picks[drag.slot] ? byPlayer.get(picks[drag.slot]!) : null;
   const put = (slug: string, slot: string | null) => {
     if (!slot) return;
     if (ghosted(slot)) { setNote('that spot holds a ghost — disarm it to put a player there'); setActive(null); return; }
@@ -451,8 +519,11 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
             up, an open one the deck's back with ＋ PICK on it; buying a player
             deals him in. The numbers sit under each card. */}
         <Felt>
+          <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', padding: '4px 0' }}>
             {slots.map((d, i) => {
+              const landing = drag && drag.slot !== d.slot ? moveOf(drag.slot, d.slot) : null;
+              const canLand = !!landing && landing.kind !== 'no';
               const slug = picks[d.slot];
               const p = slug ? byPlayer.get(slug) : null;
               const target = theCard?.targets[d.slot];
@@ -463,14 +534,16 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
               const hint = d.flt?.teams?.length ? `${d.flt.teams.join('/')} only` : d.flt?.min_exp != null || d.flt?.max_exp != null ? `${d.flt.min_exp === 0 && d.flt.max_exp === 0 ? 'rookies' : `${d.flt.min_exp ?? 0}–${d.flt.max_exp ?? '∞'} yrs`} only` : d.pos.length > 1 ? d.pos.map(posLabel).join('/') : bl.capped ? `up to ${fmtK(Math.max(0, bl.left - (bl.open - 1) * 3000))}` : 'any price';
               const dim = 'color-mix(in srgb, var(--text) 75%, transparent)';
               return (
-                <div key={d.slot} style={{ width: 104, display: 'grid', gap: 4, justifyItems: 'center', alignContent: 'start' }}>
+                <div key={d.slot} data-drop-slot={d.slot} style={{ width: 104, display: 'grid', gap: 4, justifyItems: 'center', alignContent: 'start', opacity: drag?.slot === d.slot ? 0.35 : 1 }}>
                   {/* THE PLAY CHIP rides the label row, above the card (v0.696.6, founder: "Don't even do the power up icon in
                       my team. Put the chip at the top of the card."); tap it for the play's details. */}
                   <span className="mono" style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em', color: changed ? 'var(--you)' : dim, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5, height: 16, overflow: 'visible' }}>
                     {`${labels[d.slot]}${bull && !isTotal && target != null ? ` · 🎯 ${target}` : ''}${!bull && d.zeroPts != null ? ` · 0→${d.zeroPts}` : ''}`}
                     {playOn(d.slot) && <InfoChip label="⚡ UP" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id} info={playInfo(playOn(d.slot)!)} />}
                   </span>
-                  <div style={{ borderRadius: 12, outline: changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1 }}>
+                  <div style={{ borderRadius: 12, outline: canLand ? `2px ${drag?.over === d.slot ? 'solid' : 'dashed'} var(--you)` : changed ? '2px solid var(--you)' : 'none', outlineOffset: 3, opacity: isLocked && !lv ? 0.8 : 1, touchAction: p && canTap ? 'pan-y' : undefined, userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } as CSSProperties}
+                    onPointerDown={p && canTap ? onCardPointerDown(d.slot) : undefined} onPointerMove={onCardPointerMove} onPointerUp={onCardPointerUp} onPointerCancel={() => endDrag()}
+                    onClickCapture={(e) => { if (swallowClick.current) { e.stopPropagation(); e.preventDefault(); } }}>
                     {p
                       ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
                       : ghosted(d.slot)
@@ -491,7 +564,29 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
               );
             })}
           </div>
+          {/* THE TRASH, while a card is up; and the card itself, riding the pointer */}
+          {drag && (
+            <div data-drop-trash="" className="mono" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5, height: 44, borderRadius: 10, border: `2px dashed ${drag.over === 'trash' ? 'var(--warn, #c66)' : 'rgba(255,255,255,0.8)'}`, background: drag.over === 'trash' ? 'color-mix(in srgb, var(--warn, #c66) 45%, transparent)' : 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em' }}>
+              {drag.over === 'trash' ? '🗑 LET GO TO REMOVE' : '🗑 DROP HERE TO REMOVE'}
+            </div>
+          )}
+          {drag && dragPlayer && (
+            <div style={{ position: 'fixed', zIndex: 60, left: drag.x - 52, top: drag.y - 75, pointerEvents: 'none', transform: 'scale(1.08) rotate(-3deg)', filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.45))' }}>
+              <PlayerCard slug={dragPlayer.slug} name={dragPlayer.name} pos={dragPlayer.pos} team={dragPlayer.team} idx={0} />
+            </div>
+          )}
+          </div>
         </Felt>
+        {bump && (() => {
+          const mover = picks[bump.from] ? byPlayer.get(picks[bump.from]!) : null; const other = byPlayer.get(bump.mv.other);
+          return (
+            <div className="mono" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 11, padding: '8px 10px', border: '1px solid var(--bd)', borderRadius: 8 }}>
+              <span>{`${mover?.name ?? 'He'} takes ${labels[bump.to]}. ${other?.name ?? 'The player there'} can’t move to ${labels[bump.from]} (it ${bump.mv.why}), so he leaves the squad and ${labels[bump.from]} opens up.`}</span>
+              <button className="mono" style={chip(true)} onClick={() => { setPicks(contestApplyCardMove(picks, bump.from, bump.to, bump.mv)); setBump(null); }}>MOVE HIM</button>
+              <button className="mono" style={chip(false)} onClick={() => setBump(null)}>KEEP IT</button>
+            </div>
+          );
+        })()}
         {editable && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
             <button onClick={() => void save()} disabled={busy || filled < n || blocked || !dirty} className="mono" style={chip(true)}>{dirty ? 'SAVE SQUAD' : 'SAVED'}</button>
