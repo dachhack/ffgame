@@ -54,7 +54,7 @@ const POS_TACTICAL: Theme['pos'] = {
 export const THEMES: Record<ThemeName, Theme> = {
   tactical: {
     bg: '#24221A', surface: '#2F2C23', sh: '#38352B', bd: '#3A3830', bdh: '#494638',
-    text: '#F4F2E8', dim: '#9C9A8C', faint: '#6C6A5E', mid: '#ADAB9E', dimstrong: '#DEDCD1',
+    text: '#F4F2E8', dim: '#9C9A8C', faint: '#959385', mid: '#ADAB9E', dimstrong: '#DEDCD1',
     you: '#36E59B', opp: '#FF5266', warn: '#FFB23B', onAccent: '#161510',
     fx: { nuke: '#FF4F62', erase: '#FF4F62', reset: '#FF9043', streak: '#B89AFF', mult: '#6AB6FF', compression: '#7FE38A', stop: '#B5B3A6', sys: '#8C8A7D' },
     pos: POS_TACTICAL,
@@ -82,7 +82,11 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
   prime: {
     bg: '#252116', surface: '#302C20', sh: '#3B3527', bd: '#3C3729', bdh: '#4D4737',
-    text: '#F4F0E2', dim: '#ABA18D', faint: '#6F6857', mid: '#C7BDA8', dimstrong: '#DFD7C3',
+    // faint lifted in v0.712.5 (#6F6857, 2.5:1 on surface), founder: "some of
+    // the fonts in all gold are too dark to read well". It carries game lines,
+    // team codes and notes; now 4.5:1, still under dim. Tactical, dusk and
+    // slate were lifted the same way (see check:themes).
+    text: '#F4F0E2', dim: '#ABA18D', faint: '#9C9380', mid: '#C7BDA8', dimstrong: '#DFD7C3',
     you: '#E2B254', opp: '#FF6E5C', warn: '#5BAEFF', onAccent: '#16140E',
     fx: { nuke: '#FF6E5C', erase: '#FF6E5C', reset: '#E29D4E', streak: '#B69AE3', mult: '#5BAEFF', compression: '#6FCC8A', stop: '#A89E89', sys: '#7A7263' },
     pos: {
@@ -152,7 +156,7 @@ export const THEMES: Record<ThemeName, Theme> = {
   // — the dark twin of the light "daylight" theme.
   dusk: {
     bg: '#211D15', surface: '#2C2820', sh: '#393327', bd: '#3A352A', bdh: '#4B4536',
-    text: '#F3EFE2', dim: '#A79C87', faint: '#6E6655', mid: '#C6BCA6', dimstrong: '#DED6C2',
+    text: '#F3EFE2', dim: '#A79C87', faint: '#988E7A', mid: '#C6BCA6', dimstrong: '#DED6C2',
     you: '#46C386', opp: '#ED5A50', warn: '#5C9CEF', onAccent: '#211D15',
     fx: { nuke: '#ED5A50', erase: '#ED5A50', reset: '#E0954A', streak: '#B69AE3', mult: '#5C9CEF', compression: '#5FC489', stop: '#A89E89', sys: '#7A7263' },
     pos: {
@@ -174,7 +178,7 @@ export const THEMES: Record<ThemeName, Theme> = {
   // Cool dark slate-blue, teal accent.
   slate: {
     bg: '#1A1E26', surface: '#232834', sh: '#2C323F', bd: '#2F3540', bdh: '#3E4654',
-    text: '#EAEEF5', dim: '#94A0B2', faint: '#5E6878', mid: '#AEB8C6', dimstrong: '#CFD6E0',
+    text: '#EAEEF5', dim: '#94A0B2', faint: '#848FA1', mid: '#AEB8C6', dimstrong: '#CFD6E0',
     you: '#4FD1C5', opp: '#FF6B81', warn: '#F5B53D', onAccent: '#11151C',
     fx: { nuke: '#FF6B81', erase: '#FF6B81', reset: '#F59E5C', streak: '#B79BFF', mult: '#5BB6FF', compression: '#6FCF97', stop: '#A7B0BE', sys: '#94A0B2' },
     pos: {
