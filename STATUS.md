@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.11 — Bigger small text on the home-screen widgets
+
+> - The home-screen widgets' smallest text (league names, lock times, "offline", player tags, the "+N more" lines) is a little larger and easier to read.
+
+Founder: "do the widgets", the last stop of the small-fonts pass. The
+widgets' 40 sizes under 9 (7.5–8.5pt; ExtraWidgets 34, MatchupWidget 6) take
+wfs (widget/type.ts) = max(n, 9). Their frame is fixed by the launcher, so
+not fs()'s jump to 11: a step of 0.5–1.5pt. A TextWidget can't shrink to fit,
+so the five that had no line limit ("no leagues", "offline" ×2, "★", "+N more
+of yours") get maxLines={1} truncate="END"; the other 35 already had one.
+check:widget and check:widgetrender pass (all 54 widget states build). Both
+files join check:themes' FLOORED list, so no raw size under 9 is left in the
+app (ContestCards' 1pt spacer aside). JavaScript only; no iPhone build.
+
 ### v0.712.10 — Bigger small text on the rest of the app's screens
 
 > - The remaining small text across the app (the board's slot labels and game lines, the field view, power-ups, the shop, settings, player and college cards, devy shares, the duel, the setup row, recruiting, the squad and league home) is larger on the phone, without wrapping.

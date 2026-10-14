@@ -24,6 +24,7 @@
 // a widget has no ThemeCtx, and a home screen is not the app.
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import React from 'react';
+import { wfs } from './type';
 import { FlexWidget, TextWidget, ImageWidget, ListWidget, type ColorProp } from 'react-native-android-widget';
 import { packRows, type WidgetSnapshot, type WidgetWindow, type WidgetCard, type SideLeft } from '@drip/core/data/widgetFeed';
 import { crestInitial } from '@drip/core/data/crest';
@@ -388,7 +389,7 @@ function Tile({ c, last }: { c: WidgetCard; last: boolean }) {
   return (
     <FlexWidget style={{ width: TILE_W, flexDirection: 'column', alignItems: 'center', backgroundColor: C.bg, borderRadius: 8, borderWidth: 1, borderColor: t.border,
       paddingVertical: 3, paddingHorizontal: 2, marginRight: last ? 0 : TILE_GAP }}>
-      {spot ? <TextWidget text={spot} truncate="END" maxLines={1} style={{ fontSize: 8, color: c.bestball ? C.you : C.faint, fontWeight: 'bold', marginBottom: 2 }} /> : null}
+      {spot ? <TextWidget text={spot} truncate="END" maxLines={1} style={{ fontSize: wfs(8), color: c.bestball ? C.you : C.faint, fontWeight: 'bold', marginBottom: 2 }} /> : null}
       {c.image && !placeholder
         ? <ImageWidget image={c.image as `https:${string}`} imageWidth={FACE_W} imageHeight={FACE} radius={7} />
         : <TextWidget text={t.face} maxLines={1}
@@ -397,8 +398,8 @@ function Tile({ c, last }: { c: WidgetCard; last: boolean }) {
         style={{ fontSize: 9, color: t.dim ? C.faint : placeholder ? C.warn : C.text, fontWeight: 'bold', marginTop: 2 }} />
       <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
         {inj ? <TextWidget text={inj.text} maxLines={1}
-          style={{ fontSize: 8, color: C.onAccent, backgroundColor: inj.color, fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
-        <TextWidget text={t.foot} truncate="END" maxLines={1} style={{ fontSize: 8.5, color: t.footColor, fontWeight: 'bold' }} />
+          style={{ fontSize: wfs(8), color: C.onAccent, backgroundColor: inj.color, fontWeight: 'bold', borderRadius: 3, paddingHorizontal: 2, marginRight: 3 }} /> : null}
+        <TextWidget text={t.foot} truncate="END" maxLines={1} style={{ fontSize: wfs(8.5), color: t.footColor, fontWeight: 'bold' }} />
       </FlexWidget>
     </FlexWidget>
   );
@@ -465,7 +466,7 @@ function HeaderButton({ glyph, label, action, color, busy, width }: { glyph: str
     <FlexWidget clickAction={action}
       style={{ width, height: BTN_H, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: busy ? C.line : C.bg, borderRadius: 10 }}>
       <TextWidget text={busy ? '…' : glyph} maxLines={1} style={{ fontSize: busy ? 14 : 16, color: busy ? C.dim : color, fontWeight: 'bold' }} />
-      {label || busy ? <TextWidget text={busy ? 'LOADING' : label ?? ''} maxLines={1} style={{ fontSize: 7.5, color: busy ? C.dim : color, fontWeight: 'bold', letterSpacing: 0.06 }} /> : null}
+      {label || busy ? <TextWidget text={busy ? 'LOADING' : label ?? ''} maxLines={1} style={{ fontSize: wfs(7.5), color: busy ? C.dim : color, fontWeight: 'bold', letterSpacing: 0.06 }} /> : null}
     </FlexWidget>
   );
 }
@@ -492,7 +493,7 @@ function LeagueHeader({ snap, leagues, offline, alert, busy }: { snap: WidgetSna
             </FlexWidget>
             {snap.them ? (
               <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {proj ? <TextWidget text={snap.themLive ? 'PROJ · LIVE  ' : 'PROJ  '} maxLines={1} style={{ fontSize: 8.5, color: C.faint, fontWeight: 'bold' }} /> : null}
+                {proj ? <TextWidget text={snap.themLive ? 'PROJ · LIVE  ' : 'PROJ  '} maxLines={1} style={{ fontSize: wfs(8.5), color: C.faint, fontWeight: 'bold' }} /> : null}
                 <TextWidget text={fmt(snap.me.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'them' ? C.dim : C.you, fontWeight: 'bold' }} />
                 <TextWidget text=" – " maxLines={1} style={{ fontSize: 12, color: C.faint }} />
                 <TextWidget text={fmt(snap.them.score)} maxLines={1} style={{ fontSize: 16, color: leading === 'me' ? C.dim : C.opp, fontWeight: 'bold' }} />
@@ -571,7 +572,7 @@ function TeamFace({ name, avatar, score, left, color, align }: { name: string; a
         {counts.map(([label, n], i) => (
           <FlexWidget key={label} style={{ flexDirection: 'column', alignItems: 'center', marginLeft: i ? 8 : 0 }}>
             <TextWidget text={n == null ? '–' : String(n)} maxLines={1} style={{ fontSize: 12, color: label === 'LIVE' && n ? C.live : C.text, fontWeight: 'bold' }} />
-            <TextWidget text={label} maxLines={1} style={{ fontSize: 7.5, color: C.faint, fontWeight: 'bold', letterSpacing: 0.08 }} />
+            <TextWidget text={label} maxLines={1} style={{ fontSize: wfs(7.5), color: C.faint, fontWeight: 'bold', letterSpacing: 0.08 }} />
           </FlexWidget>
         ))}
       </FlexWidget>
