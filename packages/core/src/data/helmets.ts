@@ -106,6 +106,12 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').repl
  *  lower corner (the anchor), so it grows up and in over the shell. */
 export const HELMET_NUMBER_SCALE = 1.45;
 
+/** The number on a contest PLAYING CARD (v0.713.5, founder, beside the Weekly
+ *  Contest: "numbers a touch smaller on weekly contest"). The card's art box
+ *  draws the helmet at ~110px, where 1.45× crowds the shell; the small spots
+ *  (rows, mini cards) keep HELMET_NUMBER_SCALE. */
+export const HELMET_CARD_NUMBER_SCALE = 1.2;
+
 export function helmetNumberSvg(team: string, num: number | string | null, facing: HelmetFacing = helmetFacing(), scaleBy = HELMET_NUMBER_SCALE): string {
   if (num == null || num === '') return '';
   const S = HELMET_SPEC;
@@ -139,12 +145,12 @@ export function helmetNumberSvg(team: string, num: number | string | null, facin
 
 /** A whole player helmet as one SVG document: the helmet image with the
  *  number over it. Web renders it inline; the phone through SvgXml. */
-export function helmetSvg(team: string, num: number | string | null, facing: HelmetFacing = helmetFacing()): string | null {
+export function helmetSvg(team: string, num: number | string | null, facing: HelmetFacing = helmetFacing(), scaleBy = HELMET_NUMBER_SCALE): string | null {
   const url = helmetUrl(team, facing);
   if (!url) return null;
   const S = HELMET_SPEC.size;
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${S} ${S}" width="100%" height="100%">`
     + `<image href="${esc(url)}" xlink:href="${esc(url)}" x="0" y="0" width="${S}" height="${S}"/>`
-    + helmetNumberSvg(team, num, facing)
+    + helmetNumberSvg(team, num, facing, scaleBy)
     + `</svg>`;
 }

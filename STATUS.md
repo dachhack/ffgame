@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.5 — Bigger helmets on team rows; smaller numbers on contest cards
+
+> - Helmets on My Team and the lineup picker are half again as big, so they read beside a player's three lines.
+> - On weekly contest cards the jersey number is a touch smaller, so it no longer crowds the helmet.
+
+Founder, from My Team: "Could probably make the helmets a bit bigger in
+classic". The helmet drew at the round photo's size (24px on Team, 26–30 on
+the board's setter and picker), and a side-view helmet with air around it
+reads smaller than a cropped face at the same box. New `helmetSize(photo)`
+(1.5×) in HelmetFace; Team's and ClassicBoard's Face use it in helmet mode
+only, so photos keep their size.
+
+Founder, beside the Weekly Contest: "And numbers a touch smaller on weekly
+contest". The playing card's art box draws the helmet at ~110px, where the
+rows' 1.45× number crowds the shell. New HELMET_CARD_NUMBER_SCALE (1.2×),
+passed through helmetSvg's new scale argument by the phone's contest
+CardFace and the web's PlayerCard; mini cards and rows keep 1.45×. Compared
+at both scales in Chromium. check:helmets +3. JavaScript only; no iPhone
+build.
+
 ### v0.713.4 — Helmets face each other; numbers on contest cards; a traded player's row follows him
 
 > - In helmet mode, your helmets face right and your opponent's face left, so on a matchup the two sides face each other.
