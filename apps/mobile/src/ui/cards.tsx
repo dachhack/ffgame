@@ -33,7 +33,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { storeGet, storeSet } from '@drip/core/platform';
-import { MONO, useTheme, alpha } from '../theme.native';
+import { MONO, useTheme, alpha, fsTight } from '../theme.native';
 import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from './animations';
 import { InjuryNow } from './rosterGroup';
 
@@ -376,7 +376,7 @@ export function CardBack({ label = 'SEALED', idx = 0, size, onPress, actionLabel
       <Image source={cardBackArt()} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       <Pressable onPress={onPress} disabled={!onPress} style={{ position: 'absolute', inset: 0, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 8 }}>
         <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#E7DCC2' }}>{actionLabel ?? label}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', letterSpacing: 1, color: '#E7DCC2' }}>{actionLabel ?? label}</Text>
         </View>
       </Pressable>
     </CardShell>

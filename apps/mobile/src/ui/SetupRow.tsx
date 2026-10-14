@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { METRICS, metricById } from '@drip/core/data/metrics';
 import type { Metric, Pick, Player } from '@drip/core/types';
-import { useTheme, MONO, alpha } from '../theme.native';
+import { useTheme, MONO, alpha, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { CardFace, CardBack, CardEmpty, CardPhantom, loadCardSize, cs } from './cards';
 import { openPlayerCard } from './PlayerCardSheet';
@@ -235,7 +235,7 @@ export function MetricModal({ visible, player, currentId, filter, title, subtitl
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                   <Text style={{ fontSize: 15, fontWeight: '700', color: t.text }}>{m.lock ? '🔓 ' : ''}{m.name}</Text>
                   <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: fx, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: fx }}>{m.tag}</Text>
+                    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: fx }}>{m.tag}</Text>
                   </View>
                   {on && <Mono size={9} tone="you" weight="700">✓ SEALED</Mono>}
                 </View>

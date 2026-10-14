@@ -15,7 +15,7 @@ import { collegeHeadshot, collegeLogo } from '@drip/core/data/media';
 import { collegePlayerCard, leagueGameMode, nativeRosters, matchupTeams, type CollegePlayerCard } from '@drip/core/data/liveApi';
 import { leagueSuperflex } from '@drip/core/engine/classic';
 import { kickoffLabel } from '@drip/core/data/nflSlate';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 import { tap } from './feedback';
@@ -77,7 +77,7 @@ export function CollegeCardSheet({ req, onClose }: { req: CollegeCardReq; onClos
   const logo = collegeLogo(abbr);
   const row = (label: string, value: string) => (
     <View key={label} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-      <Text style={{ fontFamily: MONO, width: 74, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: t.faint, paddingTop: 1 }}>{label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, width: 74, fontSize: fsTight(8.5), fontWeight: '700', letterSpacing: 1, color: t.faint, paddingTop: 1 }}>{label}</Text>
       <Text style={{ fontFamily: MONO, flex: 1, fontSize: 11, lineHeight: 15, color: t.text }}>{value}</Text>
     </View>
   );

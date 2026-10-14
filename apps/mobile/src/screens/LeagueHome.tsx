@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, leagueWeekScoreboard, defaultOpenWeek, leagueWriteApi, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
 import { LadderCard } from '../ui/Ladder';
-import { useTheme, alpha, MONO } from '../theme.native';
+import { useTheme, alpha, MONO, fs, fsTight } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -347,7 +347,7 @@ function LeagueMenu({ leagueId, teamName, rosterId, native, commish, onGo, onSho
           <Text style={{ fontSize: 14.5, fontWeight: '700', color: t.text }}>{title}</Text>
           {!!opts?.badge && (
             <View style={{ backgroundColor: t.you, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.onAccent }}>{opts.badge}</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: t.onAccent }}>{opts.badge}</Text>
             </View>
           )}
         </View>
@@ -396,7 +396,7 @@ function LeagueMenu({ leagueId, teamName, rosterId, native, commish, onGo, onSho
 
       {!!note && (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: alpha('#A87BD8', 10), borderWidth: StyleSheet.hairlineWidth, borderColor: '#A87BD8', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: '#A87BD8', paddingTop: 1 }}>LEAGUE NOTE</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 1, color: '#A87BD8', paddingTop: 1 }}>LEAGUE NOTE</Text>
           {note.text
             ? <Text style={{ flex: 1, fontSize: 11.5, lineHeight: 16, color: t.text }}>{note.text}</Text>
             : <Text style={{ flex: 1, fontFamily: MONO, fontSize: 9.5, lineHeight: 13, color: t.faint }}>nothing posted — say something to the league</Text>}

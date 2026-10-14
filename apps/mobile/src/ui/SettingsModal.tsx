@@ -14,7 +14,7 @@
 // 2025 bake left the app with it.
 
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { THEMES, type ThemeName, useTheme, MONO, alpha } from '../theme.native';
+import { THEMES, type ThemeName, useTheme, MONO, alpha, fs, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { VoicePicker } from './VoicePicker';
 import { DevyValues } from './DevyValues';
@@ -215,7 +215,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                           >
                             {art ? <Image source={art} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : null}
                           </View>
-                          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', textAlign: 'center', color: on ? t.you : t.faint }}>
+                          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7.5), fontWeight: '700', textAlign: 'center', color: on ? t.you : t.faint }}>
                             {o.name.toUpperCase()}
                           </Text>
                         </Pressable>
@@ -556,7 +556,7 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
                   <Text style={{ fontFamily: MONO, fontSize: 10, color }}>{st.glyph}</Text>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text numberOfLines={1} style={{ fontSize: 11.5, color: t.text }}>{plainText(r.title)}</Text>
-                    <Text style={{ fontFamily: MONO, fontSize: 8.5, color }}>{st.text} · {new Date(r.at).toLocaleString()}</Text>
+                    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), color }}>{st.text} · {new Date(r.at).toLocaleString()}</Text>
                   </View>
                 </View>
               );

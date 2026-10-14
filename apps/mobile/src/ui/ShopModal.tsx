@@ -22,7 +22,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { POWERUPS, POWERUP_CATEGORIES, powerupCategory, closesInLabel, type Powerup, type PowerupAvailability } from '@drip/core/data/powerups';
 import { myInventory, walletBuyPowerup } from '@drip/core/data/liveApi';
 import { Ev, track } from '@drip/core/analytics';
-import { useTheme, MONO, alpha } from '../theme.native';
+import { useTheme, MONO, alpha, fs, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { commit } from './feedback';
 import { Overlay } from './Overlay';
@@ -197,7 +197,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
                 }}
               >
                 <View style={{ alignSelf: 'center', backgroundColor: '#3A3122', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', letterSpacing: 0.5, color: '#D8C08A' }}>{timing}</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8), fontWeight: '700', letterSpacing: 0.5, color: '#D8C08A' }}>{timing}</Text>
                 </View>
 
                 <Text style={{ fontSize: 22, textAlign: 'center' }}>{p.icon}</Text>
@@ -210,7 +210,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
                 {!!a && (
                   passed
                     ? <View style={{ alignSelf: 'center', backgroundColor: alpha(t.opp, 18), borderRadius: 5, paddingHorizontal: 8, paddingVertical: 3 }}>
-                        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.5, color: t.opp }}>⛔ WINDOW PASSED</Text>
+                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.5, color: t.opp }}>⛔ WINDOW PASSED</Text>
                       </View>
                     : a.state === 'live'
                       ? <Mono size={8.5} tone="you" weight="700" style={{ textAlign: 'center' }}>🟢 {a.note.toUpperCase()}</Mono>

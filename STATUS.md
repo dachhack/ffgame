@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.10 — Bigger small text on the rest of the app's screens
+
+> - The remaining small text across the app (the board's slot labels and game lines, the field view, power-ups, the shop, settings, player and college cards, devy shares, the duel, the setup row, recruiting, the squad and league home) is larger on the phone, without wrapping.
+
+Founder: "keep going with the smaller screens". The last raw <Text> sizes
+under 9 outside the home-screen widgets: 34 sites in 18 files. Fixed-width or
+art-bound spots take fsTight (9pt floor): the board's slot pill, pos line,
+matchup-band chip and pre-kick game line (fs's 11 would cut much more of
+"vs HOU · Sun 9:30 AM" in that cell), label columns (58/74px), pos pills,
+badges, the power-up and shop card art, the theme swatch labels. Roomier
+headers take fs(): the field view's headers and LIVE ▸, the duel's lead line,
+the shop's WINDOW PASSED, settings' status line, devy share headers, LEAGUE
+NOTE. Single lines shrink to fit; the power-up name keeps its 3 lines and
+shrinks. check:themes FLOORED grows by 15 files (ContestCards stays off: its
+one raw size is a deliberate 1pt spacer). check:parity passes. Left: the
+home-screen widgets (34). JavaScript only; no iPhone build.
+
 ### v0.712.9 — Bigger small text in the player picker and the draft room
 
 > - The player picker's cards and the draft room (board cells, pick buttons, prices) use larger text on the phone, without wrapping; injury tags are a little larger everywhere.

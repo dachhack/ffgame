@@ -45,7 +45,7 @@ import {
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
 import { boardStashSets } from '@drip/core/data/copies';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fsTight } from '../theme.native';
 import { tap, commit } from './feedback';
 import { Card, Chip, Display, Mono, PosPill } from './prims';
 import { WeddingChip } from './WeddingChip';
@@ -248,8 +248,8 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
           <View key={p} style={{ flex: 1, backgroundColor: t.pos[p as keyof typeof t.pos]?.bg ?? t.bg }} />
         ))}
       </View>
-      <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: first?.fg ?? t.text, textAlign: 'center' }}>{label}</Text>
-      {!!posLine && <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7, color: t.faint, textAlign: 'center' }}>{posLine}</Text>}
+      <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: first?.fg ?? t.text, textAlign: 'center' }}>{label}</Text>
+      {!!posLine && <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7), color: t.faint, textAlign: 'center' }}>{posLine}</Text>}
     </View>
   );
 }
@@ -325,12 +325,12 @@ function BoardCell({ e, align, onGame, onName, empty }: {
           INT/sk tail a manager goes looking for. */}
       {onGame ? (
         <Pressable hitSlop={6} onPress={() => { tap(); onGame(); }} style={{ alignSelf: right ? 'flex-end' : 'flex-start' }}>
-          <Text numberOfLines={started ? 3 : 1} style={{ fontSize: 8.5, marginTop: 1, color: t.you, textAlign: right ? 'right' : 'left' }}>
+          <Text numberOfLines={started ? 3 : 1} style={{ fontSize: fsTight(8.5), marginTop: 1, color: t.you, textAlign: right ? 'right' : 'left' }}>
             {right ? `▸ ${line}${started ? '' : roofMark(e)}` : `${line}${started ? '' : roofMark(e)} ▸`}
           </Text>
         </Pressable>
       ) : (
-        <Text numberOfLines={started ? 3 : 1} style={{ fontSize: 8.5, marginTop: 1, color: bye ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
+        <Text numberOfLines={started ? 3 : 1} style={{ fontSize: fsTight(8.5), marginTop: 1, color: bye ? t.warn : t.faint, textAlign: right ? 'right' : 'left' }}>
           {`${line}${started ? '' : roofMark(e)}`}
         </Text>
       )}
@@ -1573,7 +1573,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
                         factor against his position; the colour is its band. */}
                     {g && (
                       <View style={{ marginTop: 2, borderWidth: 1, borderColor: MATCHUP_BAND_COLOR[g.band], borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
-                        <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: MATCHUP_BAND_COLOR[g.band] }}>
+                        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7.5), fontWeight: '700', color: MATCHUP_BAND_COLOR[g.band] }}>
                           {`${g.basis === 'def' ? (p.pos === 'DEF' ? 'DST' : p.pos) : 'wk'} ${matchupGradeLabel(g)}`}
                         </Text>
                       </View>

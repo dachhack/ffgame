@@ -37,7 +37,7 @@ import { myLeaguesOnSleeper, importMyLeague, importSeason } from '@drip/core/dat
 import { sleeperAvatarUrl, type SleeperLeague, type SleeperUser } from '@drip/core/data/sleeper';
 import { IMPORT_PROVIDERS, normalizeProviderLeague, importMyProviderLeague, providerImportSeason, type ImportProvider } from '@drip/core/data/providerAdmin';
 import type { NormalizedLeague } from '@drip/core/data/normalized';
-import { useTheme, MONO, alpha } from '../theme.native';
+import { useTheme, MONO, alpha, fsTight } from '../theme.native';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
@@ -1401,7 +1401,7 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
                   {preview.teams.map((tm) => (
                     <View key={tm.roster_id} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
                       <Text style={{ flex: 1, fontSize: 12, color: tm.taken ? t.text : t.faint }}>{tm.team_name}</Text>
-                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: tm.taken ? t.dim : t.you }}>{tm.taken ? 'TAKEN' : 'OPEN'}</Text>
+                      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: tm.taken ? t.dim : t.you }}>{tm.taken ? 'TAKEN' : 'OPEN'}</Text>
                     </View>
                   ))}
                 </View>

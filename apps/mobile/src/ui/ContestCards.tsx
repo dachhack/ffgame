@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { isGhostSlug } from '@drip/core/data/ghostCard';
-import { useTheme, MONO, fs, mix, alpha } from '../theme.native';
+import { useTheme, MONO, fs, mix, alpha, fsTight } from '../theme.native';
 import { useCardSkin, CARD_BACKS, SKIN_FELT } from './cards';
 
 export const CARD_W = 96;
@@ -117,7 +117,7 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked, fo
           : uri
           ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode={headshot(slug) ? 'cover' : 'contain'} />
           : <Text style={{ fontSize: 22, fontWeight: '800', color: suit }}>{name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}</Text>}
-        {locked ? <View style={{ position: 'absolute', bottom: 2, right: 2, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 3, paddingHorizontal: 3 }}><Text style={{ fontSize: 8, color: '#fff' }}>🔒</Text></View> : null}
+        {locked ? <View style={{ position: 'absolute', bottom: 2, right: 2, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 3, paddingHorizontal: 3 }}><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontSize: fsTight(8), color: '#fff' }}>🔒</Text></View> : null}
       </View>
       <Text numberOfLines={1} style={{ marginTop: 3, fontSize: fs(9.5), fontWeight: '700', color: INK }}>{name}</Text>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>

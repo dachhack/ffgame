@@ -113,7 +113,14 @@ for (const [name, t] of Object.entries(THEMES)) {
 // the bigger type never wraps ("Let's not do anything that causes wrap").
 {
   const { readFileSync } = await import('node:fs');
-  const FLOORED = ['apps/mobile/src/ui/Chat.tsx', 'apps/mobile/src/ui/PlayLog.tsx', 'apps/mobile/src/ui/LiveCard.tsx', 'apps/mobile/src/ui/PlayerPicker.tsx', 'apps/mobile/src/screens/Draft.tsx'];
+  const FLOORED = ['apps/mobile/src/ui/Chat.tsx', 'apps/mobile/src/ui/PlayLog.tsx', 'apps/mobile/src/ui/LiveCard.tsx', 'apps/mobile/src/ui/PlayerPicker.tsx', 'apps/mobile/src/screens/Draft.tsx',
+    // v0.712.10: the smaller screens. ContestCards stays off: its one raw
+    // size is a deliberate 1pt spacer, not text anyone reads.
+    'apps/mobile/src/ui/ClassicBoard.tsx', 'apps/mobile/src/ui/FieldView.tsx', 'apps/mobile/src/ui/PowerupHand.tsx',
+    'apps/mobile/src/ui/ShopModal.tsx', 'apps/mobile/src/ui/SettingsModal.tsx', 'apps/mobile/src/ui/PlayerCardSheet.tsx',
+    'apps/mobile/src/ui/CollegeCardSheet.tsx', 'apps/mobile/src/ui/DevyShares.tsx', 'apps/mobile/src/ui/Duel.tsx',
+    'apps/mobile/src/ui/SetupRow.tsx', 'apps/mobile/src/ui/RosterPanel.tsx', 'apps/mobile/src/ui/cards.tsx',
+    'apps/mobile/src/screens/Recruit.tsx', 'apps/mobile/src/screens/ContestSquad.tsx', 'apps/mobile/src/screens/LeagueHome.tsx'];
   for (const f of FLOORED) {
     const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
     const raw = [...src.matchAll(/fontSize: ([0-9]+(?:\.[0-9]+)?)[,} ]/g)].map((m) => Number(m[1])).filter((n) => n < 9);
