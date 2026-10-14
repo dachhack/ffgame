@@ -354,7 +354,15 @@ async function main() {
       const week = Number(args.find((a) => !a.startsWith('--')));
       if (!Number.isFinite(week)) { console.error('usage: restamp <week> [season] [--league=<uuid>] [--no-report]'); break; }
       const season = args.filter((a) => !a.startsWith('--'))[1] ?? config.season;
-      const leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      let leagueId = (args.find((a) => a.startsWith('--league=')) ?? '').slice(9) || null;
+      // THE PREFIX THE LOGS PRINT (v0.707.1): the query errands show a league as its first eight characters
+      // (no ids in a public log), and that is what a follow-up errand has to name. One match, or nothing.
+      if (leagueId && leagueId.length < 36) {
+        const { data: lgs } = await db().from('league').select('id').eq('season', season);
+        const hits = (lgs ?? []).filter((l) => String(l.id).startsWith(leagueId));
+        if (hits.length !== 1) { console.error(`restamp: --league=${leagueId} matches ${hits.length} leagues of ${season}; refusing`); break; }
+        leagueId = hits[0].id;
+      }
       // ── CLASSIC ONLY, UNLESS SOMEBODY INSISTS (v0.475.0) ──────────────────
       // A DRIP week is not reproducible after the fact. It was resolved live
       // against power-ups that were bought and spent at the time, buffs armed

@@ -1,0 +1,7 @@
+{
+  "mode": "restamp",
+  "week": 5,
+  "confirm": "RESTAMP",
+  "league": "e5ed6f65",
+  "why": "Test Wedding (the founder's test league) scored its human seat 0.0 in week 5: the league drafted after the lock, the seat had no sealed rows, and the resolver scored it as an empty lineup instead of the unmanaged fill (v0.707.1). Re-resolve week 5 for that one league under the fixed resolver. The wedding row is not touched."
+}

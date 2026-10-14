@@ -244,6 +244,36 @@ shares (web; phone shares), the wedding card and its composer (web; your
 side first). Left alone: sentences ("YOU LEAD", "YOUR MOVE"), the demo
 board's marketing YOU tag, the dev room. All JS; no iPhone build.
 
+### v0.707.1 — A team drafted after the lock still fields a lineup
+
+> - A league that drafts after the week has locked no longer scores its human seats as empty lineups: a seat with no lineup set gets its best lineup, the same as the computer-run seats, and the week's first fill lands even mid-week for players whose games haven't started.
+
+Founder, on his test league: "Test Wedding is calculating my score as 0."
+Week 5, seat 1: 0.0 against 89.4, every card 0.0, and the week-5 shotgun
+wedding married on it. Ops 053 and 055 showed why: the league was made
+Oct 8 at 21:15 UTC, the week locked at 00:15 and the draft finished at
+00:30. Every week-5 lineup row is the raw roster (slot 0); the seven CPU
+seats got sealed rows on the auto-slot's agent path at 00:30, the human
+seat got none (`if (live) continue;` — "a human's seat is filled at lock
+and then left to the human") — and at resolve that seat reached the
+classic branch through the drip fallback (`aiSide`), whose non-null
+drip-shaped picks made `picks != null` read as "stored a lineup", so the
+side scored its stored nothing instead of the unmanaged fill.
+
+- `server/src/resolve.js`: a classic side "has a lineup" when it has
+  `'wk'` rows (or the database says it stored some), not when the drip
+  fallback handed it an array. A seat with no rows at all is unmanaged
+  and the engine fields its best projected lineup, as designed in v0.248.0.
+- `server/src/lock.js`: the auto-slot gives a human seat with NO rows at
+  all its first fill even on a live week, on the agent path's rails (only
+  players whose games have not started); a seat with any row is still
+  left alone mid-week.
+- `server/src/cli.js`: `restamp --league=` accepts the eight-character
+  prefix the public logs print (one match, or it refuses).
+- Ops 056 re-stamps Test Wedding's week 5. The wedding row (married,
+  winner seat 8, Kelce + McConkey for McLaurin + Juwan Johnson) is NOT
+  touched by a re-stamp; whether to annul it is the founder's call.
+
 ### v0.707.0 — The Rams are on the board
 
 > - Matthew Stafford, Puka Nacua and every other Ram are on the weekly salary board and in Bullseye from this week: the board had been comparing the Rams' two spellings (LAR on one feed, LA on the slate) and skipping them all.
