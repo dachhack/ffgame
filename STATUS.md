@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.708.1 — Notifications, part 2: league deadlines and results
+
+> - ⏰ League deadlines: the evening before your league's waiver run, the week the trade deadline closes, and contract lengths locking within a day. Never between 9 PM and 9 AM ET.
+> - 🏁 Each week's final in your season leagues: won or lost, and the score.
+> - 🏈 The sweat: half an hour before the week's last game day (usually Monday night), the score so far and who each side still has to play.
+
+Part 2 of 4 of the notification additions (founder: "League event timing").
+Worker `push.js`, `detectTimingAndResults` (every 5 minutes, season
+leagues only — weekly squad leagues have their own recap):
+- `waiverRemindRows`: the league's weekly run from `league_week_turnover`
+  (source 'run' only); a run before noon is flagged 8 PM ET the evening
+  before, a later one 3 hours ahead (`waiverRemindAt`, `nextRunMs`).
+- `tradeDeadlineRows`: once, when the live week reaches
+  `trade_deadline_week` ("trades close when week N's games are over").
+- `contractLockRows`: draft completed + `contract_lock_hours` (72 default)
+  within a day, to seats that haven't locked.
+- `finalRows`: each side of a final, lower-wins aware; only weeks whose last
+  game is after Oct 14 (`RESULTS_FROM_MS`, so week 5 doesn't echo) and within
+  three days.
+- `sweatRows`: 30 minutes before the week's last game day
+  (`lastDayStartMs`), score from `matchup_state`, starters still to play.
+- `quietHours`: timing and finals wait out 9 PM – 9 AM ET.
+Not built, and why: a keeper deadline (the app has none) and clinched /
+eliminated (no playoff-clinch math exists yet). Tests:
+`server/test/push-season.mjs` (34 now). No migration (0498 took the kinds);
+no iPhone build.
+
 ### v0.708.0 — Notifications, part 1: starter ruled out, the lineup check, a switch for each
 
 > - 🚑 When a starter in any of your season leagues is ruled OUT, doubtful or put on IR before his game, you hear about it with time to swap. Weekly squad leagues already had this.

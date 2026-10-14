@@ -837,6 +837,197 @@ async function detectRosterQc() {
   await enqueue(rows);
 }
 
+// ── LEAGUE TIMING AND RESULTS (v0.708.1) ────────────────────────────────────
+// Part 2 of the founder's notification list: "League event timing" and the
+// week's outcome. Each type is its own switch (core pushKinds: timing, result).
+//   ⏰ timing: the weekly waiver run (the evening before, 8 PM ET, for a run
+//      before noon; three hours before, for a later one), the trade deadline's
+//      week, and contract lengths locking within a day;
+//   🏁 result: the final each week (season leagues — weekly squad leagues have
+//      their own recap), and the sweat before the week's last game day.
+// League timing never pages at night: between 9 PM and 9 AM ET it waits.
+const etHour = (ms) => +Object.fromEntries(ET_PARTS.formatToParts(new Date(ms)).map((x) => [x.type, x.value])).hour;
+const etDate = (ms) => { const p = Object.fromEntries(ET_PARTS.formatToParts(new Date(ms)).map((x) => [x.type, x.value])); return `${p.year}-${p.month}-${p.day}`; };
+/** PURE: 9 PM – 9 AM ET is quiet for the timing and result pushes. */
+export const quietHours = (ms) => { const h = etHour(ms); return h >= 21 || h < 9; };
+/** PURE: the next weekly run at `dow` (0 = Sunday) and `minute` past midnight ET, after `now`. */
+export function nextRunMs(dow, minute, now) {
+  const p = Object.fromEntries(ET_PARTS.formatToParts(new Date(now)).map((x) => [x.type, x.value]));
+  const today = new Date(Date.UTC(+p.year, +p.month - 1, +p.day)).getUTCDay();
+  for (let add = 0; add <= 7; add++) {
+    if ((today + add) % 7 !== dow) continue;
+    const at = etToUtc(+p.year, +p.month, +p.day + add, 0) + minute * 60_000;
+    if (at > now) return at;
+  }
+  return etToUtc(+p.year, +p.month, +p.day + 7, 0) + minute * 60_000;
+}
+/** PURE: when to remind about a waiver run — 8 PM ET the evening before a run before noon, else 3 hours ahead. */
+export const waiverRemindAt = (runMs) => (etHour(runMs) < 12 ? nightBeforeMs(runMs) : runMs - 3 * 3_600_000);
+/** PURE: ⏰ the waiver-run reminder rows for one league's members. */
+export function waiverRemindRows(league, members, runMs, now) {
+  if (now < waiverRemindAt(runMs) || now >= runMs) return [];
+  return members.map((uid) => ({
+    app_user_id: uid, kind: 'timing',
+    title: `⏰ ${league.name}: waivers run ${etLabel(runMs)} ET`,
+    body: 'Get your claims in before the run.',
+    data: { league_id: league.id, open: 'team' },
+    dedupe_key: `timing:waivers:${league.id}:${etDate(runMs)}:${uid}`,
+  }));
+}
+/** PURE: ⏰ the trade deadline's week has arrived. */
+export function tradeDeadlineRows(league, members, liveWeek, deadlineWeek) {
+  if (deadlineWeek == null || liveWeek !== deadlineWeek) return [];
+  return members.map((uid) => ({
+    app_user_id: uid, kind: 'timing',
+    title: `⏰ ${league.name}: trade deadline week`,
+    body: `Trades close when week ${deadlineWeek}'s games are over.`,
+    data: { league_id: league.id, open: 'team' },
+    dedupe_key: `timing:tradedl:${league.id}:${deadlineWeek}:${uid}`,
+  }));
+}
+/** PURE: ⏰ contract lengths lock within a day — the seats that haven't locked. */
+export function contractLockRows(league, unlocked, deadlineMs, now) {
+  if (!(deadlineMs > now + 3_600_000 && deadlineMs - now <= 86_400_000)) return [];
+  return unlocked.map((uid) => ({
+    app_user_id: uid, kind: 'timing',
+    title: `⏰ ${league.name}: contracts lock ${etLabel(deadlineMs)} ET`,
+    body: 'Set your contract lengths on 📜 CONTRACTS — an unset deal stays 1 year.',
+    data: { league_id: league.id, open: 'team' },
+    dedupe_key: `timing:contracts:${league.id}:${etDate(deadlineMs)}:${uid}`,
+  }));
+}
+const pts = (x) => Number(x ?? 0).toFixed(2);
+/** PURE: 🏁 a final, told to each side's owner. `lowerWins` for golf and a one-total Bullseye. */
+export function finalRows(league, m, names, owners, lowerWins) {
+  const rows = [];
+  const h = Number(m.home_final), a = Number(m.away_final);
+  if (!Number.isFinite(h) || !Number.isFinite(a)) return rows;
+  for (const [rid, mine, theirs, oppRid] of [[m.home_roster_id, h, a, m.away_roster_id], [m.away_roster_id, a, h, m.home_roster_id]]) {
+    const uid = owners.get(`${league.id}:${rid}`);
+    if (!uid) continue;
+    const word = mine === theirs ? 'Tied' : (lowerWins ? mine < theirs : mine > theirs) ? 'Won' : 'Lost';
+    rows.push({
+      app_user_id: uid, kind: 'result',
+      title: `🏁 ${league.name}: ${word} week ${m.week}`,
+      body: `${names.get(rid) ?? 'Your team'} ${pts(mine)} – ${pts(theirs)} ${names.get(oppRid) ?? 'opponent'}`,
+      data: { league_id: league.id, open: 'picks' },
+      dedupe_key: `result:final:${m.id}:${uid}`,
+    });
+  }
+  return rows;
+}
+/** PURE: the instant the week's last game day starts — its first kickoff on the ET date of the week's last kickoff. */
+export function lastDayStartMs(kicks) {
+  const ks = [...kicks].filter((k) => Number.isFinite(k));
+  if (!ks.length) return null;
+  const last = Math.max(...ks), d = etDate(last);
+  return Math.min(...ks.filter((k) => etDate(k) === d));
+}
+/** PURE: 🏁 the sweat — 30 minutes before the last game day, each open matchup's score and who is still to play. */
+export function sweatRows(league, m, score, seatsByRid, names, kicks, dayStart, now) {
+  if (dayStart == null || now < dayStart - 30 * 60_000 || now >= dayStart) return [];
+  const left = (rid) => (seatsByRid.get(rid)?.starters ?? []).filter((st) => { const k = st.team ? kicks.get(st.team) : undefined; return Number.isFinite(k) && k >= dayStart; });
+  const lh = left(m.home_roster_id), la = left(m.away_roster_id);
+  if (!lh.length && !la.length) return [];
+  const day = new Date(dayStart).toLocaleString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
+  const rows = [];
+  for (const [rid, mine, theirs, oppRid, myLeft, theirLeft] of [[m.home_roster_id, score.home, score.away, m.away_roster_id, lh, la], [m.away_roster_id, score.away, score.home, m.home_roster_id, la, lh]]) {
+    const seat = seatsByRid.get(rid);
+    if (!seat?.uid) continue;
+    const yours = myLeft.length ? myLeft.slice(0, 3).map((st) => `${st.name}${st.team ? ` (${st.team})` : ''}`).join(', ') + (myLeft.length > 3 ? ` +${myLeft.length - 3}` : '') : 'nobody';
+    rows.push({
+      app_user_id: seat.uid, kind: 'result',
+      title: `🏈 ${league.name}: ${day} night`,
+      body: `${names.get(rid) ?? 'Your team'} ${pts(mine)} – ${pts(theirs)} ${names.get(oppRid) ?? 'opponent'}. Still to play — yours: ${yours}; theirs: ${theirLeft.length}.`,
+      data: { league_id: league.id, open: 'picks' },
+      dedupe_key: `result:sweat:${m.id}:${seat.uid}`,
+    });
+  }
+  return rows;
+}
+
+// Finals are announced from week 6, 2026 on (v0.708.1 shipped after week 5 had settled — no late echoes).
+const RESULTS_FROM_MS = Date.parse('2026-10-14T00:00:00Z');
+let timingAt = 0;
+async function detectTimingAndResults() {
+  const now = Date.now();
+  if (now - timingAt < 5 * 60_000) return;
+  timingAt = now;
+  const wk = await upcomingWeek(now);
+  const season = wk?.season ?? String(new Date(now).getUTCFullYear());
+  const { data: leagues } = await db().from('league').select('id, name, kind, provider, is_mock, settings_json').eq('season', season);
+  const lgs = (leagues ?? []).filter((l) => !WEEKLY_KINDS.has(l.kind) && !l.is_mock);
+  if (!lgs.length) return;
+  const rows = [];
+  const quiet = quietHours(now);
+  const lastKick = new Map();   // week → its last kickoff, read once a sweep
+  const lastKickOf = async (w) => {
+    if (!lastKick.has(w)) {
+      const { data: g } = await db().from('nfl_slate').select('kickoff').eq('season', season).eq('week', w).not('kickoff', 'is', null);
+      lastKick.set(w, Math.max(...(g ?? []).map((x) => Date.parse(x.kickoff))));
+    }
+    return lastKick.get(w);
+  };
+  let sweatSeats = null;        // the season's lineups, read once and only on sweat night
+  for (const lg of lgs) {
+    const s = lg.settings_json ?? {};
+    const { data: mem } = await db().from('league_membership').select('sleeper_roster_id, app_user_id, team_name, contracts_locked').eq('league_id', lg.id).eq('enrolled', true);
+    const members = (mem ?? []).filter((m) => m.app_user_id);
+    if (!members.length) continue;
+    const uids = [...new Set(members.map((m) => m.app_user_id))];
+    const { data: ms } = await db().from('matchup').select('id, week, status, home_roster_id, away_roster_id, home_final, away_final').eq('league_id', lg.id);
+    const open = (ms ?? []).filter((m) => m.status !== 'final');
+    const liveWeek = open.length ? Math.min(...open.map((m) => m.week)) : null;
+    if (!quiet && liveWeek != null) {
+      // ⏰ the waiver run — only a league whose turnover is a real run
+      if ((lg.provider ?? 'sleeper') === 'native') {
+        const { data: t } = await db().rpc('league_week_turnover', { p_league_id: lg.id });
+        if (t?.source === 'run' && t.dow != null) rows.push(...waiverRemindRows(lg, uids, nextRunMs(Number(t.dow), Number(t.minute ?? 0), now), now));
+      }
+      // ⏰ the trade deadline's week
+      const dl = s.trade_deadline_week != null && s.trade_deadline_week !== '' ? Number(s.trade_deadline_week) : null;
+      rows.push(...tradeDeadlineRows(lg, uids, liveWeek, dl));
+    }
+    // ⏰ contracts lock within a day (any time of year — it follows the draft)
+    if (!quiet && s.salary_cap != null) {
+      const { data: d } = await db().from('draft').select('completed_at').eq('league_id', lg.id).maybeSingle();
+      if (d?.completed_at) {
+        const dlMs = Date.parse(d.completed_at) + (Number(s.contract_lock_hours) || 72) * 3_600_000;
+        rows.push(...contractLockRows(lg, [...new Set(members.filter((m) => !m.contracts_locked).map((m) => m.app_user_id))], dlMs, now));
+      }
+    }
+    const names = new Map(members.map((m) => [m.sleeper_roster_id, m.team_name]));
+    const owners = new Map(members.map((m) => [`${lg.id}:${m.sleeper_roster_id}`, m.app_user_id]));
+    const lowerWins = s.golf === true || s.bullseye === 'total';
+    // 🏁 finals of a week that ended within three days (and after RESULTS_FROM)
+    if (!quiet) {
+      const finals = (ms ?? []).filter((m) => m.status === 'final');
+      const weeks = [...new Set(finals.map((m) => m.week))];
+      for (const w of weeks) {
+        const last = await lastKickOf(w);
+        if (!Number.isFinite(last) || last < RESULTS_FROM_MS || now - last > 3 * 86_400_000) continue;
+        for (const m of finals.filter((x) => x.week === w)) rows.push(...finalRows(lg, m, names, owners, lowerWins));
+      }
+    }
+    // 🏁 the sweat before the week's last game day
+    if (wk && liveWeek === wk.week) {
+      const dayStart = lastDayStartMs(wk.kicks.values());
+      if (dayStart != null && now >= dayStart - 30 * 60_000 && now < dayStart) {
+        sweatSeats ??= await seasonSeats(wk.season, wk.week);
+        const seats = sweatSeats.filter((x) => x.league_id === lg.id);
+        const byRid = new Map(seats.map((x) => [x.roster_id, x]));
+        for (const m of open.filter((x) => x.week === wk.week)) {
+          const { data: st } = await db().from('matchup_state').select('home_score, away_score').eq('matchup_id', m.id);
+          const score = { home: (st ?? []).reduce((a, r) => a + Number(r.home_score ?? 0), 0), away: (st ?? []).reduce((a, r) => a + Number(r.away_score ?? 0), 0) };
+          rows.push(...sweatRows(lg, m, score, byRid, names, wk.kicks, dayStart, now));
+        }
+      }
+    }
+  }
+  if (rows.length) log(`timing & results: ${rows.length} push${rows.length === 1 ? '' : 'es'}`);
+  await enqueue(rows);
+}
+
 async function detectContestLock() {
   const { data: slate } = await db().from('nfl_slate').select('season, week, kickoff').not('kickoff', 'is', null);
   const now = Date.now();
@@ -1084,6 +1275,7 @@ export async function sweepPush() {
   await detectRuledOut().catch((e) => log('ruled-out detector error', e.message));
   await detectSeasonStatus().catch((e) => log('season status detector error', e.message));
   await detectRosterQc().catch((e) => log('lineup check detector error', e.message));
+  await detectTimingAndResults().catch((e) => log('timing & results detector error', e.message));
   try { await detectWidget(); } catch (e) { log('detectWidget', e.message); }
   await detectChopped().catch((e) => log('chopped detector error', e.message));
   await detectBitten().catch((e) => log('bitten detector error', e.message));
