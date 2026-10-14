@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/test-wedding-rows.sql",
+  "why": "054 named a column sealed_pick does not have (lock_at); the same read, fixed. Read only."
+}
