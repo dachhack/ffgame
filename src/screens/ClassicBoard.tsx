@@ -38,6 +38,7 @@ import {
   nativeRosters, loadLiveInjuries, playoffState,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
+import { boardStashSets } from '@drip/core/data/copies';
 import { PlayerImg, PosPill, InjuryNow, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
 import { VampirePanel } from './VampirePanel';
 import { SportWeekPanel } from './SportWeekPanel';
@@ -694,8 +695,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         setMatchup(m);
         weekMatchups(r.leagueId, m.week).then(setWeekList).catch(() => {});
         nativeRosters(r.leagueId).then((rows) => {
-          setStashed(new Set(rows.filter((x) => x.spot && x.spot !== 'active').map((x) => x.slug)));
-          setOnIr(new Set(rows.filter((x) => x.spot === 'ir' || x.spot === 'out').map((x) => x.slug)));   // OUT (0307) is the injured shelf too
+          // COPIES (0500): only this matchup's two teams, my copy first.
+          const sets = boardStashSets(rows, [m.home_roster_id, m.away_roster_id], r.rosterId);
+          setStashed(sets.stashed);
+          setOnIr(sets.onIr);
           setStashReady(true);
         }).catch(() => {});
         leagueGameMode(r.leagueId).then(async (gm) => {

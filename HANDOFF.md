@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-14 · Build `v0.708.4` · migrations through `0500` (next `0501`) · ops errands through `052` (next `053`)_
+_Last updated: 2026-10-14 · Build `v0.710.0` · migrations through `0501` (next `0502`) · ops errands through `052` (next `053`)_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -8,6 +8,28 @@ _Last updated: 2026-10-14 · Build `v0.708.4` · migrations through `0500` (next
 > behind it, newest section first. Everything below the v0.375.3 section's
 > design decisions still hold, but only the kickoff prompt's pick-up list is
 > current.
+
+## The copies + relegation arc (v0.709.0 →, Oct 14)
+
+Founder: "multiple copies of all players as an option. 1-4 copies" and "a
+customizable relegation system … usually used for large leagues."
+
+- **Copies.** `settings_json.copies` (1–4), set by `set_league_copies`
+  before the draft only; refused with auction, contracts, devy, guillotine,
+  vampire, shotgun wedding (`_copies_conflict`). `native_roster` keys on
+  (league, roster, slug). Server helpers: `league_copies`, `_copy_open`,
+  `_copy_holder`, `_copy_refusal`. Client: `@drip/core/data/copies`.
+  - v0.709.0 (0500): the database. v0.710.0 (0501): apps + worker.
+  - **Next — part 3, stacking:** a commish option letting one team hold
+    more than one copy (founder: "No by default"). Needs a row id on
+    `native_roster` (the PK can't stay (league, roster, slug)).
+  - Known limit: the matchup board and multi-team trade builder key by
+    slug, so when BOTH teams in one matchup/deal hold him, "my copy" wins.
+- **Relegation (not started).** Founder's picks: tiers of linked leagues;
+  methods W-L standings, total points, playoff result, promotion playoff
+  (commish picks); roster mode a commish setting with all three: redraft
+  (managers move), inherit the seat's roster, take your roster along.
+  `rollover_league` (0411 → 0368 body) makes the new season's league row.
 
 ## The notifications arc (v0.707.1 → v0.708.4, Oct 13–14)
 

@@ -244,7 +244,9 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
   const pickKey = (p: { season: string; round: number; orig: number }) => `${p.season}/${p.round}/${p.orig}`;
   /** The next team round the ring — the carousel most of these deals are. */
   const nextSeat = (rid: number) => teamsIn[(teamsIn.indexOf(rid) + 1) % teamsIn.length];
-  const holderOf = (slug: string) => rosters.find((r) => r.slug === slug)?.roster_id ?? null;
+  // COPIES (0500): several teams can hold him — the one in this deal sends him.
+  const holderOf = (slug: string) => (rosters.find((r) => r.slug === slug && teamsIn.includes(r.roster_id))
+    ?? rosters.find((r) => r.slug === slug))?.roster_id ?? null;
   const multiAssets = Object.keys(dest).length + Object.keys(pickDest).length;
   // 0328: WHAT IS THIS WORTH — computed here rather than fetched, because the
   // projections and the league's scoring both live in core and the answer has
