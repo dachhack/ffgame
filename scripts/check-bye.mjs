@@ -111,6 +111,12 @@ for (const f of ['apps/mobile/src/ui/LeagueExtras.tsx', 'src/screens/GuillotineP
   const app = read('apps/mobile/src/ui/ClassicBoard.tsx');
   ok('board: the pre-kick line leads with the opponent', /\[e\.opponent, e\.kickoff\]\.filter\(Boolean\)\.join\(' · '\)/.test(app));
   ok('board: the team line carries the bye', /byeTag\(e\.team\)/.test(app));
+  // The web board (mobile web, and the web's My Team variant): opponent first,
+  // one line, no kickoff-then-opponent left anywhere.
+  const web = read('src/screens/ClassicBoard.tsx');
+  ok('web board: the pre-kick line leads with the opponent', /function preGameLine[\s\S]{0,200}\[e\.opponent, e\.kickoff\]\.filter\(Boolean\)\.join\(' · '\)/.test(web));
+  ok('web board: no line still reads kickoff then opponent', !/kickoff \?\? ''\} \$\{[a-z]+\.opponent/.test(web));
+  ok('web board: the team line carries the bye', /byeTag\(e\.team\)/.test(web));
   const team = read('apps/mobile/src/screens/Team.tsx');
   ok('my team: roster rows carry the bye and the week\'s opponent', /byeTag\(p\.team\)/.test(team) && /slateOppLabel\(slate, p\.team\)/.test(team));
 }

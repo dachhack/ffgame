@@ -22,9 +22,9 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.712.4 — The opponent and the bye week on every phone row
+### v0.712.4 — The opponent and the bye week on every row
 
-> - On the phone's matchup board the opponent now comes first ("vs HOU · Sun, 9:30 AM"), so it no longer gets cut off.
+> - On the matchup board, in the app and on the web, the opponent now comes first ("vs HOU · Sun, 9:30 AM"), so it no longer gets cut off.
 > - Every player shows his bye week beside his team, like "JAX (7)", and the My Team rows show this week's opponent too.
 
 Founder, beside a Sleeper screenshot ("RB • CLE (11)"). Core `liveApi`:
@@ -35,8 +35,12 @@ slate it gives all 32 teams a bye and matches Sleeper's (CLE 11, NYG 8,
 CHI 10, DAL 14). Phone `ClassicBoard`: `gameLineOf` leads with the opponent;
 the team line and your own row carry the bye. Phone `Team`: roster rows
 carry the bye and `slateOppLabel` for the open week (the wire's slate), and
-so do the wire's rows. check:bye +9. Web unchanged. JavaScript only; no
-iPhone build (check:ios-runtime).
+so do the wire's rows. Web `ClassicBoard` (founder: "Mobile web could use
+a fix to not get truncated as well. Let's not do anything that causes
+wrap"): `preGameLine` leads with the opponent on the game card, the picker,
+the bench swap and the My Team variant, every one still a single
+ellipsized line; the team line and your own row carry the bye. check:bye
++12. JavaScript only; no iPhone build (check:ios-runtime).
 
 ### v0.712.3 — The injury table loses its 1,050 junk rows
 

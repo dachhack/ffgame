@@ -35,7 +35,7 @@ import {
   liveSlate, leagueStandings,
   leagueGameMode, bullseyeCard, sportLeagueGames, sportLeagueMarket, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
-  nativeRosters, loadLiveInjuries, playoffState,
+  nativeRosters, loadLiveInjuries, ensureTeamByes, byeTag, playoffState,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
 import { boardStashSets } from '@drip/core/data/copies';
@@ -67,6 +67,14 @@ import { nextMatchupSeat, matchupOrdinal } from '@drip/core/data/matchupBrowse';
  *  bare figure beside "Yet to play" is ambiguous exactly when the manager is
  *  deciding something: before kickoff it reads `proj 15.3` in the quiet colour;
  *  once the ball is live it's points, in full. */
+/** The pre-kick game line, OPPONENT FIRST (v0.712.4, founder: "make sure the
+ *  opponent is visible"): "vs CHI · Sun 1:00 PM". Kickoff-then-opponent ran
+ *  out of card at "Sun 1:00 PM vs CH…"; one line still, and now it's the
+ *  time that ellipsizes. The app's gameLineOf says the same. */
+function preGameLine(e: { opponent?: string | null; kickoff?: string | null }): string {
+  return [e.opponent, e.kickoff].filter(Boolean).join(' · ') || 'no game listed';
+}
+
 function GameCard({ e, align, onOpen, stashed }: { e: BoardEntry | null; align: 'left' | 'right'; onOpen?: () => void;
   /** An IR row (v0.427.1, founder: "Stribling is on IR and has a
    *  projection"; v0.427.2 narrowed it from taxi too — "taxi spot players
@@ -102,7 +110,7 @@ function GameCard({ e, align, onOpen, stashed }: { e: BoardEntry | null; align: 
         <>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
             <div className="mono" style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left', fontSize: 10, color: bye ? 'var(--warn, #c66)' : 'var(--dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {bye ? 'BYE' : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed')}
+              {bye ? 'BYE' : preGameLine(e)}
               {roof && <span title={ROOF_LABEL[roof]} style={{ marginLeft: 5 }}>🏟</span>}
               {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
             </div>
@@ -472,6 +480,8 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action, empty }: {
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <span style={{ color: `var(--pos-${e.pos}-fg, var(--dim))`, fontWeight: 700 }}>{e.pos}</span>
           {(e.team || collegeNameFor(e.slug)?.school) ? ` · ${e.team || collegeNameFor(e.slug)?.school}` : ''}
+          {/* v0.712.4: the bye week beside the team, Sleeper's "CLE (11)". */}
+          {e.team ? byeTag(e.team) : ''}
           {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
         </span>
         {action}
@@ -769,6 +779,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         // report, so one player wore last year's Q and everybody else wore
         // nothing. It is a module cache, so the version bump is what redraws.
         loadLiveInjuries(m.week).then((n) => { if (n) setInjuryVer((v) => v + 1); }).catch(() => {});
+        // v0.712.4: the season's bye weeks, for the "(8)" beside each team.
+        ensureTeamByes().then((ok) => { if (ok) setInjuryVer((v) => v + 1); }).catch(() => {});
         // The last regular-season week — the playoff start minus one — so the
         // week stepper knows where the season ends.
         playoffState(r.leagueId).then((ps) => {
@@ -1688,7 +1700,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                 const game = !e ? 'no game listed'
                   : bye ? 'BYE'
                   : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
-                  : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
+                  : preGameLine(e);
                 const roof = e && !started && e.roof && e.roof !== 'open' ? e.roof : null;
                 const team = p.team || collegeNameFor(p.slug)?.school || '';
                 const g = grade && (e?.proj ?? 0) > 0 ? grade : null;
@@ -1761,7 +1773,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                 <div style={{ minWidth: 0 }}>
                   <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Start {me?.name ?? prettySlug(benchPick)}</div>
                   <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 3 }}>
-                    {me ? `${me.pos}${me.team ? ` · ${me.team}` : ''} · ${me.opponent === 'BYE' ? 'BYE' : (`${me.kickoff ?? ''} ${me.opponent ?? ''}`.trim() || 'no game listed')} · ${me.proj.toFixed(1)}` : ''}
+                    {me ? `${me.pos}${me.team ? ` · ${me.team}${byeTag(me.team)}` : ''} · ${me.opponent === 'BYE' ? 'BYE' : preGameLine(me)} · ${me.proj.toFixed(1)}` : ''}
                     <span style={{ color: 'var(--you)' }}> · pick a spot</span>
                   </div>
                 </div>
@@ -1787,7 +1799,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
                             {oe.name}<InjuryNow slug={occupant!} style={{ marginLeft: 5, verticalAlign: 'middle' }} />
                           </span>
                           <span className="mono" style={{ fontSize: 9, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {`${oe.proj.toFixed(1)} · ${oe.opponent === 'BYE' ? 'BYE' : (`${oe.kickoff ?? ''} ${oe.opponent ?? ''}`.trim() || 'no game listed')} → bench`}
+                            {`${oe.proj.toFixed(1)} · ${oe.opponent === 'BYE' ? 'BYE' : preGameLine(oe)} → bench`}
                           </span>
                         </>
                       ) : (
@@ -1823,7 +1835,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     const lineOf = (e: import('@drip/core/engine/matchupBoard').BoardEntry): string => {
       if (e.opponent === 'BYE') return 'BYE';
       if (e.state !== 'pre') return `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`;
-      return `${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed';
+      return preGameLine(e);
     };
     const pill = (pos: string[], label: string, on: boolean, onClick: () => void, auto = false, why: string | null = null) => (
       <button onClick={on ? onClick : why ? () => setSaveNote(why) : undefined} disabled={!on && !why} title={on ? `change ${label}` : why ?? label} aria-label={on ? `change ${label}` : why ?? label}
