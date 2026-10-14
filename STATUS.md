@@ -22,6 +22,34 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.6 — Every theme readable; the opponent's roster trouble stays theirs
+
+> - Text is easier to read in every theme: the quiet gray and the colored text (your team, the opponent, warnings) now meet the readability standard on light and dark backgrounds.
+> - The matchup board only warns about your own roster now; an opponent's illegal roster no longer puts a big alert on your screen.
+
+Founder: "check readability for all themes (dark/light/too small fonts)".
+Audit (scratch script, WCAG) of every text token on bg/surface/sh, plus
+position labels: 63 combinations under 4.5:1. Every text colour now reaches
+4.5:1 on bg and surface in all 9 themes, its HSL lightness moved with the hue
+kept: faint in neon #688080→#839B9B (3.16→4.51 on surface: the founder's
+teal), daylight →#726957, arctic →#5D6D82, clarity →#838B99, lumen →#646E7F;
+accents in daylight (you #19794C, opp #C43432, warn #2A69BF), arctic (you
+#0C796A, opp #C6324E, warn #1E6CC2), and opp in tactical/neon/dusk. faint
+stays quieter than dim everywhere. check:themes now holds every theme (21
+assertions fail on the old palette). Left: text on the raised `sh` panels in
+dark themes (3.9–4.4) and position labels at 4.0–4.5 (bold, over 3:1).
+
+Too-small fonts: the app's prims already compress small sizes (8.5→11), but
+125 raw <Text> sizes under 9 remain, unscaled on purpose on game surfaces:
+the home-screen widgets (34), LiveCard (20), Chat (10), PlayLog (9),
+PlayerPicker, Draft, the board's cells (5). Not changed here (a blanket bump
+would wrap or truncate); listed for a targeted pass.
+
+The illegal-roster banner (0360) shows only for your own roster, app and web
+(founder: "I don't need the full Alerts for when the opposing team doesn't
+have a legal roster. That's their problem"). check:bblegal +2. No iPhone
+build.
+
 ### v0.712.5 — The dark themes' quiet text is readable
 
 > - In the Prime (gold), Tactical, Dusk and Slate themes, the small gray text (game times, team codes, notes) is brighter and easier to read.

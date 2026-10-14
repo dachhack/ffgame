@@ -55,14 +55,14 @@ export const THEMES: Record<ThemeName, Theme> = {
   tactical: {
     bg: '#24221A', surface: '#2F2C23', sh: '#38352B', bd: '#3A3830', bdh: '#494638',
     text: '#F4F2E8', dim: '#9C9A8C', faint: '#959385', mid: '#ADAB9E', dimstrong: '#DEDCD1',
-    you: '#36E59B', opp: '#FF5266', warn: '#FFB23B', onAccent: '#161510',
+    you: '#36E59B', opp: '#FF566A', warn: '#FFB23B', onAccent: '#161510',
     fx: { nuke: '#FF4F62', erase: '#FF4F62', reset: '#FF9043', streak: '#B89AFF', mult: '#6AB6FF', compression: '#7FE38A', stop: '#B5B3A6', sys: '#8C8A7D' },
     pos: POS_TACTICAL,
   },
   neon: {
     bg: '#142A2E', surface: '#1C3338', sh: '#234047', bd: '#284A52', bdh: '#356068',
-    text: '#ECF5F3', dim: '#9DB4B1', faint: '#688080', mid: '#B9CFCC', dimstrong: '#D2E3E0',
-    you: '#34E5D9', opp: '#FF5274', warn: '#FFD24A', onAccent: '#0C1A1C',
+    text: '#ECF5F3', dim: '#9DB4B1', faint: '#839B9B', mid: '#B9CFCC', dimstrong: '#D2E3E0',
+    you: '#34E5D9', opp: '#FF5D7D', warn: '#FFD24A', onAccent: '#0C1A1C',
     fx: { nuke: '#FF3D88', erase: '#FF3D88', reset: '#FF7E5C', streak: '#C29BFF', mult: '#34E5D9', compression: '#7FE38A', stop: '#B0AEC6', sys: '#9290B0' },
     pos: {
       QB: { bg: '#0E2A48', fg: '#5BC4FF', bd: '#1B4775' },
@@ -111,8 +111,8 @@ export const THEMES: Record<ThemeName, Theme> = {
   // on a you/opp/warn fill, and dark enough to read as text on the light surface.
   daylight: {
     bg: '#EFEADd', surface: '#FBF9F2', sh: '#E7E1D2', bd: '#DAD3C2', bdh: '#C5BCA6',
-    text: '#241F16', dim: '#6E6857', faint: '#998F79', mid: '#4C4736', dimstrong: '#332E22',
-    you: '#1C8A57', opp: '#CC3A38', warn: '#2C6FC9', onAccent: '#FFFFFF',
+    text: '#241F16', dim: '#6E6857', faint: '#726957', mid: '#4C4736', dimstrong: '#332E22',
+    you: '#19794C', opp: '#C43432', warn: '#2A69BF', onAccent: '#FFFFFF',
     fx: { nuke: '#CB372D', erase: '#CB372D', reset: '#B7741B', streak: '#6A45C9', mult: '#2C6FC9', compression: '#1C8A4C', stop: '#7A6F58', sys: '#8A8270' },
     pos: {
       QB: { bg: '#DCEAFB', fg: '#1C5BA6', bd: '#A9CBF0' },
@@ -133,8 +133,8 @@ export const THEMES: Record<ThemeName, Theme> = {
   // Cool, crisp light mode.
   arctic: {
     bg: '#E9EEF3', surface: '#FBFCFE', sh: '#DEE5EE', bd: '#D1D9E3', bdh: '#BAC4D1',
-    text: '#1B2230', dim: '#5E6A7B', faint: '#94A1B2', mid: '#3D4757', dimstrong: '#28303D',
-    you: '#0E8C7A', opp: '#CC3552', warn: '#1F6FC7', onAccent: '#FFFFFF',
+    text: '#1B2230', dim: '#5E6A7B', faint: '#5D6D82', mid: '#3D4757', dimstrong: '#28303D',
+    you: '#0C796A', opp: '#C6324E', warn: '#1E6CC2', onAccent: '#FFFFFF',
     fx: { nuke: '#CF3450', erase: '#CF3450', reset: '#C2761F', streak: '#5A46C0', mult: '#1F6FC7', compression: '#0E8268', stop: '#67707D', sys: '#7C8794' },
     pos: {
       QB: { bg: '#DCEBFA', fg: '#1B5FA8', bd: '#AECDEE' },
@@ -157,7 +157,7 @@ export const THEMES: Record<ThemeName, Theme> = {
   dusk: {
     bg: '#211D15', surface: '#2C2820', sh: '#393327', bd: '#3A352A', bdh: '#4B4536',
     text: '#F3EFE2', dim: '#A79C87', faint: '#988E7A', mid: '#C6BCA6', dimstrong: '#DED6C2',
-    you: '#46C386', opp: '#ED5A50', warn: '#5C9CEF', onAccent: '#211D15',
+    you: '#46C386', opp: '#EE6056', warn: '#5C9CEF', onAccent: '#211D15',
     fx: { nuke: '#ED5A50', erase: '#ED5A50', reset: '#E0954A', streak: '#B69AE3', mult: '#5C9CEF', compression: '#5FC489', stop: '#A89E89', sys: '#7A7263' },
     pos: {
       QB: { bg: '#15263A', fg: '#7AB5FF', bd: '#243C5C' },
@@ -208,7 +208,7 @@ export const THEMES: Record<ThemeName, Theme> = {
   // hue. check-themes.mjs enforces all of it.
   clarity: {
     bg: '#171A20', surface: '#20242C', sh: '#292E38', bd: '#303645', bdh: '#404859',
-    text: '#F1F4F9', dim: '#9AA3B3', faint: '#6B7382', mid: '#B9C1CF', dimstrong: '#DCE1EA',
+    text: '#F1F4F9', dim: '#9AA3B3', faint: '#838B99', mid: '#B9C1CF', dimstrong: '#DCE1EA',
     you: '#56B4E9', opp: '#E8702E', warn: '#F0D048', onAccent: '#12151B',
     fx: { nuke: '#E8702E', erase: '#E8702E', reset: '#E69F00', streak: '#CC79A7', mult: '#56B4E9', compression: '#37C9A0', stop: '#9AA3B3', sys: '#7C8494' },
     pos: {
@@ -229,7 +229,7 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
   lumen: {
     bg: '#EDF0F5', surface: '#FCFDFF', sh: '#E2E6EE', bd: '#D3D9E4', bdh: '#B8C1D2',
-    text: '#1D222B', dim: '#5D6675', faint: '#8A93A3', mid: '#3F4959', dimstrong: '#2B323E',
+    text: '#1D222B', dim: '#5D6675', faint: '#646E7F', mid: '#3F4959', dimstrong: '#2B323E',
     // warn is a deep VIOLET, not amber: on a light ground all three accents
     // must run dark (one shared onAccent = white), and at those luminances a
     // yellow collapses into the vermillion under protan/deutan — the violet
