@@ -77,13 +77,20 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').repl
  *  manifest's two layers (dark outline under the team stroke, the fill on top),
  *  right-aligned at the anchor for a left-facing helmet, left-aligned for a
  *  right-facing one. Empty for no number. */
-export function helmetNumberSvg(team: string, num: number | null, facing: HelmetFacing = 'left'): string {
+/** How much bigger than the manifest's size the number is drawn (v0.713.2,
+ *  founder, from the phone: "Looks great. Let's try it with bigger numbers").
+ *  The manifest sized it to fit "88" in the decal zone at 256px; at the 30–54px
+ *  the app actually draws, it wants to be bolder. It stays pinned to the same
+ *  lower corner (the anchor), so it grows up and in over the shell. */
+export const HELMET_NUMBER_SCALE = 1.45;
+
+export function helmetNumberSvg(team: string, num: number | null, facing: HelmetFacing = 'left', scaleBy = HELMET_NUMBER_SCALE): string {
   if (num == null) return '';
   const S = HELMET_SPEC;
   const k = helmetTeam(team);
   const colors = (k && S.teams[k]) || { fill: '#FFFFFF', stroke: '#10131A' };
   const a = S.number.anchor[facing];
-  const fs = S.number.fontSize * S.size;          // font size in helmet px
+  const fs = S.number.fontSize * S.size * scaleBy; // font size in helmet px
   const scale = fs / S.unitsPerEm;
   const chars = String(num).split('');
   const width = chars.reduce((w, c) => w + S.digits[c].adv, 0) * scale;

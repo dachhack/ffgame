@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { setPlatform } from '../packages/core/src/platform';
 import { setMarkFree } from '../packages/core/src/data/markFree';
-import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg } from '../packages/core/src/data/helmets';
+import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg, HELMET_NUMBER_SCALE } from '../packages/core/src/data/helmets';
 import { HELMET_SPEC } from '../packages/core/src/data/helmetSpec';
 import { teamLogo, headshot, espnHeadshot } from '../packages/core/src/data/media';
 import { PLAYER_BIO } from '../packages/core/src/data/playerBio';
@@ -68,7 +68,9 @@ ok('number: no paint-order (react-native-svg ignores it)', !svg.includes('paint-
 ok('number: the dark outline is drawn first', svg.indexOf(HELMET_SPEC.number.outlineColor) < svg.indexOf(HELMET_SPEC.teams.KC.stroke));
 ok('number: the fill is the team\'s number colour', svg.includes(`fill="${HELMET_SPEC.teams.KC.fill}"`));
 // Left-facing: right-aligned, so the number ENDS at the anchor; right-facing starts there.
-const S = HELMET_SPEC.size, fs = HELMET_SPEC.number.fontSize * S, sc = fs / HELMET_SPEC.unitsPerEm;
+// v0.713.2: drawn 1.45× the manifest's size ("bigger numbers"), still pinned to the anchor.
+ok('number: drawn bigger than the manifest, within reason', HELMET_NUMBER_SCALE > 1 && HELMET_NUMBER_SCALE <= 1.5, HELMET_NUMBER_SCALE);
+const S = HELMET_SPEC.size, fs = HELMET_SPEC.number.fontSize * S * HELMET_NUMBER_SCALE, sc = fs / HELMET_SPEC.unitsPerEm;
 const firstX = (s) => Number(/translate\(([-\d.]+)/.exec(s)[1]);
 const w15 = (HELMET_SPEC.digits[1].adv + HELMET_SPEC.digits[5].adv) * sc;
 ok('number: left-facing ends at the anchor (lower right)', Math.abs(firstX(svg) + w15 - HELMET_SPEC.number.anchor.left.x * S) < 0.05);
