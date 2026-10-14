@@ -57,6 +57,15 @@ const dE = (h1, h2, sim) => {
 };
 
 // ── the assertions ──────────────────────────────────────────────────────────
+// v0.712.5: prime (the gold theme) is not one of the accessible pair, but its
+// faint carried game lines and team codes at 2.5:1, founder: "some of the fonts
+// in all gold are too dark to read well". Held to body-text contrast.
+{
+  const t = THEMES.prime;
+  for (const ground of ['bg', 'surface']) ok(`prime: faint ≥ 4.5:1 on ${ground}`, contrast(t.faint, t[ground]) >= 4.5);
+  ok('prime: faint stays quieter than dim', contrast(t.faint, t.surface) < contrast(t.dim, t.surface));
+}
+
 for (const name of ACCESSIBLE_THEMES) {
   const t = THEMES[name];
   ok(`${name}: theme exists`, !!t);

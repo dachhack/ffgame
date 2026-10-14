@@ -82,7 +82,10 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
   prime: {
     bg: '#252116', surface: '#302C20', sh: '#3B3527', bd: '#3C3729', bdh: '#4D4737',
-    text: '#F4F0E2', dim: '#ABA18D', faint: '#6F6857', mid: '#C7BDA8', dimstrong: '#DFD7C3',
+    // faint lifted from #6F6857 (2.5:1 on surface) in v0.712.5, founder: "some
+    // of the fonts in all gold are too dark to read well". It carries game
+    // lines, team codes and notes; now 4.5:1 on surface, still under dim.
+    text: '#F4F0E2', dim: '#ABA18D', faint: '#9C9380', mid: '#C7BDA8', dimstrong: '#DFD7C3',
     you: '#E2B254', opp: '#FF6E5C', warn: '#5BAEFF', onAccent: '#16140E',
     fx: { nuke: '#FF6E5C', erase: '#FF6E5C', reset: '#E29D4E', streak: '#B69AE3', mult: '#5BAEFF', compression: '#6FCC8A', stop: '#A89E89', sys: '#7A7263' },
     pos: {

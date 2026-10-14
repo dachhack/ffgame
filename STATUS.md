@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.5 — The gold theme's quiet text is readable
+
+> - In the gold (Prime) theme, the small gray text (game times, team codes, notes) is brighter and easier to read.
+
+Founder: "some of the fonts in all gold are too dark to read well". Prime's
+`faint` was #6F6857, 2.52:1 on its surface (the worst of any theme), and it
+carries the board's game lines, team codes and section notes. Now #9C9380
+(same warm gray, toward `dim`): 4.58:1 on surface, 4.0 on the darker panels,
+still quieter than `dim` (5.45). check:themes +3 (two fail on the old value).
+Tactical, dusk and slate have the same low `faint` (2.56–2.62) and are
+unchanged. Core theme only; no iPhone build.
+
 ### v0.712.4 — The opponent and the bye week on every row
 
 > - On the matchup board, in the app and on the web, the opponent now comes first ("vs HOU · Sun, 9:30 AM"), so it no longer gets cut off.
