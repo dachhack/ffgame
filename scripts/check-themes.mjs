@@ -106,5 +106,20 @@ for (const [name, t] of Object.entries(THEMES)) {
   ok(`${name}: you and opp are not the same color`, t.you.toLowerCase() !== t.opp.toLowerCase());
 }
 
+// NO RAW TINY TEXT, SCREEN BY SCREEN (v0.712.7). Founder: "start on the small
+// fonts". The app's prims already run sizes through fs() (8.5 → 11); raw
+// <Text> under 9 skipped it. Each screen moved onto fs() joins this list and
+// may not slip back. Single-line labels use numberOfLines + shrink-to-fit, so
+// the bigger type never wraps ("Let's not do anything that causes wrap").
+{
+  const { readFileSync } = await import('node:fs');
+  const FLOORED = ['apps/mobile/src/ui/Chat.tsx', 'apps/mobile/src/ui/PlayLog.tsx'];
+  for (const f of FLOORED) {
+    const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+    const raw = [...src.matchAll(/fontSize: ([0-9]+(?:\.[0-9]+)?)[,} ]/g)].map((m) => Number(m[1])).filter((n) => n < 9);
+    ok(`${f}: no raw font size under 9 (use fs())`, raw.length === 0);
+  }
+}
+
 if (fails) { console.log(`\n${fails} THEME ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL THEME ASSERTIONS PASSED');
