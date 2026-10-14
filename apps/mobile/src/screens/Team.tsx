@@ -59,7 +59,7 @@ import { FlagChip, InjuryBadge, InjuryNow } from '../ui/rosterGroup';
 import { setLeagueFlags, flagRulesFor, flagFor } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardsFromRows, type BullseyeCard, type BullseyeConfig } from '@drip/core/engine/bullseye';
-import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc } from '@drip/core/data/liveApi';
+import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWeekSlate, slateOppLabel, type SlateSpot } from '@drip/core/data/liveApi';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { weekTitle } from '@drip/core/data/nflSlate';
 import { normTeam } from '../../../../packages/core/src/data/teamCodes';
@@ -634,6 +634,13 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
     }).catch(() => { if (alive) setBullCard(null); });
     return () => { alive = false; };
   }, [leagueId, gm, bullCfg, myRoster]);
+  // THE WEEK'S OPPONENT ON THE WIRE (v0.707.7, founder: "Def on waivers doesn't show the opponent for the week").
+  const [wireSlate, setWireSlate] = useState<Map<string, SlateSpot> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    wireWeekSlate(leagueId).then((r) => { if (alive) setWireSlate(r.slate); }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId]);
   const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius) : null);
   const bySpot = useMemo(() => {
     const active = shown.filter((p) => p.spot === 'active');
@@ -1340,6 +1347,9 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
                   <PosPill pos={p.pos} size={7.5} />
                   <Mono size={8.5} tone="faint">{teamLabel(p)}</Mono>
+                  {!isCollegeSlug(p.slug) && !!slateOppLabel(wireSlate, p.team) && (
+                    <Mono size={8.5} tone="dim" weight="700">{slateOppLabel(wireSlate, p.team)}</Mono>
+                  )}
                   <InjuryNow slug={p.slug} size={7.5} />
                   <FlagChip slug={p.slug} size={7.5} />
                   {clears && <Mono size={8.5} tone="warn" weight="700">W · {clears.short}</Mono>}
