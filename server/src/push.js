@@ -25,6 +25,7 @@
 //             high-stakes, and both had only ever been a banner you had to
 //             open the app to find.
 import { contestConfigOf } from '../../packages/core/src/engine/contest.ts';
+import { pushKindOn } from '../../packages/core/src/data/pushKinds.ts';
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
@@ -34,6 +35,7 @@ import { sweepDevRoom } from './devRoom.js';
 import { slotsFor } from '../../packages/core/src/engine/matchup.ts';
 import { TeamMap } from '../../packages/core/src/data/teamCodes.ts';
 import { isCollegeWeek } from '../../packages/core/src/data/nflSlate.ts';
+import { starterSlugs } from '../../packages/core/src/data/poolEntry.ts';
 
 const log = (...a) => console.log(new Date().toISOString(), '[push]', ...a);
 
@@ -593,7 +595,7 @@ export function contestLockRows(league, week, band, lockMs, members, entered) {
 export function ruledOutRows(player, week, kickMs, holders, leagueNames, autoSub) {
   const kickLabel = new Date(kickMs).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
   return holders.filter((h) => h.app_user_id).map((h) => ({
-    app_user_id: h.app_user_id, kind: 'lineup',
+    app_user_id: h.app_user_id, kind: 'status',   // v0.708.0: its own switch
     title: `⚠ ${player.name} is ${player.status === 'IR' ? 'on IR' : 'OUT'}`,
     body: `He’s in your ${leagueNames.get(h.league_id) ?? 'league'} squad for week ${week}. Swap him before ${kickLabel} ET${autoSub.get(h.league_id) ? ', or he’s swapped for you just before kickoff' : ' — after that his spot scores nothing'}.`,
     data: { league_id: h.league_id, open: 'league' },
@@ -635,6 +637,206 @@ async function detectRuledOut() {
   if (rows.length) log(`ruled out: ${rows.length} squad${rows.length === 1 ? '' : 's'} told`);
   await enqueue(rows);
 }
+// ── SEASON LEAGUES: PLAYER STATUS AND THE LINEUP CHECK (v0.708.0) ───────────
+// Founder: "Any app notification additions we could do? … player status,
+// roster QC" → "Night before + 90 min before kick". detectRuledOut above only
+// ever watched the weekly contest squads; a classic, drip or imported season
+// league heard nothing when a starter went down. Three pushes, each only when
+// something is wrong:
+//   • 🚑 status: a starter is newly OUT, doubtful or on IR before his game;
+//   • 🩺 the night check: 8 PM ET the evening before a seat's first game —
+//     starters on a bye, out, doubtful or on IR, and spots left empty;
+//   • ⚠ the 90-minute check: a starter still OUT/doubtful/IR as his game's
+//     inactives post (inactives arrive as O on the injury feed).
+const ISSUE_STATUS = new Set(['O', 'IR', 'D']);
+const ISSUE_WORD = { O: 'OUT', IR: 'on IR', D: 'doubtful' };
+const ET_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+/** PURE: the instant of a wall-clock time in New York. */
+function etToUtc(y, mo, d, h) {
+  const guess = Date.UTC(y, mo - 1, d, h);
+  const p = Object.fromEntries(ET_PARTS.formatToParts(new Date(guess)).map((x) => [x.type, x.value]));
+  return guess + (guess - Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute));
+}
+/** PURE: 8 PM ET the evening before a kickoff. */
+export function nightBeforeMs(kickMs) {
+  const p = Object.fromEntries(ET_PARTS.formatToParts(new Date(kickMs)).map((x) => [x.type, x.value]));
+  return etToUtc(+p.year, +p.month, +p.day - 1, 20);
+}
+const etLabel = (ms) => new Date(ms).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+/** PURE: what is wrong with one starter, or null. `kicks` is a TeamMap of the week's kickoffs. */
+export function starterIssue(st, kicks, statusOf) {
+  if (st.team && kicks.size && !kicks.has(st.team)) return 'on a bye';
+  const s = String(statusOf.get(st.slug) ?? '').toUpperCase();
+  return ISSUE_STATUS.has(s) ? ISSUE_WORD[s] : null;
+}
+/** PURE: 🚑 one starter newly out/doubtful/IR — a row per seat holding him, before his kickoff. */
+export function seasonStatusRows(seats, hurt, kicks, week, now) {
+  const rows = [];
+  for (const seat of seats) for (const st of seat.starters) {
+    const s = String(hurt.get(st.slug) ?? '').toUpperCase();
+    if (!ISSUE_STATUS.has(s)) continue;
+    const kick = st.team ? kicks.get(st.team) : undefined;
+    if (!Number.isFinite(kick) || kick <= now) continue;
+    rows.push({
+      app_user_id: seat.uid, kind: 'status',
+      title: `🚑 ${st.name} is ${ISSUE_WORD[s]}`,
+      body: `He’s in your ${seat.league_name} lineup for week ${week}. Swap him before ${etLabel(kick)} ET.`,
+      data: { league_id: seat.league_id, open: 'picks', roster_id: seat.roster_id },
+      dedupe_key: `status:${seat.league_id}:${week}:${st.slug}:${s}:${seat.uid}:${seat.roster_id}`,
+    });
+  }
+  return rows;
+}
+/** PURE: 🩺 the night-before check — one row per seat with anything wrong, once its first game's eve has come. */
+export function rosterQcNightRows(seats, kicks, statusOf, week, now) {
+  const rows = [];
+  for (const seat of seats) {
+    const ks = seat.starters.map((st) => (st.team ? kicks.get(st.team) : undefined)).filter((k) => Number.isFinite(k));
+    if (!ks.length) continue;
+    const first = Math.min(...ks);
+    if (now < nightBeforeMs(first) || now >= first) continue;
+    const bad = seat.starters.map((st) => ({ st, why: starterIssue(st, kicks, statusOf) })).filter((x) => x.why);
+    const empties = seat.empties ?? 0;
+    if (!bad.length && !empties) continue;
+    const bits = bad.slice(0, 3).map((x) => `${x.st.name} ${x.why === 'on a bye' ? 'is on a bye' : `is ${x.why}`}`);
+    if (bad.length > 3) bits.push(`${bad.length - 3} more`);
+    if (empties) bits.push(`${empties} empty spot${empties === 1 ? '' : 's'}`);
+    rows.push({
+      app_user_id: seat.uid, kind: 'rosterqc',
+      title: `🩺 ${seat.league_name}: lineup check`,
+      body: `${bits.join(', ')}. Your first game kicks off ${etLabel(first)} ET.`,
+      data: { league_id: seat.league_id, open: 'picks', roster_id: seat.roster_id },
+      dedupe_key: `rosterqc:night:${seat.league_id}:${week}:${seat.uid}:${seat.roster_id}`,
+    });
+  }
+  return rows;
+}
+const INACTIVES_MS = 90 * 60_000;
+/** PURE: ⚠ the 90-minute check — a starter still out/doubtful/IR as his game's inactives post. */
+export function rosterQcKickRows(seats, kicks, statusOf, week, now) {
+  const rows = [];
+  for (const seat of seats) for (const st of seat.starters) {
+    const kick = st.team ? kicks.get(st.team) : undefined;
+    if (!Number.isFinite(kick) || kick <= now || kick - now > INACTIVES_MS) continue;
+    const s = String(statusOf.get(st.slug) ?? '').toUpperCase();
+    if (!ISSUE_STATUS.has(s)) continue;
+    rows.push({
+      app_user_id: seat.uid, kind: 'rosterqc',
+      title: `⚠ ${st.name} is ${ISSUE_WORD[s]} — kickoff in ${Math.max(1, Math.round((kick - now) / 60_000))} min`,
+      body: `He’s starting for you in ${seat.league_name}. Swap him before ${etLabel(kick)} ET.`,
+      data: { league_id: seat.league_id, open: 'picks', roster_id: seat.roster_id },
+      dedupe_key: `rosterqc:kick:${seat.league_id}:${week}:${st.slug}:${seat.uid}:${seat.roster_id}`,
+    });
+  }
+  return rows;
+}
+
+const WEEKLY_KINDS = new Set(['pod', 'weekly', 'dfs', 'bullseye']);   // core liveApi WEEKLY_KINDS: squad leagues, watched elsewhere
+/** Every human seat's starters in the season leagues for a week:
+ *  [{ league_id, league_name, roster_id, uid, starters: [{ slug, name, team }], empties }]. */
+async function seasonSeats(season, week) {
+  const { data: leagues } = await db().from('league').select('id, name, kind, provider, is_mock, settings_json').eq('season', String(season));
+  const lgs = (leagues ?? []).filter((l) => !WEEKLY_KINDS.has(l.kind) && !l.is_mock);
+  if (!lgs.length) return [];
+  const byId = new Map(lgs.map((l) => [l.id, l]));
+  const { data: ms } = await db().from('matchup').select('id, league_id, home_roster_id, away_roster_id, status')
+    .in('league_id', [...byId.keys()]).eq('week', week).neq('status', 'final');
+  if (!ms?.length) return [];
+  const pairs = [];
+  for (const m of ms) for (const r of [m.home_roster_id, m.away_roster_id]) if (r != null) pairs.push([m.league_id, r, m.id]);
+  const owners = await ownersFor(pairs.map(([l, r]) => [l, r]));
+  const seats = [];
+  for (const [lid, rid, mid] of pairs) {
+    const uid = owners.get(`${lid}:${rid}`);
+    if (uid) seats.push({ league_id: lid, league_name: byId.get(lid).name ?? 'your league', roster_id: rid, uid, mid, starters: [], empties: 0 });
+  }
+  if (!seats.length) return [];
+  // Their saved picks (classic: the 'wk' window; drip: a row per window). A null slug is a spot left empty.
+  const { data: picks } = await db().from('sealed_pick').select('matchup_id, app_user_id, game_window, player_slug')
+    .in('matchup_id', [...new Set(seats.map((x) => x.mid))]).in('app_user_id', [...new Set(seats.map((x) => x.uid))]);
+  const bySeat = new Map();
+  for (const p of picks ?? []) {
+    const k = `${p.matchup_id}:${p.app_user_id}`;
+    if (!bySeat.has(k)) bySeat.set(k, []);
+    bySeat.get(k).push(p);
+  }
+  // Imported leagues without saved picks read their synced lineup's starters.
+  const imported = lgs.filter((l) => (l.provider ?? 'sleeper') !== 'native').map((l) => l.id);
+  const synced = new Map();
+  if (imported.length) {
+    const { data: sl } = await db().from('sleeper_lineup').select('league_id, roster_id, starters_json').in('league_id', imported).eq('week', week);
+    for (const r of sl ?? []) synced.set(`${r.league_id}:${r.roster_id}`, r.starters_json ?? []);
+  }
+  for (const seat of seats) {
+    const mine = bySeat.get(`${seat.mid}:${seat.uid}`) ?? [];
+    const classic = (byId.get(seat.league_id).settings_json?.game_mode ?? 'drip') === 'classic';
+    if (mine.length) {
+      seat.starters = [...new Set(mine.filter((p) => p.player_slug).map((p) => p.player_slug))].map((slug) => ({ slug }));
+      if (classic) seat.empties = mine.filter((p) => p.game_window === 'wk' && !p.player_slug).length;
+    } else if (synced.has(`${seat.league_id}:${seat.roster_id}`)) {
+      const raw = synced.get(`${seat.league_id}:${seat.roster_id}`);
+      const pool = new Map((Array.isArray(raw) ? raw : []).map((e) => [e.player_slug ?? e.slug, e]));
+      seat.starters = starterSlugs(raw).map((slug) => ({ slug, name: pool.get(slug)?.full, team: pool.get(slug)?.team }));
+    }
+  }
+  // Names and teams from each league's pool where the lineup didn't carry them.
+  const need = seats.filter((x) => x.starters.some((st) => !st.team || !st.name));
+  if (need.length) {
+    const { data: lp } = await db().from('league_pool').select('league_id, slug, full_name, team')
+      .in('league_id', [...new Set(need.map((x) => x.league_id))]).in('slug', [...new Set(need.flatMap((x) => x.starters.map((st) => st.slug)))]);
+    const meta = new Map((lp ?? []).map((r) => [`${r.league_id}:${r.slug}`, r]));
+    for (const seat of need) for (const st of seat.starters) {
+      const m = meta.get(`${seat.league_id}:${st.slug}`);
+      st.name = st.name || m?.full_name || st.slug;
+      st.team = st.team || m?.team || null;
+    }
+  }
+  return seats.filter((x) => x.starters.length || x.empties);
+}
+/** The season's week with games still to come, and its kickoffs by team. */
+async function upcomingWeek(now) {
+  const { data: slate } = await db().from('nfl_slate').select('season, week, home, away, kickoff').not('kickoff', 'is', null).gt('kickoff', new Date(now).toISOString());
+  const nfl = (slate ?? []).filter((g) => !isCollegeWeek(Number(g.week)));
+  if (!nfl.length) return null;
+  const first = nfl.reduce((a, g) => (g.week < a.week ? g : a));
+  const season = String(first.season), week = first.week;
+  const { data: all } = await db().from('nfl_slate').select('home, away, kickoff').eq('season', season).eq('week', week);
+  const kicks = new TeamMap();
+  for (const g of all ?? []) if (g.kickoff) for (const t of [g.home, g.away]) kicks.set(t, Math.min(kicks.get(t) ?? Infinity, Date.parse(g.kickoff)));
+  return { season, week, kicks };
+}
+async function detectSeasonStatus() {
+  const { data: hurt } = await db().from('injury_status').select('player_slug, status')
+    .in('status', ['O', 'IR', 'D', 'o', 'ir', 'd']).gt('updated_at', sinceIso());
+  if (!hurt?.length) return;
+  const now = Date.now();
+  const wk = await upcomingWeek(now);
+  if (!wk) return;
+  const seats = await seasonSeats(wk.season, wk.week);
+  const rows = seasonStatusRows(seats, new Map(hurt.map((h) => [h.player_slug, h.status])), wk.kicks, wk.week, now);
+  if (rows.length) log(`season status: ${rows.length} lineup${rows.length === 1 ? '' : 's'} told`);
+  await enqueue(rows);
+}
+// The lineup check reads every season lineup, so it runs every 5 minutes, not every sweep.
+let rosterQcAt = 0;
+async function detectRosterQc() {
+  const now = Date.now();
+  if (now - rosterQcAt < 5 * 60_000) return;
+  rosterQcAt = now;
+  const wk = await upcomingWeek(now);
+  if (!wk) return;
+  const firstKick = Math.min(...wk.kicks.values());
+  if (!Number.isFinite(firstKick) || now < nightBeforeMs(firstKick)) return;   // nothing to check before the week's first eve
+  const seats = await seasonSeats(wk.season, wk.week);
+  if (!seats.length) return;
+  const slugs = [...new Set(seats.flatMap((x) => x.starters.map((st) => st.slug)))];
+  const { data: inj } = slugs.length ? await db().from('injury_status').select('player_slug, status').in('player_slug', slugs) : { data: [] };
+  const statusOf = new Map((inj ?? []).map((r) => [r.player_slug, r.status]));
+  const rows = [...rosterQcNightRows(seats, wk.kicks, statusOf, wk.week, now), ...rosterQcKickRows(seats, wk.kicks, statusOf, wk.week, now)];
+  if (rows.length) log(`lineup check: ${rows.length} push${rows.length === 1 ? '' : 'es'}`);
+  await enqueue(rows);
+}
+
 async function detectContestLock() {
   const { data: slate } = await db().from('nfl_slate').select('season, week, kickoff').not('kickoff', 'is', null);
   const now = Date.now();
@@ -767,7 +969,7 @@ async function flush() {
   for (const p of pending) {
     // A widget ping has no browser or iPhone to go to (the home-screen widget
     // is Android's): web and iOS devices are skipped for it.
-    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => t.prefs?.[p.kind] !== false && !(p.kind === 'widget' && (t.platform === 'web' || t.platform === 'ios')));
+    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => pushKindOn(t.prefs, p.kind) && !(p.kind === 'widget' && (t.platform === 'web' || t.platform === 'ios')));
     let attempted = devices.length === 0; // deviceless rows resolve immediately
     let waiting = null;
     // PER-DEVICE OUTCOMES (v0.392.2). One row can go to a phone and a browser;
@@ -880,6 +1082,8 @@ export async function sweepPush() {
   await detectLineup().catch((e) => log('lineup detector error', e.message));
   await detectContestLock().catch((e) => log('contest lock detector error', e.message));
   await detectRuledOut().catch((e) => log('ruled-out detector error', e.message));
+  await detectSeasonStatus().catch((e) => log('season status detector error', e.message));
+  await detectRosterQc().catch((e) => log('lineup check detector error', e.message));
   try { await detectWidget(); } catch (e) { log('detectWidget', e.message); }
   await detectChopped().catch((e) => log('chopped detector error', e.message));
   await detectBitten().catch((e) => log('bitten detector error', e.message));

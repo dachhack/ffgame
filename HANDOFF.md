@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-13 · Build `v0.707.0` · migrations through `0497` (next `0498`) · ops errands through `052` (next `053`)_
+_Last updated: 2026-10-13 · Build `v0.707.0` · migrations through `0498` (next `0499`) · ops errands through `052` (next `053`)_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's

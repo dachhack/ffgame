@@ -22,6 +22,38 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.708.0 — Notifications, part 1: starter ruled out, the lineup check, a switch for each
+
+> - 🚑 When a starter in any of your season leagues is ruled OUT, doubtful or put on IR before his game, you hear about it with time to swap. Weekly squad leagues already had this.
+> - 🩺 The night before your first game (8 PM ET), a lineup check names anyone on a bye, ruled out, or an empty spot. Then 90 minutes before each game, a starter still out gets one more call. Only when something is wrong.
+> - Every notification type has its own switch under 🔔 Notifications, with an ⓘ that says what each one is. Live big-play alerts, coming next, start off.
+
+Founder: "Any app notification additions we could do? League event timing,
+player status, roster QC, player events like TDs and big plays" → "Let's do
+them all but work through tuning and turn off/on options for each." Tuning
+the founder chose: big plays = TDs + 20+ yard plays, ≤3 a player a game;
+yours and your opponent's on separate switches; both OFF by default; roster
+check the night before + 90 min before each kick.
+
+This release (1 of 4): the switch framework and the season-league checks.
+- `packages/core/src/data/pushKinds.ts`: one list of types (label, ⓘ line,
+  default) for the phone (SettingsModal), the web (NativeLeague alerts card)
+  and the worker's sender (`pushKindOn`); bigplay/oppplay default off.
+- **0498**: `push_outbox_kind_check` and `_sanitize_push_prefs` take the
+  seven new types (status, rosterqc, timing, result, bigplay, oppplay, coin)
+  — without it the outbox rejects them and a saved switch is stripped.
+  push-probes pu30/pu31.
+- Worker (`push.js`): `seasonSeats` reads every human seat's starters for the
+  upcoming NFL week (sealed_pick for native leagues, classic 'wk' empties
+  counted; sleeper_lineup starters for imported ones; names/teams from
+  league_pool). `detectSeasonStatus` (🚑, on injury updates),
+  `detectRosterQc` (🩺 at `nightBeforeMs` of a seat's first kickoff, ⚠ inside
+  90 min; every 5 minutes). Contest ruled-out pushes move from 'lineup' to
+  the 'status' switch. Kickoffs by TeamMap (LA/LAR). Tests:
+  `server/test/push-season.mjs` (20).
+Not yet live-tested: the first night check runs Wednesday 8 PM ET for the
+Thursday game. All JS + SQL; no iPhone build.
+
 ### v0.707.7 — The wire shows who they play
 
 > - Every NFL player and defense in the waiver pool now shows the week's opponent beside the team: "vs LV", "@ DEN", or BYE. App and site.
