@@ -1,0 +1,5 @@
+{
+  "_": "Layout zones for template.png, as fractions of the (square) image. The art is left-facing; gen-helmets.mjs mirrors these for right-facing helmets. decal = where the abbreviation and nickname go; number = the corner the app keeps for the player's number (the back of the helmet, away from the face mask).",
+  "decal":  { "x": 0.47, "y": 0.29, "w": 0.42, "h": 0.25 },
+  "number": { "x": 0.645, "y": 0.655, "w": 0.335, "h": 0.33 }
+}

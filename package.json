@@ -12,6 +12,7 @@
     "dev": "vite",
     "build": "node scripts/gen-changelog.mjs && tsc -b && vite build",
     "gen:changelog": "node scripts/gen-changelog.mjs",
+    "gen:helmets": "node scripts/helmets/gen-helmets.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "validate": "node scripts/espn/validate.mjs",
@@ -128,6 +129,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
