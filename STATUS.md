@@ -22,6 +22,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.708.2 — Notifications, part 3: live big plays, and no icons
+
+> - Turn on "your big plays" and you'll hear it live when one of your starters scores a touchdown or makes a 20+ yard play: "TD! Patrick Mahomes → Travis Kelce, 35-yd catch".
+> - "Opponent's big plays" does the same for the team you're playing. Both start off; switch them on under Notifications. At most 3 per player per game, and plays that land together come as one notification.
+> - Notifications no longer carry icons, only the Drip icon itself, and the notification settings are plain words.
+
+Founder, mid-build: "Don't use the icons for alerts or in the alert settings.
+Just the drip icon in the alert." `plainText` (core pushKinds) strips every
+emoji at the sender (`flush`) — the one place every push leaves, so the
+worker's detectors, contestRecap, contestSubs and the database's own outbox
+writes all lose them — and in both apps' recent-notifications log; the
+settings labels lost theirs (a check holds every label emoji-free). A
+rolled-up big play by your opponent reads "Opp:". Two ⓘ lines that promised
+unbuilt things (keeper deadline, clinch) were corrected.
+
+Part 3 of 4 of the notification additions (founder: "player events like TDs
+and big plays"; tuning: TDs + 20+ yd, ≤3 a player a game, yours and your
+opponent's on separate switches, both off by default). Worker `push.js`,
+`detectBigPlays`, every sweep (1 min):
+- Works only for devices with `bigplay` or `oppplay` switched ON (a JSON
+  filter on push_token.prefs) — nobody opted in, no reads at all.
+- New `live_play` rows (ingested in the last 3 min) that `isBigPlay`: a TD
+  on a pass/run/catch/return/defensive score, or 20+ yards on a
+  pass/run/catch/return — never a kick or a punt.
+- Only games on now (`game_feed.state` 'in', or 'post' within 15 min): the
+  post-game nflverse true-up (its own ids) and a re-ingested final never
+  replay a Sunday.
+- The whole play is read so the throw and the catch are one line
+  (`bigPlayLine`); lineups from `seasonSeats` (with each matchup's opponent
+  for 👀) plus the weekly squad leagues' squads (`squadSeats`, your own only),
+  refreshed every 5 minutes.
+- `bigPlayRows`: per member, one push per sweep (several plays roll up), a
+  3-per-player-per-game cap and a seen-play memory in the worker (a restart
+  forgets them — at worst a few extra); names fall back to `slugToName`.
+Tests: `server/test/push-season.mjs` (46). All JS; no iPhone build.
+
 ### v0.708.1 — Notifications, part 2: league deadlines and results
 
 > - ⏰ League deadlines: the evening before your league's waiver run, the week the trade deadline closes, and contract lengths locking within a day. Never between 9 PM and 9 AM ET.

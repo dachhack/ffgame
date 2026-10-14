@@ -21,7 +21,7 @@ import { DevyValues } from './DevyValues';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
-import { PUSH_KINDS, pushKindOn, flipPushKind } from '@drip/core/data/pushKinds';
+import { PUSH_KINDS, pushKindOn, flipPushKind, plainText } from '@drip/core/data/pushKinds';
 import { LabelInfo } from './InfoChip';
 import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, getSession, deleteMyAccount, type PushLogRow } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
@@ -514,7 +514,7 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
                 <View key={r.id} style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
                   <Text style={{ fontFamily: MONO, fontSize: 10, color }}>{st.glyph}</Text>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text numberOfLines={1} style={{ fontSize: 11.5, color: t.text }}>{r.title}</Text>
+                    <Text numberOfLines={1} style={{ fontSize: 11.5, color: t.text }}>{plainText(r.title)}</Text>
                     <Text style={{ fontFamily: MONO, fontSize: 8.5, color }}>{st.text} · {new Date(r.at).toLocaleString()}</Text>
                   </View>
                 </View>

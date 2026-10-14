@@ -3,9 +3,10 @@
 // Founder: "Night before + 90 min before kick", only when something is wrong.
 // Pure rows only. Run from server/: npx tsx test/push-season.mjs
 import { nightBeforeMs, starterIssue, seasonStatusRows, rosterQcNightRows, rosterQcKickRows,
-  quietHours, nextRunMs, waiverRemindAt, waiverRemindRows, tradeDeadlineRows, contractLockRows, finalRows, lastDayStartMs, sweatRows } from '../src/push.js';
+  quietHours, nextRunMs, waiverRemindAt, waiverRemindRows, tradeDeadlineRows, contractLockRows, finalRows, lastDayStartMs, sweatRows,
+  isBigPlay, bigPlayLine, bigPlayRows, slugToName } from '../src/push.js';
 import { TeamMap } from '../../packages/core/src/data/teamCodes.ts';
-import { pushKindOn, flipPushKind, PUSH_KINDS } from '../../packages/core/src/data/pushKinds.ts';
+import { pushKindOn, flipPushKind, PUSH_KINDS, plainText } from '../../packages/core/src/data/pushKinds.ts';
 
 let fails = 0;
 const ok = (label, cond, got) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}${!cond && got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); if (!cond) fails++; };
@@ -94,6 +95,37 @@ ok('🏈 sweat: the score and who is still to play, both sides', sw.length === 2
   && sw[0].body === 'Bank Roll 98.40 – 112.60 Super Crisp. Still to play — yours: CeeDee Lamb (DAL); theirs: 0.'
   && sw[1].body === 'Super Crisp 112.60 – 98.40 Bank Roll. Still to play — yours: nobody; theirs: 1.', sw);
 ok('🏈 sweat: a matchup nobody plays in tonight gets nothing', sweatRows(LG, M, { home: 1, away: 2 }, new Map([[1, { uid: 'u1', starters: [P('mahomes', 'KC')] }], [2, { uid: 'u2', starters: [] }]]), names, wkKicks, MNF, MNF - 20 * 60_000).length === 0);
+
+// ── part 3 (v0.708.2): live big plays ──
+const R = (player_slug, k, y = 0, td = 0) => ({ player_slug, k, y, td });
+ok('big: a TD of any kind, or 20+ yards on a pass, run, catch or return', isBigPlay(R('kelce', 'rec', 4, 1)) && isBigPlay(R('pacheco', 'rush', 22)) && isBigPlay(R('kc-dst', 'dst_td', 0, 1))
+  && !isBigPlay(R('pacheco', 'rush', 19)) && !isBigPlay(R('butker', 'fg', 52)) && !isBigPlay(R('punter', 'punt', 60)));
+const nm = (x) => ({ mahomes: 'Patrick Mahomes', kelce: 'Travis Kelce', pacheco: 'Isiah Pacheco', lamb: 'CeeDee Lamb' })[x] ?? x;
+ok('big: the throw and the catch read as one play', bigPlayLine([R('mahomes', 'pass', 35, 1), R('kelce', 'rec', 35, 1)], nm) === 'TD! Patrick Mahomes → Travis Kelce, 35-yd catch');
+ok('big: a run reads as a run', bigPlayLine([R('pacheco', 'rush', 22)], nm) === 'Isiah Pacheco, 22-yd run');
+const play = (pid, rows, game_id = 'G1') => ({ game_id, pid, rows });
+const it = (mine, opp, wantMine = true, wantOpp = false) => new Map([['u1', { mine: new Map(mine.map((x) => [x, ['Turf Warriors']])), opp: new Map(opp.map((x) => [x, ['Turf Warriors']])), wantMine, wantOpp }]]);
+let sent = new Map();
+const b1 = bigPlayRows([play(1, [R('mahomes', 'pass', 35, 1), R('kelce', 'rec', 35, 1)])], it(['kelce'], []), nm, sent);
+ok('big: one play, one push, on your switch', b1.length === 1 && b1[0].kind === 'bigplay' && b1[0].title === '🏈 TD! Patrick Mahomes → Travis Kelce, 35-yd catch' && b1[0].body === 'In your Turf Warriors lineup.', b1);
+ok('big: your opponent’s play is nothing with that switch off', bigPlayRows([play(2, [R('lamb', 'rec', 40)])], it([], ['lamb']), nm, new Map()).length === 0);
+const o1 = bigPlayRows([play(2, [R('lamb', 'rec', 40)])], it([], ['lamb'], true, true), nm, new Map());
+ok('big: …and on its own switch when it is on', o1.length === 1 && o1[0].kind === 'oppplay' && o1[0].title.startsWith('👀 CeeDee Lamb, 40-yd catch') && /opponent/.test(o1[0].body), o1);
+const roll = bigPlayRows([play(3, [R('pacheco', 'rush', 25)]), play(4, [R('kelce', 'rec', 21)])], it(['pacheco', 'kelce'], []), nm, new Map());
+ok('big: plays that land together roll into one push', roll.length === 1 && roll[0].title === '🏈 2 big plays' && roll[0].body === 'Isiah Pacheco, 25-yd run · Travis Kelce, 21-yd catch', roll);
+sent = new Map();
+let capN = 0;
+for (let i = 10; i < 15; i++) capN += bigPlayRows([play(i, [R('pacheco', 'rush', 25)])], it(['pacheco'], []), nm, sent).length;
+ok('big: at most 3 pushes for one player in one game', capN === 3);
+ok('big: …a new game starts the count again', bigPlayRows([play(20, [R('pacheco', 'rush', 25)], 'G2')], it(['pacheco'], []), nm, sent).length === 1);
+ok('big: nobody who wants it, nothing', bigPlayRows([play(30, [R('kelce', 'rec', 30)])], it(['kelce'], [], false, false), nm, new Map()).length === 0);
+
+ok('big: a name from a bare slug, never the slug itself', slugToName('aaron-rodgers') === 'Aaron Rodgers' && slugToName('kc-dst') === 'KC Defense');
+// ── no icons (v0.708.2, founder: "Don't use the icons for alerts or in the alert settings. Just the drip icon in the alert.") ──
+ok('no icons: a title loses its emoji and keeps its words', plainText('🏈 TD! Patrick Mahomes → Travis Kelce, 35-yd catch') === 'TD! Patrick Mahomes → Travis Kelce, 35-yd catch'
+  && plainText('⚠ Lineup locks 1:00 PM ET') === 'Lineup locks 1:00 PM ET' && plainText('🗓 Turf Warriors: squads lock Thu') === 'Turf Warriors: squads lock Thu'
+  && plainText('Set them on 📜 CONTRACTS') === 'Set them on CONTRACTS' && plainText('◎40 earned') === '◎40 earned', [plainText('Set them on 📜 CONTRACTS')]);
+ok('no icons: not one setting label carries an emoji', PUSH_KINDS.every((k) => plainText(k.label) === k.label), PUSH_KINDS.map((k) => k.label));
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

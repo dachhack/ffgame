@@ -19,22 +19,30 @@ export interface PushKind {
 }
 
 export const PUSH_KINDS: PushKind[] = [
-  { key: 'lineup', label: '⚠ lineup locks soon', info: 'An empty spot an hour before it locks, and a weekly squad not built before kickoff.', defaultOn: true },
-  { key: 'status', label: '🚑 starter ruled out', info: 'A player in your lineup is ruled OUT, doubtful, on IR, or inactive at the 90-minute list — while there is still time to swap.', defaultOn: true },
-  { key: 'rosterqc', label: '🩺 lineup check', info: 'The night before your first game: a starter on bye, an empty spot, or a starter ruled out. Only when something is wrong.', defaultOn: true },
-  { key: 'timing', label: '⏰ league deadlines', info: 'Waiver claims closing, the trade deadline, keeper and contract deadlines.', defaultOn: true },
-  { key: 'result', label: '🏁 results & the sweat', info: 'Your final score each week, what you need on Monday night, and clinching or elimination.', defaultOn: true },
-  { key: 'bigplay', label: '🏈 your big plays', info: 'Live: a touchdown or a 20+ yard play by one of your starters. At most 3 a player a game.', defaultOn: false },
-  { key: 'oppplay', label: '👀 opponent’s big plays', info: 'Live: the same, for your opponent’s starters.', defaultOn: false },
-  { key: 'coin', label: '◎ drip coin', info: 'Drip coin earned, and when you can afford a play before the week locks.', defaultOn: true },
-  { key: 'chat', label: '💬 mentions & DMs', info: 'Someone names you in league chat, or messages you directly.', defaultOn: true },
-  { key: 'trades', label: '⇄ trade offers', info: 'Offers to you, answers to yours, and your shotgun wedding’s vows.', defaultOn: true },
-  { key: 'waivers', label: '✚ waiver results', info: 'Your claims won or lost when the waiver run settles.', defaultOn: true },
+  { key: 'lineup', label: 'lineup locks soon', info: 'An empty spot an hour before it locks, and a weekly squad not built before kickoff.', defaultOn: true },
+  { key: 'status', label: 'starter ruled out', info: 'A player in your lineup is ruled OUT, doubtful, on IR, or inactive at the 90-minute list — while there is still time to swap.', defaultOn: true },
+  { key: 'rosterqc', label: 'lineup check', info: 'The night before your first game: a starter on bye, an empty spot, or a starter ruled out. Only when something is wrong.', defaultOn: true },
+  { key: 'timing', label: 'league deadlines', info: 'The evening before your waiver run, the trade deadline’s week, and contract lengths locking within a day.', defaultOn: true },
+  { key: 'result', label: 'results & the sweat', info: 'Your final score each week, and the score and who is left to play before the week’s last game day.', defaultOn: true },
+  { key: 'bigplay', label: 'your big plays', info: 'Live: a touchdown or a 20+ yard play by one of your starters. At most 3 a player a game.', defaultOn: false },
+  { key: 'oppplay', label: 'opponent’s big plays', info: 'Live: the same, for your opponent’s starters.', defaultOn: false },
+  { key: 'coin', label: 'drip coin', info: 'Drip coin earned, and when you can afford a play before the week locks.', defaultOn: true },
+  { key: 'chat', label: 'mentions & DMs', info: 'Someone names you in league chat, or messages you directly.', defaultOn: true },
+  { key: 'trades', label: 'trade offers', info: 'Offers to you, answers to yours, and your shotgun wedding’s vows.', defaultOn: true },
+  { key: 'waivers', label: 'waiver results', info: 'Your claims won or lost when the waiver run settles.', defaultOn: true },
   { key: 'draft', label: 'draft alerts', info: 'The draft is about to start, and it is your pick.', defaultOn: true },
-  { key: 'members', label: '⚑ new managers', info: 'Commissioners: someone joined or claimed a seat.', defaultOn: true },
+  { key: 'members', label: 'new managers', info: 'Commissioners: someone joined or claimed a seat.', defaultOn: true },
   // 0273: one key for both format events — a manager who wants one wants the other.
-  { key: 'format', label: '🪓 chopped & 🩸 bitten', info: 'The guillotine took your team, or a vampire fed on you.', defaultOn: true },
+  { key: 'format', label: 'chopped & bitten', info: 'The guillotine took your team, or a vampire fed on you.', defaultOn: true },
 ];
+
+/** NO ICONS IN A NOTIFICATION (v0.708.2, founder: "Don't use the icons for
+ *  alerts or in the alert settings. Just the drip icon in the alert."). The
+ *  sender runs every title and body through this, so no detector, old or new,
+ *  can put an emoji beside the app's own icon. Arrows and ◎ are text and stay. */
+export function plainText(s: string): string {
+  return s.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/gu, '').replace(/\s{2,}/g, ' ').replace(/^[\s·:—-]+/, '').trim();
+}
 
 const DEFAULTS = new Map(PUSH_KINDS.map((k) => [k.key, k.defaultOn]));
 

@@ -84,7 +84,7 @@ import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWe
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 import { LabelInfo, InfoChip } from './adminUi';
-import { PUSH_KINDS, pushKindOn, flipPushKind } from '@drip/core/data/pushKinds';
+import { PUSH_KINDS, pushKindOn, flipPushKind, plainText } from '@drip/core/data/pushKinds';
 import { BullseyeStart } from './BullseyeLeague';
 import { normTeam } from '../../packages/core/src/data/teamCodes';
 
@@ -5289,7 +5289,7 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
     // BARE inside a Sheet (v0.296.3) — a card in a card is two frames around
     // one picture, and the sheet's own title already says NOTIFICATIONS.
     <div style={bare ? {} : { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '12px 14px' }}>
-      {!bare && <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS <InfoChip title="What each one is" info={PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} /></div>}
+      {!bare && <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>NOTIFICATIONS <InfoChip title="What each one is" info={PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} /></div>}
       {web !== 'unsupported' && (
         <div style={{ marginBottom: 8 }}>
           {web === 'denied' ? (
@@ -5364,7 +5364,7 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
                 <div key={r.id} style={{ display: 'flex', gap: 6, alignItems: 'baseline', padding: '3px 0', borderTop: '1px solid var(--bd)' }}>
                   <span className="mono" style={{ fontSize: 10, color, flex: 'none' }}>{st.glyph}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plainText(r.title)}</div>
                     <div className="mono" style={{ fontSize: 8.5, color }}>{st.text} · {new Date(r.at).toLocaleString()}</div>
                   </div>
                 </div>
