@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.3 — Team units wear letters on their helmets
+
+> - Kickers, defenses, head coaches and punters get their team's helmet too, lettered K, D, HC and P where a player's number goes.
+
+Founder: "K on a helmet for Kicker D for Defense. HC, P". Team units had no
+helmet in helmet mode (their slugs, jax-k, hou-dst, kc-hc, kc-p, aren't in
+the player bio), so the board showed the team code in a circle.
+playerHelmet now reads a unit slug and answers its team with the label K /
+D / HC / P; the number layer draws letters as well as digits (gen-digits
+extracts K D H C P from Jersey 15 too, 15 glyphs). Same anchor and 1.45×
+size as the numbers; checked in Chromium at 44px and 110px. check:helmets +7
+(a name ending -p is not a punter). JavaScript only; no iPhone build.
+
 ### v0.713.2 — Bigger jersey numbers on the helmets
 
 > - The jersey numbers on helmets are bigger and easier to read.

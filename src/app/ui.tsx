@@ -326,7 +326,7 @@ export function Img({ src, size, radius, alt, fallback }: { src?: string | null;
 /** A team helmet with a jersey number over its lower corner (helmet mode,
  *  v0.713.0). The SVG comes from core's helmetSvg, so the web and the phone
  *  draw the same picture; it's our own markup, so inlining it is safe. */
-export function HelmetFace({ team, num, size = 30 }: { team: string; num: number | null; size?: number }) {
+export function HelmetFace({ team, num, size = 30 }: { team: string; num: number | string | null; size?: number }) {
   const svg = helmetSvg(team, num);
   if (!svg) return null;
   return <span aria-label={num != null ? `${team} #${num}` : team} role="img"

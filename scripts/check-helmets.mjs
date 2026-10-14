@@ -29,7 +29,7 @@ const ok = (name, cond, got) => {
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
 // ── the generated spec ─────────────────────────────────────────────────────
-ok('spec: ten digits, each a path with an advance', Array.from({ length: 10 }, (_, n) => HELMET_SPEC.digits[n]).every((d) => d && /^M/.test(d.d) && d.adv > 0));
+ok('spec: ten digits and K D H C P, each a path with an advance', [...'0123456789KDHCP'].every((c) => HELMET_SPEC.digits[c] && /^M/.test(HELMET_SPEC.digits[c].d) && HELMET_SPEC.digits[c].adv > 0));
 ok('spec: all 32 teams have number colours', Object.keys(HELMET_SPEC.teams).length === 32);
 const manifest = JSON.parse(read('public/helmets/manifest.json'));
 ok('spec: size and anchor match the manifest', HELMET_SPEC.size === manifest.size
@@ -60,6 +60,14 @@ ok('on: a college player keeps his photo path', headshot('c-4433') === null || !
 const ph = playerHelmet(slug);
 ok('player: team and number from the bio', ph?.team === 'MIN' && ph?.num === PLAYER_BIO[slug].num, ph);
 ok('player: a team hint covers a missing team', playerHelmet('no-such-player', 'DAL')?.team === 'DAL');
+// v0.713.3, founder: "K on a helmet for Kicker D for Defense. HC, P".
+ok('unit: a kicker wears K', JSON.stringify(playerHelmet('jax-k')) === JSON.stringify({ team: 'JAX', num: 'K' }), playerHelmet('jax-k'));
+ok('unit: a defense wears D', playerHelmet('hou-dst')?.num === 'D' && playerHelmet('hou-dst')?.team === 'HOU');
+ok('unit: a head coach wears HC, a punter P', playerHelmet('kc-hc')?.num === 'HC' && playerHelmet('kc-p')?.num === 'P');
+ok('unit: the Rams unit (la-k) is the LAR helmet', playerHelmet('la-k')?.team === 'LAR');
+ok('unit: a player whose name ends -p is not a punter', playerHelmet('john-smith-p')?.num !== 'P');
+ok('unit: the letters are drawn (outline, stroke, fill per letter)', (helmetNumberSvg('KC', 'HC').match(/<path /g) ?? []).length === 6);
+ok('unit: a glyph the font slice lacks is skipped, not drawn blank', helmetNumberSvg('KC', 'Z') === '');
 
 // ── the number ─────────────────────────────────────────────────────────────
 const svg = helmetNumberSvg('KC', 15, 'left');
