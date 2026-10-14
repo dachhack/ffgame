@@ -51,7 +51,7 @@ import { openPlayerCard } from '../ui/PlayerCardSheet';
 
 import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
 import { WeddingChip } from '../ui/WeddingChip';
-import { takeTeamTab, requestVows } from '../ui/leagueNav';
+import { takeTeamTab, requestVows, onTeamTab } from '../ui/leagueNav';
 import { TradeCenter } from '../ui/TradeCenter';
 import { CapSheet } from '../ui/LeagueExtras';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
@@ -320,6 +320,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   // founder's call, same shape as the commish map. Identity and the
   // over-limit warning stay above the tabs; modals are tab-agnostic.
   const [tab, setTab] = useState<'roster' | 'waivers' | 'trades' | 'keepers' | 'contracts' | 'devy'>(() => takeTeamTab() ?? 'roster');   // a room-bus request lands here (v0.706.0)
+  useEffect(() => onTeamTab((x) => setTab(x)), []);   // …and while this screen is up (v0.707.5, the wedding banner)
   // KEEPERS is a fourth tab (v0.296.5, founder) instead of a card under the
   // roster, and only in a league that keeps anyone: no count, no tab. The card
   // hides itself the same way, but a tab that opens onto nothing is worse than
@@ -1398,7 +1399,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
       )}
 
       {/* trades — propose/answer for managers, rulings inline for the commish */}
-      {tab === 'trades' && <ShotgunWeddingCard leagueId={leagueId} onChanged={() => void refresh()} />}
+      {tab === 'trades' && <ShotgunWeddingCard leagueId={leagueId} markSeen onChanged={() => void refresh()} />}
       {tab === 'trades' && (
       <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order}
         rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}

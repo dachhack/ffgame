@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BullseyeSquad, SquadScreen } from './BullseyeContest';
 import { DevRoomBar, DevRoomScreen } from './DevRoom';
+import { WeddingBanner } from './ShotgunWeddingCard';
 import { BullseyeLeaguePage, BullseyeStart } from './BullseyeLeague';
 import { useStore } from '../app/store';
 import { SiteSettings, VersionTag, Img, Crest, Sheet } from '../app/ui';
@@ -715,6 +716,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // screen should scroll when a hub tile deep-links into it.
   const [homeFor, setHomeFor] = useState<Enrollment | null>(null);
   const [teamFocus, setTeamFocus] = useState<TeamFocus | undefined>(undefined);
+  // Remounts My Team so a fresh focus lands even when it is already open (v0.707.5, the wedding banner).
+  const [teamNonce, setTeamNonce] = useState(0);
   // ── COMING BACK FROM THE MATCHUP BOARD (v0.288.1) ────────────────────────
   // The board is its own top-level route, so App.tsx unmounts LiveOnboard while
   // it is up and THIS COMPONENT'S STATE IS GONE — `homeFor`, `target`, `view`,
@@ -769,7 +772,16 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   // unconditionally (it takes a nullable enrollment for exactly this) so the
   // ▦ MATCHUP chip can build the board from any room, not just the hub.
   const stripBoard = useHeroBoard(homeFor, session?.user.id ?? '');
-  const stripFor = (here: StripRoom | null) => (homeFor ? (
+  // 🎉 THE WEDDING BANNER (v0.707.5): under the league's name in every room —
+  // the strip's name, or the hub's own header — while your shotgun wedding
+  // that went through is unseen; a click lands on My Team › Trades.
+  const weddingBanner = homeFor && homeFor.league?.provider === 'native' && homeFor.sleeper_roster_id != null ? (
+    <WeddingBanner key={`wed-${homeFor.league_id}`} leagueId={homeFor.league_id} onOpen={() => {
+      setTarget({ leagueId: homeFor.league_id, rosterId: homeFor.sleeper_roster_id });
+      setTeamFocus('trades'); setTeamNonce((n) => n + 1); setView('team');
+    }} />
+  ) : null;
+  const stripFor = (here: StripRoom | null) => (homeFor ? (<>
     <LeagueStrip
       leagueId={homeFor.league_id}
       name={homeFor.league?.name ?? 'League'}
@@ -783,7 +795,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         setTarget({ leagueId: homeFor.league_id, rosterId: homeFor.sleeper_roster_id });
         if (room === 'team') { setTeamFocus(undefined); setView('team'); } else setView('draft');
       }} />
-  ) : null);
+    {here !== 'home' && weddingBanner}
+  </>) : null);
   // "My league isn't in the pilot yet" → the request-a-code capture sheet.
   const [requesting, setRequesting] = useState(false);
   // A commissioner with no seat LANDS on the dashboard; this flips once they ask
@@ -1021,7 +1034,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
           desk is the older behaviour and the safer guess. */}
       {homeFor?.league?.provider && homeFor.league.provider !== 'native'
         ? <PlatformTeam leagueId={target.leagueId} rosterId={target.rosterId} userId={session.user.id} />
-        : <TeamManage leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')}
+        : <TeamManage key={`team-${target.leagueId}-${teamNonce}`} leagueId={target.leagueId} focus={teamFocus} onDraft={() => setView('draft')}
             lineupUserId={homeFor?.pick_user_id ?? session.user.id} lineupRosterId={target.rosterId} />}
     </>
   );
@@ -1138,7 +1151,8 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
         onBack={() => { setHomeFor(null); setView('home'); }}
         onResults={() => { setTarget({ leagueId: e.league_id, rosterId: 0 }); setView('results'); }}
         onDraft={() => { setTarget({ leagueId: e.league_id, rosterId: e.sleeper_roster_id }); setView('draft'); }}
-        onManage={() => { setManageId(e.league_id); setManageTab(undefined); setView('commishdash'); }} />
+        onManage={() => { setManageId(e.league_id); setManageTab(undefined); setView('commishdash'); }}
+        banner={weddingBanner} />
       </>
     );
   }

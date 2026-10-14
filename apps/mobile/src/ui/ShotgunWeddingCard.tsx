@@ -17,7 +17,7 @@ import {
   shotgunState, shotgunDecline, shotgunCounter, shotgunAcceptCounter, shotgunCommishEdit, shotgunCommishDecline, friendlyError,
 } from '@drip/core/data/liveApi';
 import {
-  weddingStatusShort, type Wedding, type WeddingPlayer, type WeddingSide,
+  weddingStatusShort, markWeddingsSeen, weddingNewsIds, type Wedding, type WeddingPlayer, type WeddingSide,
 } from '@drip/core/data/shotgunWedding';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
@@ -25,7 +25,7 @@ import { Card, Mono } from './prims';
 
 // THE TRADE BOX (v0.656.4, founder: "get rid of the walls of text"): the two
 // sides side by side, a player to a row. Twin of the web's TradeBox.
-function Side({ side, gives, you, get, small }: { side: WeddingSide; gives: WeddingPlayer[]; you: boolean; get: boolean; small?: boolean }) {
+function Side({ side, gives, you, small }: { side: WeddingSide; gives: WeddingPlayer[]; you: boolean; small?: boolean }) {
   const t = useTheme();
   const fs = small ? 11.5 : 12.5;
   return (
@@ -35,7 +35,7 @@ function Side({ side, gives, you, get, small }: { side: WeddingSide; gives: Wedd
         <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs, fontWeight: '700', color: t.text }}>{side.team}</Text>
         {side.score != null && <Mono size={9.5} tone="faint">{side.score}</Mono>}
       </View>
-      <Mono size={8.5} weight="700" track={0.1} tone={you ? 'you' : 'faint'} style={{ marginTop: 2 }}>{you ? 'YOU SEND' : get ? 'YOU GET' : 'SENDS'}</Mono>
+      <Mono size={8.5} weight="700" track={0.1} tone={you ? 'you' : 'faint'} style={{ marginTop: 2 }}>SENDS</Mono>
       {gives.length ? gives.map((p) => (
         <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
           {!!p.pos && <Mono size={9} weight="700" tone="dim" style={{ width: 22 }}>{p.pos}</Mono>}
@@ -49,14 +49,16 @@ function TradeBox({ w, home, away, small }: { w: Wedding; home: WeddingPlayer[];
   const t = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 6, marginTop: small ? 6 : 10 }}>
-      <Side side={w.home} gives={home} you={w.my_seat === w.home.roster} get={w.my_seat === w.away.roster} small={small} />
+      <Side side={w.home} gives={home} you={w.my_seat === w.home.roster} small={small} />
       <Text style={{ alignSelf: 'center', color: t.faint, fontSize: 14 }}>⇄</Text>
-      <Side side={w.away} gives={away} you={w.my_seat === w.away.roster} get={w.my_seat === w.home.roster} small={small} />
+      <Side side={w.away} gives={away} you={w.my_seat === w.away.roster} small={small} />
     </View>
   );
 }
 
-export function ShotgunWeddingCard({ leagueId, onChanged, scope = 'mine' }: { leagueId: string; onChanged?: () => void;
+export function ShotgunWeddingCard({ leagueId, onChanged, scope = 'mine', markSeen = false }: { leagueId: string; onChanged?: () => void;
+  /** On My Team › Trades (v0.707.5): a visit marks your wedding that went through as seen — the banner goes. */
+  markSeen?: boolean;
   /** WHOSE WEDDINGS (v0.706.2, founder: "Don't show the vows for the other teams"): 'mine' on My Team — yours alone;
    *  'commish' in Commish tools — every other pending wedding, with the commissioner's hand. */
   scope?: 'mine' | 'commish' }) {
@@ -79,6 +81,7 @@ export function ShotgunWeddingCard({ leagueId, onChanged, scope = 'mine' }: { le
   }, [leagueId]);
   // THE WAY IN (v0.706.0, founder: "Clicking the chip takes you to the vows interaction"): a chip asked for the
   // composer; it opens on your pending wedding once the card has it.
+  useEffect(() => { if (markSeen && ws) markWeddingsSeen(weddingNewsIds(ws)); }, [ws, markSeen]);
   const wantVows = useRef(takeVows());
   useEffect(() => {
     if (!ws || !wantVows.current) return;
@@ -126,8 +129,12 @@ export function ShotgunWeddingCard({ leagueId, onChanged, scope = 'mine' }: { le
         const rows = open === 'commish' || !mine
           ? [{ label: `${w.home.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.home, pick: pickH, set: setPickH },
              { label: `${w.away.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.away, pick: pickA, set: setPickA }]
-          : [{ label: 'YOU SEND (1–3)', list: iAmHome ? w.rosters?.home : w.rosters?.away, pick: iAmHome ? pickH : pickA, set: iAmHome ? setPickH : setPickA },
-             { label: 'YOU GET (1–3)', list: iAmHome ? w.rosters?.away : w.rosters?.home, pick: iAmHome ? pickA : pickH, set: iAmHome ? setPickA : setPickH }];
+          // Each team by name, your own first (v0.707.5; no "you send / you get", as on the web since v0.707.1).
+          : iAmHome
+            ? [{ label: `${w.home.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.home, pick: pickH, set: setPickH },
+               { label: `${w.away.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.away, pick: pickA, set: setPickA }]
+            : [{ label: `${w.away.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.away, pick: pickA, set: setPickA },
+               { label: `${w.home.team.toUpperCase()} SENDS (1–3)`, list: w.rosters?.home, pick: pickH, set: setPickH }];
         const openComposer = (mode: 'vows' | 'commish') => {
           if (open === mode) { setComposing(null); return; }
           setComposing({ id: w.id, mode }); setNote(null);

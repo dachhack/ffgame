@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.5 — 💍 Just married: the congratulations banner
+
+> - When your shotgun wedding goes through, a congratulations banner appears under the league's name and ⚙ SETTINGS. Tap it to land on My Team › Trades, where the wedding's result is.
+> - The banner goes away once tapped, or once you open Trades. Site and app.
+> - The wedding card on the phone names both teams ("BANK ROLL SENDS") instead of YOU SEND / YOU GET, as the site already does.
+
+Founder: "after your wedding goes through, let's have a banner squeeze in
+under the league name and settings row with a congratulatory message. click
+the banner takes you to trades where you see the results of your wedding.
+Banner goes away once clicked or you visit the trades section."
+
+Core (`data/shotgunWedding.ts`): `weddingNews` picks your wedding with status
+married or renegotiated not yet seen; `weddingCongrats` words it with both
+team names (no "you", after v0.707.1); seen is per device in platform storage
+(`drip.wedding-seen.<id>`, MMKV / localStorage) with `onWeddingSeen` so every
+mounted banner drops at once. shotgun_state only returns the latest week, so
+a banner never outlives its week. Phone: `WeddingBanner` in the league header
+(App.tsx, under the name row, native leagues with a seat); a tap requests
+the Trades tab, and `leagueNav` gains `onTeamTab` so a Team already on
+screen switches too. Web: `WeddingBanner` after the strip's name, and under
+the hub's own header (`LeagueHubPage` `banner`); a tap sets focus 'trades'
+and remounts TeamManage (`teamNonce`). Both Trades tabs pass `markSeen` to
+the wedding card. Also: the phone's wedding card and composer said YOU SEND
+/ YOU GET (missed in v0.707.1); now team names, yours first.
+Tests: `check-shotgun-wedding` (8 banner assertions). No live wedding yet to
+see it on. All JS; no iPhone build.
+
 ### v0.707.4 — The chip row fits again; the app chip moves under fields
 
 > - The chips above your leagues (ALL, COMMISH, WEEKLY, FIND, ADD, 🗂) sit a little closer together, so the whole row fits on the screen again.

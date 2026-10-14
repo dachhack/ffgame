@@ -14,7 +14,8 @@ import {
   shotgunState, shotgunDecline, shotgunCounter, shotgunAcceptCounter, shotgunCommishEdit, shotgunCommishDecline, friendlyError,
 } from '@drip/core/data/liveApi';
 import {
-  weddingStatusShort, type Wedding, type WeddingPlayer, type WeddingSide,
+  weddingStatusShort, markWeddingsSeen, onWeddingSeen, weddingCongrats, weddingNews, weddingNewsIds,
+  type Wedding, type WeddingPlayer, type WeddingSide,
 } from '@drip/core/data/shotgunWedding';
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: 14, marginBottom: 12 };
@@ -57,7 +58,9 @@ function TradeBox({ w, home, away, small }: { w: Wedding; home: WeddingPlayer[];
   );
 }
 
-export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; onChanged?: () => void }) {
+export function ShotgunWeddingCard({ leagueId, onChanged, markSeen = false }: { leagueId: string; onChanged?: () => void;
+  /** On My Team › Trades (v0.707.5): a visit marks your wedding that went through as seen — the banner goes. */
+  markSeen?: boolean }) {
   const [ws, setWs] = useState<Wedding[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
     return () => window.clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueId]);
+  useEffect(() => { if (markSeen && ws) markWeddingsSeen(weddingNewsIds(ws)); }, [ws, markSeen]);
 
   const act = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
     if (busy) return;
@@ -195,5 +199,36 @@ export function ShotgunWeddingCard({ leagueId, onChanged }: { leagueId: string; 
         );
       })}
     </div>
+  );
+}
+
+// 🎉 THE CONGRATULATIONS BANNER (v0.707.5, founder: "after your wedding goes
+// through, let's have a banner squeeze in under the league name and settings
+// row … click the banner takes you to trades … goes away once clicked or you
+// visit the trades section"). The phone's twin is WeddingBanner in
+// apps/mobile/src/ui/WeddingChip.tsx; the rule and the words are core's.
+export function WeddingBanner({ leagueId, onOpen }: { leagueId: string; onOpen: () => void }) {
+  const [ws, setWs] = useState<Wedding[]>([]);
+  const [, bump] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const load = () => shotgunState(leagueId)
+      .then((r) => { if (live) setWs(r.ok && r.on !== false ? (r.weddings ?? []) : []); })
+      .catch(() => {});
+    void load();
+    const t = window.setInterval(() => { if (!document.hidden) void load(); }, 5 * 60_000);
+    const off = onWeddingSeen(() => bump((n) => n + 1));
+    return () => { live = false; window.clearInterval(t); off(); };
+  }, [leagueId]);
+  const w = weddingNews(ws);
+  if (!w) return null;
+  const c = weddingCongrats(w);
+  return (
+    <button onClick={() => { markWeddingsSeen([w.id]); onOpen(); }} title={c.sub}
+      style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', margin: '8px 0 10px', padding: '9px 13px', borderRadius: 10,
+        border: '1px solid var(--you)', background: 'color-mix(in srgb, var(--you) 12%, var(--surface))' }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{c.title}</div>
+      <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', color: 'var(--you)', marginTop: 2 }}>{c.sub}</div>
+    </button>
   );
 }

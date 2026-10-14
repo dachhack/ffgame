@@ -37,7 +37,8 @@ import { LivePicks } from './src/screens/LivePicks';
 import { CommishTools } from './src/screens/CommishTools';
 import { ChatScreen } from './src/ui/Chat';
 import { LeagueHome, LeagueSettingsSheet, type LeagueSettingsReq } from './src/screens/LeagueHome';
-import { onLeagueGo } from './src/ui/leagueNav';
+import { onLeagueGo, requestTeamTab } from './src/ui/leagueNav';
+import { WeddingBanner } from './src/ui/WeddingChip';
 import { tap } from './src/ui/feedback';
 import { ChatChipDot } from './src/ui/unread';
 import { registerForPush } from './src/ui/push';
@@ -486,6 +487,10 @@ export function App() {
               <Text style={{ fontFamily: MONO, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, color: theme.you }}>⚙ SETTINGS</Text>
             </Pressable>
           </View>
+        )}
+        {/* 🎉 Under the name row (v0.707.5): your shotgun wedding went through. */}
+        {open && open.native && open.rosterId != null && (
+          <WeddingBanner key={`wed-${open.leagueId}`} leagueId={open.leagueId} onOpen={() => { requestTeamTab('trades'); setView('team'); }} />
         )}
         </Animated.View>
         {/* The room strip moved to the BOTTOM (v0.356.0, founder: "I like how

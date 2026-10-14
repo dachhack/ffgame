@@ -355,7 +355,7 @@ function Tile({ icon: _icon, title, sub, badge, onClick, disabled, accent }: {
   );
 }
 
-export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, onResults, onDraft, onManage }: {
+export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, onResults, onDraft, onManage, banner }: {
   e: Enrollment;
   /** This week's matchup, when the schedule has one. All that is read from it
    *  now is WHETHER it exists — the shop opens on a board, and a league with no
@@ -368,6 +368,8 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
   onBack: () => void;
   onResults: () => void;
   onDraft: () => void;
+  /** Squeezed in under the header (v0.707.5): the 🎉 wedding banner, when there is one. */
+  banner?: React.ReactNode;
   onManage: () => void;
 }) {
   const { play, building, err: buildErr } = useHeroBoard(e, userId);
@@ -509,6 +511,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
           ⚙ SETTINGS
         </button>
       </div>
+      {banner}
 
       {/* the commissioner's standing note — the board banner's message, here too */}
       {note && (
