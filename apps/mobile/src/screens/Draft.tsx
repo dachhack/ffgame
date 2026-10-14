@@ -51,6 +51,7 @@ import { Overlay } from '../ui/Overlay';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { starApply, STAR_GOLD, type StarMode } from '../ui/stars';
 import { teamLabel, isCollegeSlug } from '@drip/core/data/college';
+import { playerHelmetFace } from '../ui/HelmetFace';
 
 // v0.554.0: every position the league can play — IDP, FB, HC and P included
 // (the list used to stop at DEF); posChips trims it to the league's own.
@@ -72,6 +73,8 @@ function fmtLong(secs: number): string {
 /** Small round headshot with a position-pill fallback — the row identity. */
 function Face({ slug, pos, size = 26 }: { slug: string; pos: string; size?: number }) {
   const t = useTheme();
+  const helmet = playerHelmetFace(slug, size);
+  if (helmet) return helmet;
   const src = headshot(slug);
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

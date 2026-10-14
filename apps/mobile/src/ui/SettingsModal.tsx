@@ -20,7 +20,7 @@ import { VoicePicker } from './VoicePicker';
 import { DevyValues } from './DevyValues';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { Ev, track } from '@drip/core/analytics';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { PUSH_KINDS, pushKindOn, flipPushKind, plainText, leagueKindOn } from '@drip/core/data/pushKinds';
 import { LabelInfo } from './InfoChip';
 import { myLeaguePushPrefs, setLeaguePushPrefs } from '@drip/core/data/liveApi';
@@ -39,6 +39,8 @@ import { currentSeason, addDays } from '@drip/core/sports/league';
 import { sportToday } from '@drip/core/sports/slate';
 import { Chip } from './prims';
 import { CARD_BACKS, CARD_SIZES, type CardSkin, type CardSize } from './cards';
+import { helmetMode, setHelmetMode } from '@drip/core/data/helmets';
+import { HelmetFace } from './HelmetFace';
 
 /** Theme ids with the web's display names. Order matches the web menu. */
 const THEME_OPTS: { id: ThemeName; name: string }[] = [
@@ -224,6 +226,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                   </View>
                 </View>
 
+                <HelmetPicker />
               </View>
             )}
             {section === 'voice' && <VoicePicker />}
@@ -661,6 +664,38 @@ function FieldsPicker() {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+/** PLAYER PICTURES (v0.713.0, founder: "a mode that replaces the head shots and
+ *  team logos with the helmets"). Photos (the ESPN headshots and team logos) or
+ *  helmets: every logo becomes the team's helmet and every headshot the
+ *  helmet with the player's number. Per device, like the theme. */
+function HelmetPicker() {
+  const t = useTheme();
+  const [on, setOn] = useState(helmetMode());
+  const pick = (next: boolean) => { tap(); setHelmetMode(next); setOn(next); };
+  const tile = (id: 'photos' | 'helmets', label: string, art: ReactNode) => {
+    const sel = (id === 'helmets') === on;
+    return (
+      <Pressable key={id} onPress={() => pick(id === 'helmets')} style={{ width: 62, gap: 4 }}>
+        <View style={{ width: 62, height: 62, borderRadius: 6, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center',
+          borderWidth: sel ? 2 : StyleSheet.hairlineWidth, borderColor: sel ? t.you : t.bd }}>
+          {art}
+        </View>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7.5), fontWeight: '700', textAlign: 'center', color: sel ? t.you : t.faint }}>{label}</Text>
+      </Pressable>
+    );
+  };
+  return (
+    <View style={{ gap: 8 }}>
+      <LabelInfo label="PLAYER PICTURES" title="Photos or helmets"
+        info="Helmets swaps every team logo for the team's helmet, and every player's photo for his team's helmet with his jersey number on it. Only on this device." />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {tile('photos', 'PHOTOS', <Text style={{ fontSize: 26 }}>👤</Text>)}
+        {tile('helmets', 'HELMETS', <HelmetFace team="KC" num={15} size={54} />)}
+      </View>
     </View>
   );
 }

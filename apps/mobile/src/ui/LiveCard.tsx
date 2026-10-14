@@ -24,6 +24,7 @@ import { useWobble, HotGlow } from './animations';
 import { cardBackArt } from './cards';
 import { InjuryNow } from './rosterGroup';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
+import { playerHelmetFace } from './HelmetFace';
 
 const STOCK = '#F4EDDA';
 const STOCK_TILE = require('../../assets/card-stock.png');
@@ -156,11 +157,11 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
             <View style={{ height: float ? 46 : 50, borderRadius: 5, borderWidth: 1.5, borderColor: suit.fg, overflow: 'hidden', backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center' }}>
               {ghost
                 ? <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1D3540', alignItems: 'center', justifyContent: 'center' }]}><Text style={{ fontSize: 30 }}>👻</Text></View>
-                : photo
+                : playerHelmetFace(slug, float ? 46 : 50, team) ?? (photo
                 ? <Image source={{ uri: photo }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                 : logo
                   ? <Image source={{ uri: logo }} style={{ width: '70%', height: '70%' }} resizeMode="contain" />
-                  : <Text style={{ fontFamily: MONO, fontSize: 13, color: suit.fg }}>{initials(name)}</Text>}
+                  : <Text style={{ fontFamily: MONO, fontSize: 13, color: suit.fg }}>{initials(name)}</Text>)}
             </View>
 
             {/* Fixed two-line box, name centred in it: a one-line TYLER

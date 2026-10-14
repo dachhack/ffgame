@@ -64,6 +64,7 @@ import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWe
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { weekTitle } from '@drip/core/data/nflSlate';
 import { normTeam } from '../../../../packages/core/src/data/teamCodes';
+import { playerHelmetFace } from '../ui/HelmetFace';
 
 /** Every spot chip is this wide, so the player column starts at the same x on
  *  every row (v0.289.0).
@@ -188,6 +189,8 @@ function KeepersCard({ leagueId, myRoster, mine }: {
 
 function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: number }) {
   const t = useTheme();
+  const helmet = playerHelmetFace(slug, size);
+  if (helmet) return helmet;
   const src = headshot(slug);
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

@@ -18,6 +18,7 @@ import { Mono } from './prims';
 import { GROUP_TABS, GroupBadge, InjuryBadge, FlagChip } from './rosterGroup';
 import { openPlayerCard } from './PlayerCardSheet';
 import { injuryFor } from '@drip/core/data/injuries';
+import { playerHelmetFace } from './HelmetFace';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -209,13 +210,13 @@ function RosterRow({ player, group, week, userId }: { player: Player; group: Poo
     <Pressable
       onPress={() => openPlayerCard({ slug: player.id, name: player.full ?? player.name, pos: player.pos, team: player.team, week: week || undefined, userId })}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
-      <View style={{ width: 26, height: 26, borderRadius: 13, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
+      {playerHelmetFace(player.id, 26, player.team) ?? <View style={{ width: 26, height: 26, borderRadius: 13, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
         {photo
           ? <Image source={{ uri: photo }} style={{ width: 26, height: 26 }} resizeMode="cover" />
           : logo
             ? <Image source={{ uri: logo }} style={{ width: 18, height: 18 }} resizeMode="contain" />
             : <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{player.pos}</Text>}
-      </View>
+      </View>}
       <View style={{ backgroundColor: pc.bg, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 }}>
         <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
       </View>

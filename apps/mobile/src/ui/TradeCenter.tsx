@@ -36,6 +36,7 @@ import { openPlayerCard } from './PlayerCardSheet';
 import { headshot } from '@drip/core/data/media';
 import { Overlay } from './Overlay';
 import { InjuryNow } from './rosterGroup';
+import { playerHelmetFace } from './HelmetFace';
 
 export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeReview,
                               reviewHours, vetoNeed, offerDays, faabTrading, myFaab,
@@ -383,9 +384,9 @@ export function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tr
             </Pressable>
             <Pressable onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: p?.full_name ?? r.slug, pos: p?.pos ?? '', team: p?.team ?? '' }); }}
               style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: alpha(t.text, 10) }}>
+              {playerHelmetFace(r.slug, 22, p?.team) ?? <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: alpha(t.text, 10) }}>
                 {headshot(r.slug) ? <Image source={{ uri: headshot(r.slug)! }} style={{ width: 22, height: 22 }} resizeMode="cover" /> : null}
-              </View>
+              </View>}
               <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: fs(11.5), color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>
                 {p?.full_name ?? r.slug}
               </Text>

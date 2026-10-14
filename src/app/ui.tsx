@@ -1,3 +1,4 @@
+import { helmetMode, setHelmetMode, playerHelmet, helmetSvg } from '@drip/core/data/helmets';
 import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Session } from '@supabase/supabase-js';
@@ -322,10 +323,24 @@ export function Img({ src, size, radius, alt, fallback }: { src?: string | null;
   );
 }
 
+/** A team helmet with a jersey number over its lower corner (helmet mode,
+ *  v0.713.0). The SVG comes from core's helmetSvg, so the web and the phone
+ *  draw the same picture; it's our own markup, so inlining it is safe. */
+export function HelmetFace({ team, num, size = 30 }: { team: string; num: number | null; size?: number }) {
+  const svg = helmetSvg(team, num);
+  if (!svg) return null;
+  return <span aria-label={num != null ? `${team} #${num}` : team} role="img"
+    style={{ display: 'inline-block', width: size, height: size, flex: 'none', lineHeight: 0 }}
+    dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
 // Player image: ESPN headshot → team logo → position pill. `espnId` covers
 // players outside the baked slug→headshot map (2026 rookies — native-league
 // pools carry the directory's espn_id per player).
 export function PlayerImg({ playerId, espnId, team, pos, size = 30 }: { playerId: string; espnId?: string | null; team?: string | null; pos: Pos | string; size?: number }) {
+  // HELMET MODE (v0.713.0): the team's helmet with his number on it.
+  const helmet = helmetMode() ? playerHelmet(playerId, team) : null;
+  if (helmet) return <HelmetFace team={helmet.team} num={helmet.num} size={size} />;
   return (
     <Img src={headshot(playerId) ?? espnHeadshot(espnId)} size={size} radius={Math.round(size * 0.3)} alt={playerId}
       fallback={<Img src={teamLogo(team, { slug: playerId })} size={size} radius={Math.round(size * 0.3)} fallback={<PosPill pos={pos} />} />} />
@@ -589,6 +604,13 @@ export function SiteSettings({ superAdmin, minimal }: { superAdmin?: () => void;
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <button onClick={() => setBigText(!bigText)} aria-pressed={bigText} title="Bigger fine print" style={toggle(bigText)}>
                 <span style={{ fontSize: 9 }}>A</span><span style={{ fontSize: 12 }}>A</span><span>Bigger</span>
+              </button>
+              {/* HELMETS (v0.713.0, founder: "a mode that replaces the head shots
+                  and team logos with the helmets"). Per device; every picture
+                  in the page changes, so it reloads, as mark-free does. */}
+              <button onClick={() => { setHelmetMode(!helmetMode()); window.location.reload(); }} aria-pressed={helmetMode()}
+                title="Team helmets (with the player's number) instead of photos and logos" style={toggle(helmetMode())}>
+                <span>⛑</span><span>Helmets</span>
               </button>
             </div>
           </div>

@@ -22,6 +22,7 @@ Output (committed):
 - `public/helmets/png/{ABBR}-{left|right}[-plain].png`: 256×256, transparent
 - `public/helmets/manifest.json`: colors, file paths, and where to draw the number
 - `public/fonts/jersey-15.ttf`: the number font
+- `packages/core/src/data/helmetSpec.ts` (`gen-digits.mjs`, run by `gen:helmets`): the number's size, colours and anchor from the manifest, and Jersey 15's digits 0–9 as SVG paths. The apps draw the number from these paths (helmet mode, `data/helmets.ts`), so the phone needs no font loader.
 
 `scripts/helmets/preview/sheet.png` (ignored) shows every helmet with sample numbers. Check it after any change.
 

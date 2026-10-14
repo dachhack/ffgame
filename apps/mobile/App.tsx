@@ -32,6 +32,7 @@ import { BullseyeSquad, BullseyeGate } from './src/screens/BullseyeContest';
 import { Leagues } from './src/screens/Leagues';
 import { isAdmin, loadCollegeWeekDates, loadCollegeLogos, syncMarkFree } from '@drip/core/data/liveApi';
 import { onMarkFree } from '@drip/core/data/markFree';
+import { onHelmetMode } from '@drip/core/data/helmets';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { LivePicks } from './src/screens/LivePicks';
 import { CommishTools } from './src/screens/CommishTools';
@@ -311,6 +312,8 @@ export function App() {
   // the account changes, and re-render the tree whenever the answer flips (a
   // sync, or the gear's toggle) so every logo and headshot re-resolves.
   useEffect(() => onMarkFree(() => setWeekDatesVer((v) => v + 1)), []);
+  // Helmet mode (v0.713.0) swaps every picture: same re-render as mark-free.
+  useEffect(() => onHelmetMode(() => setWeekDatesVer((v) => v + 1)), []);
   useEffect(() => { void syncMarkFree(); }, [session?.user.id]);
 
   // Push registration (0150): once signed in, ask permission and register the

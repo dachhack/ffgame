@@ -60,6 +60,7 @@ import { openPlayerCard } from './PlayerCardSheet';
 import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, leagueWeekProjections, type MatchupResult, type PlayerAdjustment, type WeekProjRow } from '@drip/core/data/liveApi';
 import { matchupGrade, matchupGradeLabel, MATCHUP_BAND_COLOR, MATCHUP_BAND_WORD } from '@drip/core/data/weekProj';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
+import { playerHelmetFace } from './HelmetFace';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
  *  Founder: "the middle of the top is super empty. Maybe have the week's game
@@ -260,6 +261,8 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
  *  as a new component type on every render. */
 function Face({ slug, size = 26 }: { slug: string; size?: number }) {
   const t = useTheme();
+  const helmet = playerHelmetFace(slug, size);
+  if (helmet) return helmet;
   const uri = headshot(slug);
   return uri
     ? <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: t.bg }} />
