@@ -63,8 +63,22 @@ export function helmetUrl(team: string | null | undefined, facing: HelmetFacing 
   return `${SITE_ORIGIN}/helmets/png/${k}-${facing}${isMarkFree() ? '-plain' : ''}.png`;
 }
 
-/** A player's helmet: his current team and jersey number (number may be null). */
-export function playerHelmet(slug: string | null | undefined, teamHint?: string | null): { team: string; num: number | null } | null {
+/** What a TEAM UNIT wears instead of a number (v0.713.3, founder: "K on a
+ *  helmet for Kicker D for Defense. HC, P"). Unit slugs are `jax-k`,
+ *  `hou-dst`, `kc-hc`, `kc-p` (slugMeta). */
+const UNIT_LABEL: Record<string, string> = { k: 'K', dst: 'D', hc: 'HC', p: 'P' };
+function teamUnit(slug: string): { team: string; label: string } | null {
+  const m = /^([a-z]{2,3})-(k|dst|hc|p)$/.exec(slug);
+  const team = m ? helmetTeam(m[1]) : null;
+  return m && team ? { team, label: UNIT_LABEL[m[2]] } : null;
+}
+
+/** A player's helmet: his current team and what goes on it: his jersey
+ *  number, or a team unit's letters (K, D, HC, P). `num` is null when there is
+ *  nothing to print. */
+export function playerHelmet(slug: string | null | undefined, teamHint?: string | null): { team: string; num: number | string | null } | null {
+  const unit = slug ? teamUnit(slug) : null;
+  if (unit) return { team: unit.team, num: unit.label };
   const team = helmetTeam((slug && teamFor(slug)) || teamHint);
   if (!team) return null;
   const num = slug ? PLAYER_BIO[slug]?.num : undefined;
@@ -77,15 +91,24 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').repl
  *  manifest's two layers (dark outline under the team stroke, the fill on top),
  *  right-aligned at the anchor for a left-facing helmet, left-aligned for a
  *  right-facing one. Empty for no number. */
-export function helmetNumberSvg(team: string, num: number | null, facing: HelmetFacing = 'left'): string {
-  if (num == null) return '';
+/** How much bigger than the manifest's size the number is drawn (v0.713.2,
+ *  founder, from the phone: "Looks great. Let's try it with bigger numbers").
+ *  The manifest sized it to fit "88" in the decal zone at 256px; at the 30–54px
+ *  the app actually draws, it wants to be bolder. It stays pinned to the same
+ *  lower corner (the anchor), so it grows up and in over the shell. */
+export const HELMET_NUMBER_SCALE = 1.45;
+
+export function helmetNumberSvg(team: string, num: number | string | null, facing: HelmetFacing = 'left', scaleBy = HELMET_NUMBER_SCALE): string {
+  if (num == null || num === '') return '';
   const S = HELMET_SPEC;
   const k = helmetTeam(team);
   const colors = (k && S.teams[k]) || { fill: '#FFFFFF', stroke: '#10131A' };
   const a = S.number.anchor[facing];
-  const fs = S.number.fontSize * S.size;          // font size in helmet px
+  const fs = S.number.fontSize * S.size * scaleBy; // font size in helmet px
   const scale = fs / S.unitsPerEm;
-  const chars = String(num).split('');
+  // Only glyphs the spec carries (digits, K D H C P); anything else is skipped.
+  const chars = String(num).toUpperCase().split('').filter((c) => S.digits[c]);
+  if (!chars.length) return '';
   const width = chars.reduce((w, c) => w + S.digits[c].adv, 0) * scale;
   const x0 = a.x * S.size - (a.align === 'right' ? width : 0);
   const y = a.y * S.size;
@@ -108,7 +131,7 @@ export function helmetNumberSvg(team: string, num: number | null, facing: Helmet
 
 /** A whole player helmet as one SVG document: the helmet image with the
  *  number over it. Web renders it inline; the phone through SvgXml. */
-export function helmetSvg(team: string, num: number | null, facing: HelmetFacing = 'left'): string | null {
+export function helmetSvg(team: string, num: number | string | null, facing: HelmetFacing = 'left'): string | null {
   const url = helmetUrl(team, facing);
   if (!url) return null;
   const S = HELMET_SPEC.size;

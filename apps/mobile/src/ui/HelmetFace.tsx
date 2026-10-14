@@ -14,7 +14,7 @@ import { helmetMode, playerHelmet, helmetSvg } from '@drip/core/data/helmets';
 
 /** A helmet with a number: a square at `size`, or filling its (square) parent
  *  when no size is given (the picker's and the deck cards' photo frames). */
-export function HelmetFace({ team, num, size }: { team: string; num: number | null; size?: number }) {
+export function HelmetFace({ team, num, size }: { team: string; num: number | string | null; size?: number }) {
   const xml = helmetSvg(team, num);
   if (!xml) return null;
   const dim = size ?? '100%';

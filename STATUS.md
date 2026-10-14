@@ -22,6 +22,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.3 — Team units wear letters on their helmets
+
+> - Kickers, defenses, head coaches and punters get their team's helmet too, lettered K, D, HC and P where a player's number goes.
+
+Founder: "K on a helmet for Kicker D for Defense. HC, P". Team units had no
+helmet in helmet mode (their slugs, jax-k, hou-dst, kc-hc, kc-p, aren't in
+the player bio), so the board showed the team code in a circle.
+playerHelmet now reads a unit slug and answers its team with the label K /
+D / HC / P; the number layer draws letters as well as digits (gen-digits
+extracts K D H C P from Jersey 15 too, 15 glyphs). Same anchor and 1.45×
+size as the numbers; checked in Chromium at 44px and 110px. check:helmets +7
+(a name ending -p is not a punter). JavaScript only; no iPhone build.
+
+### v0.713.2 — Bigger jersey numbers on the helmets
+
+> - The jersey numbers on helmets are bigger and easier to read.
+
+Founder, after seeing helmet mode on the phone: "Looks great. Let's try it
+with bigger numbers". helmets.ts HELMET_NUMBER_SCALE = 1.45: the number is
+drawn 1.45× the manifest's size, still pinned to the same lower-right
+anchor, so it grows up and in over the shell. Compared 1.0/1.3/1.45/1.6× at
+44px and 110px in Chromium: 1.6× runs into the ear hole and face mask on
+two-digit numbers; 1.45× reads clearly and stays on the shell.
+check:helmets +1. JavaScript only; no iPhone build.
+
 ### v0.713.1 — Player pictures gets its own settings row
 
 > - Helmets are now under Settings → Player pictures.

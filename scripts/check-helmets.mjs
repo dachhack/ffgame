@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { setPlatform } from '../packages/core/src/platform';
 import { setMarkFree } from '../packages/core/src/data/markFree';
-import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg } from '../packages/core/src/data/helmets';
+import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg, HELMET_NUMBER_SCALE } from '../packages/core/src/data/helmets';
 import { HELMET_SPEC } from '../packages/core/src/data/helmetSpec';
 import { teamLogo, headshot, espnHeadshot } from '../packages/core/src/data/media';
 import { PLAYER_BIO } from '../packages/core/src/data/playerBio';
@@ -29,7 +29,7 @@ const ok = (name, cond, got) => {
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
 // ── the generated spec ─────────────────────────────────────────────────────
-ok('spec: ten digits, each a path with an advance', Array.from({ length: 10 }, (_, n) => HELMET_SPEC.digits[n]).every((d) => d && /^M/.test(d.d) && d.adv > 0));
+ok('spec: ten digits and K D H C P, each a path with an advance', [...'0123456789KDHCP'].every((c) => HELMET_SPEC.digits[c] && /^M/.test(HELMET_SPEC.digits[c].d) && HELMET_SPEC.digits[c].adv > 0));
 ok('spec: all 32 teams have number colours', Object.keys(HELMET_SPEC.teams).length === 32);
 const manifest = JSON.parse(read('public/helmets/manifest.json'));
 ok('spec: size and anchor match the manifest', HELMET_SPEC.size === manifest.size
@@ -60,6 +60,14 @@ ok('on: a college player keeps his photo path', headshot('c-4433') === null || !
 const ph = playerHelmet(slug);
 ok('player: team and number from the bio', ph?.team === 'MIN' && ph?.num === PLAYER_BIO[slug].num, ph);
 ok('player: a team hint covers a missing team', playerHelmet('no-such-player', 'DAL')?.team === 'DAL');
+// v0.713.3, founder: "K on a helmet for Kicker D for Defense. HC, P".
+ok('unit: a kicker wears K', JSON.stringify(playerHelmet('jax-k')) === JSON.stringify({ team: 'JAX', num: 'K' }), playerHelmet('jax-k'));
+ok('unit: a defense wears D', playerHelmet('hou-dst')?.num === 'D' && playerHelmet('hou-dst')?.team === 'HOU');
+ok('unit: a head coach wears HC, a punter P', playerHelmet('kc-hc')?.num === 'HC' && playerHelmet('kc-p')?.num === 'P');
+ok('unit: the Rams unit (la-k) is the LAR helmet', playerHelmet('la-k')?.team === 'LAR');
+ok('unit: a player whose name ends -p is not a punter', playerHelmet('john-smith-p')?.num !== 'P');
+ok('unit: the letters are drawn (outline, stroke, fill per letter)', (helmetNumberSvg('KC', 'HC').match(/<path /g) ?? []).length === 6);
+ok('unit: a glyph the font slice lacks is skipped, not drawn blank', helmetNumberSvg('KC', 'Z') === '');
 
 // ── the number ─────────────────────────────────────────────────────────────
 const svg = helmetNumberSvg('KC', 15, 'left');
@@ -68,7 +76,9 @@ ok('number: no paint-order (react-native-svg ignores it)', !svg.includes('paint-
 ok('number: the dark outline is drawn first', svg.indexOf(HELMET_SPEC.number.outlineColor) < svg.indexOf(HELMET_SPEC.teams.KC.stroke));
 ok('number: the fill is the team\'s number colour', svg.includes(`fill="${HELMET_SPEC.teams.KC.fill}"`));
 // Left-facing: right-aligned, so the number ENDS at the anchor; right-facing starts there.
-const S = HELMET_SPEC.size, fs = HELMET_SPEC.number.fontSize * S, sc = fs / HELMET_SPEC.unitsPerEm;
+// v0.713.2: drawn 1.45× the manifest's size ("bigger numbers"), still pinned to the anchor.
+ok('number: drawn bigger than the manifest, within reason', HELMET_NUMBER_SCALE > 1 && HELMET_NUMBER_SCALE <= 1.5, HELMET_NUMBER_SCALE);
+const S = HELMET_SPEC.size, fs = HELMET_SPEC.number.fontSize * S * HELMET_NUMBER_SCALE, sc = fs / HELMET_SPEC.unitsPerEm;
 const firstX = (s) => Number(/translate\(([-\d.]+)/.exec(s)[1]);
 const w15 = (HELMET_SPEC.digits[1].adv + HELMET_SPEC.digits[5].adv) * sc;
 ok('number: left-facing ends at the anchor (lower right)', Math.abs(firstX(svg) + w15 - HELMET_SPEC.number.anchor.left.x * S) < 0.05);
