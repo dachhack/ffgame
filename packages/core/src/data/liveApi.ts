@@ -25,6 +25,7 @@ import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
 import type { WaiverRunReport } from './txnChat';
 import { TeamMap, TeamSet } from './teamCodes';
 import { LIVE_SEASON } from './realPbp';
+import { liveTeamFor } from './slugMeta';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -5099,6 +5100,20 @@ export async function leaguePool(leagueId: string): Promise<LeaguePoolPlayer[]> 
       setCollegeNames(rows.filter((r) => /^c-\d+$/.test(r.slug)).map((r) => ({ slug: r.slug, full_name: r.full_name, school: by[r.slug]?.school_abbr ?? null })));
       return rows.map((r) => (by[r.slug] ? { ...r, school: by[r.slug].school_abbr, cls: by[r.slug].class_year, conf: by[r.slug].conference ?? null, tier: by[r.slug].tier ?? null } : r));
     });
+}
+/** THE LIVE TEAM ON EACH POOL ROW (v0.713.4, founder: "Interesting mis match
+ *  HOU van ARZ for Marvin Harrison"). league_pool keeps the team a player had
+ *  when the league was seeded, so a traded player's wire row printed his old
+ *  club, bye week and opponent beside his new club's helmet. Loads the
+ *  worker's team overrides (0142, the trades) and lays them over the rows.
+ *  NFL rows only: college rows keep their school. Never throws. */
+export async function leaguePoolLive(leagueId: string): Promise<LeaguePoolPlayer[]> {
+  const [rows] = await Promise.all([leaguePool(leagueId), loadTeamOverrides()]);
+  return withLiveTeams(rows);
+}
+/** The pure half of leaguePoolLive, for the check. */
+export function withLiveTeams<T extends { slug: string; team: string }>(rows: T[]): T[] {
+  return rows.map((r) => (isCollegeSlug(r.slug) ? r : { ...r, team: liveTeamFor(r.slug, r.team, LIVE_SEASON) || r.team }));
 }
 /** Make sure the college players among `slugs` have names installed
  *  (collegeNameFor) — a board holds only slugs, and a college slug is an ESPN

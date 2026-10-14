@@ -41,7 +41,7 @@ import {
   myEnrollments, type Enrollment,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  setLeagueCopies, leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
+  setLeagueCopies, leaguePool, leaguePoolLive, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, seatFullError, cancelWaiverClaim, processWaivers, friendlyError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
@@ -3286,7 +3286,8 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
       if (!viewAs) await processWaivers(leagueId).catch(() => {});
       const [t, r, p] = await Promise.all([
         viewAs ? adminUserNativeTeamState(viewAs.userId, leagueId) : nativeTeamState(leagueId),
-        nativeRosters(leagueId), leaguePool(leagueId)]);
+        // leaguePoolLive (v0.713.4): a traded player's row shows his new club.
+        nativeRosters(leagueId), leaguePoolLive(leagueId)]);
       if (t.error) { setErr(friendlyError(t.error)); return; }
       skew.current = Date.parse(t.server_now) - Date.now();
       setTeam(t); setRosters(r); setPool(p); setErr(null);

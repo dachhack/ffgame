@@ -48,6 +48,14 @@ export function onHelmetMode(fn: () => void): () => void {
 /** Which way a helmet faces: 'left' has the face mask on the left. */
 export type HelmetFacing = 'left' | 'right';
 
+/** Yours face right, the opponent's face left (v0.713.4, founder: "Can we have
+ *  helmets for the user face right and opposing helmets face left?"). On a
+ *  matchup the two sides face each other across the middle; everywhere else
+ *  (your roster, the picker, a team logo) a helmet faces right, like yours. */
+export function helmetFacing(opponent?: boolean): HelmetFacing {
+  return opponent ? 'left' : 'right';
+}
+
 /** The manifest's key for a team code (LA → LAR, WSH → WAS), or null. */
 export function helmetTeam(team: string | null | undefined): string | null {
   if (!team) return null;
@@ -57,7 +65,7 @@ export function helmetTeam(team: string | null | undefined): string | null {
 }
 
 /** The helmet image for a team, or null for a team without one. */
-export function helmetUrl(team: string | null | undefined, facing: HelmetFacing = 'left'): string | null {
+export function helmetUrl(team: string | null | undefined, facing: HelmetFacing = helmetFacing()): string | null {
   const k = helmetTeam(team);
   if (!k) return null;
   return `${SITE_ORIGIN}/helmets/png/${k}-${facing}${isMarkFree() ? '-plain' : ''}.png`;
@@ -89,8 +97,8 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').repl
 
 /** The number's SVG paths, in the helmet's own 0..size coordinates: the
  *  manifest's two layers (dark outline under the team stroke, the fill on top),
- *  right-aligned at the anchor for a left-facing helmet, left-aligned for a
- *  right-facing one. Empty for no number. */
+ *  right-aligned at the anchor for a left-facing helmet (lower right, the
+ *  back of the shell), left-aligned for a right-facing one (lower left). Empty for no number. */
 /** How much bigger than the manifest's size the number is drawn (v0.713.2,
  *  founder, from the phone: "Looks great. Let's try it with bigger numbers").
  *  The manifest sized it to fit "88" in the decal zone at 256px; at the 30–54px
@@ -98,7 +106,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').repl
  *  lower corner (the anchor), so it grows up and in over the shell. */
 export const HELMET_NUMBER_SCALE = 1.45;
 
-export function helmetNumberSvg(team: string, num: number | string | null, facing: HelmetFacing = 'left', scaleBy = HELMET_NUMBER_SCALE): string {
+export function helmetNumberSvg(team: string, num: number | string | null, facing: HelmetFacing = helmetFacing(), scaleBy = HELMET_NUMBER_SCALE): string {
   if (num == null || num === '') return '';
   const S = HELMET_SPEC;
   const k = helmetTeam(team);
@@ -131,7 +139,7 @@ export function helmetNumberSvg(team: string, num: number | string | null, facin
 
 /** A whole player helmet as one SVG document: the helmet image with the
  *  number over it. Web renders it inline; the phone through SvgXml. */
-export function helmetSvg(team: string, num: number | string | null, facing: HelmetFacing = 'left'): string | null {
+export function helmetSvg(team: string, num: number | string | null, facing: HelmetFacing = helmetFacing()): string | null {
   const url = helmetUrl(team, facing);
   if (!url) return null;
   const S = HELMET_SPEC.size;

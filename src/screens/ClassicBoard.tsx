@@ -471,7 +471,9 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action, empty }: {
           centre pill, the same way the names and scores do. PlayerImg already
           degrades headshot → team logo → position pill, so a missing portrait
           costs the picture and never the row. */}
-      <PlayerImg playerId={e.slug} team={e.team} pos={e.pos as Pos} size={face} />
+      {/* Helmets face the middle (v0.713.4): yours (left column) face right,
+          the opponent's (right column) face left. */}
+      <PlayerImg playerId={e.slug} team={e.team} pos={e.pos as Pos} size={face} opponent={right} />
       <div style={{ textAlign: align, minWidth: 0, flex: 1 }}>
       <div onClick={onName ? (ev) => { ev.stopPropagation(); onName(); } : undefined}
         title={onName ? 'open the player card' : undefined}

@@ -12,6 +12,7 @@ import { headshot, teamLogo } from '@drip/core/data/media';
 import { isGhostSlug } from '@drip/core/data/ghostCard';
 import { useTheme, MONO, fs, mix, alpha, fsTight } from '../theme.native';
 import { useCardSkin, CARD_BACKS, SKIN_FELT } from './cards';
+import { playerHelmetFace } from './HelmetFace';
 
 export const CARD_W = 96;
 export const CARD_H = 138;
@@ -114,9 +115,12 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked, fo
       <View style={{ flex: 1, marginTop: 4, borderRadius: 6, borderWidth: 1.2, borderColor: suit, backgroundColor: '#E8E0C8', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
         {isGhostSlug(slug)
           ? <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2B33' }}><Text style={{ fontSize: 30 }}>👻</Text></View>
-          : uri
+          // HELMET MODE (v0.713.4, founder: "Numbers on helmets for weekly
+          // contest leagues please"): the numbered helmet, yours facing right,
+          // theirs facing left.
+          : playerHelmetFace(slug, undefined, team, !mine) ?? (uri
           ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode={headshot(slug) ? 'cover' : 'contain'} />
-          : <Text style={{ fontSize: 22, fontWeight: '800', color: suit }}>{name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}</Text>}
+          : <Text style={{ fontSize: 22, fontWeight: '800', color: suit }}>{name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}</Text>)}
         {locked ? <View style={{ position: 'absolute', bottom: 2, right: 2, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 3, paddingHorizontal: 3 }}><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontSize: fsTight(8), color: '#fff' }}>🔒</Text></View> : null}
       </View>
       <Text numberOfLines={1} style={{ marginTop: 3, fontSize: fs(9.5), fontWeight: '700', color: INK }}>{name}</Text>

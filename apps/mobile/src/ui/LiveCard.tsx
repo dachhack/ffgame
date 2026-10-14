@@ -157,7 +157,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
             <View style={{ height: float ? 46 : 50, borderRadius: 5, borderWidth: 1.5, borderColor: suit.fg, overflow: 'hidden', backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center' }}>
               {ghost
                 ? <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1D3540', alignItems: 'center', justifyContent: 'center' }]}><Text style={{ fontSize: 30 }}>👻</Text></View>
-                : playerHelmetFace(slug, float ? 46 : 50, team) ?? (photo
+                : playerHelmetFace(slug, float ? 46 : 50, team, side === 'their') ?? (photo
                 ? <Image source={{ uri: photo }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                 : logo
                   ? <Image source={{ uri: logo }} style={{ width: '70%', height: '70%' }} resizeMode="contain" />

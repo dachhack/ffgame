@@ -1,4 +1,4 @@
-import { helmetMode, setHelmetMode, playerHelmet, helmetSvg } from '@drip/core/data/helmets';
+import { helmetMode, setHelmetMode, playerHelmet, helmetSvg, helmetFacing, type HelmetFacing } from '@drip/core/data/helmets';
 import { useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Session } from '@supabase/supabase-js';
@@ -326,8 +326,8 @@ export function Img({ src, size, radius, alt, fallback }: { src?: string | null;
 /** A team helmet with a jersey number over its lower corner (helmet mode,
  *  v0.713.0). The SVG comes from core's helmetSvg, so the web and the phone
  *  draw the same picture; it's our own markup, so inlining it is safe. */
-export function HelmetFace({ team, num, size = 30 }: { team: string; num: number | string | null; size?: number }) {
-  const svg = helmetSvg(team, num);
+export function HelmetFace({ team, num, size = 30, facing }: { team: string; num: number | string | null; size?: number | string; facing?: HelmetFacing }) {
+  const svg = helmetSvg(team, num, facing);
   if (!svg) return null;
   return <span aria-label={num != null ? `${team} #${num}` : team} role="img"
     style={{ display: 'inline-block', width: size, height: size, flex: 'none', lineHeight: 0 }}
@@ -337,10 +337,12 @@ export function HelmetFace({ team, num, size = 30 }: { team: string; num: number
 // Player image: ESPN headshot → team logo → position pill. `espnId` covers
 // players outside the baked slug→headshot map (2026 rookies — native-league
 // pools carry the directory's espn_id per player).
-export function PlayerImg({ playerId, espnId, team, pos, size = 30 }: { playerId: string; espnId?: string | null; team?: string | null; pos: Pos | string; size?: number }) {
+export function PlayerImg({ playerId, espnId, team, pos, size = 30, opponent }: { playerId: string; espnId?: string | null; team?: string | null; pos: Pos | string; size?: number;
+  /** The opponent's player: his helmet faces left, toward yours (v0.713.4). */
+  opponent?: boolean }) {
   // HELMET MODE (v0.713.0): the team's helmet with his number on it.
   const helmet = helmetMode() ? playerHelmet(playerId, team) : null;
-  if (helmet) return <HelmetFace team={helmet.team} num={helmet.num} size={size} />;
+  if (helmet) return <HelmetFace team={helmet.team} num={helmet.num} size={size} facing={helmetFacing(opponent)} />;
   return (
     <Img src={headshot(playerId) ?? espnHeadshot(espnId)} size={size} radius={Math.round(size * 0.3)} alt={playerId}
       fallback={<Img src={teamLogo(team, { slug: playerId })} size={size} radius={Math.round(size * 0.3)} fallback={<PosPill pos={pos} />} />} />

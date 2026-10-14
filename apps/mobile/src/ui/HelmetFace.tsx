@@ -3,19 +3,23 @@
 // number in a sporty font over the lower corner of the helmet in a consistent
 // spot."
 //
+// v0.713.4: yours face right, the opponent's face left ("Can we have helmets
+// for the user face right and opposing helmets face left?"). The number rides
+// the back of the shell either way: lower left facing right, lower right
+// facing left.
+//
 // The same SVG the web draws (core helmetSvg: the helmet image with the number
 // as Jersey 15 paths), through react-native-svg's SvgXml. No font loader, no
-// native module, so no iPhone build. Every helmet faces left, so the number
-// sits in the same lower-right corner everywhere.
+// native module, so no iPhone build.
 import React from 'react';
 import { View } from 'react-native';
 import { SvgXml } from 'react-native-svg';
-import { helmetMode, playerHelmet, helmetSvg } from '@drip/core/data/helmets';
+import { helmetMode, playerHelmet, helmetSvg, helmetFacing, type HelmetFacing } from '@drip/core/data/helmets';
 
 /** A helmet with a number: a square at `size`, or filling its (square) parent
  *  when no size is given (the picker's and the deck cards' photo frames). */
-export function HelmetFace({ team, num, size }: { team: string; num: number | string | null; size?: number }) {
-  const xml = helmetSvg(team, num);
+export function HelmetFace({ team, num, size, facing }: { team: string; num: number | string | null; size?: number; facing?: HelmetFacing }) {
+  const xml = helmetSvg(team, num, facing);
   if (!xml) return null;
   const dim = size ?? '100%';
   return (
@@ -27,8 +31,8 @@ export function HelmetFace({ team, num, size }: { team: string; num: number | st
 
 /** A player's helmet when helmet mode is on and his team is known, else null
  *  (the caller draws its headshot as before). */
-export function playerHelmetFace(slug: string | null | undefined, size?: number, teamHint?: string | null): React.ReactElement | null {
+export function playerHelmetFace(slug: string | null | undefined, size?: number, teamHint?: string | null, opponent?: boolean): React.ReactElement | null {
   if (!helmetMode() || !slug || /^c-\d+$/.test(slug)) return null;
   const h = playerHelmet(slug, teamHint);
-  return h ? <HelmetFace team={h.team} num={h.num} size={size} /> : null;
+  return h ? <HelmetFace team={h.team} num={h.num} size={size} facing={helmetFacing(opponent)} /> : null;
 }

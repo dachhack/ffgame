@@ -9,10 +9,12 @@
 import { readFileSync } from 'node:fs';
 import { setPlatform } from '../packages/core/src/platform';
 import { setMarkFree } from '../packages/core/src/data/markFree';
-import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg, HELMET_NUMBER_SCALE } from '../packages/core/src/data/helmets';
+import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg, helmetFacing, HELMET_NUMBER_SCALE } from '../packages/core/src/data/helmets';
 import { HELMET_SPEC } from '../packages/core/src/data/helmetSpec';
 import { teamLogo, headshot, espnHeadshot } from '../packages/core/src/data/media';
 import { PLAYER_BIO } from '../packages/core/src/data/playerBio';
+import { setTeamOverrides, clearTeamOverrides } from '../packages/core/src/data/playerTeam';
+import { withLiveTeams } from '../packages/core/src/data/liveApi';
 
 const store = new Map();
 setPlatform({
@@ -41,8 +43,11 @@ ok('team: LA is the Rams helmet', helmetTeam('LA') === 'LAR', helmetTeam('LA'));
 ok('team: WSH is the Commanders helmet', helmetTeam('WSH') === 'WAS', helmetTeam('WSH'));
 ok('team: JAC is the Jaguars helmet', helmetTeam('JAC') === 'JAX');
 ok('team: an unknown code has none', helmetTeam('XYZ') === null && helmetUrl('XYZ') === null);
-ok('url: named helmet, facing left by default', helmetUrl('KC') === 'https://dripfantasy.com/helmets/png/KC-left.png', helmetUrl('KC'));
-ok('url: every team\'s file is in the manifest', Object.keys(HELMET_SPEC.teams).every((k) => manifest.teams[k].files.left === new URL(helmetUrl(k)).pathname));
+// v0.713.4, founder: "Can we have helmets for the user face right and opposing helmets face left?"
+ok('facing: yours (and the default) face right, the opponent\'s face left', helmetFacing() === 'right' && helmetFacing(false) === 'right' && helmetFacing(true) === 'left');
+ok('url: named helmet, facing right by default', helmetUrl('KC') === 'https://dripfantasy.com/helmets/png/KC-right.png', helmetUrl('KC'));
+ok('url: the opponent\'s helmet faces left', helmetUrl('KC', helmetFacing(true)) === 'https://dripfantasy.com/helmets/png/KC-left.png');
+ok('url: every team\'s files are in the manifest', Object.keys(HELMET_SPEC.teams).every((k) => manifest.teams[k].files.left === new URL(helmetUrl(k, 'left')).pathname && manifest.teams[k].files.right === new URL(helmetUrl(k, 'right')).pathname));
 
 // ── the switch ─────────────────────────────────────────────────────────────
 let heard = 0;
@@ -85,21 +90,43 @@ ok('number: left-facing ends at the anchor (lower right)', Math.abs(firstX(svg) 
 ok('number: right-facing starts at the anchor (lower left)', Math.abs(firstX(helmetNumberSvg('KC', 15, 'right')) - HELMET_SPEC.number.anchor.right.x * S) < 0.05);
 ok('number: none for a player without one', helmetNumberSvg('KC', null) === '');
 const whole = helmetSvg('KC', 15);
-ok('svg: the helmet image under the number', /<image href="https:\/\/dripfantasy\.com\/helmets\/png\/KC-left\.png"/.test(whole) && whole.indexOf('<image') < whole.indexOf('<path'));
+ok('svg: the helmet image under the number', /<image href="https:\/\/dripfantasy\.com\/helmets\/png\/KC-right\.png"/.test(whole) && whole.indexOf('<image') < whole.indexOf('<path'));
+ok('svg: facing right, the number sits lower left (the back of the shell)', firstX(whole) === firstX(helmetNumberSvg('KC', 15, 'right')));
+ok('svg: the opponent\'s helmet faces left, number lower right', /KC-left\.png/.test(helmetSvg('KC', 15, 'left')) && firstX(helmetSvg('KC', 15, 'left')) === firstX(svg));
 
 // ── mark-free: plain helmets ───────────────────────────────────────────────
 setMarkFree(true);
-ok('mark-free: the plain helmet (abbreviation only)', teamLogo('KC') === 'https://dripfantasy.com/helmets/png/KC-left-plain.png', teamLogo('KC'));
+ok('mark-free: the plain helmet (abbreviation only)', teamLogo('KC') === 'https://dripfantasy.com/helmets/png/KC-right-plain.png', teamLogo('KC'));
 setMarkFree(false);
 setHelmetMode(false);
 ok('off again: ESPN logos back', /espncdn/.test(teamLogo('KC') ?? '') && heard === 2);
 
+// ── the row agrees with the helmet ─────────────────────────────────────────
+// v0.713.4, founder: "Interesting mis match HOU van ARZ for Marvin Harrison".
+// The helmet followed his trade (teamFor reads the worker's overrides); the
+// wire row printed league_pool's seeded team, its bye and its opponent.
+setTeamOverrides([{ slug: 'marvin-harrison', team: 'HOU' }]);
+{
+  const rows = withLiveTeams([{ slug: 'marvin-harrison', team: 'ARI' }, { slug: 'c-4433', team: '' }, { slug: 'no-such-player', team: 'DAL' }, { slug: 'la-k', team: 'LAR' }]);
+  ok('pool: a traded player\'s row carries his new team', rows[0].team === 'HOU' && playerHelmet('marvin-harrison', rows[0].team)?.team === 'HOU', rows[0]);
+  ok('pool: a college row keeps its (empty) team', rows[1].team === '');
+  ok('pool: a player the bake lacks keeps the pool\'s team', rows[2].team === 'DAL');
+  ok('pool: a unit keeps its own team', rows[3].team === 'LA', rows[3]);
+}
+clearTeamOverrides();
+for (const f of ['apps/mobile/src/screens/Team.tsx', 'src/screens/NativeLeague.tsx']) {
+  ok(`pool: ${f} reads the live teams`, /leaguePoolLive\(leagueId\)/.test(read(f)));
+}
+
 // ── both apps draw it ──────────────────────────────────────────────────────
 const web = read('src/app/ui.tsx');
 ok('web: PlayerImg draws the helmet with the number', /const helmet = helmetMode\(\) \? playerHelmet\(playerId, team\) : null;/.test(web) && /export function HelmetFace/.test(web));
+ok('web: the board\'s right column (the opponent) faces left', /opponent=\{right\}/.test(read('src/screens/ClassicBoard.tsx')) && /helmetFacing\(opponent\)/.test(web));
+ok('web: the duel\'s score card and mini card face by side', /opponent=\{side === 'their'\}/.test(read('src/screens/Matchup.tsx')) && /helmetArt\(slug, team, side === 'their'\)/.test(read('src/app/cardTable.tsx')));
 ok('web: the settings menu has the switch', /setHelmetMode\(!helmetMode\(\)\)/.test(web));
 const face = read('apps/mobile/src/ui/HelmetFace.tsx');
 ok('app: HelmetFace draws through SvgXml', /<SvgXml xml=\{xml\}/.test(face));
+ok('app: the opponent\'s helmet faces left', /facing=\{helmetFacing\(opponent\)\}/.test(face) && /playerHelmetFace\(slug, float \? 46 : 50, team, side === 'their'\)/.test(read('apps/mobile/src/ui/LiveCard.tsx')));
 for (const f of ['ui/ClassicBoard.tsx', 'screens/Team.tsx', 'screens/Draft.tsx', 'ui/RosterPanel.tsx', 'ui/PlayerCardSheet.tsx', 'ui/PlayerPicker.tsx', 'ui/cards.tsx', 'ui/LiveCard.tsx', 'ui/TradeCenter.tsx', 'ui/ShotgunWeddingCard.tsx', 'ui/GameView.tsx']) {
   ok(`app: ${f} draws player helmets`, /playerHelmetFace\(/.test(read(`apps/mobile/src/${f}`)));
 }
@@ -109,6 +136,9 @@ for (const f of ['ui/ClassicBoard.tsx', 'screens/Team.tsx', 'screens/Draft.tsx',
   // v0.713.1: its own row on the settings menu, not tucked inside Cards.
   ok('app: "Player pictures" is its own settings row', /id: 'pictures', icon: '⛑', name: 'Player pictures'/.test(set) && /section === 'pictures' && <HelmetPicker \/>/.test(set));
 }
+// v0.713.4, founder: "Numbers on helmets for weekly contest leagues please".
+ok('contest: the phone\'s card face draws the numbered helmet, theirs facing left', /playerHelmetFace\(slug, undefined, team, !mine\)/.test(read('apps/mobile/src/ui/ContestCards.tsx')));
+ok('contest: the web\'s playing card draws it, the opponent\'s facing left', /const helmet = helmetArt\(slug, team, opp\);/.test(read('src/app/cardTable.tsx')));
 ok('app: the tree re-renders when it flips', /onHelmetMode\(/.test(read('apps/mobile/App.tsx')));
 
 if (fails) { console.log(`\n${fails} HELMET ASSERTION(S) FAILED`); process.exit(1); }
