@@ -30,6 +30,7 @@ import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { installSportMarketFor } from '@drip/core/sports/market';
 import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
 import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
+import { holdersBySlug, copyOpen, copiesLeft, holderFor } from '@drip/core/data/copies';
 import { ShotgunWeddingCard } from './ShotgunWeddingCard';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
@@ -40,7 +41,7 @@ import {
   myEnrollments, type Enrollment,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
+  setLeagueCopies, leaguePool, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, seatFullError, cancelWaiverClaim, processWaivers, friendlyError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
@@ -1113,6 +1114,19 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
               <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
             </div>
           )}
+          {/* ── COPIES (0500): 1–4 of every player, each on a different team ── */}
+          {!contractRoom && st.mode !== 'auction' && (
+            <>
+              <LabelInfo label="COPIES" title="Copies of every player" style={{ marginTop: 12 }}
+                info="How many teams can roster the same player. At 2, two different teams can each draft or add him; a team never holds two of him. Used for big leagues where one pool runs thin. Set before the draft — it locks when the draft starts. Not offered with an auction, salaries, devy, guillotine, vampire or a shotgun wedding." />
+              <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
+                {[1, 2, 3, 4].map((n) => (
+                  <Chip key={n} on={(st.copies ?? 1) === n}
+                    onClick={() => { if ((st.copies ?? 1) !== n) void run(() => setLeagueCopies(leagueId, n), n === 1 ? '✓ one copy of each player' : `✓ ${n} copies of each player`); }}>{n}</Chip>
+                ))}
+              </div>
+            </>
+          )}
           <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
               <div className="mono" style={label}>{mode === 'auction' ? 'NOMINATION CLOCK' : 'PICK CLOCK'}</div>
@@ -1475,8 +1489,11 @@ export function DraftRoom({ leagueId, onBack, onTeam, onOpenLeague, embedded = f
   }, [team]);
   const teamName = (rid: number | null | undefined) => (rid == null ? null : byRoster[rid]?.team ?? null);
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
-  const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug)), [st?.picks]);
   const myRoster = team?.my_roster_id ?? null;
+  // COPIES (0500): a player is gone to ME once every copy is drafted or I
+  // already have one; with one copy, that's simply "picked".
+  const draftHeld = useMemo(() => holdersBySlug(st?.picks ?? []), [st?.picks]);
+  const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug).filter((s) => !copyOpen(draftHeld, s, st?.copies, myRoster))), [st?.picks, draftHeld, st?.copies, myRoster]);
   // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
   const mySeatRule = useMySeatRule(leagueId, myRoster);
   const [seatShowAll, setSeatShowAll] = useState(false);
@@ -3298,8 +3315,12 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
   }, [leagueId]);
 
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
-  const rostered = useMemo(() => new Set(rosters.map((r) => r.slug)), [rosters]);
   const myRoster = team?.my_roster_id ?? null;
+  // COPIES (0500): who holds each player is a list. "Rostered" for the wire
+  // means no copy is left for MY team; with one copy that's the old answer.
+  const held = useMemo(() => holdersBySlug(rosters), [rosters]);
+  const copies = gm?.copies ?? 1;
+  const rostered = useMemo(() => new Set([...held.keys()].filter((s) => !copyOpen(held, s, copies, myRoster))), [held, copies, myRoster]);
   // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
   const mySeatRule = useMySeatRule(leagueId, myRoster);
   const [seatShowAll, setSeatShowAll] = useState(false);
@@ -3405,14 +3426,14 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
    *  injury gate and says why not. */
   const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir' | 'out' | 'devy') => {
     setFillFor(null);
-    run(() => setRosterSpot(leagueId, slug, spot));
+    run(() => setRosterSpot(leagueId, slug, spot, shownRid));
   };
   // A FULL spot takes a SWAP (0461, #1188): the occupant back to active and
   // this player into his place, as one move — with a full roster there was
   // no other way to do it short of a drop.
   const swapIntoSpot = (outSlug: string, inSlug: string) => {
     setFillFor(null);
-    run(() => swapRosterSpot(leagueId, outSlug, inSlug));
+    run(() => swapRosterSpot(leagueId, outSlug, inSlug, shownRid));
   };
 
   /** WHICH POSITIONS THIS LEAGUE CAN ACTUALLY ROSTER (v0.302.0, founder: "no
@@ -3436,9 +3457,9 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
    *  waiver order, which carries both. */
   const ownerOf = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of rosters) m.set(r.slug, r.roster_id);
+    for (const s of held.keys()) { const h = holderFor(held, s, myRoster); if (h != null) m.set(s, h); }
     return m;
-  }, [rosters]);
+  }, [held, myRoster]);
   const seatName = useMemo(() => {
     const m = new Map<number, string>();
     for (const w of team?.waiver_order ?? []) m.set(w.roster_id, w.team || `Roster ${w.roster_id}`);
@@ -4009,8 +4030,10 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
             // duration anybody can picture. `W (Wed)` is the answer already
             // converted, and it stays true while you look at it.
             const clears = clearsOn(p.waived_until, Date.now() + skew.current);
-            const ownRid = ownerOf.get(p.slug);
-            const isMine = ownRid != null && ownRid === myRoster;
+            const holders = held.get(p.slug) ?? [];
+            const isMine = myRoster != null && holders.includes(myRoster);
+            // COPIES (0500): held elsewhere but a copy is left — still an add.
+            const ownRid = isMine ? myRoster : copyOpen(held, p.slug, copies, myRoster) ? undefined : ownerOf.get(p.slug);
             const adds = trend[p.slug]?.a ?? 0;
             return (
               <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)' }}>
@@ -4033,12 +4056,16 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
                 {/* WHO HOLDS HIM. Only drawn when the list is showing owned
                     players, so the free-agent wire does not grow a column of
                     blanks. */}
-                {showOwned && ownRid != null && (
-                  <span className="mono" title={isMine ? 'on your roster' : `rostered by ${seatName.get(ownRid) ?? 'another team'}`}
-                    style={{ fontSize: 8.5, fontWeight: 700, color: isMine ? 'var(--you)' : 'var(--dim)', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    → {isMine ? 'you' : (seatName.get(ownRid) ?? `Roster ${ownRid}`)}
-                  </span>
-                )}
+                {showOwned && holders.length > 0 && (() => {
+                  const names = holders.map((r) => r === myRoster ? 'you' : (seatName.get(r) ?? `Roster ${r}`));
+                  const tag = copies > 1 ? `${names.join(', ')} · ${copiesLeft(held, p.slug, copies)}/${copies} left` : names[0];
+                  return (
+                    <span className="mono" title={isMine && holders.length === 1 ? 'on your roster' : `rostered by ${names.join(', ')}`}
+                      style={{ fontSize: 8.5, fontWeight: 700, color: isMine ? 'var(--you)' : 'var(--dim)', maxWidth: copies > 1 ? 160 : 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      → {tag}
+                    </span>
+                  );
+                })()}
                 {/* 0340: what the rest of fantasy football did with him in the
                     last day. Only shown where the board actually has a count —
                     a zero is not news and a column of them is noise. */}
@@ -4500,7 +4527,9 @@ function TradeCenter({ leagueId, myRoster, teams, rosters, poolBySlug, tradeRevi
   /** The default destination for an asset a seat is sending: the next team
    *  round the ring, which is what a carousel deal usually is. */
   const nextSeat = (rid: number) => teamsIn[(teamsIn.indexOf(rid) + 1) % teamsIn.length];
-  const holderOf = (slug: string) => rosters.find((r) => r.slug === slug)?.roster_id ?? null;
+  // COPIES (0500): several teams can hold him — the one in this deal sends him.
+  const holderOf = (slug: string) => (rosters.find((r) => r.slug === slug && teamsIn.includes(r.roster_id))
+    ?? rosters.find((r) => r.slug === slug))?.roster_id ?? null;
   const multiAssets = Object.keys(dest).length + Object.keys(pickDest).length;
   // 0328's other half: WHAT IS THIS WORTH, computed here rather than fetched,
   // because the projections and the league's scoring both live in core and

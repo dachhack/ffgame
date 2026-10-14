@@ -187,7 +187,12 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
 
       const { data: allRos } = await db().from('native_roster')
         .select('roster_id,slug,spot').eq('league_id', lg.id);
-      const owned = new Set((allRos ?? []).map((r) => r.slug));
+      // COPIES (0500): a player is off the wire once every copy is held; a
+      // seat that holds one copy is kept off another below (heldBySeat).
+      const copies = Math.max(1, Math.min(4, Number(lg.settings_json?.copies) || 1));
+      const holdCount = new Map();
+      for (const r of allRos ?? []) holdCount.set(r.slug, (holdCount.get(r.slug) ?? 0) + 1);
+      const owned = new Set([...holdCount].filter(([, n]) => n >= copies).map(([slug]) => slug));
 
       // WHAT THIS SEAT HAS ALREADY ASKED FOR. A pending claim has not moved
       // anybody yet — the added player is still unowned and the dropped player
@@ -311,6 +316,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
           { p_league_id: lg.id, p_roster_id: seat.roster_id });
         if (blocked) continue;
         const mine = (allRos ?? []).filter((r) => r.roster_id === seat.roster_id);
+        const heldBySeat = new Set(mine.map((r) => r.slug));
 
         // ── IR HOUSEKEEPING (v0.426.0) ───────────────────────────────────────
         // The league's list decides who qualifies (0198), the shape how many
@@ -478,7 +484,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
         // …plus the best few bodies for every spot nobody on the roster can
         // stand in (v0.665.1) — a rookie-only spot's rookies are rarely a
         // position's top twelve.
-        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id) && !p.wait), (p) => rosValueOf(p) + momentumOf(p), undefined, { slots, roster });
+        const candidates = shortlistWire(available.filter((p) => !pendingAdds.has(p.id) && !p.wait && !heldBySeat.has(p.id)), (p) => rosValueOf(p) + momentumOf(p), undefined, { slots, roster });
 
         // Replacement level: the best FREE body at a position — what anyone
         // could sign for nothing this minute — so a claim is measured over

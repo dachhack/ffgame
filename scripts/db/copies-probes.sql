@@ -47,6 +47,8 @@ begin
   perform cp_err(set_league_copies(lid, 5), '1 to 4', 'cp1d no more than four');
   perform cp_ok(set_league_copies(lid, 2), 'cp1e two copies');
   perform cp_true(league_copies(lid) = 2, 'cp1f stored');
+  perform cp_true((draft_state(lid) ->> 'copies')::int = 2 and (league_game_mode(lid) ->> 'copies')::int = 2,
+    'cp1f2 (0501) the draft room and the league''s mode both say two copies');
   perform cp_ok(start_draft(lid, '[1,2,3]'::jsonb), 'cp1g …and the same pool fills the draft twice over');
   perform cp_err(set_league_copies(lid, 3), 'before the draft', 'cp1h copies lock when the draft starts');
 

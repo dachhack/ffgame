@@ -2483,7 +2483,9 @@ export const leagueLiveBuffs = (leagueId: string) =>
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
 export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; bullseye?: 'slots' | 'total' | null; bullseye_radius?: number | null; bullseye_deal?: 'shared' | 'team' | null; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean;
   /** 0426: which sport the league plays ('nfl' for every league before it) and its sport block. */
-  sport?: Sport; sport_settings?: Record<string, unknown> | null }
+  sport?: Sport; sport_settings?: Record<string, unknown> | null;
+  /** 0500/0501: copies of every player (1–4); each copy on a different team. */
+  copies?: number }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -4816,6 +4818,8 @@ export interface DraftState {
    *  above is already net of them; this is here so a screen can SAY why the
    *  roster is bigger than the draft. */
   stash_slots?: number;
+  /** 0501: copies of every player the league runs (1–4). */
+  copies?: number;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
 /** Change the number of teams before the draft (0458): grow adds open seats;

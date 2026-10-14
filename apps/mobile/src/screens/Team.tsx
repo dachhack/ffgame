@@ -30,6 +30,7 @@ import { sportLeagueMarket,
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
+import { holdersBySlug, copyOpen, copiesLeft, holderFor } from '@drip/core/data/copies';
 import { teamBook, fmtPts, stakesOf } from '@drip/core/data/devyShares';
 import { ClassicBoard } from '../ui/ClassicBoard';
 import { DevyMarketTab } from '../ui/DevyShares';
@@ -496,15 +497,19 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   }, [leagueId]);
 
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
-  const rostered = useMemo(() => new Set(rosters.map((r) => r.slug)), [rosters]);
+  const myRoster = team?.my_roster_id ?? null;
+  // COPIES (0500): who holds each player is a list. "Rostered" for the wire
+  // means no copy is left for MY team; with one copy that's the old answer.
+  const held = useMemo(() => holdersBySlug(rosters), [rosters]);
+  const copies = gm?.copies ?? 1;
+  const rostered = useMemo(() => new Set([...held.keys()].filter((s) => !copyOpen(held, s, copies, myRoster))), [held, copies, myRoster]);
   /** 0341: WHO HOLDS HIM. `rosters` is league-wide; the wire was throwing the
    *  answer away with `!rostered.has(slug)`. */
   const ownerOf = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of rosters) m.set(r.slug, r.roster_id);
+    for (const s of held.keys()) { const h = holderFor(held, s, myRoster); if (h != null) m.set(s, h); }
     return m;
-  }, [rosters]);
-  const myRoster = team?.my_roster_id ?? null;
+  }, [held, myRoster]);
   // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
   const mySeatRule = useMySeatRule(leagueId, myRoster);
   const [seatShowAll, setSeatShowAll] = useState(false);
@@ -590,7 +595,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   const moveToSpot = (slug: string, spot: 'active' | 'taxi' | 'ir' | 'out' | 'devy') => {
     tap();
     setFillFor(null);
-    void run(() => setRosterSpot(leagueId, slug, spot));
+    void run(() => setRosterSpot(leagueId, slug, spot, shownRid));
   };
   // A FULL spot takes a SWAP (0461, #1188): the occupant back to active and
   // this player into his place, as one move — with a full roster there was
@@ -598,7 +603,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   const swapIntoSpot = (outSlug: string, inSlug: string) => {
     tap();
     setFillFor(null);
-    void run(() => swapRosterSpot(leagueId, outSlug, inSlug));
+    void run(() => swapRosterSpot(leagueId, outSlug, inSlug, shownRid));
   };
 
   // ── THE ROSTER, LAID OUT LIKE A ROSTER (v0.281.0, founder) ───────────────
@@ -1311,8 +1316,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
           // sleeps, and past a day it stops being a duration anybody can
           // picture. The day is the answer already converted.
           const clears = clearsOn(p.waived_until, Date.now() + skew.current);
-          const ownRid = ownerOf.get(p.slug);
-          const isMine = ownRid != null && ownRid === myRoster;
+          const holders = held.get(p.slug) ?? [];
+          const isMine = myRoster != null && holders.includes(myRoster);
+          // COPIES (0500): held elsewhere but a copy is left — still an add.
+          const ownRid = isMine ? myRoster : copyOpen(held, p.slug, copies, myRoster) ? undefined : ownerOf.get(p.slug);
           const adds = trend[p.slug]?.a ?? 0;
           // OVER-LIMIT ROSTERS ARE THE ONLY LOCK-OUT LEFT (v0.403.0). A shut
           // FA window used to disable this for anyone without a waiver hold —
@@ -1353,9 +1360,10 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                   <InjuryNow slug={p.slug} size={7.5} />
                   <FlagChip slug={p.slug} size={7.5} />
                   {clears && <Mono size={8.5} tone="warn" weight="700">W · {clears.short}</Mono>}
-                  {showOwned && ownRid != null && (
-                    <Mono size={8.5} tone={isMine ? 'you' : 'dim'} weight="700">
-                      → {isMine ? 'you' : (seatName.get(ownRid) ?? `Roster ${ownRid}`)}
+                  {showOwned && holders.length > 0 && (
+                    <Mono size={8.5} tone={isMine ? 'you' : 'dim'} weight="700" numberOfLines={1}>
+                      → {holders.map((r) => r === myRoster ? 'you' : (seatName.get(r) ?? `Roster ${r}`)).join(', ')}
+                      {copies > 1 ? ` · ${copiesLeft(held, p.slug, copies)}/${copies} left` : ''}
                     </Mono>
                   )}
                   {adds > 0 && (

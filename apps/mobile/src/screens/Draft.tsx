@@ -20,7 +20,7 @@ import { sportLeagueMarket,
   setAutodraft, setDraftQueue, setLotProxy, startDraft, seedLeaguePool, leagueGameMode,
   commishPauseDraft, commishResumeDraft, commishForcePick, commishUndoPick, setDraftNight,
   commishResetDraft, commishMoveDraftSlot, leagueAutodrafts, commishEditPick,
-  setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
+  setDraftSetup, setLeagueCopies, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   createPracticeRoom, deleteMockDraft, draftLog, type DraftEvent,
   draftHere, seatIsHere, type DraftPresence,
   leaguePoolExp, leaguePoolIds, friendlyError, myQueueMaxes, setQueueMax, auctionMarketValue,
@@ -38,6 +38,8 @@ import { devyBlockLine, devyBlockRound, draftRoundLabel } from '@drip/core/data/
 import { sortPool, POOL_SORTS, projFor, adpFor, installLiveMarket, clearLiveMarket, dynFor, setDynFormat, type PoolSort, DRAFT_POS_FILTERS, LEVEL_FILTERS, CLASS_FILTERS, levelClassMatch, poolSearchMatch, type LevelFilter, confMatch, confFilterOptions } from '@drip/core/data/poolSort';
 import { setSlugSleeperIds } from '@drip/core/data/slugMeta';
 import { keeperState, isDynastyContinuity } from '@drip/core/data/liveApi';
+import { holdersBySlug, copyOpen } from '@drip/core/data/copies';
+import { InfoChip } from '../ui/InfoChip';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { FlagChip, InjuryNow } from '../ui/rosterGroup';
@@ -293,8 +295,10 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
   }, [team]);
   const teamName = (rid: number | null | undefined) => (rid == null ? null : byRoster[rid]?.team ?? null);
   const poolBySlug = useMemo(() => new Map(pool.map((p) => [p.slug, p])), [pool]);
-  const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug)), [st?.picks]);
   const myRoster = team?.my_roster_id ?? null;
+  // COPIES (0500): gone to ME once every copy is drafted or I already have one.
+  const draftHeld = useMemo(() => holdersBySlug(st?.picks ?? []), [st?.picks]);
+  const taken = useMemo(() => new Set((st?.picks ?? []).map((p) => p.slug).filter((s) => !copyOpen(draftHeld, s, st?.copies, myRoster))), [st?.picks, draftHeld, st?.copies, myRoster]);
   // ⚖️ The commissioner's rule for my team (0460): the list shows who I may take.
   const mySeatRule = useMySeatRule(leagueId, myRoster);
   const [seatShowAll, setSeatShowAll] = useState(false);
@@ -1674,6 +1678,19 @@ function DraftSetupCard({ leagueId, st, seats, busy, teamName, onDone }: {
               </>
             )}
           </View>
+          {/* COPIES (0500): 1–4 of every player, each on a different team */}
+          {!contractRoom && st.mode !== 'auction' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Mono size={8.5} tone="faint" track={0.1}>COPIES</Mono>
+              <InfoChip title="Copies of every player">
+                How many teams can roster the same player. At 2, two different teams can each draft or add him; a team never holds two of him. Used for big leagues where one pool runs thin. Set before the draft — it locks when the draft starts. Not offered with an auction, salaries, devy, guillotine, vampire or a shotgun wedding.
+              </InfoChip>
+              {[1, 2, 3, 4].map((n) => (
+                <Chip key={n} label={String(n)} on={(st.copies ?? 1) === n}
+                  onPress={() => { if ((st.copies ?? 1) === n) return; tap(); onDone(() => setLeagueCopies(leagueId, n)); }} />
+              ))}
+            </View>
+          )}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Mono size={8.5} tone="faint" track={0.1}>{mode === 'auction' ? 'NOMINATE' : 'PICK CLOCK'}</Mono>
             <TextInput value={clock} keyboardType="number-pad" onChangeText={(v) => setClock(v.replace(/\D/g, ''))} style={box(64)} />

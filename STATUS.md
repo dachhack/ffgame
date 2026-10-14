@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.710.0 — Copies of every player, part 2: the apps
+
+> - Commissioners can now set COPIES (1 to 4) in draft setup on the app and the site: with 2, two different teams can each draft or add the same player. Set before the draft; it locks once the draft starts.
+> - In a copies league, the waiver wire, draft board and player cards show every team that holds a player and how many copies are left.
+
+Part 2 of the founder's copies ask (0500 was the database).
+
+- 0501: `draft_state` and `league_game_mode` carry `copies`.
+- core `data/copies.ts`: `holdersBySlug`, `copyOpen`, `copiesLeft`,
+  `holderFor`, `boardStashSets` — one rule for both apps; one copy answers
+  exactly as the old one-owner maps (pinned by `check:copies`, in parity).
+- Web + app: COPIES chips (ⓘ) in draft setup (hidden for auction/contracts);
+  draft "taken" = every copy drafted or I hold one; wire shows a held
+  player with a copy left as an ADD and names every holder with "n/m left";
+  player cards list every holder; trade composer picks the holder in the
+  deal; commish roster console lists one row per copy and names the team on
+  move/waive/cut; taxi/IR moves name the team being edited; matchup board
+  stash sets only read the two teams on it, my copy first.
+- Worker: `seatWire` takes a held player off the wire only once every copy
+  is held, and never offers a seat a second copy; `lock.js` autofill reads
+  taxi/IR per team.
+- No iPhone build (JavaScript and SQL only). Next: part 3, stacking.
+
 ### v0.709.0 — Copies of every player, part 1: the database
 
 > - Groundwork for a new league option: up to 4 copies of every player, so up to 4 different teams can roster the same player. The commissioner's setting arrives on the app and the site in the next release; every league today stays at one copy and plays exactly as before.
