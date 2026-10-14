@@ -93,7 +93,12 @@ ok('app: HelmetFace draws through SvgXml', /<SvgXml xml=\{xml\}/.test(face));
 for (const f of ['ui/ClassicBoard.tsx', 'screens/Team.tsx', 'screens/Draft.tsx', 'ui/RosterPanel.tsx', 'ui/PlayerCardSheet.tsx', 'ui/PlayerPicker.tsx', 'ui/cards.tsx', 'ui/LiveCard.tsx', 'ui/TradeCenter.tsx', 'ui/ShotgunWeddingCard.tsx', 'ui/GameView.tsx']) {
   ok(`app: ${f} draws player helmets`, /playerHelmetFace\(/.test(read(`apps/mobile/src/${f}`)));
 }
-ok('app: settings has the switch', /function HelmetPicker/.test(read('apps/mobile/src/ui/SettingsModal.tsx')));
+{
+  const set = read('apps/mobile/src/ui/SettingsModal.tsx');
+  ok('app: settings has the switch', /function HelmetPicker/.test(set));
+  // v0.713.1: its own row on the settings menu, not tucked inside Cards.
+  ok('app: "Player pictures" is its own settings row', /id: 'pictures', icon: '⛑', name: 'Player pictures'/.test(set) && /section === 'pictures' && <HelmetPicker \/>/.test(set));
+}
 ok('app: the tree re-renders when it flips', /onHelmetMode\(/.test(read('apps/mobile/App.tsx')));
 
 if (fails) { console.log(`\n${fails} HELMET ASSERTION(S) FAILED`); process.exit(1); }

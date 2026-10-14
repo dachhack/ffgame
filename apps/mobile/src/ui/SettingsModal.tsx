@@ -113,6 +113,9 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
     { id: 'notifications', icon: '🔔', name: 'Notifications', value: 'alerts, test push, recent pushes' },
     { id: 'theme', icon: '🎨', name: 'Color theme', value: themeName },
     { id: 'cards', icon: '🃏', name: 'Cards', value: `${sizeName} · ${skinName}` },
+    // v0.713.1: helmet mode gets its own row (v0.713.0 hid it inside Cards,
+    // and the founder went looking for it: "I don't see looks").
+    { id: 'pictures', icon: '⛑', name: 'Player pictures', value: helmetMode() ? 'helmets, with jersey numbers' : 'photos' },
     { id: 'voice', icon: '🔊', name: 'Play-by-play voice', value: 'the voice that reads plays aloud' },
     // v0.601.0: StatHead-based devy values, 1QB and SF, for every player.
     { id: 'devy', icon: '🎓', name: 'Devy values', value: '1QB & SF, refreshed with each StatHead board' },
@@ -225,10 +228,9 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                     })}
                   </View>
                 </View>
-
-                <HelmetPicker />
               </View>
             )}
+            {section === 'pictures' && <HelmetPicker />}
             {section === 'voice' && <VoicePicker />}
             {section === 'devy' && <DevyValues />}
             {section === 'account' && <DeleteAccount onDeleted={() => { onClose(); onSignOut(); }} />}
@@ -270,7 +272,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
   );
 }
 
-type Section = 'notifications' | 'theme' | 'cards' | 'voice' | 'devy' | 'widget' | 'rehearsal' | 'account';
+type Section = 'notifications' | 'theme' | 'cards' | 'pictures' | 'voice' | 'devy' | 'widget' | 'rehearsal' | 'account';
 
 /** One compact line in the menu's lower half: an action, not a category. */
 /** DELETE MY ACCOUNT (0422). Type the email back to confirm. A commissioner of

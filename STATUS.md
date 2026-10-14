@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.1 — Player pictures gets its own settings row
+
+> - Helmets are now under Settings → Player pictures.
+
+Founder, from the phone: "I don't see looks". v0.713.0's notes said Settings
+→ Looks, but the picker went inside Cards (under the card deck), and there is
+no Looks section. It is now its own row, ⛑ Player pictures, showing what it's
+set to (photos, or helmets with jersey numbers). check:helmets +1. JavaScript
+only; no iPhone build.
+
 ### v0.713.0 — Helmet mode: team helmets instead of photos and logos
 
 > - New in settings: Player pictures → Helmets. Every team logo becomes the team's helmet, and every player photo becomes his team's helmet with his jersey number on it.
@@ -50,7 +60,7 @@ Builds on #1325's helmets (public/helmets, manifest.json).
 - App: HelmetFace (SvgXml) in the board/team/draft faces, the roster
   panel, the player card (header and depth rows), the picker and deck
   cards, the live card, trades, the shotgun wedding card and the game
-  view; Settings → Looks → PLAYER PICTURES (Photos / Helmets, ⓘ chip); the
+  view; Settings → Player pictures (Photos / Helmets, ⓘ chip; its own row since v0.713.1); the
   tree re-renders on the switch.
 - Every helmet faces left, so the number sits in the same lower-right spot
   everywhere.
