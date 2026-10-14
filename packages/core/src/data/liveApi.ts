@@ -23,7 +23,8 @@ import { assignSealedRows } from '../engine/seatPicks';
 import type { Session } from '@supabase/supabase-js';
 import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
 import type { WaiverRunReport } from './txnChat';
-import { TeamMap } from './teamCodes';
+import { TeamMap, TeamSet } from './teamCodes';
+import { LIVE_SEASON } from './realPbp';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -827,6 +828,59 @@ export function slateOppLabel(slate: Map<string, SlateSpot> | null | undefined, 
   const s = slate.get(team);
   return s ? `${s.home ? 'vs' : '@'} ${s.opp}` : 'BYE';
 }
+// ── EVERY TEAM'S BYE WEEK (v0.712.4) ──────────────────────────────────────
+// Founder, beside a Sleeper screenshot: "have the bye week for that player in
+// parenthesis next to their name" — Sleeper prints "RB • CLE (11)". The season
+// schedule is already in nfl_slate, so a bye is the one regular-season week a
+// team is missing from. Read once per season, kept in a module cache behind a
+// synchronous getter so a row can ask during render.
+
+/** Each team's bye week from a season's slate rows. Only full weeks count (13+
+ *  games; weeks 1–18), so a week still being loaded can't invent a bye, and a
+ *  team gets a number only when exactly one such week is missing it. Pure. */
+export function byeWeeksFrom(rows: { week: number; home: string; away: string }[]): TeamMap<number> {
+  const byWeek = new Map<number, TeamSet>();
+  const teams = new TeamSet();
+  for (const r of rows) {
+    if (!(r.week >= 1 && r.week <= 18)) continue;
+    const s = byWeek.get(r.week) ?? new TeamSet();
+    s.add(r.home); s.add(r.away); teams.add(r.home); teams.add(r.away);
+    byWeek.set(r.week, s);
+  }
+  const full = [...byWeek].filter(([, s]) => s.size >= 26).map(([w]) => w).sort((a, b) => a - b);
+  const out = new TeamMap<number>();
+  for (const team of teams) {
+    const missing = full.filter((w) => !byWeek.get(w)!.has(team));
+    if (missing.length === 1) out.set(team, missing[0]);
+  }
+  return out;
+}
+
+let teamByes: TeamMap<number> | null = null;
+let teamByesLoad: Promise<boolean> | null = null;
+/** Load the season's bye weeks once; resolves true when they're in hand. Never throws. */
+export function ensureTeamByes(season = String(LIVE_SEASON)): Promise<boolean> {
+  if (teamByes) return Promise.resolve(true);
+  if (!teamByesLoad) {
+    teamByesLoad = (async () => {
+      const { data } = await (await client()).from('nfl_slate').select('week, home, away').eq('season', season).lte('week', 18);
+      const byes = byeWeeksFrom((data ?? []) as { week: number; home: string; away: string }[]);
+      if (byes.size) teamByes = byes;
+      return byes.size > 0;
+    })().catch(() => false).finally(() => { teamByesLoad = null; });
+  }
+  return teamByesLoad;
+}
+/** A team's bye week, or null (not loaded, or not known). */
+export function byeWeekOf(team: string | null | undefined): number | null {
+  return (team && teamByes?.get(team)) || null;
+}
+/** " (8)" for a team with a known bye, "" otherwise — ready to sit after the team code. */
+export function byeTag(team: string | null | undefined): string {
+  const w = byeWeekOf(team);
+  return w ? ` (${w})` : '';
+}
+
 /** The wire's week and its slate by team, for a league. */
 export async function wireWeekSlate(leagueId: string): Promise<{ week: number; slate: Map<string, SlateSpot> }> {
   const open = await defaultOpenWeek(leagueId);
