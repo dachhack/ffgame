@@ -14,7 +14,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { headshot, teamLogo } from '@drip/core/data/media';
 import type { Player } from '@drip/core/types';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 import { GROUP_TABS, groupTag } from './rosterGroup';
@@ -228,34 +228,34 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo
     >
       <View style={{ flexDirection: 'row', alignSelf: 'stretch', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ backgroundColor: pc.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
         </View>
         {/* Deliberately NOT the shared GroupBadge: that one is drawn in theme
             colours, and this card is cream stock in both themes — t.dim on
             cream is unreadable in dark mode. Same tags, card-local palette. */}
         {tag ? (
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: tagFg, borderRadius: 3, paddingHorizontal: 3 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: tagFg }}>{tag}</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7.5), fontWeight: '700', color: tagFg }}>{tag}</Text>
           </View>
         ) : null}
         {injury ? (
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: injFg, borderRadius: 3, paddingHorizontal: 3 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: injFg }}>{injury}</Text>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fsTight(7.5), fontWeight: '700', color: injFg }}>{injury}</Text>
           </View>
         ) : null}
         {flagFor(player.id) ? (
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: '#7B5AA6', borderRadius: 3, paddingHorizontal: 3, maxWidth: 64 }}>
-            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '700', color: '#7B5AA6' }}>⚑ {flagFor(player.id)}</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7.5), fontWeight: '700', color: '#7B5AA6' }}>⚑ {flagFor(player.id)}</Text>
           </View>
         ) : null}
         {onInfo && (
           <Pressable onPress={onInfo} hitSlop={8} style={{ width: 15, height: 15, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: '#8A7C55', alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: '#8A7C55' }}>i</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: '#8A7C55' }}>i</Text>
           </Pressable>
         )}
         {!!logo
           ? <Image source={{ uri: logo }} style={{ width: 13, height: 13 }} resizeMode="contain" />
-          : <Text style={{ fontFamily: MONO, fontSize: 8, color: '#6B6047' }}>{player.team}</Text>}
+          : <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8), color: '#6B6047' }}>{player.team}</Text>}
       </View>
 
       <View style={{ width: '100%', aspectRatio: 1, borderRadius: 6, borderWidth: 1.5, borderColor: pc.fg, backgroundColor: '#EDE4CB', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
@@ -265,7 +265,7 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo
       </View>
 
       <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '800', color: '#201C12', textAlign: 'center' }}>{player.name}</Text>
-      {!!line && <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8, color: '#6B6047', textAlign: 'center' }}>{line}</Text>}
+      {!!line && <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), color: '#6B6047', textAlign: 'center' }}>{line}</Text>}
       {current && <Mono size={8} weight="700" style={{ color: '#8A6A28' }}>CURRENT ✓</Mono>}
       {gated && <Text style={{ fontSize: 10 }}>🔒</Text>}
     </Pressable>

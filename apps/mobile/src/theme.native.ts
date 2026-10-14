@@ -125,6 +125,13 @@ export const TYPE_SLOPE = 0.6;   // fraction of the gap to the pivot that remain
 export const fs = (n: number) =>
   n >= TYPE_PIVOT ? n : Math.round((TYPE_PIVOT - (TYPE_PIVOT - n) * TYPE_SLOPE) * 4) / 4;
 
+/** THE FLOOR FOR FIXED-WIDTH SPOTS (v0.712.9, founder: "start on the small
+ *  fonts"). A picker card's header pills or a draft-board cell has no room for
+ *  fs()'s jump (7 → 10.2), but 7pt is too small to read. These get 9pt
+ *  instead, always paired with numberOfLines={1} + adjustsFontSizeToFit so a
+ *  long value shrinks rather than overflowing the cell. */
+export const fsTight = (n: number) => Math.max(n, 9);
+
 export const type = {
   mono: { fontFamily: MONO },
   grotesk: { fontWeight: '700' as const },

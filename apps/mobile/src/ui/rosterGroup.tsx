@@ -16,7 +16,7 @@ import { injuryNow, onInjuryReport } from '@drip/core/data/injuries';
 import { ensureInjuryReport } from '@drip/core/data/liveApi';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { flagFor } from '@drip/core/data/commish';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fsTight } from '../theme.native';
 
 /** Filter-chip order and wording. 'start' is included here because as a FILTER
  *  "starters only" is a thing you want; as a badge it isn't. */
@@ -68,7 +68,9 @@ export function InjuryBadge({ status, size = 8 }: { status: string | null; size?
   if (!status || !fg) return null;
   return (
     <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: fg, borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
-      <Text style={{ fontFamily: MONO, fontSize: size, fontWeight: '700', color: fg }}>{status}</Text>
+      {/* fsTight (v0.712.9): callers pass 6–8 for the tight spots they sit in;
+          a one- or two-letter tag still gets the 9pt floor. */}
+      <Text style={{ fontFamily: MONO, fontSize: fsTight(size), fontWeight: '700', color: fg }}>{status}</Text>
     </View>
   );
 }
