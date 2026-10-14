@@ -22,6 +22,7 @@ import {
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Mono } from './prims';
+import { playerHelmetFace } from './HelmetFace';
 
 // THE TRADE BOX (v0.656.4, founder: "get rid of the walls of text"): the two
 // sides side by side, a player to a row. Twin of the web's TradeBox.
@@ -194,9 +195,9 @@ export function ShotgunWeddingCard({ leagueId, onChanged, scope = 'mine', markSe
                               </Pressable>
                               <Pressable onPress={() => { tap(); openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos ?? '', team: p.team ?? '' }); }}
                                 style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: alpha(t.text, 10) }}>
+                                {playerHelmetFace(p.slug, 22, p.team) ?? <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: alpha(t.text, 10) }}>
                                   {headshot(p.slug) ? <Image source={{ uri: headshot(p.slug)! }} style={{ width: 22, height: 22 }} resizeMode="cover" /> : null}
-                                </View>
+                                </View>}
                                 <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 11.5, color: on ? t.you : t.text, fontWeight: on ? '700' : '400' }}>{p.name}</Text>
                               </Pressable>
                               <Mono size={8} tone="faint">{p.pos ?? ''}</Mono>

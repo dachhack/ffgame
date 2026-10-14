@@ -36,6 +36,7 @@ import { storeGet, storeSet } from '@drip/core/platform';
 import { MONO, useTheme, alpha, fsTight } from '../theme.native';
 import { useFlipIn, useWobble, useShake, useScoreTick, NukeBurst, HotGlow } from './animations';
 import { InjuryNow } from './rosterGroup';
+import { playerHelmetFace } from './HelmetFace';
 
 // True playing-card ratio (2.5:3.5). The web sets it as --ct-aspect so both
 // cards in a slot pair match height; here the same number keeps the pair square
@@ -323,9 +324,9 @@ export function CardFace({ slug, name, pos, team, metric, bank, accent, idx = 0,
           are, on images already framed head-and-shoulders. */}
       <View style={{ alignItems: 'center', gap: cs(4, sc), marginTop: cs(6, sc) }}>
         <View style={{ width: cs(60, sc), height: cs(60, sc), borderRadius: 7, borderWidth: 1.5, borderColor: accent, backgroundColor: '#EDE4CB', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          {src
+          {playerHelmetFace(slug, undefined, team) ?? (src
             ? <Image source={{ uri: src }} style={{ width: '100%', height: '100%' }} resizeMode={photo ? 'cover' : 'contain'} />
-            : <Text style={{ fontFamily: MONO, fontSize: cs(16, sc), color: INK_DIM }}>{pos}</Text>}
+            : <Text style={{ fontFamily: MONO, fontSize: cs(16, sc), color: INK_DIM }}>{pos}</Text>)}
         </View>
         <Text numberOfLines={1} style={{ fontSize: cs(13, sc), fontWeight: '800', color: INK, letterSpacing: 0.2 }}>{name}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

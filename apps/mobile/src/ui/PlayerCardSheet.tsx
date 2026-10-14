@@ -35,6 +35,7 @@ import { InjuryBadge } from './rosterGroup';
 import { CollegeCardSheet } from './CollegeCardSheet';
 import { isCollegeSlug } from '@drip/core/data/college';
 import { sameTeam } from '../../../../packages/core/src/data/teamCodes';
+import { playerHelmetFace } from './HelmetFace';
 
 export interface PlayerCardReq {
   slug: string; name: string; pos: string; team: string;
@@ -256,11 +257,11 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
     <Overlay visible title="Player card" subtitle={`${name.toUpperCase()} · ${pos} · ${team}`} onClose={onClose}>
       <ScrollView contentContainerStyle={{ padding: 14, gap: 12 }}>
         <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-          <View style={{ width: 54, height: 54, borderRadius: 27, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
+          {playerHelmetFace(slug, 54, team) ?? <View style={{ width: 54, height: 54, borderRadius: 27, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
             {photo ? <Image source={{ uri: photo }} style={{ width: 54, height: 54 }} resizeMode="cover" />
               : logo ? <Image source={{ uri: logo }} style={{ width: 34, height: 34 }} resizeMode="contain" />
               : <Text style={{ fontFamily: MONO, fontSize: 12, color: t.faint }}>{pos}</Text>}
-          </View>
+          </View>}
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
               <Text numberOfLines={1} style={{ fontSize: 17, fontWeight: '800', color: t.text, flexShrink: 1 }}>{name}</Text>
@@ -439,10 +440,10 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
                       onPress={() => { tap(); openPlayerCard({ slug: r.slug, name: rn, pos: r.pos, team: showTeam, week, userId, leagueId }); }}
                       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: t.bd, opacity: pressed ? 0.6 : 1 })}>
                       <Mono size={9} tone={me ? 'you' : 'faint'} weight="700" style={{ width: 14, textAlign: 'right' }}>{String(r.depth)}</Mono>
-                      <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
+                      {playerHelmetFace(r.slug, 22, showTeam) ?? <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
                         {headshot(r.slug) ? <Image source={{ uri: headshot(r.slug)! }} style={{ width: 22, height: 22 }} resizeMode="cover" />
                           : <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7), color: t.faint }}>{r.pos}</Text>}
-                      </View>
+                      </View>}
                       <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: me ? '800' : '600', color: me ? t.you : t.text }}>{rn}</Text>
                       {!!tag && <InjuryBadge status={tag} />}
                       {me ? <Mono size={8} tone="you">THIS CARD</Mono> : <Mono size={9} tone="faint">›</Mono>}

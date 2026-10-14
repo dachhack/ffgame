@@ -2,6 +2,7 @@
 // for the sanitized Drip Test League demo (2025 league logos, no real owners).
 import { HEADSHOTS } from './headshots';
 import { isMarkFree } from './markFree';
+import { helmetMode, helmetUrl } from './helmets';
 
 // ESPN team logo by NFL abbreviation. ESPN accepts the standard abbr lowercased
 // for every team in this league (la/lar/was/wsh all resolve), so no remap.
@@ -40,14 +41,18 @@ export function collegeLogo(abbr?: string | null): string | null {
 }
 
 export function teamLogo(abbr?: string | null, ctx?: LogoCtx): string | null {
-  if (!abbr || isMarkFree()) return null;
+  if (!abbr) return null;
   if (isCollegeLogoCtx(ctx)) return collegeLogo(abbr);
+  // HELMET MODE (v0.713.0): the team's helmet stands in for its logo, the
+  // plain one (abbreviation only) when mark-free. College teams keep theirs.
+  if (helmetMode()) return helmetUrl(abbr);
+  if (isMarkFree()) return null;
   return `https://a.espncdn.com/i/teamlogos/nfl/500/${abbr.toLowerCase()}.png`;
 }
 
 /** Build an ESPN headshot URL from a raw ESPN player id (suppressed when mark-free). */
 export function espnHeadshot(espnId?: string | null): string | null {
-  if (!espnId || isMarkFree()) return null;
+  if (!espnId || isMarkFree() || helmetMode()) return null;
   return `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`;
 }
 
@@ -69,7 +74,10 @@ export function clearRuntimeHeadshots(): void { runtimeHeadshots = {}; }
 /** ESPN headshot for a player slug, or null (→ fall back to the team logo). Mark-free
  *  mode suppresses it (NFLPA likeness) → the UI falls back to a generic position pill. */
 export function headshot(playerId?: string | null): string | null {
-  if (!playerId || isMarkFree()) return null;
+  // Helmet mode: no photo, so a spot that hasn't learned helmetSvg falls back
+  // to its team logo, which is now the team's helmet. College players keep
+  // their photos (there are no college helmets).
+  if (!playerId || isMarkFree() || (helmetMode() && !/^c-\d+$/.test(playerId))) return null;
   return HEADSHOTS[playerId] ?? runtimeHeadshots[playerId] ?? null;
 }
 

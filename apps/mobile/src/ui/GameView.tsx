@@ -28,6 +28,7 @@ import { FieldView } from './FieldView';
 import { ReaderBar } from './ReaderBar';
 import { appVoice } from './voice';
 import { openPlayerCard } from './PlayerCardSheet';
+import { playerHelmetFace } from './HelmetFace';
 
 const fullName = (slug: string) => stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 const shortName = (full: string) => { const w = full.split(' '); return w.length > 1 ? `${w[0][0]}. ${w.slice(1).join(' ')}` : full; };
@@ -214,9 +215,9 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
                                 return (
                                   <Pressable key={who.slug} onPress={() => openPlayerCard({ slug: who.slug, name: fullName(who.slug), pos: row?.pos ?? '', team: row?.team ?? '', week })}
                                     style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                    <View style={{ width: 20, height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: t.sh }}>
+                                    {playerHelmetFace(who.slug, 20, row?.team) ?? <View style={{ width: 20, height: 20, borderRadius: 10, overflow: 'hidden', backgroundColor: t.sh }}>
                                       {!!headshot(who.slug) && <Image source={{ uri: headshot(who.slug)! }} style={{ width: 20, height: 20 }} />}
-                                    </View>
+                                    </View>}
                                     <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', color: t.text }}>{shortName(who.full)}</Text>
                                     {!!row && <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.pos?.[row.pos]?.fg ?? t.faint }}>{row.pos}</Text>}
                                     {!!row && <Text style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dim }}>· {row.stat}</Text>}

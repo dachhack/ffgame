@@ -24,6 +24,7 @@ import { injuryFor } from '@drip/core/data/injuries';
 import { nflGameForTeam } from '@drip/core/data/nflSlate';
 import { normTeam } from '@drip/core/data/slugMeta';
 import { projectedPoints } from '@drip/core/engine/projScoring';
+import { playerHelmetFace } from './HelmetFace';
 
 const POS_TABS = ['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 
@@ -259,9 +260,9 @@ function MiniPlayerCard({ player, current, group, injury, gated, onPress, onInfo
       </View>
 
       <View style={{ width: '100%', aspectRatio: 1, borderRadius: 6, borderWidth: 1.5, borderColor: pc.fg, backgroundColor: '#EDE4CB', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-        {src
+        {playerHelmetFace(player.id, undefined, player.team) ?? (src
           ? <Image source={{ uri: src }} style={{ width: '100%', height: '100%' }} resizeMode={photo ? 'cover' : 'contain'} />
-          : <Text style={{ fontFamily: MONO, fontSize: 14, color: '#6B6047' }}>{player.pos}</Text>}
+          : <Text style={{ fontFamily: MONO, fontSize: 14, color: '#6B6047' }}>{player.pos}</Text>)}
       </View>
 
       <Text numberOfLines={1} style={{ fontSize: 10.5, fontWeight: '800', color: '#201C12', textAlign: 'center' }}>{player.name}</Text>
