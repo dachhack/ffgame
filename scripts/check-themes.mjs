@@ -113,12 +113,17 @@ for (const [name, t] of Object.entries(THEMES)) {
 // the bigger type never wraps ("Let's not do anything that causes wrap").
 {
   const { readFileSync } = await import('node:fs');
-  const FLOORED = ['apps/mobile/src/ui/Chat.tsx', 'apps/mobile/src/ui/PlayLog.tsx'];
+  const FLOORED = ['apps/mobile/src/ui/Chat.tsx', 'apps/mobile/src/ui/PlayLog.tsx', 'apps/mobile/src/ui/LiveCard.tsx'];
   for (const f of FLOORED) {
     const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
     const raw = [...src.matchAll(/fontSize: ([0-9]+(?:\.[0-9]+)?)[,} ]/g)].map((m) => Number(m[1])).filter((n) => n < 9);
     ok(`${f}: no raw font size under 9 (use fs())`, raw.length === 0);
   }
+  // v0.712.8: the live card's panel is dark felt in every theme, so its text
+  // must come through feltInk (a light theme's greys sat at 1.2:1 on it).
+  const live = readFileSync(new URL('../apps/mobile/src/ui/LiveCard.tsx', import.meta.url), 'utf8');
+  ok('LiveCard: panel text reads theme colours through feltInk', /const t = \{ \.\.\.theme, \.\.\.feltInk\(theme\) \};/.test(live));
+  ok('LiveCard: felt targets keep the greys in order', /FELT_TARGET = \{ faint: 4\.5, dim: 5\.5, dimstrong: 8, text: 10/.test(live));
 }
 
 if (fails) { console.log(`\n${fails} THEME ASSERTION(S) FAILED`); process.exit(1); }
