@@ -44,7 +44,15 @@ declare known text[] := array[
   -- feed: NFL boards keyed by the feeds
   'adp_board.slug', 'dyn_board.slug', 'market_board.slug', 'player_market.slug', 'proj_board.slug',
   'trend_board.slug', 'player_depth.slug', 'player_team_override.slug', 'injury_status.player_slug',
-  'pod_salary.slug', 'team_kdst.dst_slug', 'team_kdst.k_slug'];
+  'pod_salary.slug', 'team_kdst.dst_slug', 'team_kdst.k_slug',
+  -- 0468: the head-coach units (`jax-hc`), an NFL feed like team_kdst
+  'team_role.slug',
+  -- 0478: a contest squad's swap history — NFL players, and history keeps its slug
+  'contest_swap.in_slug', 'contest_swap.out_slug',
+  -- 0426: other sports' leagues — never a college football player
+  'sport_slot_lock.player_slug'];
+  -- (These four were added in v0.707.6: the runner had stopped at its first
+  -- suite since 0422, so gr0 never saw them arrive.)
   c text;
 begin
   for c in

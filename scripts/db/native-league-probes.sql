@@ -48,11 +48,12 @@ values ('2026', 1, 'SEA', 'KC', 'snf', '2026-09-09T20:20:00-04:00') on conflict 
 do $$
 declare r jsonb; lid uuid;
 begin
-  -- closed-testing gate: a non-admin may not create a native league
-  perform probe_as('b');
-  -- 0095 moved this gate off admin-only onto the `native` feature flag, and
-  -- reworded the refusal with it; the probe still expected the old text.
-  perform assert_err(create_native_league('X', '2026', 4), 'invite-only', '1a0 non-flagged create gated');
+  -- The gate: 0095 put it on the `native` flag; 0422 ("the door is open")
+  -- made has_native() any signed-in account. The refusal left is the
+  -- signed-out caller. (Until v0.707.6 this still expected 'invite-only' and
+  -- stopped the scratch runner at its first suite.)
+  perform set_config('app.uid', '', false);
+  perform assert_err(create_native_league('X', '2026', 4), 'not signed in', '1a0 a signed-out caller cannot create');
   perform probe_as('a');
   perform assert_err(create_native_league('X', '2026', 1), 'team count', '1a team-count gate');
   perform assert_err(create_native_league('X', '2026', 4, 3), 'roster size', '1b rounds gate');
@@ -786,10 +787,9 @@ end $$;
 do $$
 declare lid uuid; r jsonb; pool jsonb := '[]'::jsonb; i int; code text;
 begin
-  -- same closed-testing gate as real native leagues
-  perform probe_as('b');
-  -- Mocks delegate to create_native_league, so they inherit its 0095 wording.
-  perform assert_err(create_mock_draft(4), 'invite-only', '18a non-flagged gated');
+  -- the same gate as real native leagues: since 0422, signed in is enough
+  perform set_config('app.uid', '', false);
+  perform assert_err(create_mock_draft(4), 'not signed in', '18a a signed-out caller cannot open a mock');
 
   -- SNAKE mock: creator + 3 named bots
   perform probe_as('a');
