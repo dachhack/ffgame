@@ -24,7 +24,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ### v0.708.5 — No more last season's injury tags on the phone
 
-> - The phone no longer shows last season's injury tags: Brock Bowers and Terry McLaurin were marked Out (and projected 0) from a 2025 report, though both are healthy.
+> - Injury tags never come from last season any more: Brock Bowers and Terry McLaurin showed Out (and projected 0) on the phone from a 2025 report, though both are healthy.
 
 `injuryFor` falls back to the baked 2025 report when the live one isn't
 installed for the week asked. Only `setActiveLeague`/`resetToDemoLeague` move
@@ -34,7 +34,12 @@ phone board whose live report was for another week (or failed to load) wore
 2025 week 6 (Bowers and McLaurin O, six untagged); ESPN, Sleeper and StatHead
 all have both healthy. `apps/mobile/index.ts` now sets `setInjurySeason(LIVE_SEASON)`
 at bundle load (the engine's `healthy()` reads the same tags, so auto-lineups
-were affected too). check:injuries +5 (two fail on the old code).
+were affected too). And, founder: "it never makes sense to fall back to
+previous season; hold the current value": `injuryFor`/`injuryRowFor` now
+answer a week the live report wasn't loaded for with the newest snapshot held
+(`heldRows`: the any-screen report, else the board's). The bake is read only
+by a 2025 board with no live report installed, i.e. the demo. check:injuries
+rules 4–5 rewritten to match, +5 for this case.
 
 Also: `poll/injuries.js`'s prune read now pages (`allRows`). It was the one
 `injury_status` read on PostgREST's 1000-row cap. Probe

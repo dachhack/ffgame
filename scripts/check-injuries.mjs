@@ -43,11 +43,12 @@ eq('live: hasLiveInjuries', hasLiveInjuries(3), true);
 eq('live: player off the report', injuryFor(3, 'josh-allen'), null);
 eq('live: detail row', injuryRowFor(3, 'christian-mccaffrey')?.comment, 'knee');
 
-// 4. And ONLY that week. The ESPN feed is a snapshot of the designations
-//    standing right now — it carries no week and keeps no history, so tagging
-//    any other week with it would be an invention.
-eq('live: another week is not covered', injuryFor(4, 'christian-mccaffrey'), null);
-eq('live: another week has no detail', injuryRowFor(4, 'christian-mccaffrey'), null);
+// 4. Another week HOLDS the current report (v0.708.5). The feed is a snapshot
+//    of right now with no week in it; before this, a week it was not loaded
+//    for read nothing, or (on a board left on 2025) last season's bake.
+eq('live: another week is not covered', hasLiveInjuries(4), false);
+eq('live: another week holds the current designation', injuryFor(4, 'christian-mccaffrey'), 'O');
+eq('live: another week holds the current detail', injuryRowFor(4, 'christian-mccaffrey')?.comment, 'knee');
 
 // 5. For a week it covers, the live report WINS — the two reports must never
 //    blend into one board.
@@ -56,7 +57,7 @@ setLiveInjuries(1, { 'ceedee-lamb': { status: 'D' } });
 eq('live outranks baked: baked designation suppressed', injuryFor(1, 'christian-mccaffrey'), null);
 eq('live outranks baked: baked IR suppressed', injuryFor(1, 'brandon-aiyuk'), null);
 eq('live outranks baked: live designation served', injuryFor(1, 'ceedee-lamb'), 'D');
-eq('baked still serves an uncovered week', injuryFor(2, 'isaiah-likely'), 'O');
+eq('a held live report: an uncovered week never reads the bake', injuryFor(2, 'isaiah-likely'), null);
 
 // 6. Clearing reverts cleanly — a league exit must not strand the last board's
 //    designations over the next one.
@@ -150,10 +151,10 @@ eq('now: it is independent of the board\'s week-keyed cache', injuryFor(99, 'a-g
 clearLiveInjuries();
 setInjurySeason(2025);
 setLiveInjuries(7, {});
-eq('2025 board: a week the live report does not cover reads the bake', injuryFor(6, 'brock-bowers'), 'O');
+eq('even a board left on 2025 holds the live report, not 2025 week 6', injuryFor(6, 'brock-bowers'), null);
+eq('…nor 2025 IR', injuryFor(6, 'kyler-murray'), null);
 setInjurySeason(2026);
 eq('2026 board: the same miss reads nothing, never last year', injuryFor(6, 'brock-bowers'), null);
-eq('2026 board: nor 2025 IR', injuryFor(6, 'kyler-murray'), null);
 clearLiveInjuries();
 {
   const { readFileSync } = await import('node:fs');

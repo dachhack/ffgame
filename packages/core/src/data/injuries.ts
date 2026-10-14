@@ -52,10 +52,11 @@ export function setInjurySeason(year: number): void {
 // live-plays and game-feed overlays (`setLivePlays` / `clearLivePlays`), loaded
 // once per league open and cleared on exit.
 //
-// ONE WEEK ONLY, and that is not a shortcut. The ESPN feed is a snapshot of the
-// designations standing right now — it carries no week and keeps no history, so
-// it can only speak for the week being played. Asked about any other week it
-// returns null rather than tagging a past week with today's report.
+// KEYED TO ONE WEEK, but no longer silent outside it (v0.708.5). The feed is a
+// snapshot of the designations standing right now; it carries no week and
+// keeps no history. Asked about a week it was not loaded for, it holds that
+// current snapshot (heldRows below) rather than answering with nothing or,
+// worse, with last season's report for the same week number.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Everything the report knows about one player, for a detail view. */
@@ -121,15 +122,32 @@ export function hasLiveInjuries(week: number): boolean {
 
 /** The full live row for a player, for a badge that opens into detail. */
 export function injuryRowFor(week: number, slug: string): InjuryRow | null {
-  if (!hasLiveInjuries(week)) return null;
-  return liveRows[slug] ?? null;
+  if (hasLiveInjuries(week)) return liveRows[slug] ?? null;
+  return heldRows()?.[slug] ?? null;
 }
 
-// The live report wins for the week it covers; otherwise the baked 2025 report
-// serves a 2025 board (IR from its start week takes precedence there); else null.
+// HOLD THE CURRENT REPORT, NEVER LAST SEASON'S (v0.708.5). Founder: "I don't
+// think it ever makes sense to do the fall back to previous season. Maybe just
+// hold the current value." A week-6 phone board whose live report had been
+// installed for another week fell through to the baked 2025 week 6 and wore
+// Brock Bowers and Terry McLaurin "O" at 0.0, both healthy on every 2026 feed.
+// The report is a snapshot of right now either way, so a week it was not
+// loaded for gets the newest snapshot held: the any-screen report (every
+// loadLiveInjuries refreshes it too), else the board's. The bake is only for a
+// 2025 board with no live report installed, which is the demo replay.
+function heldRows(): Record<string, InjuryRow> | null {
+  if (reportAt > 0) return reportRows;
+  if (liveWeek != null) return liveRows;
+  return null;
+}
+
+// The live report wins for the week it covers; any other week holds the newest
+// live snapshot (heldRows). Only a 2025 board with no live report installed,
+// the demo replay, reads the bake (IR from its start week takes precedence).
 export function injuryFor(week: number, slug: string): InjuryStatus | null {
   if (hasLiveInjuries(week)) return liveRows[slug]?.status ?? null;
-  if (activeSeason !== INJURY_DATA_SEASON) return null; // no feed loaded for this season
+  // A live report is held: it answers, whatever week it was loaded for.
+  if (liveWeek != null || activeSeason !== INJURY_DATA_SEASON) return heldRows()?.[slug]?.status ?? null;
   const ir = IR_FROM[slug];
   if (ir != null && week >= ir) return 'IR';
   return INJURIES[week]?.[slug] ?? null;
