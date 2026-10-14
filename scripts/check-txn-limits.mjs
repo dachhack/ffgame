@@ -27,5 +27,19 @@ ok('trades spent', seasonOut.tradesOut && seasonOut.text?.endsWith('0 of 2 trade
 ok('a failed read says nothing', txnLimitSummary({ ok: false }).text === null);
 ok('no read at all says nothing', txnLimitSummary(null).text === null);
 
+
+// A LOST CLAIM SAYS WHICH LIMIT (0504, #1311). "roster over limits" alone gave
+// a manager whose 1-for-1 swap lost nothing to go on; the newest process_waivers
+// must carry roster_illegal_reason's own text after it.
+{
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const dir = new URL('../supabase/migrations/', import.meta.url);
+  const latest = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+    .filter((f) => /create or replace function process_waivers\(/.test(readFileSync(new URL(f, dir), 'utf8'))).pop();
+  const sql = readFileSync(new URL(latest, dir), 'utf8');
+  ok(`the newest process_waivers (${latest}) names the illegal roster's reason`,
+    /err := roster_illegal_reason\(p_league_id, c\.roster_id\);[\s\S]{0,200}note = 'roster over limits: ' \|\| err/.test(sql));
+  ok('…and never writes the bare words', !/note = 'roster over limits',/.test(sql));
+}
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log('\ntxn-limits: all ok');
