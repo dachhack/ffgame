@@ -17,11 +17,11 @@ import { clearsOn } from '@drip/core/data/waiverDays';
 import { SPORTS } from '@drip/core/sports/index';
 import { sportLeagueMarket,
   addFreeAgent, cancelWaiverClaim,
-  friendlyError, leaguePool, nativeRosters, setRosterSpot, swapRosterSpot,
+  friendlyError, leaguePoolLive, nativeRosters, setRosterSpot, swapRosterSpot,
   rosterRules, injuryTags, leagueMarket,
   nativeTeamState, processWaivers, setTeamAvatar, setTeamName, submitWaiverClaim, seatFullError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
-  myFavorites, loadTeamOverrides, playerFlags, leaguePoolExp, leaguePoolIds,
+  myFavorites, playerFlags, leaguePoolExp, leaguePoolIds,
   keeperState, setKeepers, type KeeperState, isDynastyContinuity,
   leagueContracts, type ContractDeal,
   leagueGameMode, type GameModeInfo,
@@ -289,7 +289,7 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
               <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.pos[p.pos as keyof typeof t.pos]?.fg ?? t.dim }}>{p.pos}</Text>
               <Mono size={8.5} tone="faint">{sub ?? `${teamLabel(p)}${isCollegeSlug(p.slug) ? '' : byeTag(p.team)}`}</Mono>
               {!sub && !isCollegeSlug(p.slug) && !!slateOppLabel(slate, p.team) && (
-                <Mono size={8.5} tone="dim" weight="700">{slateOppLabel(slate, p.team)}</Mono>
+                <Mono size={8.5} tone="dim" weight="700" numberOfLines={1} style={{ flexShrink: 0 }}>{slateOppLabel(slate, p.team)}</Mono>
               )}
               <InjuryBadge status={inj ?? null} size={7.5} />
               <FlagChip slug={p.slug} size={7.5} />
@@ -464,7 +464,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
       // Clearing due waiver claims first keeps this screen self-driving even
       // with no worker running (process_waivers is idempotent).
       await processWaivers(leagueId).catch(() => {});
-      const [tm, r, p] = await Promise.all([nativeTeamState(leagueId), nativeRosters(leagueId), leaguePool(leagueId)]);
+      // THE LIVE TEAM, not the pool's (v0.713.4, founder: "Interesting mis
+      // match HOU van ARZ for Marvin Harrison"). league_pool keeps the team
+      // the league was seeded with; a traded player's row printed his old
+      // club, bye and opponent beside his new club's helmet. The worker's
+      // override layer (0142) is the move: leaguePoolLive lays it over.
+      const [tm, r, p] = await Promise.all([nativeTeamState(leagueId), nativeRosters(leagueId), leaguePoolLive(leagueId)]);
       if (tm.error) { setErr(friendlyError(tm.error)); return; }
       skew.current = Date.parse(tm.server_now) - Date.now();
       setTeam(tm); setRosters(r); setPool(p); setErr(null);
@@ -477,7 +482,6 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   useEffect(() => {
     void refresh();
     myFavorites().then(setFavs).catch(() => {});
-    void loadTeamOverrides();
     playerFlags(leagueId).then((f) => { if (Array.isArray(f)) { setLeagueFlags(leagueId, f); setFlagVer((v) => v + 1); } }).catch(() => {});
     // years_exp by slug — the tenure filter's data. A failed read leaves the
     // map empty, so every band except ANY comes back empty rather than wrong.
@@ -1367,7 +1371,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                   <PosPill pos={p.pos} size={7.5} />
                   <Mono size={8.5} tone="faint">{`${teamLabel(p)}${isCollegeSlug(p.slug) ? '' : byeTag(p.team)}`}</Mono>
                   {!isCollegeSlug(p.slug) && !!slateOppLabel(wireSlate, p.team) && (
-                    <Mono size={8.5} tone="dim" weight="700">{slateOppLabel(wireSlate, p.team)}</Mono>
+                    <Mono size={8.5} tone="dim" weight="700" numberOfLines={1} style={{ flexShrink: 0 }}>{slateOppLabel(wireSlate, p.team)}</Mono>
                   )}
                   <InjuryNow slug={p.slug} size={7.5} />
                   <FlagChip slug={p.slug} size={7.5} />

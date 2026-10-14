@@ -3990,7 +3990,7 @@ function ScoreCard({ side, player, week, clock, metricId, metricName, tag, bank,
           bank={bank} hot={hot} nuked={!!scorched && !subName && suppressSpent == null}
           badge={<InjuryBadge week={week} slug={player.id} />} />
       ) : (
-        <span className="mx-sc-img" style={{ display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 46 : 64} /></span>
+        <span className="mx-sc-img" style={{ display: 'inline-flex' }}><PlayerImg playerId={player.id} team={player.team} pos={player.pos} size={isMobile ? 46 : 64} opponent={side === 'their'} /></span>
       )}
     </span>
   );

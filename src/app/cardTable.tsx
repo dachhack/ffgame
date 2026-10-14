@@ -5,6 +5,7 @@
 // the rest of the app; suit colors come from the active theme's --pos-* vars.
 import { useEffect, useMemo, useState } from 'react';
 import { headshot, teamLogo } from '@drip/core/data/media';
+import { helmetMode, playerHelmet, helmetSvg, helmetFacing } from '@drip/core/data/helmets';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { DripCoin, FxIcon, PuIcon } from './gameIcons';
 import { GHOST_CARD, isGhostSlug } from '@drip/core/data/ghostCard';
@@ -550,6 +551,16 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boo
 // slug registry (covers every demo/hero player incl. K/DST team slugs) — so a
 // missing or broken headshot degrades to the team crest, not straight to
 // initials. Mark-free mode nulls both URLs and lands on initials as before.
+/** A card's art in HELMET MODE (v0.713.4): the team's helmet with his number,
+ *  filling the art box; yours face right, the opponent's (`opp`) face left.
+ *  Null outside the mode, or with no team helmet (the art falls back as before). */
+function helmetArt(slug: string, team: string | null | undefined, opp?: boolean): React.ReactNode {
+  if (!helmetMode() || /^c-\d+$/.test(slug)) return null;
+  const ph = playerHelmet(slug, team);
+  const svg = ph ? helmetSvg(ph.team, ph.num, helmetFacing(opp)) : null;
+  return svg ? <span style={{ display: 'block', width: '100%', height: '100%', lineHeight: 0 }} dangerouslySetInnerHTML={{ __html: svg }} /> : null;
+}
+
 function useCardArt(slug: string, team?: string | null) {
   const url = useMemo(() => headshot(slug), [slug]);
   const logo = useMemo(() => teamLogo(team || slugMeta(slug).team || null, { slug }), [team, slug]);
@@ -579,6 +590,8 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
   const suit = posVars(pos);
   // The Ghost (v0.527.0): a ghost where the headshot goes.
   const ghost = isGhostSlug(slug);
+  // HELMET MODE (v0.713.4): the numbered helmet; the opponent's faces left.
+  const helmet = helmetArt(slug, team, opp);
   return (
     <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : flip ? 'ct-flip' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${selected ? ' ct-sel' : ''}${onClick ? ' ct-tap' : ''}`}
       style={{ animationDelay: `${idx * 90}ms` }} onClick={onClick}>
@@ -598,6 +611,8 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
           <div className="ct-art" style={{ borderColor: suit.color as string }}>
             {ghost
               ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'radial-gradient(circle at 50% 40%, #2B4A55, #13232B)', fontSize: 34 }}>👻</span>
+              : helmet
+              ? helmet
               : art.stage === 'head'
               ? <img src={art.url!} alt="" draggable={false} onError={art.fail} />
               : art.stage === 'logo'
@@ -646,6 +661,8 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
   const art = useCardArt(slug, team);
   const suit = posVars(pos);
   const ghost = isGhostSlug(slug);   // v0.527.0: the Ghost's own card
+  // HELMET MODE (v0.713.4): the numbered helmet; the opponent's faces left.
+  const helmet = ghost ? null : helmetArt(slug, team, side === 'their');
   const fmt = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
   return (
     <div className={`ct-lcard ${side === 'you' ? 'ct-lyou' : 'ct-lopp'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${float ? ' ct-float' : ''}`}
@@ -663,6 +680,8 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
       <div className="ct-lart" style={{ borderColor: suit.color as string }}>
         {ghost
           ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'radial-gradient(circle at 50% 40%, #2B4A55, #13232B)', fontSize: 26 }}>👻</span>
+          : helmet
+          ? helmet
           : art.stage === 'head'
           ? <img src={art.url!} alt="" draggable={false} onError={art.fail} />
           : art.stage === 'logo'

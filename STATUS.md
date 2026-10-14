@@ -22,6 +22,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.4 — Helmets face each other; numbers on contest cards; a traded player's row follows him
+
+> - In helmet mode, your helmets face right and your opponent's face left, so on a matchup the two sides face each other.
+> - Weekly contest cards show the numbered helmet too, on the phone and the web.
+> - A traded player's waiver row now shows his new team, its bye week and its opponent (Marvin Harrison read ARI beside a Texans helmet).
+
+Founder: "Can we have helmets for the user face right and opposing helmets
+face left?" core `helmetFacing(opponent)`: 'right' by default (yours, and
+every neutral spot: roster, picker, team logos), 'left' for the opponent. The
+right-facing art's number anchor is lower left, the back of the shell, same
+1.45× size; checked in Chromium at 44px and 110px. Wired: web board cells
+(right column = opponent), the duel's score card and mini card, the contest
+playing card; phone LiveCard mini card and contest CardFace. The phone's
+board rows carry no faces, so nothing changes there.
+
+Founder: "Numbers on helmets for weekly contest leagues please". The contest
+CardFace (phone) and PlayerCard (web) drew `teamLogo`, which in helmet mode
+is a helmet with no number; both now draw the numbered helmet.
+
+Founder: "Interesting mis match HOU van ARZ for Marvin Harrison". He was
+traded: ESPN lists Marvin Harrison Jr. on HOU, #18, and the ARI roster no
+longer has him. The helmet and the card read teamFor (the worker's overrides,
+0142), but the wire rows read league_pool's team from when the league was
+seeded, hence "ARI (14) @" beside a Texans helmet. New `leaguePoolLive`
+loads the overrides and lays them over the pool rows (NFL rows only); the
+phone's Team screen and the web's league screen use it. The opponent label
+also gets numberOfLines={1}: two DEN rows showed "vs" with no "SEA" after it
+in the same screenshot. The slate data is right (SEA @ DEN, ARI @ LA), so
+this guards a clipped wrap on iOS, unconfirmed. check:helmets +13.
+JavaScript only; no iPhone build.
+
 ### v0.713.3 — Team units wear letters on their helmets
 
 > - Kickers, defenses, head coaches and punters get their team's helmet too, lettered K, D, HC and P where a player's number goes.
