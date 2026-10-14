@@ -273,7 +273,7 @@ export function ReportSheet({ leagueId, week, onClose }: { leagueId: string; wee
               <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingVertical: 5, borderTopWidth: i ? StyleSheet.hairlineWidth : 0, borderTopColor: t.bd }}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text numberOfLines={1} style={{ fontSize: 12.5, fontWeight: r.hot ? '700' : '500', color: t.text }}>{r.label}</Text>
-                  {!!r.sub && <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.dim, marginTop: 1 }}>{r.sub}</Text>}
+                  {!!r.sub && <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dim, marginTop: 1 }}>{r.sub}</Text>}
                 </View>
                 <Text style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: '700', color: r.hot ? t.warn : t.text, fontVariant: ['tabular-nums'] }}>{r.value}</Text>
               </View>
@@ -306,7 +306,7 @@ function PollView({ m, be, onVoted }: { m: ChatMessage; be: ChatBackend; onVoted
           </Pressable>
         );
       })}
-      <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.faint, marginTop: 3 }}>📊 {total} vote{total === 1 ? '' : 's'} · tap to vote or change</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.faint, marginTop: 3 }}>📊 {total} vote{total === 1 ? '' : 's'} · tap to vote or change</Text>
     </View>
   );
 }
@@ -341,7 +341,7 @@ function GifPicker({ onPick, onClose }: { onPick: (url: string) => void; onClose
             </Pressable>
           ))}
         </View>
-        <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint, marginTop: 6, marginBottom: 8 }}>{GIF?.attribution}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(7.5), color: t.faint, marginTop: 6, marginBottom: 8 }}>{GIF?.attribution}</Text>
       </ScrollView>
     </View>
   );
@@ -723,7 +723,7 @@ function EditedNote({ m }: { m: { edited_at?: string | null; edited_by?: string 
   const t = useTheme();
   const note = editNote(m);
   if (!note) return null;
-  return <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint, fontStyle: 'italic' }}>· {note}</Text>;
+  return <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: MONO, fontSize: fs(8), color: t.faint, fontStyle: 'italic' }}>· {note}</Text>;
 }
 
 /** QUICK REACTIONS on one message (v0.329.0) — the web chat's Reactions in RN.
@@ -934,7 +934,7 @@ export function LeagueChat({ leagueId, canModerate, backend, bottomPad }: {
           {pinsOpen && pins.map((p) => (
             <Pressable key={p.id} onLongPress={() => menu(p)} delayLongPress={350}
               style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 5 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>{p.author}</Text>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>{p.author}</Text>
               <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: t.text }}>
                 {p.kind === 'poll' ? `📊 ${p.body}`
                   : isChatImageUrl(p.body) ? (p.caption ? `🖼 ${p.caption}` : '🖼 IMAGE')
@@ -953,9 +953,9 @@ export function LeagueChat({ leagueId, canModerate, backend, bottomPad }: {
           <Pressable key={m.id} onLongPress={() => menu(m)} delayLongPress={350} onLayout={sticky.rowLayout(m.id)}
             style={{ marginBottom: 10, ...(m.mentions_me ? { backgroundColor: alpha(t.you, 8), borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, marginHorizontal: -6 } : {}) }}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: m.mine ? t.you : t.warn }}>{m.author}</Text>
-              <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{fmtWhen(m.at)}</Text>
-              {m.pinned && <Text style={{ fontSize: 8 }}>📌</Text>}
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: MONO, fontSize: fs(9), fontWeight: '700', color: m.mine ? t.you : t.warn }}>{m.author}</Text>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint }}>{fmtWhen(m.at)}</Text>
+              {m.pinned && <Text style={{ fontSize: fs(8) }}>📌</Text>}
               <EditedNote m={m} />
             </View>
             {editing === m.id
@@ -1108,10 +1108,10 @@ function DmHome({ leagueId, initialDm }: { leagueId: string; initialDm?: { peerI
                     {isChatImageUrl(th.preview) ? '🖼 Picture' : isImageUrl(th.preview) ? '🖼 GIF' : th.preview}
                   </Text>}
                 </View>
-                <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{fmtWhen(th.last_at)}</Text>
+                <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint }}>{fmtWhen(th.last_at)}</Text>
                 {th.unread > 0 && (
                   <View style={{ backgroundColor: t.you, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.onAccent }}>{th.unread}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.onAccent }}>{th.unread}</Text>
                   </View>
                 )}
               </Pressable>
@@ -1216,7 +1216,7 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
                 {!!m.caption && <View style={{ marginTop: 3 }}><MsgBody body={m.caption} names={[]} /></View>}
               </>)}
               <View style={{ flexDirection: 'row', gap: 4, marginTop: 2, justifyContent: m.mine ? 'flex-end' : 'flex-start' }}>
-                <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint }}>{fmtWhen(m.at)}</Text>
+                <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7.5), color: t.faint }}>{fmtWhen(m.at)}</Text>
                 <EditedNote m={m} />
               </View>
             </Pressable>

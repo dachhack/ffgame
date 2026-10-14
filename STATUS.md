@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.7 — Bigger small text in chat and the play log
+
+> - Chat (names, times, poll and pin lines) and the game's play log (clock, badges, headers) use larger text on the phone, without wrapping.
+
+Founder: "start on the small fonts". First pass of the 125 raw <Text> sizes
+under 9 (v0.712.6 audit): Chat.tsx (10) and PlayLog.tsx (9) now run them
+through fs() (8 → 10.75, 8.5 → 11, 7.5 → 10.5); the chat author line goes
+9 → fs(9) so the name stays bigger than its timestamp. Single-line labels get
+numberOfLines={1} + adjustsFontSizeToFit (min 0.8), so the larger type
+shrinks to fit rather than wrap; the play log's clock column widens 42 → 52
+and its quarter-clock column 88 → 104; the badge row already wraps by design.
+check:themes guards a FLOORED list of screens (these two) against raw sizes
+under 9. Next: LiveCard (20), PlayerPicker (7), Draft (7). JavaScript only;
+no iPhone build.
+
 ### v0.712.6 — Every theme readable; the opponent's roster trouble stays theirs
 
 > - Text is easier to read in every theme: the quiet gray and the colored text (your team, the opponent, warnings) now meet the readability standard on light and dark backgrounds.

@@ -23,7 +23,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { PbpEvent, EffectType } from '@drip/core/types';
 import { gamesInWindow } from '@drip/core/data/nflSlate';
 import { gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
-import { useTheme, MONO, type Theme, type FxKey } from '../theme.native';
+import { useTheme, MONO, fs, type Theme, type FxKey } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 
@@ -100,7 +100,7 @@ export function PlayLog({ events, gameLabel, realOf, youName, theirName }: {
         return (
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 5, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5 }}>
             <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>{last.youBank.toFixed(1)}</Text>
-            <Text style={{ flex: 1, fontFamily: MONO, fontSize: 8, letterSpacing: 0.8, color: t.faint, textAlign: 'center' }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ flex: 1, fontFamily: MONO, fontSize: fs(8), letterSpacing: 0.8, color: t.faint, textAlign: 'center' }}>
               ◈ BANK NOW{gap ? ' · DRIP EARNS BETWEEN PLAYS — SEE MINUTES' : ''}
             </Text>
             <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.opp }}>{last.theirBank.toFixed(1)}</Text>
@@ -154,12 +154,12 @@ function Row({ ev, realOf, onPress, last }: {
       {ev.delta > 0 && <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: accent }}>+{ev.delta.toFixed(1)}</Text>}
       {/* Suppressed when a 'mult' effect badge already carries the number. */}
       {!!ev.mult && ev.effect?.type !== 'mult' && (
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.fx.mult }}>×{ev.mult.toFixed(2)}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.fx.mult }}>×{ev.mult.toFixed(2)}</Text>
       )}
       {!!ev.effect && (
-        <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: fxColor(t, ev.effect.type) }}>{ev.effect.text}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: fxColor(t, ev.effect.type) }}>{ev.effect.text}</Text>
       )}
-      {!!ev.buffNote && <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: t.warn }}>⚡ {ev.buffNote}</Text>}
+      {!!ev.buffNote && <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: t.warn }}>⚡ {ev.buffNote}</Text>}
     </View>
   );
 
@@ -188,9 +188,9 @@ function Row({ ev, realOf, onPress, last }: {
 
       {mine ? action : <View style={{ flex: 1 }} />}
 
-      <View style={{ width: 42, alignItems: 'center' }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, color: t.dim }}>{fmtClock(ev.clock)}</Text>
-        {!!realOf && <Text style={{ fontFamily: MONO, fontSize: 7.5, color: t.faint }}>{realOf(ev)}</Text>}
+      <View style={{ width: 52, alignItems: 'center' }}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), color: t.dim }}>{fmtClock(ev.clock)}</Text>
+        {!!realOf && <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(7.5), color: t.faint }}>{realOf(ev)}</Text>}
       </View>
 
       {mine ? <View style={{ flex: 1 }} /> : action}
@@ -239,8 +239,8 @@ export function WindowGameLog({ week, win }: { week: number; win: string }) {
     <View style={{ backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 9 }}>
       <Pressable onPress={() => setOpen((o) => !o)}
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.85, color: t.faint }}>📺 GAME LOG · every play, all games</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.7, color: t.dim }}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ flexShrink: 1, fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.85, color: t.faint }}>📺 GAME LOG · every play, all games</Text>
+        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.7, color: t.dim }}>
           {rows.length ? `${rows.length} PLAYS ${open ? '▾' : '▸'}` : ''}
         </Text>
       </Pressable>
@@ -252,7 +252,7 @@ export function WindowGameLog({ week, win }: { week: number; win: string }) {
             )}
             {rows.map(({ f, p }, i) => (
               <View key={`${f.key}:${p.pid ?? p.c}:${i}`} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
-                <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: p.sc ? t.warn : t.faint, minWidth: 88 }}>
+                <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: p.sc ? t.warn : t.faint, minWidth: 104 }}>
                   {feeds.length > 1 ? `${f.key} · ` : ''}{qc(p.c)}
                 </Text>
                 <Text style={{ flex: 1, minWidth: 0, fontSize: 11, lineHeight: 15, color: p.sc ? t.text : t.dim }}>
