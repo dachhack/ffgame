@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/kickoff-def-claim.sql",
+  "why": "#1311: a member's 1-for-1 claim on CAR Defense lost as 'roster over limits' in the Kickoff League's Oct 14 run. Which limit? Read only, seats and players only."
+}
