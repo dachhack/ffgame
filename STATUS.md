@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.3 — The injury table loses its 1,050 junk rows
+
+> - Behind the scenes: about a thousand broken injury records left over from September are cleared out. Nothing you see changes.
+
+0505: deletes `injury_status` rows whose key is a whole JSON object
+(`{"slug":"brock-bowers",…}`), written by v0.489.0's poller and never pruned.
+On Oct 14 they were 1,050 of 1,742 NFL rows (267 O, 261 IR), all from
+2026-09-23 (`scripts/db/injury-stale-rows.sql`). No reader matched them.
+Adds `injury_status_slug_not_object` (`left(player_slug, 1) <> '{'`) so the
+shape can't come back. Idempotent; checked on a scratch Postgres 16 (2 of 5
+test rows deleted, a second run deletes 0, an object key is refused).
+SQL only, no iPhone build.
+
 ### v0.712.2 — Injury tags never come from last season
 
 > - Injury tags never come from last season any more: Brock Bowers and Terry McLaurin showed Out (and projected 0) on the phone from a 2025 report, though both are healthy.
