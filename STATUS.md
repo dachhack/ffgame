@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.708.5 — A cleared player no longer stays Out
+
+> - A player cleared to play (Brock Bowers, healthy on Sleeper and ESPN) no longer keeps an old Out tag.
+
+`poll/injuries.js`'s prune read (`held`) was a bare `select('player_slug')`,
+the one `injury_status` read left on PostgREST's silent 1000-row cap after
+v0.489.4 paged the others. With college (`c-…`) and sport-directory rows
+(`nba-…`, `mlb-…`) in the same table it passed a thousand, and NFL rows past
+the cap were never considered for deletion: a cleared player kept his last
+designation. Now `allRows`, ordered on the key; a failed read skips the prune.
+Live feeds Oct 14: ESPN Active (Oct 12 00:47Z), Sleeper no status. Not
+confirmed against the live row (no read access here). check:injurymerge +2
+(fail on the old code). No iPhone build.
+
 ### v0.708.4 — Notifications, part 4: drip coin
 
 > - Drip coin earned comes as a notification: how much, for what ("built your squad, a loss"), and your new wallet.

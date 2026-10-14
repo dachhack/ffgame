@@ -202,6 +202,14 @@ const ok = (name, cond, got) => {
     (worker.match(/\.order\('player_slug'\)/g) ?? []).length === 3
     && (api.match(/\.order\('player_slug'\)/g) ?? []).length === 2);
   ok('the hurt-in-game read pages and is ordered too', /select\('player_slug,status,designation_date,team'\)\.order\('player_slug'\)\.range/.test(worker));
+  // v0.708.5: the poller's prune read was the one left unpaged, so NFL rows
+  // past the first thousand were never pruned (Brock Bowers, cleared by both
+  // feeds, stayed Out).
+  const prunePoll = readFileSync(new URL('../server/src/poll/injuries.js', import.meta.url), 'utf8');
+  ok('the poller\'s prune read pages, ordered on the primary key',
+    /allRows\(\(from, to\) => db\(\)\.from\('injury_status'\)\s*\n?\s*\.select\('player_slug'\)\.order\('player_slug'\)\.range/.test(prunePoll));
+  ok('…and it no longer takes a bare select of the table',
+    !/from\('injury_status'\)\.select\('player_slug'\);/.test(prunePoll));
 }
 
 if (fails) { console.log(`\n${fails} INJURY MERGE ASSERTION(S) FAILED`); process.exit(1); }
