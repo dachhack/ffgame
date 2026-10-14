@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.8 — The live card: bigger text, and readable in light themes
+
+> - The live card's small text (game, stat line, PTS, power-up chips, the card's own labels) is larger on the phone, without wrapping.
+> - In the light themes, the live card's text was nearly invisible on its dark panel; it now reads clearly.
+
+Founder: "keep going with the live card". LiveCard.tsx's 20 raw sizes under
+9: the info panel goes onto fs() (single lines shrink to fit, two-line ones
+too); the mini card face is fixed 78px art, so its labels get a named floor
+of 8 (cardFs: corner pos/team 6.5 → 8, bank and HOT 7 → 8) rather than fs().
+Found on the way: the panel is dark felt (#241E15) in every theme, but its
+text used the theme's tokens, so daylight/arctic/lumen put dark greys on it:
+dimstrong (game label, stat line) at 1.2:1, the rest about 3:1. feltInk
+lightens each token, hue kept, to a per-token target on the felt (faint 4.5,
+dim 5.5, dimstrong 8, text 10, accents 4.5); the dark themes already clear
+them and are unchanged. check:themes: LiveCard joins FLOORED, plus the
+feltInk wiring. JavaScript only; no iPhone build.
+
 ### v0.712.7 — Bigger small text in chat and the play log
 
 > - Chat (names, times, poll and pin lines) and the game's play log (clock, badges, headers) use larger text on the phone, without wrapping.

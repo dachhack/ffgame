@@ -19,7 +19,7 @@ import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
 import type { Pos } from '@drip/core/theme';
-import { useTheme, MONO, alpha } from '../theme.native';
+import { useTheme, MONO, alpha, fs } from '../theme.native';
 import { useWobble, HotGlow } from './animations';
 import { cardBackArt } from './cards';
 import { InjuryNow } from './rosterGroup';
@@ -34,18 +34,63 @@ const CARD_W = 78;
 // bottom so the card reads as dealt ONTO the strip rather than boxed inside it.
 // The 12px of negative margin is what buys the middle its width back.
 const FLOAT_W = 72;
+
+/** THE CARD FACE'S FLOOR (v0.712.8, founder: "start on the small fonts"). The
+ *  mini card is a fixed 78px piece of art, so it can't take the app's fs()
+ *  scale (6.5 → 9.9) without its corners colliding. Its labels get a floor
+ *  of 8 instead, the same size the card's NUKED stamp already used; the info
+ *  panel beside it uses fs() like the rest of the app. */
+const cardFs = (n: number) => Math.max(n, 8);
 const FLOAT_OVERHANG = 12;
 
 // Each side sits in its own panel on the felt, as on the web — warm stock-ish
 // brown rather than loose on the green, so the two halves of a duel read as two
 // objects instead of one run-on row.
+/** The panel's felt: the same dark brown in every theme. */
+const FELT = '#241E15';
+
+/** THEME INK THAT READS ON THE FELT (v0.712.8). The panel is dark in every
+ *  theme, but its text took the theme's tokens, so a light theme put its dark
+ *  greys on dark brown: daylight's dimstrong (the game label, the stat line)
+ *  sat at 1.2:1. Each token used here is lightened, hue kept, until it reaches
+ *  its target on the felt (FELT_TARGET, 4.5:1 at least); the dark themes
+ *  already do and come through unchanged. */
+const lumOf = (h: string) => {
+  const c = (h.replace('#', '').match(/../g) ?? ['0', '0', '0']).map((x) => { const v = parseInt(x, 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+const contrastOn = (a: string, b: string) => { const [x, y] = [lumOf(a), lumOf(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+function lighten(h: string, by: number): string {
+  const [r, g, b] = (h.replace('#', '').match(/../g) ?? ['0', '0', '0']).map((x) => parseInt(x, 16));
+  const mix = (v: number) => Math.round(v + (255 - v) * by).toString(16).padStart(2, '0');
+  return `#${mix(r)}${mix(g)}${mix(b)}`;
+}
+export function feltSafe(color: string, target = 4.5): string {
+  if (!/^#[0-9a-f]{6}$/i.test(color)) return color;
+  let c = color;
+  for (let i = 1; i <= 40 && contrastOn(c, FELT) < target; i++) c = lighten(color, i * 0.025);
+  return c;
+}
+/** Per-token targets, so a lifted light theme keeps its order on the felt:
+ *  faint quietest, dimstrong and text clearly brighter. */
+const FELT_TARGET = { faint: 4.5, dim: 5.5, dimstrong: 8, text: 10, warn: 4.5, you: 4.5, opp: 4.5 } as const;
+type Ink = Record<'faint' | 'dim' | 'dimstrong' | 'text' | 'warn' | 'you' | 'opp', string>;
+const inkCache = new WeakMap<object, Ink>();
+function feltInk(t: ReturnType<typeof useTheme>): Ink {
+  const hit = inkCache.get(t);
+  if (hit) return hit;
+  const ink = Object.fromEntries((['faint', 'dim', 'dimstrong', 'text', 'warn', 'you', 'opp'] as const).map((k) => [k, feltSafe(t[k], FELT_TARGET[k])])) as Ink;
+  inkCache.set(t, ink);
+  return ink;
+}
+
 const PANEL = {
   // TOP-aligned, not centred. The two panels in a duel are independent heights
   // — one metric name wraps to two lines, the other doesn't — and centring made
   // each card float to the middle of its own panel, so the pair sat at
   // different heights whenever the names differed in length.
   flex: 1, gap: 6, alignItems: 'flex-start' as const,
-  backgroundColor: '#241E15', borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A',
+  backgroundColor: FELT, borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A',
   borderRadius: 8, paddingHorizontal: 4, paddingVertical: 6,
   // The floating card overhangs; without this Android clips it at the panel edge.
   overflow: 'visible' as const,
@@ -96,14 +141,14 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 3 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <View style={{ borderWidth: 1, borderColor: suit.bd, backgroundColor: suit.bg, borderRadius: 3, paddingHorizontal: 3.5, paddingVertical: 1.5 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 6.5, fontWeight: '700', color: suit.fg }}>{ghost ? GHOST_CARD.pos : pos === 'DEF' ? 'DST' : pos}</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: cardFs(6.5), fontWeight: '700', color: suit.fg }}>{ghost ? GHOST_CARD.pos : pos === 'DEF' ? 'DST' : pos}</Text>
                 </View>
                 <InjuryNow slug={slug} size={6.5} />
               </View>
               {!!team && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2.5 }}>
                   {!!logo && <Image source={{ uri: logo }} style={{ width: 9, height: 9 }} resizeMode="contain" />}
-                  <Text style={{ fontFamily: MONO, fontSize: 6.5, fontWeight: '700', color: INK_DIM }}>{team.toUpperCase()}</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: cardFs(6.5), fontWeight: '700', color: INK_DIM }}>{team.toUpperCase()}</Text>
                 </View>
               )}
             </View>
@@ -123,7 +168,7 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
                 card height or the pair's bottoms drift apart (founder's
                 Fri-slate note: cards aligned, chips one height). */}
             <View style={{ height: 19, justifyContent: 'center' }}>
-              <Text numberOfLines={2} style={{ fontSize: 8.2, fontWeight: '800', letterSpacing: 0.2, lineHeight: 9.5, textAlign: 'center', color: INK, textTransform: 'uppercase' }}>
+              <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontSize: cardFs(8.2), fontWeight: '800', letterSpacing: 0.2, lineHeight: 9.5, textAlign: 'center', color: INK, textTransform: 'uppercase' }}>
                 {name}
               </Text>
             </View>
@@ -132,13 +177,13 @@ export function MiniCard({ side, slug, name, pos, team, bank, hot = false, nuked
           {nuked && (
             <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(30,8,10,0.62)' }}>
               <Text style={{ fontSize: 13 }}>☠</Text>
-              <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '800', color: '#FF4F62', letterSpacing: 1 }}>NUKED</Text>
-              {bank != null && <Text style={{ fontFamily: MONO, fontSize: 7, color: '#E7DCC2' }}>bank {fmt(bank)}</Text>}
+              <Text style={{ fontFamily: MONO, fontSize: cardFs(8), fontWeight: '800', color: '#FF4F62', letterSpacing: 1 }}>NUKED</Text>
+              {bank != null && <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: cardFs(7), color: '#E7DCC2' }}>bank {fmt(bank)}</Text>}
             </View>
           )}
           {hot && !nuked && (
             <View pointerEvents="none" style={{ position: 'absolute', top: 3, right: 3, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
-              <Text style={{ fontSize: 7, fontWeight: '700', color: '#E9B959' }}>🔥 HOT</Text>
+              <Text numberOfLines={1} style={{ fontSize: cardFs(7), fontWeight: '700', color: '#E9B959' }}>🔥 HOT</Text>
             </View>
           )}
         </View>
@@ -179,7 +224,9 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
    *  it after the lock. */
   chips?: { icon: string; name: string }[];
 }) {
-  const t = useTheme();
+  const theme = useTheme();
+  // Every colour below sits on the felt, so it comes through feltInk.
+  const t = { ...theme, ...feltInk(theme) };
   const accent = side === 'you' ? t.you : t.opp;
   // The opponent's row mirrors, so the two sides read outward from the middle
   // rather than both marching left — the same reversal the web does with
@@ -200,10 +247,10 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
           {bank != null && (
             <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', alignItems: 'baseline', gap: 6 }}>
               <Text style={{ fontSize: 26, fontWeight: '800', lineHeight: 28, color: accent }}>{fmt(bank)}</Text>
-              <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint, letterSpacing: 1 }}>PTS</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(7), color: t.faint, letterSpacing: 1 }}>PTS</Text>
             </View>
           )}
-          <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 8, color: t.faint, textAlign: mirror ? 'right' : 'left' }}>{GHOST_CARD.line}</Text>
+          <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, textAlign: mirror ? 'right' : 'left' }}>{GHOST_CARD.line}</Text>
         </View>
       </Pressable>
     );
@@ -221,10 +268,10 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
           {bank != null && (
             <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', alignItems: 'baseline', gap: 6 }}>
               <Text style={{ fontSize: 26, fontWeight: '800', lineHeight: 28, color: accent }}>{fmt(bank)}</Text>
-              <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint, letterSpacing: 1 }}>PTS</Text>
+              <Text style={{ fontFamily: MONO, fontSize: fs(7), color: t.faint, letterSpacing: 1 }}>PTS</Text>
             </View>
           )}
-          <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: 8, color: t.faint, textAlign: mirror ? 'right' : 'left' }}>{phantom.sub}</Text>
+          <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint, textAlign: mirror ? 'right' : 'left' }}>{phantom.sub}</Text>
         </View>
       </Pressable>
     );
@@ -238,9 +285,9 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
         <View style={{ width: FLOAT_W, height: 106, marginTop: -FLOAT_OVERHANG, marginBottom: -FLOAT_OVERHANG, borderRadius: 8, borderWidth: 2, borderColor: alpha(t.text, 25), alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(t.text, 5), opacity: 0.55 }} />
         <View style={{ flex: 1, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '800', letterSpacing: 1, color: t.dim }}>NO PLAYER</Text>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '800', letterSpacing: 1, color: t.dim }}>NO PLAYER</Text>
           </View>
-          <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>{windowEmpty ? 'window left empty — the facing player subs as a backup' : 'unopposed — the facing player banks here'}</Text>
+          <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint }}>{windowEmpty ? 'window left empty — the facing player subs as a backup' : 'unopposed — the facing player banks here'}</Text>
         </View>
       </View>
     );
@@ -254,9 +301,9 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
         </View>
         <View style={{ flex: 1, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 7.5, fontWeight: '800', letterSpacing: 1, color: t.dim }}>🔒 SEALED PICK</Text>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '800', letterSpacing: 1, color: t.dim }}>🔒 SEALED PICK</Text>
           </View>
-          <Text style={{ fontFamily: MONO, fontSize: 8, color: t.faint }}>flips face-up at kickoff</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), color: t.faint }}>flips face-up at kickoff</Text>
         </View>
       </View>
     );
@@ -271,7 +318,7 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
 
       <View style={{ flex: 1, minWidth: 0, alignItems: mirror ? 'flex-end' : 'flex-start', gap: 3 }}>
         {!!gameLabel && (
-          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: t.dimstrong }}>{gameLabel}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: t.dimstrong }}>{gameLabel}</Text>
         )}
         {/* The metric chip carries the SIDE's colour, not one shared gold — on
             the web yours reads teal and theirs red, which is how you tell the
@@ -303,14 +350,14 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
             <Text style={{ fontSize: 26, fontWeight: '800', lineHeight: 28, color: nuked ? '#FF4F62' : accent, textDecorationLine: nuked ? 'line-through' : 'none' }}>
               {fmt(bank)}
             </Text>
-            <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint, letterSpacing: 1 }}>PTS</Text>
+            <Text style={{ fontFamily: MONO, fontSize: fs(7), color: t.faint, letterSpacing: 1 }}>PTS</Text>
             {coin != null && coin !== 0 && (
-              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.warn }}>🪙 {coin > 0 ? '+' : ''}{coin}</Text>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.warn }}>🪙 {coin > 0 ? '+' : ''}{coin}</Text>
             )}
           </View>
         )}
         {!!stat && (
-          <Text numberOfLines={2} style={{ fontSize: 8.6, lineHeight: 12, color: t.dimstrong, textAlign: mirror ? 'right' : 'left' }}>{stat}</Text>
+          <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontSize: fs(8.6), lineHeight: 14, color: t.dimstrong, textAlign: mirror ? 'right' : 'left' }}>{stat}</Text>
         )}
       </View>
     </Pressable>
@@ -325,8 +372,8 @@ export function LiveCard({ side, slug, name, pos, team, sealed = false, unoppose
       <View style={{ flexDirection: mirror ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 3, paddingHorizontal: 4 }}>
         {chips.map((c, i) => (
           <View key={`${c.name}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: alpha(accent, 14), borderWidth: StyleSheet.hairlineWidth, borderColor: alpha(accent, 50), borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
-            <Text style={{ fontSize: 8 }}>{c.icon}</Text>
-            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: accent }}>{c.name.toUpperCase()}</Text>
+            <Text style={{ fontSize: fs(8) }}>{c.icon}</Text>
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7), fontWeight: '700', color: accent }}>{c.name.toUpperCase()}</Text>
           </View>
         ))}
       </View>
