@@ -1,0 +1,698 @@
+{
+  "generated": "scripts/helmets/gen-helmets.mjs — edit teams.json, template.png or template.json and re-run; do not hand-edit",
+  "size": 256,
+  "number": {
+    "font": "Jersey 15",
+    "fontFile": "/fonts/jersey-15.ttf",
+    "fontSize": 0.3700227529368143,
+    "strokeWidth": 0.07,
+    "outlineWidth": 0.13,
+    "outlineColor": "#10131A",
+    "anchor": {
+      "left": {
+        "x": 0.964375,
+        "y": 0.9693750000000001,
+        "align": "right"
+      },
+      "right": {
+        "x": 0.03562499999999996,
+        "y": 0.9693750000000001,
+        "align": "left"
+      }
+    }
+  },
+  "teams": {
+    "ARI": {
+      "city": "Arizona",
+      "name": "Cardinals",
+      "colors": {
+        "shell": "#97233F",
+        "stripe": "#FFFFFF",
+        "facemask": "#FFFFFF",
+        "text": "#FFFFFF",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#97233F"
+      },
+      "files": {
+        "left": "/helmets/png/ARI-left.png",
+        "leftPlain": "/helmets/png/ARI-left-plain.png",
+        "right": "/helmets/png/ARI-right.png",
+        "rightPlain": "/helmets/png/ARI-right-plain.png"
+      }
+    },
+    "ATL": {
+      "city": "Atlanta",
+      "name": "Falcons",
+      "colors": {
+        "shell": "#A71930",
+        "stripe": "#000000",
+        "facemask": "#000000",
+        "text": "#FFFFFF",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#A71930"
+      },
+      "files": {
+        "left": "/helmets/png/ATL-left.png",
+        "leftPlain": "/helmets/png/ATL-left-plain.png",
+        "right": "/helmets/png/ATL-right.png",
+        "rightPlain": "/helmets/png/ATL-right-plain.png"
+      }
+    },
+    "BAL": {
+      "city": "Baltimore",
+      "name": "Ravens",
+      "colors": {
+        "shell": "#241773",
+        "stripe": "#000000",
+        "facemask": "#000000",
+        "text": "#FFFFFF",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#241773"
+      },
+      "files": {
+        "left": "/helmets/png/BAL-left.png",
+        "leftPlain": "/helmets/png/BAL-left-plain.png",
+        "right": "/helmets/png/BAL-right.png",
+        "rightPlain": "/helmets/png/BAL-right-plain.png"
+      }
+    },
+    "BUF": {
+      "city": "Buffalo",
+      "name": "Bills",
+      "colors": {
+        "shell": "#00338D",
+        "stripe": "#C60C30",
+        "facemask": "#FFFFFF",
+        "text": "#FFFFFF",
+        "textStroke": "#C60C30"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#00338D"
+      },
+      "files": {
+        "left": "/helmets/png/BUF-left.png",
+        "leftPlain": "/helmets/png/BUF-left-plain.png",
+        "right": "/helmets/png/BUF-right.png",
+        "rightPlain": "/helmets/png/BUF-right-plain.png"
+      }
+    },
+    "CAR": {
+      "city": "Carolina",
+      "name": "Panthers",
+      "colors": {
+        "shell": "#0085CA",
+        "stripe": "#101820",
+        "facemask": "#101820",
+        "text": "#FFFFFF",
+        "textStroke": "#101820"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#101820"
+      },
+      "files": {
+        "left": "/helmets/png/CAR-left.png",
+        "leftPlain": "/helmets/png/CAR-left-plain.png",
+        "right": "/helmets/png/CAR-right.png",
+        "rightPlain": "/helmets/png/CAR-right-plain.png"
+      }
+    },
+    "CHI": {
+      "city": "Chicago",
+      "name": "Bears",
+      "colors": {
+        "shell": "#0B162A",
+        "stripe": "#C83803",
+        "facemask": "#C83803",
+        "text": "#FFFFFF",
+        "textStroke": "#C83803"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#0B162A"
+      },
+      "files": {
+        "left": "/helmets/png/CHI-left.png",
+        "leftPlain": "/helmets/png/CHI-left-plain.png",
+        "right": "/helmets/png/CHI-right.png",
+        "rightPlain": "/helmets/png/CHI-right-plain.png"
+      }
+    },
+    "CIN": {
+      "city": "Cincinnati",
+      "name": "Bengals",
+      "colors": {
+        "shell": "#FB4F14",
+        "stripe": "#000000",
+        "facemask": "#000000",
+        "text": "#FFFFFF",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#000000"
+      },
+      "files": {
+        "left": "/helmets/png/CIN-left.png",
+        "leftPlain": "/helmets/png/CIN-left-plain.png",
+        "right": "/helmets/png/CIN-right.png",
+        "rightPlain": "/helmets/png/CIN-right-plain.png"
+      }
+    },
+    "CLE": {
+      "city": "Cleveland",
+      "name": "Browns",
+      "colors": {
+        "shell": "#FF3C00",
+        "stripe": "#311D00",
+        "facemask": "#311D00",
+        "text": "#FFFFFF",
+        "textStroke": "#311D00"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#311D00"
+      },
+      "files": {
+        "left": "/helmets/png/CLE-left.png",
+        "leftPlain": "/helmets/png/CLE-left-plain.png",
+        "right": "/helmets/png/CLE-right.png",
+        "rightPlain": "/helmets/png/CLE-right-plain.png"
+      }
+    },
+    "DAL": {
+      "city": "Dallas",
+      "name": "Cowboys",
+      "colors": {
+        "shell": "#B0B7BC",
+        "stripe": "#003594",
+        "facemask": "#003594",
+        "text": "#003594",
+        "textStroke": "#FFFFFF"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#003594"
+      },
+      "files": {
+        "left": "/helmets/png/DAL-left.png",
+        "leftPlain": "/helmets/png/DAL-left-plain.png",
+        "right": "/helmets/png/DAL-right.png",
+        "rightPlain": "/helmets/png/DAL-right-plain.png"
+      }
+    },
+    "DEN": {
+      "city": "Denver",
+      "name": "Broncos",
+      "colors": {
+        "shell": "#002244",
+        "stripe": "#FB4F14",
+        "facemask": "#FB4F14",
+        "text": "#FFFFFF",
+        "textStroke": "#FB4F14"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#002244"
+      },
+      "files": {
+        "left": "/helmets/png/DEN-left.png",
+        "leftPlain": "/helmets/png/DEN-left-plain.png",
+        "right": "/helmets/png/DEN-right.png",
+        "rightPlain": "/helmets/png/DEN-right-plain.png"
+      }
+    },
+    "DET": {
+      "city": "Detroit",
+      "name": "Lions",
+      "colors": {
+        "shell": "#0076B6",
+        "stripe": "#B0B7BC",
+        "facemask": "#B0B7BC",
+        "text": "#FFFFFF",
+        "textStroke": "#002B47"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#0076B6"
+      },
+      "files": {
+        "left": "/helmets/png/DET-left.png",
+        "leftPlain": "/helmets/png/DET-left-plain.png",
+        "right": "/helmets/png/DET-right.png",
+        "rightPlain": "/helmets/png/DET-right-plain.png"
+      }
+    },
+    "GB": {
+      "city": "Green Bay",
+      "name": "Packers",
+      "colors": {
+        "shell": "#FFB612",
+        "stripe": "#203731",
+        "facemask": "#203731",
+        "text": "#203731",
+        "textStroke": "#FFFFFF"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#203731"
+      },
+      "files": {
+        "left": "/helmets/png/GB-left.png",
+        "leftPlain": "/helmets/png/GB-left-plain.png",
+        "right": "/helmets/png/GB-right.png",
+        "rightPlain": "/helmets/png/GB-right-plain.png"
+      }
+    },
+    "HOU": {
+      "city": "Houston",
+      "name": "Texans",
+      "colors": {
+        "shell": "#03202F",
+        "stripe": "#A71930",
+        "facemask": "#A71930",
+        "text": "#FFFFFF",
+        "textStroke": "#A71930"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#03202F"
+      },
+      "files": {
+        "left": "/helmets/png/HOU-left.png",
+        "leftPlain": "/helmets/png/HOU-left-plain.png",
+        "right": "/helmets/png/HOU-right.png",
+        "rightPlain": "/helmets/png/HOU-right-plain.png"
+      }
+    },
+    "IND": {
+      "city": "Indianapolis",
+      "name": "Colts",
+      "colors": {
+        "shell": "#FFFFFF",
+        "stripe": "#002C5F",
+        "facemask": "#002C5F",
+        "text": "#002C5F",
+        "textStroke": "#FFFFFF"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#002C5F"
+      },
+      "files": {
+        "left": "/helmets/png/IND-left.png",
+        "leftPlain": "/helmets/png/IND-left-plain.png",
+        "right": "/helmets/png/IND-right.png",
+        "rightPlain": "/helmets/png/IND-right-plain.png"
+      }
+    },
+    "JAX": {
+      "city": "Jacksonville",
+      "name": "Jaguars",
+      "colors": {
+        "shell": "#006778",
+        "stripe": "#D7A22A",
+        "facemask": "#101820",
+        "text": "#FFFFFF",
+        "textStroke": "#101820"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#006778"
+      },
+      "files": {
+        "left": "/helmets/png/JAX-left.png",
+        "leftPlain": "/helmets/png/JAX-left-plain.png",
+        "right": "/helmets/png/JAX-right.png",
+        "rightPlain": "/helmets/png/JAX-right-plain.png"
+      }
+    },
+    "KC": {
+      "city": "Kansas City",
+      "name": "Chiefs",
+      "colors": {
+        "shell": "#E31837",
+        "stripe": "#FFFFFF",
+        "facemask": "#FFFFFF",
+        "text": "#FFFFFF",
+        "textStroke": "#5C0A16"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#E31837"
+      },
+      "files": {
+        "left": "/helmets/png/KC-left.png",
+        "leftPlain": "/helmets/png/KC-left-plain.png",
+        "right": "/helmets/png/KC-right.png",
+        "rightPlain": "/helmets/png/KC-right-plain.png"
+      }
+    },
+    "LV": {
+      "city": "Las Vegas",
+      "name": "Raiders",
+      "colors": {
+        "shell": "#A5ACAF",
+        "stripe": "#000000",
+        "facemask": "#000000",
+        "text": "#000000",
+        "textStroke": "#FFFFFF"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#000000"
+      },
+      "files": {
+        "left": "/helmets/png/LV-left.png",
+        "leftPlain": "/helmets/png/LV-left-plain.png",
+        "right": "/helmets/png/LV-right.png",
+        "rightPlain": "/helmets/png/LV-right-plain.png"
+      }
+    },
+    "LAC": {
+      "city": "Los Angeles",
+      "name": "Chargers",
+      "colors": {
+        "shell": "#0080C6",
+        "stripe": "#FFC20E",
+        "facemask": "#FFC20E",
+        "text": "#FFFFFF",
+        "textStroke": "#002A5E"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#0080C6"
+      },
+      "files": {
+        "left": "/helmets/png/LAC-left.png",
+        "leftPlain": "/helmets/png/LAC-left-plain.png",
+        "right": "/helmets/png/LAC-right.png",
+        "rightPlain": "/helmets/png/LAC-right-plain.png"
+      }
+    },
+    "LAR": {
+      "city": "Los Angeles",
+      "name": "Rams",
+      "colors": {
+        "shell": "#003594",
+        "stripe": "#FFA300",
+        "facemask": "#FFA300",
+        "text": "#FFFFFF",
+        "textStroke": "#001A4D"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#003594"
+      },
+      "files": {
+        "left": "/helmets/png/LAR-left.png",
+        "leftPlain": "/helmets/png/LAR-left-plain.png",
+        "right": "/helmets/png/LAR-right.png",
+        "rightPlain": "/helmets/png/LAR-right-plain.png"
+      }
+    },
+    "MIA": {
+      "city": "Miami",
+      "name": "Dolphins",
+      "colors": {
+        "shell": "#008E97",
+        "stripe": "#FC4C02",
+        "facemask": "#005778",
+        "text": "#FFFFFF",
+        "textStroke": "#005778"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#005778"
+      },
+      "files": {
+        "left": "/helmets/png/MIA-left.png",
+        "leftPlain": "/helmets/png/MIA-left-plain.png",
+        "right": "/helmets/png/MIA-right.png",
+        "rightPlain": "/helmets/png/MIA-right-plain.png"
+      }
+    },
+    "MIN": {
+      "city": "Minnesota",
+      "name": "Vikings",
+      "colors": {
+        "shell": "#4F2683",
+        "stripe": "#FFC62F",
+        "facemask": "#FFC62F",
+        "text": "#FFFFFF",
+        "textStroke": "#2A1150"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#4F2683"
+      },
+      "files": {
+        "left": "/helmets/png/MIN-left.png",
+        "leftPlain": "/helmets/png/MIN-left-plain.png",
+        "right": "/helmets/png/MIN-right.png",
+        "rightPlain": "/helmets/png/MIN-right-plain.png"
+      }
+    },
+    "NE": {
+      "city": "New England",
+      "name": "Patriots",
+      "colors": {
+        "shell": "#002244",
+        "stripe": "#C60C30",
+        "facemask": "#B0B7BC",
+        "text": "#FFFFFF",
+        "textStroke": "#C60C30"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#002244"
+      },
+      "files": {
+        "left": "/helmets/png/NE-left.png",
+        "leftPlain": "/helmets/png/NE-left-plain.png",
+        "right": "/helmets/png/NE-right.png",
+        "rightPlain": "/helmets/png/NE-right-plain.png"
+      }
+    },
+    "NO": {
+      "city": "New Orleans",
+      "name": "Saints",
+      "colors": {
+        "shell": "#D3BC8D",
+        "stripe": "#101820",
+        "facemask": "#101820",
+        "text": "#101820",
+        "textStroke": "#FFFFFF"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#101820"
+      },
+      "files": {
+        "left": "/helmets/png/NO-left.png",
+        "leftPlain": "/helmets/png/NO-left-plain.png",
+        "right": "/helmets/png/NO-right.png",
+        "rightPlain": "/helmets/png/NO-right-plain.png"
+      }
+    },
+    "NYG": {
+      "city": "New York",
+      "name": "Giants",
+      "colors": {
+        "shell": "#0B2265",
+        "stripe": "#A71930",
+        "facemask": "#A5ACAF",
+        "text": "#FFFFFF",
+        "textStroke": "#A71930"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#0B2265"
+      },
+      "files": {
+        "left": "/helmets/png/NYG-left.png",
+        "leftPlain": "/helmets/png/NYG-left-plain.png",
+        "right": "/helmets/png/NYG-right.png",
+        "rightPlain": "/helmets/png/NYG-right-plain.png"
+      }
+    },
+    "NYJ": {
+      "city": "New York",
+      "name": "Jets",
+      "colors": {
+        "shell": "#125740",
+        "stripe": "#FFFFFF",
+        "facemask": "#FFFFFF",
+        "text": "#FFFFFF",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#125740"
+      },
+      "files": {
+        "left": "/helmets/png/NYJ-left.png",
+        "leftPlain": "/helmets/png/NYJ-left-plain.png",
+        "right": "/helmets/png/NYJ-right.png",
+        "rightPlain": "/helmets/png/NYJ-right-plain.png"
+      }
+    },
+    "PHI": {
+      "city": "Philadelphia",
+      "name": "Eagles",
+      "colors": {
+        "shell": "#004C54",
+        "stripe": "#A5ACAF",
+        "facemask": "#000000",
+        "text": "#FFFFFF",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#004C54"
+      },
+      "files": {
+        "left": "/helmets/png/PHI-left.png",
+        "leftPlain": "/helmets/png/PHI-left-plain.png",
+        "right": "/helmets/png/PHI-right.png",
+        "rightPlain": "/helmets/png/PHI-right-plain.png"
+      }
+    },
+    "PIT": {
+      "city": "Pittsburgh",
+      "name": "Steelers",
+      "colors": {
+        "shell": "#101820",
+        "stripe": "#FFB612",
+        "facemask": "#FFB612",
+        "text": "#FFB612",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#101820"
+      },
+      "files": {
+        "left": "/helmets/png/PIT-left.png",
+        "leftPlain": "/helmets/png/PIT-left-plain.png",
+        "right": "/helmets/png/PIT-right.png",
+        "rightPlain": "/helmets/png/PIT-right-plain.png"
+      }
+    },
+    "SF": {
+      "city": "San Francisco",
+      "name": "49ers",
+      "colors": {
+        "shell": "#B3995D",
+        "stripe": "#AA0000",
+        "facemask": "#AA0000",
+        "text": "#AA0000",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#AA0000"
+      },
+      "files": {
+        "left": "/helmets/png/SF-left.png",
+        "leftPlain": "/helmets/png/SF-left-plain.png",
+        "right": "/helmets/png/SF-right.png",
+        "rightPlain": "/helmets/png/SF-right-plain.png"
+      }
+    },
+    "SEA": {
+      "city": "Seattle",
+      "name": "Seahawks",
+      "colors": {
+        "shell": "#002244",
+        "stripe": "#69BE28",
+        "facemask": "#A5ACAF",
+        "text": "#FFFFFF",
+        "textStroke": "#69BE28"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#002244"
+      },
+      "files": {
+        "left": "/helmets/png/SEA-left.png",
+        "leftPlain": "/helmets/png/SEA-left-plain.png",
+        "right": "/helmets/png/SEA-right.png",
+        "rightPlain": "/helmets/png/SEA-right-plain.png"
+      }
+    },
+    "TB": {
+      "city": "Tampa Bay",
+      "name": "Buccaneers",
+      "colors": {
+        "shell": "#34302B",
+        "stripe": "#D50A0A",
+        "facemask": "#D50A0A",
+        "text": "#FFFFFF",
+        "textStroke": "#D50A0A"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#34302B"
+      },
+      "files": {
+        "left": "/helmets/png/TB-left.png",
+        "leftPlain": "/helmets/png/TB-left-plain.png",
+        "right": "/helmets/png/TB-right.png",
+        "rightPlain": "/helmets/png/TB-right-plain.png"
+      }
+    },
+    "TEN": {
+      "city": "Tennessee",
+      "name": "Titans",
+      "colors": {
+        "shell": "#0C2340",
+        "stripe": "#4B92DB",
+        "facemask": "#8A8D8F",
+        "text": "#FFFFFF",
+        "textStroke": "#4B92DB"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#0C2340"
+      },
+      "files": {
+        "left": "/helmets/png/TEN-left.png",
+        "leftPlain": "/helmets/png/TEN-left-plain.png",
+        "right": "/helmets/png/TEN-right.png",
+        "rightPlain": "/helmets/png/TEN-right-plain.png"
+      }
+    },
+    "WAS": {
+      "city": "Washington",
+      "name": "Commanders",
+      "colors": {
+        "shell": "#5A1414",
+        "stripe": "#FFB612",
+        "facemask": "#FFB612",
+        "text": "#FFFFFF",
+        "textStroke": "#000000"
+      },
+      "number": {
+        "fill": "#FFFFFF",
+        "stroke": "#5A1414"
+      },
+      "files": {
+        "left": "/helmets/png/WAS-left.png",
+        "leftPlain": "/helmets/png/WAS-left-plain.png",
+        "right": "/helmets/png/WAS-right.png",
+        "rightPlain": "/helmets/png/WAS-right-plain.png"
+      }
+    }
+  }
+}
