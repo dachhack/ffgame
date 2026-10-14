@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/test-wedding-rows.sql",
+  "why": "Test Wedding week 5, seat 1 at 0.0 (ops 053: the draft ran 15 minutes after the week's lock, every week-5 lineup is the raw roster). Which sealed rows the resolver scored for the human seat, and who wrote them. Read only."
+}
