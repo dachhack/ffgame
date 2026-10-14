@@ -14,7 +14,7 @@ import { collegeClassLabel } from '@drip/core/data/college';
 import { openPlayerCard } from './PlayerCardSheet';
 import { teamBook, myStake, rightLine, lockLine, stakeLine, fmtPts, maxBuy, devyRulesText, DEEP_SEARCH_MIN, MARKET_PAGE, MARKET_FIRST_FETCH, marketNext, marketFooter, marketLines, shapeMarket, nextSort, marketSubline, MARKET_FILTERS, launchBanner, launchOrderMax, launchRulesText, tradePreview, type MarketLine, type MarketSort, type MarketFilter } from '@drip/core/data/devyShares';
 import { InfoChip } from './InfoChip';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs, fsTight } from '../theme.native';
 import { onNearEnd, isNearEnd } from './scrollChrome';
 import { Overlay } from './Overlay';
 import { Chip, Mono, PosPill, PrimaryButton } from './prims';
@@ -186,7 +186,7 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
               <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.round(l.myProgress * 100)}%`, backgroundColor: t.you }} />
             )}
           </View>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, color: l.lead >= 1 ? (l.leadMine ? t.you : t.opp) : t.faint, textAlign: 'center' }}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), color: l.lead >= 1 ? (l.leadMine ? t.you : t.opp) : t.faint, textAlign: 'center' }}>
             {l.lead >= 1 ? 'OWNED' : `${Math.round(l.lead * 100)}%`}
           </Text>
         </View>
@@ -281,7 +281,7 @@ function DevyMarketView({ visible, leagueId, myRoster, onClose, inline }: {
     return (
       <Pressable key={label} disabled={key == null} onPress={() => { if (key) { tap(); setSort((c) => nextSort(c, key)); } }}
         style={width ? { width } : { flex: 1 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.6, color: on ? t.you : t.faint, textAlign: align }}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.6, color: on ? t.you : t.faint, textAlign: align }}>
           {label}{on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
         </Text>
       </Pressable>

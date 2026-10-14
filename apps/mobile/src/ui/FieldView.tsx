@@ -33,7 +33,7 @@ import { teamLogo, headshot } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
-import { useTheme, MONO, alpha, mix, fs } from '../theme.native';
+import { useTheme, MONO, alpha, mix, fs, fsTight } from '../theme.native';
 import { Overlay } from './Overlay';
 import { openPlayerCard } from './PlayerCardSheet';
 import { PlayByPlaySheet } from './PlayByPlaySheet';
@@ -144,12 +144,12 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           {!!teamLogo(tm, { week }) && <Image source={{ uri: teamLogo(tm, { week })! }} style={{ width: 12, height: 12, borderRadius: 2 }} />}
-          <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', letterSpacing: 0.6, color: t.faint }}>{`${tm} · PROJECTED`}</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.6, color: t.faint }}>{`${tm} · PROJECTED`}</Text>
         </View>
         {top.length === 0 && <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>— no projections —</Text>}
         {top.map((r) => (
           <View key={r.slug} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: t.faint, width: 24 }}>{r.pos}</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8), fontWeight: '700', color: t.faint, width: 24 }}>{r.pos}</Text>
             <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: t.text }}>{boxName(r.slug)}</Text>
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.dim }}>{(r.proj ?? 0).toFixed(1)}</Text>
           </View>
@@ -291,7 +291,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 1, opacity: idx <= 0 ? 0.35 : 1 }}>
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.text }}>‹</Text>
           </Pressable>
-          <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.6, color: pin != null ? t.warn : t.faint }}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.6, color: pin != null ? t.warn : t.faint }}>
             {pin != null ? `PLAY ${idx + 1}/${plays.length}` : `LIVE · ${plays.length} PLAYS`}
           </Text>
           <Pressable onPress={() => stepTo(idx + 1)} disabled={pin == null} hitSlop={6}
@@ -301,7 +301,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
           {pin != null && (
             <Pressable onPress={() => setPin(null)} hitSlop={6}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1 }}>
-              <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.you }}>LIVE ▸</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.you }}>LIVE ▸</Text>
             </Pressable>
           )}
         </View>
@@ -430,7 +430,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
       {!over && (
         <View style={{ alignItems: 'center', marginTop: 4 }}>
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: t.surface }}>
-            <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.8, color: accent ?? (cur?.sc ? t.warn : t.you) }}>{situation}</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.8, color: accent ?? (cur?.sc ? t.warn : t.you) }}>{situation}</Text>
           </View>
         </View>
       )}

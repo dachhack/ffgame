@@ -21,7 +21,7 @@ import { teamFor } from '@drip/core/data/playerTeam';
 import { openPlayerCard } from './PlayerCardSheet';
 import type { WindowScore, RevealedPick, PoolPlayer, TeamInfo } from '@drip/core/data/liveApi';
 import type { Pos } from '@drip/core/types';
-import { useTheme, MONO } from "../theme.native";
+import { useTheme, MONO, fs } from "../theme.native";
 import { Card, Mono } from "./prims";
 import { CardFace, CardBack, CardPhantom } from "./cards";
 import { LiveCard } from "./LiveCard";
@@ -387,7 +387,7 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
                     <Mono size={8.5} weight="700" tone="faint" track={0.1}>
                       ⚔ WINDOW BATTLE{done ? '' : ` · win for +${WINDOW_WIN_BONUS}`}
                     </Mono>
-                    <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', letterSpacing: 0.7, color: leadColor }}>
+                    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.7, color: leadColor }}>
                       {label}{done && !even ? ` +${WINDOW_WIN_BONUS}` : ''}
                     </Text>
                   </View>

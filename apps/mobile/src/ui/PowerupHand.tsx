@@ -36,7 +36,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { powerupById } from '@drip/core/data/powerups';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { Overlay } from './Overlay';
 import { ScrollShiftCtx } from './scrollChrome';
@@ -214,9 +214,9 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0, de
               >
                 <Text style={{ fontSize: 19, marginTop: 2 }}>{p?.icon ?? '◈'}</Text>
                 <Text
-                  numberOfLines={3}
+                  numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}
                   style={{
-                    fontFamily: MONO, fontSize: 8.6, fontWeight: '700', textAlign: 'center',
+                    fontFamily: MONO, fontSize: fsTight(8.6), fontWeight: '700', textAlign: 'center',
                     marginTop: 5, letterSpacing: 0.4, color: c.armed ? t.onAccent : INK,
                   }}
                 >
@@ -227,7 +227,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0, de
               </View>
               {c.qty > 1 && (
                 <View style={{ position: 'absolute', top: -7, right: -6, backgroundColor: '#E9B959', borderWidth: 2, borderColor: '#000', borderRadius: 999, paddingHorizontal: 5, paddingVertical: 1 }}>
-                  <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '800', color: '#241A08' }}>×{c.qty}</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8), fontWeight: '800', color: '#241A08' }}>×{c.qty}</Text>
                 </View>
               )}
             </Pressable>
@@ -250,7 +250,7 @@ export function PowerupHand({ cards, busyId, onArm, lift = 0, listSignal = 0, de
           >
             <View style={{ flex: 1, borderRadius: 9, borderWidth: 2, borderStyle: 'dashed', borderColor: STOCK_EDGE, backgroundColor: '#1C160C', padding: 6, alignItems: 'center' }}>
               <Text style={{ fontSize: 19, marginTop: 8 }}>🃏</Text>
-              <Text style={{ fontFamily: MONO, fontSize: 8.6, fontWeight: '700', color: INK, marginTop: 5 }}>+{hidden} MORE</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.6), fontWeight: '700', color: INK, marginTop: 5 }}>+{hidden} MORE</Text>
               <View style={{ flex: 1 }} />
               <Mono size={6.6} tone="faint" track={0.08}>TAP FOR ALL</Mono>
             </View>

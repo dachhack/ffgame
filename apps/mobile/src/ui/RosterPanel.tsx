@@ -13,7 +13,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { headshot, teamLogo } from '@drip/core/data/media';
 import type { GameWindow, Player } from '@drip/core/types';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { GROUP_TABS, GroupBadge, InjuryBadge, FlagChip } from './rosterGroup';
 import { openPlayerCard } from './PlayerCardSheet';
@@ -217,7 +217,7 @@ function RosterRow({ player, group, week, userId }: { player: Player; group: Poo
             : <Text style={{ fontFamily: MONO, fontSize: 9, color: t.faint }}>{player.pos}</Text>}
       </View>
       <View style={{ backgroundColor: pc.bg, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8.5), fontWeight: '700', color: pc.fg }}>{player.pos}</Text>
       </View>
       <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, color: t.text }}>{player.full}</Text>
       <InjuryBadge status={injuryFor(week, player.id)} />

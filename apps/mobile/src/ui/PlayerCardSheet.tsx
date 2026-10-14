@@ -27,7 +27,7 @@ import { liveSeasonLog } from '@drip/core/data/playerLog';
 import { buildGameLog, type GameLogWeek } from '@drip/core/data/gameLog';
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projFor } from '@drip/core/data/poolSort';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fsTight } from '../theme.native';
 import { Mono } from './prims';
 import { Ev, track } from '@drip/core/analytics';
 import { Overlay } from './Overlay';
@@ -247,7 +247,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
   const logo = teamLogo(showTeam, { slug });
   const row = (label: string, value: string) => (
     <View key={label} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-      <Text style={{ fontFamily: MONO, width: 58, fontSize: 8.5, fontWeight: '700', letterSpacing: 1, color: t.faint, paddingTop: 1 }}>{label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, width: 58, fontSize: fsTight(8.5), fontWeight: '700', letterSpacing: 1, color: t.faint, paddingTop: 1 }}>{label}</Text>
       <Text style={{ fontFamily: MONO, flex: 1, fontSize: 11, lineHeight: 15, color: t.text }}>{value}</Text>
     </View>
   );
@@ -441,7 +441,7 @@ function PlayerCardSheet({ req, onClose }: { req: PlayerCardReq; onClose: () => 
                       <Mono size={9} tone={me ? 'you' : 'faint'} weight="700" style={{ width: 14, textAlign: 'right' }}>{String(r.depth)}</Mono>
                       <View style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', backgroundColor: t.sh, alignItems: 'center', justifyContent: 'center' }}>
                         {headshot(r.slug) ? <Image source={{ uri: headshot(r.slug)! }} style={{ width: 22, height: 22 }} resizeMode="cover" />
-                          : <Text style={{ fontFamily: MONO, fontSize: 7, color: t.faint }}>{r.pos}</Text>}
+                          : <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7), color: t.faint }}>{r.pos}</Text>}
                       </View>
                       <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: me ? '800' : '600', color: me ? t.you : t.text }}>{rn}</Text>
                       {!!tag && <InjuryBadge status={tag} />}

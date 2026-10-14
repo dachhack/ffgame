@@ -33,7 +33,7 @@ import { classicSlotsFromSpec, type ClassicSlotDef, type ClassicScoring } from '
 import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projectedRing, tiebreakDistance } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
-import { useTheme, MONO, fs, alpha } from '../theme.native';
+import { useTheme, MONO, fs, alpha, fsTight } from '../theme.native';
 import { FeltTable, CardBack, CardFace, FlipCard, CARD_W, CARD_H } from '../ui/ContestCards';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
@@ -89,7 +89,7 @@ function InjuryTag({ week, slug }: { week: number; slug: string }) {
   if (!s) return null;
   const bad = s === 'O' || s === 'IR';
   const c = bad ? t.warn : '#D9A441';
-  return <View accessibilityLabel={INJ_WORD[s]} style={{ borderWidth: 1, borderColor: c, borderRadius: 3, paddingHorizontal: 3, marginLeft: 5 }}><Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '800', color: c }}>{s}</Text></View>;
+  return <View accessibilityLabel={INJ_WORD[s]} style={{ borderWidth: 1, borderColor: c, borderRadius: 3, paddingHorizontal: 3, marginLeft: 5 }}><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8), fontWeight: '800', color: c }}>{s}</Text></View>;
 }
 
 /** THE TIE-BREAKER CHIP (v0.682.2): what the number on the card means. */
