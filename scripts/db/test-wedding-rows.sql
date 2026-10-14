@@ -4,7 +4,7 @@ set search_path = public;
 \echo '── sealed rows of the week-5 matchups (whose seat: the home or away roster via membership / agent)'
 select m.week, m.home_roster_id as home, m.away_roster_id as away,
        case when sp.app_user_id = mem.app_user_id then 'seat ' || mem.sleeper_roster_id when sp.app_user_id = ag.agent_user_id then 'cpu ' || ag.roster_id else 'other' end as whose,
-       sp.game_window, sp.roster_slot, sp.player_slug, sp.locked, sp.lock_at, sp.created_at, sp.updated_at
+       sp.game_window, sp.roster_slot, sp.player_slug, sp.locked, sp.created_at, sp.updated_at, sp.revealed_at
   from sealed_pick sp join matchup m on m.id = sp.matchup_id join league l on l.id = m.league_id
   left join league_membership mem on mem.league_id = l.id and mem.app_user_id = sp.app_user_id
   left join seat_agent ag on ag.league_id = l.id and ag.agent_user_id = sp.app_user_id
