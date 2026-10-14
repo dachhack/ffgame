@@ -91,6 +91,7 @@ begin
   r := create_league_ladder('Pyramid', array[a, b], 'standings', 1, 'roster');
   perform rl_ok(r, 'rl1f two tiers, one team each way, rosters travel'); lad := (r ->> 'ladder_id')::uuid;
   perform rl_err(create_league_ladder('Again', array[b, a]), 'another ladder', 'rl1g a league is in one ladder');
+  perform rl_err(rollover_league(a), 'roll the whole ladder', 'rl1h (0503) a tier can''t roll over on its own');
 
   -- ══ rl2. the order each method reads ══
   perform rl_true(_ladder_rank(a, 'standings') = array[1,2,3,4], 'rl2 standings: by record (got ' || _ladder_rank(a, 'standings')::text || ')');

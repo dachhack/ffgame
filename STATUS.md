@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.0 — Relegation, part 2: the ladder on the app and the site
+
+> - Commissioners can link their leagues into a relegation ladder: COMMISH TOOLS › 🪜 LADDER. Pick the tiers, how teams move (record, points, playoffs or a promotion playoff), how many go up and down, and what happens to rosters.
+> - When the season ends, one button rolls the whole ladder into next season and moves the teams. Members see their tier and who's going up and down under the standings.
+
+- Web `LadderPanel.tsx` (RUN THE SEASON › 🪜 LADDER, NFL native) and the
+  members' `LadderCard` under the hub's standings; phone `ui/Ladder.tsx`
+  (CommishTools 'ladder', LeagueHome under Standings). Rules are chips with
+  one ⓘ; labels and ⓘ text shared from core `data/ladder.ts`.
+- 0503: `rollover_league` refuses a laddered league unless `ladder_rollover`
+  is calling (`app.ladder_rolling`), so NEXT SEASON can't strand a tier
+  (`_rollover_league_0411` is the old body). Probed (rl1h).
+- No iPhone build (JavaScript and SQL).
+
 ### v0.711.0 — Relegation, part 1: the ladder
 
 > - Groundwork for relegation: commissioners will be able to link leagues into tiers, with teams moving up and down at the end of each season. The commissioner's controls arrive on the app and the site in the next release; nothing changes for any league today.

@@ -7,6 +7,7 @@ import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { leagueNote, leagueSignals, nativeRosters, leaguePool, matchupTeams, playoffState, leagueGameMode, leaveLeague, friendlyError, leagueContracts, chatMembers, setLeagueArchived, vampireState, feedingBell, leagueWeekScoreboard, defaultOpenWeek, leagueWriteApi, type TeamInfo, type VampireState } from '@drip/core/data/liveApi';
+import { LadderCard } from '../ui/Ladder';
 import { useTheme, alpha, MONO } from '../theme.native';
 import { tap, warn } from '../ui/feedback';
 import { Mono } from '../ui/prims';
@@ -234,6 +235,7 @@ export function LeagueHome(props: {
       <GuillotineCard leagueId={leagueId} myRoster={rosterId} />
       <VampireCard leagueId={leagueId} myRoster={rosterId} isCommish={commish} />
       <Standings leagueId={leagueId} myRoster={rosterId} />
+      <LadderCard leagueId={leagueId} />
       <DartsBoard leagueId={leagueId} myRoster={rosterId} week={week} />
 
       {/* ── ACTIVITY ──────────────────────────────────────────────────────

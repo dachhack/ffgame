@@ -76,6 +76,7 @@ import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '..
 import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
 import { Overlay } from '../ui/Overlay';
 import { InfoChip, LabelInfo } from '../ui/InfoChip';
+import { LadderCommishCard } from '../ui/Ladder';
 import { SportLineup } from '../ui/SportLineup';
 import { SportSettings } from '../ui/SportSettings';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
@@ -135,6 +136,8 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'players', label: 'PLAYERS', nativeOnly: true },
     { id: 'playoffs', label: 'PLAYOFFS', nativeOnly: true },
     { id: 'dynasty', label: 'NEXT SEASON', nativeOnly: true },
+    // 0502: relegation — tiers of linked leagues, rolled over together
+    { id: 'ladder', label: '🪜 LADDER', nativeOnly: true },
   ] },
   { title: 'ENGAGE', items: [
     // 0325: the league's own weekly awards and badges — nothing here changes
@@ -508,6 +511,7 @@ export function CommishTools({ leagueId, native, contest = false, rosterId, init
             {section === 'format' && native && sport !== 'nfl' && <Card><Mono size={9.5} tone="faint" style={{ lineHeight: fs(13) }}>A {SPORTS[sport].league} league plays head-to-head. Points, categories or roto is a SCORING setting on the web console.</Mono></Card>}
             {section === 'players' && native && <><TopUpPoolCard leagueId={leagueId} /><CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} /></>}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
+            {section === 'ladder' && native && <LadderCommishCard leagueId={leagueId} />}
             {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
             {section === 'locks' && native && <LocksCard leagueId={leagueId} />}
             {section === 'order' && native && <><WaiverOrderCard leagueId={leagueId} /><WaiverHoldsCard leagueId={leagueId} /><TxnLimitsCard leagueId={leagueId} /></>}
