@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { setPlatform } from '../packages/core/src/platform';
 import { setMarkFree } from '../packages/core/src/data/markFree';
-import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg, helmetFacing, HELMET_NUMBER_SCALE } from '../packages/core/src/data/helmets';
+import { helmetMode, setHelmetMode, onHelmetMode, helmetTeam, helmetUrl, playerHelmet, helmetNumberSvg, helmetSvg, helmetFacing, HELMET_NUMBER_SCALE, HELMET_CARD_NUMBER_SCALE } from '../packages/core/src/data/helmets';
 import { HELMET_SPEC } from '../packages/core/src/data/helmetSpec';
 import { teamLogo, headshot, espnHeadshot } from '../packages/core/src/data/media';
 import { PLAYER_BIO } from '../packages/core/src/data/playerBio';
@@ -88,6 +88,9 @@ const firstX = (s) => Number(/translate\(([-\d.]+)/.exec(s)[1]);
 const w15 = (HELMET_SPEC.digits[1].adv + HELMET_SPEC.digits[5].adv) * sc;
 ok('number: left-facing ends at the anchor (lower right)', Math.abs(firstX(svg) + w15 - HELMET_SPEC.number.anchor.left.x * S) < 0.05);
 ok('number: right-facing starts at the anchor (lower left)', Math.abs(firstX(helmetNumberSvg('KC', 15, 'right')) - HELMET_SPEC.number.anchor.right.x * S) < 0.05);
+// v0.713.5, founder: "numbers a touch smaller on weekly contest".
+ok('card: the playing card\'s number is smaller than a row\'s, still bigger than the manifest', HELMET_CARD_NUMBER_SCALE > 1 && HELMET_CARD_NUMBER_SCALE < HELMET_NUMBER_SCALE);
+ok('card: helmetSvg draws at the scale it is given', helmetSvg('KC', 15, 'right', HELMET_CARD_NUMBER_SCALE).includes(helmetNumberSvg('KC', 15, 'right', HELMET_CARD_NUMBER_SCALE)) && !helmetSvg('KC', 15, 'right', HELMET_CARD_NUMBER_SCALE).includes(helmetNumberSvg('KC', 15, 'right')));
 ok('number: none for a player without one', helmetNumberSvg('KC', null) === '');
 const whole = helmetSvg('KC', 15);
 ok('svg: the helmet image under the number', /<image href="https:\/\/dripfantasy\.com\/helmets\/png\/KC-right\.png"/.test(whole) && whole.indexOf('<image') < whole.indexOf('<path'));
@@ -137,8 +140,8 @@ for (const f of ['ui/ClassicBoard.tsx', 'screens/Team.tsx', 'screens/Draft.tsx',
   ok('app: "Player pictures" is its own settings row', /id: 'pictures', icon: '⛑', name: 'Player pictures'/.test(set) && /section === 'pictures' && <HelmetPicker \/>/.test(set));
 }
 // v0.713.4, founder: "Numbers on helmets for weekly contest leagues please".
-ok('contest: the phone\'s card face draws the numbered helmet, theirs facing left', /playerHelmetFace\(slug, undefined, team, !mine\)/.test(read('apps/mobile/src/ui/ContestCards.tsx')));
-ok('contest: the web\'s playing card draws it, the opponent\'s facing left', /const helmet = helmetArt\(slug, team, opp\);/.test(read('src/app/cardTable.tsx')));
+ok('contest: the phone\'s card face draws the numbered helmet, theirs facing left', /playerHelmetFace\(slug, undefined, team, !mine, HELMET_CARD_NUMBER_SCALE\)/.test(read('apps/mobile/src/ui/ContestCards.tsx')));
+ok('contest: the web\'s playing card draws it, the opponent\'s facing left', /const helmet = helmetArt\(slug, team, opp, HELMET_CARD_NUMBER_SCALE\);/.test(read('src/app/cardTable.tsx')));
 ok('app: Team and the board draw helmets 1.5× the photo size (v0.713.5)', /export const helmetSize = \(photo: number\) => Math\.round\(photo \* 1\.5\)/.test(face)
   && ['apps/mobile/src/screens/Team.tsx', 'apps/mobile/src/ui/ClassicBoard.tsx'].every((f) => /playerHelmetFace\(slug, helmetSize\(size\)\)/.test(read(f))));
 ok('app: the tree re-renders when it flips', /onHelmetMode\(/.test(read('apps/mobile/App.tsx')));

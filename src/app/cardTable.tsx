@@ -5,7 +5,7 @@
 // the rest of the app; suit colors come from the active theme's --pos-* vars.
 import { useEffect, useMemo, useState } from 'react';
 import { headshot, teamLogo } from '@drip/core/data/media';
-import { helmetMode, playerHelmet, helmetSvg, helmetFacing } from '@drip/core/data/helmets';
+import { helmetMode, playerHelmet, helmetSvg, helmetFacing, HELMET_NUMBER_SCALE, HELMET_CARD_NUMBER_SCALE } from '@drip/core/data/helmets';
 import { slugMeta } from '@drip/core/data/slugMeta';
 import { DripCoin, FxIcon, PuIcon } from './gameIcons';
 import { GHOST_CARD, isGhostSlug } from '@drip/core/data/ghostCard';
@@ -554,10 +554,10 @@ const initials = (name: string) => name.split(/\s+/).map((w) => w[0]).filter(Boo
 /** A card's art in HELMET MODE (v0.713.4): the team's helmet with his number,
  *  filling the art box; yours face right, the opponent's (`opp`) face left.
  *  Null outside the mode, or with no team helmet (the art falls back as before). */
-function helmetArt(slug: string, team: string | null | undefined, opp?: boolean): React.ReactNode {
+function helmetArt(slug: string, team: string | null | undefined, opp?: boolean, numberScale = HELMET_NUMBER_SCALE): React.ReactNode {
   if (!helmetMode() || /^c-\d+$/.test(slug)) return null;
   const ph = playerHelmet(slug, team);
-  const svg = ph ? helmetSvg(ph.team, ph.num, helmetFacing(opp)) : null;
+  const svg = ph ? helmetSvg(ph.team, ph.num, helmetFacing(opp), numberScale) : null;
   return svg ? <span style={{ display: 'block', width: '100%', height: '100%', lineHeight: 0 }} dangerouslySetInnerHTML={{ __html: svg }} /> : null;
 }
 
@@ -591,7 +591,8 @@ export function PlayerCard({ slug, name, pos, team, slot, metric, bank, opp = fa
   // The Ghost (v0.527.0): a ghost where the headshot goes.
   const ghost = isGhostSlug(slug);
   // HELMET MODE (v0.713.4): the numbered helmet; the opponent's faces left.
-  const helmet = helmetArt(slug, team, opp);
+  // The playing card's number a touch smaller (v0.713.5): the art box is big.
+  const helmet = helmetArt(slug, team, opp, HELMET_CARD_NUMBER_SCALE);
   return (
     <div className={`ct-wrap ${opp ? 'ct-flip ct-opp' : flip ? 'ct-flip' : 'ct-dealin'}${hot && !nuked ? ' ct-hot' : ''}${nuked ? ' ct-nuked' : ''}${selected ? ' ct-sel' : ''}${onClick ? ' ct-tap' : ''}`}
       style={{ animationDelay: `${idx * 90}ms` }} onClick={onClick}>

@@ -18,8 +18,8 @@ import { helmetMode, playerHelmet, helmetSvg, helmetFacing, type HelmetFacing } 
 
 /** A helmet with a number: a square at `size`, or filling its (square) parent
  *  when no size is given (the picker's and the deck cards' photo frames). */
-export function HelmetFace({ team, num, size, facing }: { team: string; num: number | string | null; size?: number; facing?: HelmetFacing }) {
-  const xml = helmetSvg(team, num, facing);
+export function HelmetFace({ team, num, size, facing, numberScale }: { team: string; num: number | string | null; size?: number; facing?: HelmetFacing; numberScale?: number }) {
+  const xml = helmetSvg(team, num, facing, numberScale);
   if (!xml) return null;
   const dim = size ?? '100%';
   return (
@@ -35,8 +35,8 @@ export const helmetSize = (photo: number) => Math.round(photo * 1.5);
 
 /** A player's helmet when helmet mode is on and his team is known, else null
  *  (the caller draws its headshot as before). */
-export function playerHelmetFace(slug: string | null | undefined, size?: number, teamHint?: string | null, opponent?: boolean): React.ReactElement | null {
+export function playerHelmetFace(slug: string | null | undefined, size?: number, teamHint?: string | null, opponent?: boolean, numberScale?: number): React.ReactElement | null {
   if (!helmetMode() || !slug || /^c-\d+$/.test(slug)) return null;
   const h = playerHelmet(slug, teamHint);
-  return h ? <HelmetFace team={h.team} num={h.num} size={size} facing={helmetFacing(opponent)} /> : null;
+  return h ? <HelmetFace team={h.team} num={h.num} size={size} facing={helmetFacing(opponent)} numberScale={numberScale} /> : null;
 }
