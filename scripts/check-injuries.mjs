@@ -142,5 +142,26 @@ eq('now: an unsubscribed listener hears nothing', heard, 1);
 eq('now: a newer sheet clears an old tag', injuryNow('a-guy'), null);
 eq('now: it is independent of the board\'s week-keyed cache', injuryFor(99, 'a-guy'), null);
 
+
+// ── THE PHONE'S SEASON (v0.708.5) ─────────────────────────────────────────
+// A week-6 phone board wore 2025's week 6 (Brock Bowers and Terry McLaurin
+// "O", both healthy on every 2026 feed): the live report was installed for
+// another week, and the phone never moved the injury season off 2025.
+clearLiveInjuries();
+setInjurySeason(2025);
+setLiveInjuries(7, {});
+eq('2025 board: a week the live report does not cover reads the bake', injuryFor(6, 'brock-bowers'), 'O');
+setInjurySeason(2026);
+eq('2026 board: the same miss reads nothing, never last year', injuryFor(6, 'brock-bowers'), null);
+eq('2026 board: nor 2025 IR', injuryFor(6, 'kyler-murray'), null);
+clearLiveInjuries();
+{
+  const { readFileSync } = await import('node:fs');
+  const idx = readFileSync(new URL('../apps/mobile/index.ts', import.meta.url), 'utf8');
+  const at = idx.indexOf('setInjurySeason(LIVE_SEASON)');
+  eq('the phone sets the live injury season at bundle load', at >= 0, true);
+  eq('…before the widget task is registered', at >= 0 && at < idx.indexOf('registerMatchupWidget();'), true);
+}
+
 console.log(fails ? `FAIL  ${fails} injury assertion(s) failed` : 'OK    injury report precedence');
 process.exit(fails ? 1 : 0);

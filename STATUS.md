@@ -22,19 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.708.5 — A cleared player no longer stays Out
+### v0.708.5 — No more last season's injury tags on the phone
 
-> - A player cleared to play (Brock Bowers, healthy on Sleeper and ESPN) no longer keeps an old Out tag.
+> - The phone no longer shows last season's injury tags: Brock Bowers and Terry McLaurin were marked Out (and projected 0) from a 2025 report, though both are healthy.
 
-`poll/injuries.js`'s prune read (`held`) was a bare `select('player_slug')`,
-the one `injury_status` read left on PostgREST's silent 1000-row cap after
-v0.489.4 paged the others. With college (`c-…`) and sport-directory rows
-(`nba-…`, `mlb-…`) in the same table it passed a thousand, and NFL rows past
-the cap were never considered for deletion: a cleared player kept his last
-designation. Now `allRows`, ordered on the key; a failed read skips the prune.
-Live feeds Oct 14: ESPN Active (Oct 12 00:47Z), Sleeper no status. Not
-confirmed against the live row (no read access here). check:injurymerge +2
-(fail on the old code). No iPhone build.
+`injuryFor` falls back to the baked 2025 report when the live one isn't
+installed for the week asked. Only `setActiveLeague`/`resetToDemoLeague` move
+its season off 2025; the web calls them, the phone never did. So a week-6
+phone board whose live report was for another week (or failed to load) wore
+2025's week 6. Confirmed on a member's screenshot: all 8 players shown match
+2025 week 6 (Bowers and McLaurin O, six untagged); ESPN, Sleeper and StatHead
+all have both healthy. `apps/mobile/index.ts` now sets `setInjurySeason(LIVE_SEASON)`
+at bundle load (the engine's `healthy()` reads the same tags, so auto-lineups
+were affected too). check:injuries +5 (two fail on the old code).
+
+Also: `poll/injuries.js`'s prune read now pages (`allRows`). It was the one
+`injury_status` read on PostgREST's 1000-row cap. Probe
+`scripts/db/injury-stale-rows.sql` found 1,050 stranded NFL rows; every one
+shown is keyed by a JSON object (the v0.489.0 bug). Readers can't match those
+keys, and the prune's `.in()` delete may still choke on them: follow-up.
+No iPhone build (check:ios-runtime: over the air).
 
 ### v0.708.4 — Notifications, part 4: drip coin
 

@@ -17,6 +17,8 @@ import './src/platform.native';
 import { registerMatchupWidget } from './src/widget/widgetTask';
 
 import { registerRootComponent } from 'expo';
+import { setInjurySeason } from '@drip/core/data/injuries';
+import { LIVE_SEASON } from '@drip/core/data/realPbp';
 import { initAnalytics } from '@drip/core/analytics';
 import { initNativeAnalytics } from './src/analytics.native';
 import { App } from './App';
@@ -31,6 +33,15 @@ initNativeAnalytics();
 // the web sends `standalone` from the same seam.
 initAnalytics({ native: true });
 
+// THE PHONE PLAYS THE LIVE SEASON (v0.708.5). injuryFor falls back to the
+// baked 2025 report whenever the live one is not installed for the week asked
+// (another screen or the widget loaded a different week, or the read failed),
+// and only setActiveLeague / resetToDemoLeague ever move that season off 2025:
+// the web calls them, the phone never did. So a Wednesday week-6 board wore
+// 2025's week 6: Brock Bowers and Terry McLaurin "O" at 0.0, both healthy on
+// every 2026 feed. The phone has no 2025 board to protect; set it before the
+// widget's headless task or any screen can ask.
+setInjurySeason(LIVE_SEASON);
 registerMatchupWidget();
 // Over-the-air updates: check on every return to the foreground and apply a
 // downloaded update after a long enough absence (src/updates.ts).
