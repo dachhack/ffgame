@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.6 — No cards on the setup board; Large is gone; ARMED counts when it would wrap
+
+> - Settings → Cards → Card size: No cards, Small or Medium. No cards draws the setup board as plain rows. Large is gone; a phone set to Large now shows Medium.
+> - On the drip board, ARMED shows just a count once its power-ups would wrap; tap it to see which.
+
+Founder: "Let's nuke the large card setting. Let's add a no cards setting."
+Scoped to the setup board, where card size already applied (founder's pick:
+live duels and the Weekly Contest keep their cards). CardSize is now 'none'
+| 'small' | 'medium'; loadCardSize reads a saved 'large' as 'medium'. With
+'none', SetupRow draws one row per spot: helmet or photo, the name (opens the
+player card), POS · TEAM, the metric line (opens the metric sheet, or "+ PICK
+A METRIC"), ⇄ swap and ✕ clear, the ⚡ and TWIN marks, and the opponent's
+"🔒 SEALED" side with 🔍 SCOUT. Ghost / Bye Steal and empty spots get rows
+too. The picker's paragraph moved into an ⓘ (LabelInfo); No cards' swatch
+is three bars.
+
+Founder: "Let's have armed just say how many once they start to wrap. Click
+to show which." The ◈ ARMED strip measures its chips on one line off-screen
+against its own width; past that it shows "⚡ 3 ▾", and a tap opens a sheet
+listing each armed buff with its blurb. check:settingsmenu +5. JavaScript
+only; no iPhone build.
+
 ### v0.713.5 — Bigger helmets on team rows; smaller numbers on contest cards
 
 > - Helmets on My Team and the lineup picker are half again as big, so they read beside a player's three lines.

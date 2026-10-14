@@ -190,6 +190,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   }, [switchOpen, seats, userId]);
   // The ARMED strip's sheet (v0.431.0): one armed buff and its blurb.
   const [armedOpen, setArmedOpen] = useState<string | null>(null);
+  // A COUNT ONCE THEY WRAP (v0.713.6, founder: "Let's have armed just say how
+  // many once they start to wrap. Click to show which."). The strip measures
+  // its chips on one line (off-screen) against its own width; past that it
+  // shows "3 ▾" and a tap lists them.
+  const [armedW, setArmedW] = useState(0);
+  const [armedNeed, setArmedNeed] = useState(0);
+  const [armedListOpen, setArmedListOpen] = useState(false);
   // EXTRA SLOTS (0305, v0.431.0, founder: "I don't see the extra slot I
   // added"): the windows this seat has widened, {win: n}, read from the
   // server's record with the targeted plays. `extraPick` is the card's
@@ -1531,14 +1538,46 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           spot answers yet — Momentum armed before a drip metric is picked —
           would otherwise be nowhere on screen. Tap one for what it does.
           No take-backs: a played card is played. */}
-      {[...buffs].some((id) => !powerupById(id)?.target) && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-          <Mono size={8.5} weight="700" track={0.14} tone="faint">◈ ARMED</Mono>
+      {(() => {
+        const armed = [...buffs].filter((id) => !powerupById(id)?.target);
+        if (!armed.length) return null;
+        const chips = armed.map((id) => { const p = powerupById(id); return (
+          <Chip key={id} on label={`${p?.icon ?? '✦'} ${(p?.name ?? id).toUpperCase()}`} onPress={() => setArmedOpen(id)} a11y={`${p?.name ?? id}, armed`} />
+        ); });
+        const label = <Mono size={8.5} weight="700" track={0.14} tone="faint">◈ ARMED</Mono>;
+        // One line or a count: the chips would wrap once they need more than the strip has.
+        const counted = armedW > 0 && armedNeed > armedW + 0.5;
+        return (
+          <View onLayout={(e) => setArmedW(e.nativeEvent.layout.width)} style={{ marginBottom: 10 }}>
+            {/* The one-line measure: laid out off to the side, never seen or tapped. */}
+            <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, width: 10000, opacity: 0 }}>
+              <View onLayout={(e) => setArmedNeed(e.nativeEvent.layout.width)} style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {label}{chips}
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {label}
+              {counted
+                ? <Chip on label={`⚡ ${armed.length} ▾`} onPress={() => setArmedListOpen(true)} a11y={`${armed.length} armed, show which`} />
+                : chips}
+            </View>
+          </View>
+        );
+      })()}
+      <Overlay visible={armedListOpen} title={`Armed · ${[...buffs].filter((id) => !powerupById(id)?.target).length}`}
+        subtitle="IN PLAY THIS WEEK" onClose={() => setArmedListOpen(false)}>
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
           {[...buffs].filter((id) => !powerupById(id)?.target).map((id) => { const p = powerupById(id); return (
-            <Chip key={id} on label={`${p?.icon ?? '✦'} ${(p?.name ?? id).toUpperCase()}`} onPress={() => setArmedOpen(id)} a11y={`${p?.name ?? id}, armed`} />
+            <View key={id} style={{ flexDirection: 'row', gap: 10, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12 }}>
+              <Text style={{ fontSize: 20 }}>{p?.icon ?? '✦'}</Text>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{p?.name ?? id}</Text>
+                {!!p?.blurb && <Text style={{ fontSize: 12, color: t.mid, lineHeight: 17 }}>{p.blurb}</Text>}
+              </View>
+            </View>
           ); })}
-        </View>
-      )}
+        </ScrollView>
+      </Overlay>
       <Overlay visible={!!armedOpen} title={armedOpen ? `${powerupById(armedOpen)?.icon ?? '✦'} ${powerupById(armedOpen)?.name ?? armedOpen}` : ''}
         subtitle="ARMED · IN PLAY THIS WEEK" onClose={() => setArmedOpen(null)}>
         <View style={{ padding: 14, gap: 12 }}>

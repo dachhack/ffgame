@@ -172,8 +172,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
             {section === 'cards' && (
               <View style={{ gap: 18 }}>
                 <View style={{ gap: 8 }}>
-                  <Mono size={8.5} weight="700" track={0.16} tone="faint">CARD SIZE</Mono>
-                  <Mono size={9} tone="faint">On the setup board. Smaller fits a whole window on screen; larger is easier to read and to hit.</Mono>
+                  <LabelInfo label="CARD SIZE" title="Card size"
+                    info="How the setup board draws your picks. Small fits a whole window on screen; Medium is easier to read and to hit. No cards draws each spot as a plain row: your player, his metric, and the opponent's sealed spot." />
                   <View style={{ flexDirection: 'row', gap: 7 }}>
                     {CARD_SIZES.map((o) => {
                       const on = cardSize === o.id;
@@ -181,6 +181,8 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                       // word you have to close the sheet to evaluate. Same 2.5:3.5 as
                       // the real card; the widths are the real caps, quartered.
                       const w = Math.round((o.w ?? 152) / 4);
+                      // NO CARDS (v0.713.6): its swatch is a row, not a card.
+                      const none = o.id === 'none';
                       return (
                         <Pressable
                           key={o.id}
@@ -192,7 +194,9 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
                           }}
                         >
                           <View style={{ height: 40, justifyContent: 'flex-end' }}>
-                            <View style={{ width: w, aspectRatio: 0.714, borderRadius: 3, backgroundColor: on ? t.you : t.bd }} />
+                            {none
+                              ? <View style={{ gap: 3 }}>{[0, 1, 2].map((i) => <View key={i} style={{ width: 34, height: 6, borderRadius: 2, backgroundColor: on ? t.you : t.bd }} />)}</View>
+                              : <View style={{ width: w, aspectRatio: 0.714, borderRadius: 3, backgroundColor: on ? t.you : t.bd }} />}
                           </View>
                           <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: on ? t.you : t.faint }}>{o.name.toUpperCase()}</Text>
                         </Pressable>

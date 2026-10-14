@@ -18,7 +18,8 @@ import { Mono } from './prims';
 import { CardFace, CardBack, CardEmpty, CardPhantom, loadCardSize, cs } from './cards';
 import { openPlayerCard } from './PlayerCardSheet';
 import { Overlay } from './Overlay';
-import { teamLogo } from '@drip/core/data/media';
+import { teamLogo, headshot } from '@drip/core/data/media';
+import { playerHelmetFace } from './HelmetFace';
 
 export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twin, phantom, hydrated = true, idx = 0, onScout, onOpenPicker, onPickMetric, onClearSlot }: {
   pick?: Pick;
@@ -87,10 +88,113 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
     if (pick?.playerId && !pick?.metricId && !lockPlayer) setMetricOpen(true);
   }, [pick?.playerId, pick?.metricId, lockPlayer, hydrated]);
 
+  // The chip's detail sheet and the metric sheet: the same two overlays
+  // whichever way the spot is drawn.
+  const sheets = (
+    <>
+      <Overlay
+        visible={puOpen}
+        title="Power-ups on this card"
+        subtitle={player ? `${player.name.toUpperCase()} · ${player.pos}` : undefined}
+        onClose={() => setPuOpen(false)}
+      >
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
+          {(applied ?? []).map((a, i) => (
+            <View key={`${a.name}-${i}`} style={{ flexDirection: 'row', gap: 10, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12 }}>
+              <Text style={{ fontSize: 20 }}>{a.icon}</Text>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{a.name}</Text>
+                {!!a.blurb && <Text style={{ fontSize: 12, color: t.mid, lineHeight: 17 }}>{a.blurb}</Text>}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </Overlay>
+
+      <MetricModal
+        visible={metricOpen}
+        player={player}
+        currentId={pick?.metricId ?? null}
+        filter={metricFilter}
+        onPick={(id) => { onPickMetric(id); setMetricOpen(false); }}
+        onClose={() => setMetricOpen(false)}
+      />
+    </>
+  );
+
+  // NO CARDS (v0.713.6, founder: "Let's add a no cards setting"): the spot as
+  // one plain row. Same taps as the card: the name opens the player card, the
+  // metric line opens the metric sheet, ⇄ swaps, ✕ clears, and the sealed
+  // side scouts.
+  if (cardSize === 'none') {
+    const face = player
+      ? playerHelmetFace(player.id, 36, player.team) ?? (
+        <View style={{ width: 36, height: 36, borderRadius: 18, overflow: 'hidden', backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}>
+          {headshot(player.id)
+            ? <Image source={{ uri: headshot(player.id)! }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            : <Mono size={8} tone="faint" weight="700">{player.pos}</Mono>}
+        </View>)
+      : null;
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, backgroundColor: t.sh }}>
+        {player ? (
+          <>
+            {face}
+            <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Pressable hitSlop={4} style={{ flexShrink: 1 }} onPress={() => openPlayerCard({ slug: player.id, name: player.name, pos: player.pos, team: player.team })}>
+                  <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{player.name}</Text>
+                </Pressable>
+                {twin && <Mono size={8.5} weight="700" style={{ color: '#E9B959' }}>🎖️×2</Mono>}
+                {!!applied?.length && (
+                  <Pressable hitSlop={6} onPress={() => setPuOpen(true)} accessibilityLabel={`${applied.map((a) => a.name).join(', ')} on this spot`}>
+                    <Text style={{ fontSize: 11 }}>⚡{applied.slice(0, 3).map((a) => a.icon).join('')}{applied.length > 3 ? `+${applied.length - 3}` : ''}</Text>
+                  </Pressable>
+                )}
+              </View>
+              <Mono size={8.5} tone="faint" numberOfLines={1}>{`${player.pos} · ${player.team}`}</Mono>
+              <Pressable hitSlop={4} disabled={lockPlayer} onPress={() => setMetricOpen(true)} style={{ alignSelf: 'flex-start' }}>
+                <Mono size={9} weight="700" tone={metric ? 'you' : 'warn'} numberOfLines={1}>{metric ? `${metric.name}${lockPlayer ? '' : ' ↻'}` : '+ PICK A METRIC'}</Mono>
+              </Pressable>
+            </View>
+            {!lockPlayer && (
+              <View style={{ flexDirection: 'row', gap: 4 }}>
+                <Pressable hitSlop={6} onPress={onOpenPicker} accessibilityLabel="Swap player" style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+                  <Mono size={11} weight="700" tone="dim">⇄</Mono>
+                </Pressable>
+                <Pressable hitSlop={6} onPress={onClearSlot} accessibilityLabel="Clear this spot" style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+                  <Mono size={11} weight="700" tone="faint">✕</Mono>
+                </Pressable>
+              </View>
+            )}
+          </>
+        ) : phantom ? (
+          <Pressable disabled={!applied?.length} onPress={() => setPuOpen(true)} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 22 }}>{phantom.icon}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>{phantom.title}</Text>
+              <Mono size={8.5} tone="faint" numberOfLines={1}>{phantom.sub}</Mono>
+            </View>
+          </Pressable>
+        ) : (
+          <Pressable disabled={lockPlayer} onPress={onOpenPicker} style={{ flex: 1, paddingVertical: 10 }}>
+            <Mono size={10} weight="700" tone={lockPlayer ? 'faint' : 'you'}>{lockPlayer ? 'EMPTY' : '+ PICK A PLAYER'}</Mono>
+          </Pressable>
+        )}
+        {/* Their side: sealed until kickoff, and the way to scout it. */}
+        <Pressable disabled={!onScout} onPress={onScout} hitSlop={4}
+          style={{ alignItems: 'center', gap: 1, paddingLeft: 8, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.bd }}>
+          <Mono size={8.5} weight="700" tone="opp">🔒 SEALED</Mono>
+          {onScout && <Mono size={8.5} weight="700" tone="dim">🔍 SCOUT</Mono>}
+        </Pressable>
+        {sheets}
+      </View>
+    );
+  }
+
   // Centred, because at Small and Medium the cards are capped and left to
   // themselves a flex row would push them to the edges with a hole between —
-  // the pairing is the point, so they sit together. At Large they fill the row
-  // and centring is a no-op.
+  // the pairing is the point, so they sit together.
   return (
     <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', justifyContent: 'center' }}>
       {/* Your card, then the opponent's face-down one — the pairing IS the
@@ -158,34 +262,7 @@ export function SetupRow({ pick, resolve, lockPlayer, metricFilter, applied, twi
 
       <CardBack size={cardSize} idx={idx} onPress={onScout} actionLabel={onScout ? '🔍 SCOUT' : undefined} />
 
-      {/* The chip's detail sheet: what's on this card and what each one does. */}
-      <Overlay
-        visible={puOpen}
-        title="Power-ups on this card"
-        subtitle={player ? `${player.name.toUpperCase()} · ${player.pos}` : undefined}
-        onClose={() => setPuOpen(false)}
-      >
-        <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
-          {(applied ?? []).map((a, i) => (
-            <View key={`${a.name}-${i}`} style={{ flexDirection: 'row', gap: 10, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 12 }}>
-              <Text style={{ fontSize: 20 }}>{a.icon}</Text>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{a.name}</Text>
-                {!!a.blurb && <Text style={{ fontSize: 12, color: t.mid, lineHeight: 17 }}>{a.blurb}</Text>}
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      </Overlay>
-
-      <MetricModal
-        visible={metricOpen}
-        player={player}
-        currentId={pick?.metricId ?? null}
-        filter={metricFilter}
-        onPick={(id) => { onPickMetric(id); setMetricOpen(false); }}
-        onClose={() => setMetricOpen(false)}
-      />
+      {sheets}
     </View>
   );
 }

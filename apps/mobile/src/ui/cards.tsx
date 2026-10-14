@@ -59,17 +59,23 @@ export const CARD_ASPECT = 0.714;
  *  Applies to the SETUP board only. The revealed cards in a live duel are the
  *  thing you are watching, and shrinking those to fit more of a board you have
  *  finished editing is the wrong trade — so only SetupRow opts in. */
-export type CardSize = 'small' | 'medium' | 'large';
+//
+//  v0.713.6, founder: "Let's nuke the large card setting. Let's add a no cards
+//  setting." Large is gone (a saved Large reads as Medium, the nearest), and
+//  NONE draws the setup board as plain rows (SetupRow's SetupLine): your pick,
+//  its metric, and the opponent's sealed spot, no card art.
+export type CardSize = 'none' | 'small' | 'medium';
 export const CARD_SIZES: { id: CardSize; name: string; w: number | null; s: number }[] = [
+  { id: 'none', name: 'No cards', w: null, s: 1 },
   { id: 'small', name: 'Small', w: 122, s: 0.82 },
   { id: 'medium', name: 'Medium', w: 146, s: 0.91 },
-  { id: 'large', name: 'Large', w: null, s: 1 },
 ];
 
 export const CARD_SIZE_KEY = 'gc-cardsize';
 
 export function loadCardSize(): CardSize {
-  const s = storeGet(CARD_SIZE_KEY) as CardSize | null;
+  const s = storeGet(CARD_SIZE_KEY);
+  if (s === 'large') return 'medium';
   return CARD_SIZES.some((o) => o.id === s) ? (s as CardSize) : 'small';
 }
 export function saveCardSize(s: CardSize): void { storeSet(CARD_SIZE_KEY, s); }
@@ -80,7 +86,9 @@ export function saveCardSize(s: CardSize): void { storeSet(CARD_SIZE_KEY, s); }
  *  draws itself — the footer's scale arrives as the render prop's argument. */
 export const cs = (n: number, k: number) => Math.round(n * k * 10) / 10;
 
-const sizeSpec = (size?: CardSize) => CARD_SIZES.find((o) => o.id === (size ?? loadCardSize())) ?? CARD_SIZES[0];
+// 'none' never draws a card (SetupRow takes the row path), so a card asked
+// for at 'none' anyway is drawn Small rather than at no size at all.
+const sizeSpec = (size?: CardSize) => CARD_SIZES.find((o) => o.id === (size ?? loadCardSize()) && o.id !== 'none') ?? CARD_SIZES[1];
 
 const STOCK = '#F4EDDA';       // middle of the web's face gradient
 const STOCK_TILE = require('../../assets/card-stock.png');
