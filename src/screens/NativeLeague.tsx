@@ -84,7 +84,8 @@ import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWe
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 import { LabelInfo, InfoChip } from './adminUi';
-import { PUSH_KINDS, pushKindOn, flipPushKind } from '@drip/core/data/pushKinds';
+import { PUSH_KINDS, pushKindOn, flipPushKind, plainText, leagueKindOn } from '@drip/core/data/pushKinds';
+import { myLeaguePushPrefs, setLeaguePushPrefs } from '@drip/core/data/liveApi';
 import { BullseyeStart } from './BullseyeLeague';
 import { normTeam } from '../../packages/core/src/data/teamCodes';
 
@@ -5256,6 +5257,20 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
     setAllChat(next);
     void setLeagueChatPush(leagueId, next).catch(() => setAllChat(!next));
   };
+  // THIS LEAGUE'S SWITCHES (0499, v0.708.3, founder: "Let's do per league settings and overall").
+  const [lp, setLp] = useState<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    if (!leagueId) { setLp(null); return; }
+    let dead = false;
+    myLeaguePushPrefs(leagueId).then((r) => { if (!dead) setLp(r?.prefs ?? {}); }).catch(() => { if (!dead) setLp({}); });
+    return () => { dead = true; };
+  }, [leagueId]);
+  const saveLp = (next: Record<string, boolean>) => {
+    if (!leagueId || !lp) return;
+    const was = lp;
+    setLp(next);
+    void setLeaguePushPrefs(leagueId, next).then((r) => { if (!r?.ok) setLp(was); }).catch(() => setLp(was));
+  };
   const toggle = (tok: PushTokenRow, key: string) => {
     const next = flipPushKind((tok.prefs ?? {}) as Record<string, boolean>, key);
     setTokens((cur) => (cur ?? []).map((x) => (x.token === tok.token ? { ...x, prefs: next } : x)));
@@ -5289,7 +5304,13 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
     // BARE inside a Sheet (v0.296.3) — a card in a card is two frames around
     // one picture, and the sheet's own title already says NOTIFICATIONS.
     <div style={bare ? {} : { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '12px 14px' }}>
-      {!bare && <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS <InfoChip title="What each one is" info={PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} /></div>}
+      <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>
+        {bare ? '' : leagueId ? 'THIS LEAGUE' : 'NOTIFICATIONS'}
+        <InfoChip title="What each one is" info={(leagueId
+          ? 'These switches are this league’s, for your account on every device. A notification goes out when both this league’s switch and your overall one (⚙ → Notifications) are on. The chat switch picks every chat message or only mentions & DMs; mentions, DMs and polls always come through.\n\n'
+          : 'These are each device’s overall switches; they follow your account, so flipping them here reaches your phone. Each league can also turn types off, or mute itself, under its own alerts.\n\n')
+          + PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} />
+      </div>
       {web !== 'unsupported' && (
         <div style={{ marginBottom: 8 }}>
           {web === 'denied' ? (
@@ -5302,7 +5323,7 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
                 color: web === 'subscribed' ? 'var(--dim)' : 'var(--you)',
                 background: web === 'subscribed' ? 'var(--bg)' : 'color-mix(in srgb, var(--you) 12%, transparent)',
                 border: `1px solid ${web === 'subscribed' ? 'var(--bd)' : 'var(--you)'}` }}>
-              {web === 'subscribed' ? '✓ THIS BROWSER GETS PUSHES — tap to turn off' : '🔔 ENABLE PUSHES ON THIS BROWSER'}
+              {web === 'subscribed' ? 'THIS BROWSER GETS PUSHES — tap to turn off' : 'ENABLE PUSHES ON THIS BROWSER'}
             </button>
           )}
         </div>
@@ -5313,7 +5334,32 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
           No device registered — sign in on the Drip Fantasy app{web === 'unsupported' ? '' : ' or enable this browser above'} and it shows up here.
         </div>
       )}
-      {tokens?.map((tok) => (
+      {leagueId && lp && (() => {
+        // IN A LEAGUE: this league's switches; a type no device has on overall says so.
+        const chip = (on: boolean): React.CSSProperties => ({ fontSize: 9, fontWeight: 700, borderRadius: 999, padding: '4px 10px', cursor: 'pointer', color: on ? 'var(--you)' : 'var(--dim)', background: on ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` });
+        return (
+          <div style={{ display: 'grid', gap: 7 }}>
+            <button onClick={() => saveLp({ ...lp, muted: !lp.muted })} className="mono"
+              style={{ justifySelf: 'start', fontSize: 9.5, fontWeight: 700, borderRadius: 6, padding: '6px 12px', cursor: 'pointer', color: lp.muted ? 'var(--opp)' : 'var(--dim)', background: lp.muted ? 'color-mix(in srgb, var(--opp) 12%, transparent)' : 'var(--bg)', border: `1px solid ${lp.muted ? 'var(--opp)' : 'var(--bd)'}` }}>
+              {lp.muted ? 'THIS LEAGUE IS MUTED' : 'MUTE THIS LEAGUE'}
+            </button>
+            {!lp.muted && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {PUSH_KINDS.map((k) => {
+                  const on = leagueKindOn(lp, k.key);
+                  const offOverall = !!tokens?.length && tokens.every((tok) => !pushKindOn(tok.prefs, k.key));
+                  return (
+                    <button key={k.key} onClick={() => saveLp({ ...lp, [k.key]: !on })} title={k.info} className="mono" style={chip(on && !offOverall)}>
+                      {k.label}{on && offOverall ? ' · off overall' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+      {!leagueId && tokens?.map((tok) => (
         <div key={tok.token} style={{ marginBottom: 6 }}>
           {(tokens.length > 1) && (
             <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginBottom: 4 }}>{tok.platform === 'web' ? 'browser' : 'phone'} · seen {new Date(tok.last_seen_at).toLocaleDateString()}</div>
@@ -5338,20 +5384,15 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
               color: allChat ? 'var(--you)' : 'var(--dim)',
               background: allChat ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)',
               border: `1px solid ${allChat ? 'var(--you)' : 'var(--bd)'}` }}>
-            {allChat ? '✓ EVERY MESSAGE IN THIS LEAGUE' : 'ONLY MENTIONS & DMs IN THIS LEAGUE'}
+            {allChat ? 'EVERY CHAT MESSAGE IN THIS LEAGUE' : 'ONLY MENTIONS & DMs IN THIS LEAGUE'}
           </button>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
-            Per league, not per device: leave it off and chat still pings you for mentions, DMs and polls.
-          </div>
         </div>
       )}
-      <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-        Lit = on. Mutes apply per kind, per device — they follow your account, so flipping them here reaches your phone.
-      </div>
+
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
         <button onClick={() => { void sendTest(); }} className="mono"
           style={{ fontSize: 9.5, fontWeight: 700, borderRadius: 6, padding: '6px 12px', cursor: 'pointer', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 12%, transparent)', border: '1px solid var(--you)' }}>
-          🔔 SEND ME A TEST PUSH
+          SEND ME A TEST PUSH
         </button>
         {testMsg && <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 5 }}>{testMsg}</div>}
         {log && log.length > 0 && (
@@ -5364,7 +5405,7 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
                 <div key={r.id} style={{ display: 'flex', gap: 6, alignItems: 'baseline', padding: '3px 0', borderTop: '1px solid var(--bd)' }}>
                   <span className="mono" style={{ fontSize: 10, color, flex: 'none' }}>{st.glyph}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plainText(r.title)}</div>
                     <div className="mono" style={{ fontSize: 8.5, color }}>{st.text} · {new Date(r.at).toLocaleString()}</div>
                   </div>
                 </div>

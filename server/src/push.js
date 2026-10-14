@@ -25,7 +25,7 @@
 //             high-stakes, and both had only ever been a banner you had to
 //             open the app to find.
 import { contestConfigOf } from '../../packages/core/src/engine/contest.ts';
-import { pushKindOn } from '../../packages/core/src/data/pushKinds.ts';
+import { pushKindOn, plainText, leagueKindOn, pushAllowed } from '../../packages/core/src/data/pushKinds.ts';
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
@@ -1028,6 +1028,165 @@ async function detectTimingAndResults() {
   await enqueue(rows);
 }
 
+// ── LIVE BIG PLAYS (v0.708.2) ───────────────────────────────────────────────
+// Part 3 of the founder's notification list: "player events like TDs and big
+// plays". Tuning the founder chose: a touchdown, or a single play of 20+ yards;
+// your starters on one switch (bigplay) and your opponent's on another
+// (oppplay), BOTH OFF until a member switches them on; at most 3 pushes per
+// player per game; plays that land together roll up into one push.
+//   • only devices that switched one on are worked for (none on → no reads);
+//   • only plays of a game that is on now (game_feed 'in', or just final):
+//     the post-game nflverse true-up writes its own ids, and a finished game
+//     re-ingested must not replay its Sunday;
+//   • kicks and punts are never "20+ yard plays".
+const BIG_YDS = 20;
+const BIG_KINDS = new Set(['pass', 'rush', 'rec', 'return']);
+const TD_KINDS = new Set(['pass', 'rush', 'rec', 'return', 'dst_td', 'int', 'fumrec']);
+const PER_GAME_CAP = 3;
+const KIND_WORD = { pass: 'pass', rush: 'run', rec: 'catch', return: 'return', dst_td: 'defensive TD', int: 'pick-six', fumrec: 'fumble return' };
+/** PURE: is this live_play row a big play? */
+export const isBigPlay = (r) => (Number(r.td) > 0 && TD_KINDS.has(r.k)) || (BIG_KINDS.has(r.k) && Number(r.y) >= BIG_YDS);
+/** PURE: one play's words — "TD! Patrick Mahomes → Travis Kelce, 35-yd catch". */
+export function bigPlayLine(rows, nameOf) {
+  const td = rows.some((r) => Number(r.td) > 0 && TD_KINDS.has(r.k));
+  const lead = rows.find((r) => r.k === 'rec' || r.k === 'rush' || r.k === 'return' || r.k === 'dst_td' || r.k === 'int' || r.k === 'fumrec') ?? rows[0];
+  const qb = lead.k === 'rec' ? rows.find((r) => r.k === 'pass') : null;
+  const who = qb ? `${nameOf(qb.player_slug)} → ${nameOf(lead.player_slug)}` : nameOf(lead.player_slug);
+  const yds = Number(lead.y) > 0 ? `${lead.y}-yd ${KIND_WORD[lead.k] ?? 'play'}` : (KIND_WORD[lead.k] ?? 'play');
+  return `${td ? 'TD! ' : ''}${who}, ${yds}`;
+}
+/** PURE: the pushes for one sweep's new big plays.
+ *  plays: [{ game_id, pid, rows: [{ player_slug, k, y, td }] }]
+ *  interest: Map uid → { mine: Map slug → league names[], opp: Map slug → league names[], wantMine, wantOpp }
+ *  sent: Map `${uid}:${game}:${slug}` → pushes so far (mutated: the cap's memory) */
+export function bigPlayRows(plays, interest, nameOf, sent) {
+  const out = [];
+  for (const [uid, it] of interest) {
+    const lines = [], keys = [];
+    let side = null;
+    for (const pl of plays) {
+      const slugs = [...new Set(pl.rows.map((r) => r.player_slug))];
+      const mine = it.wantMine ? slugs.filter((x) => it.mine.has(x)) : [];
+      const opp = it.wantOpp ? slugs.filter((x) => it.opp.has(x) && !it.mine.has(x)) : [];
+      const hit = mine.length ? mine : opp;
+      if (!hit.length) continue;
+      const capKey = (x) => `${uid}:${pl.game_id}:${x}`;
+      const open = hit.filter((x) => (sent.get(capKey(x)) ?? 0) < PER_GAME_CAP);
+      if (!open.length) continue;
+      for (const x of open) sent.set(capKey(x), (sent.get(capKey(x)) ?? 0) + 1);
+      const s = mine.length ? 'mine' : 'opp';
+      side = side == null ? s : side === s ? s : 'both';
+      const leagues = [...new Set(open.flatMap((x) => (s === 'mine' ? it.mine : it.opp).get(x) ?? []))];
+      lines.push({ text: bigPlayLine(pl.rows, nameOf), leagues, s });
+      keys.push(`${pl.game_id}:${pl.pid}`);
+    }
+    if (!lines.length) continue;
+    const kind = side === 'opp' ? 'oppplay' : 'bigplay';
+    const icon = side === 'opp' ? '👀' : '🏈';
+    const one = lines.length === 1 ? lines[0] : null;
+    out.push({
+      app_user_id: uid, kind,
+      title: one ? `${icon} ${one.text}` : `${icon} ${lines.length} big plays`,
+      body: one
+        ? (one.s === 'mine' ? `In your ${one.leagues.join(', ')} lineup.` : `Your opponent’s, in ${one.leagues.join(', ')}.`)
+        : lines.slice(0, 3).map((l) => `${l.s === 'opp' ? 'Opp: ' : ''}${l.text}`).join(' · ') + (lines.length > 3 ? ` · +${lines.length - 3}` : ''),
+      data: { open: 'picks' },
+      dedupe_key: `${kind}:${uid}:${keys.sort().join(',')}`.slice(0, 400),
+    });
+  }
+  return out;
+}
+
+/** The weekly squad leagues' squads for a week, shaped like seasonSeats (no matchup: your own plays only). */
+async function squadSeats(season, week) {
+  const { data: leagues } = await db().from('league').select('id, name, contest_week').in('kind', ['dfs', 'bullseye']).eq('season', String(season));
+  const live = (leagues ?? []).filter((l) => l.contest_week == null || Number(l.contest_week) === week);
+  if (!live.length) return [];
+  const names = new Map(live.map((l) => [l.id, l.name]));
+  const { data: sl } = await db().from('sleeper_lineup').select('league_id, roster_id, starters_json').in('league_id', live.map((l) => l.id)).eq('week', week);
+  if (!sl?.length) return [];
+  const owners = await ownersFor(sl.map((r) => [r.league_id, r.roster_id]));
+  return sl.map((r) => ({
+    league_id: r.league_id, league_name: names.get(r.league_id) ?? 'your league', roster_id: r.roster_id, mid: null, empties: 0,
+    uid: owners.get(`${r.league_id}:${r.roster_id}`),
+    starters: (Array.isArray(r.starters_json) ? r.starters_json : []).map((e) => ({ slug: e.player_slug ?? e.slug, name: e.full ?? e.name ?? null, team: e.team ?? null })).filter((st) => st.slug),
+  })).filter((x) => x.uid && x.starters.length);
+}
+/** PURE: a readable name from a slug when no lineup carried one — "aaron-rodgers" → "Aaron Rodgers", "kc-dst" → "KC Defense". */
+export function slugToName(slug) {
+  const m = /^([a-z]{2,3})-(dst|def)$/.exec(String(slug));
+  if (m) return `${m[1].toUpperCase()} Defense`;
+  return String(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+}
+const bigSent = new Map();       // the per-game cap's memory (a worker restart forgets it — at worst a few extra)
+const bigSeen = new Map();       // `${game}:${pid}` → when first pushed, so overlapping sweeps never repeat a play
+let bigSeats = { at: 0, week: null, seats: [] };
+async function detectBigPlays() {
+  const now = Date.now();
+  // Who asked: a device with either switch ON (both start off).
+  const { data: toks } = await db().from('push_token').select('app_user_id, prefs')
+    .or('prefs->>bigplay.eq.true,prefs->>oppplay.eq.true');
+  const want = new Map();
+  for (const t of toks ?? []) {
+    const w = want.get(t.app_user_id) ?? { mine: false, opp: false };
+    w.mine ||= pushKindOn(t.prefs, 'bigplay'); w.opp ||= pushKindOn(t.prefs, 'oppplay');
+    want.set(t.app_user_id, w);
+  }
+  if (!want.size) return;
+  const { data: fresh } = await db().from('live_play').select('week, game_id, pid, player_slug, k, y, td')
+    .gt('ingested_at', new Date(now - 3 * 60_000).toISOString());
+  const cand = (fresh ?? []).filter(isBigPlay).filter((r) => !bigSeen.has(`${r.game_id}:${r.pid}`));
+  if (!cand.length) return;
+  // Only games on now (or final within 15 minutes, for the last play).
+  const games = [...new Set(cand.map((r) => String(r.game_id)))];
+  const { data: feeds } = await db().from('game_feed').select('game_id, state, updated_at').in('game_id', games);
+  const live = new Set((feeds ?? []).filter((g) => g.state === 'in' || (g.state === 'post' && now - Date.parse(g.updated_at) < 15 * 60_000)).map((g) => String(g.game_id)));
+  const keep = cand.filter((r) => live.has(String(r.game_id)));
+  if (!keep.length) return;
+  // The whole play (the QB's row beside the catch), grouped.
+  const byPlay = new Map();
+  const { data: whole } = await db().from('live_play').select('game_id, pid, player_slug, k, y, td')
+    .in('game_id', [...new Set(keep.map((r) => r.game_id))]).in('pid', [...new Set(keep.map((r) => r.pid))]);
+  for (const r of whole ?? []) {
+    if (!keep.some((x) => x.game_id === r.game_id && x.pid === r.pid)) continue;
+    const k = `${r.game_id}:${r.pid}`;
+    if (!byPlay.has(k)) byPlay.set(k, { game_id: r.game_id, pid: r.pid, rows: [] });
+    byPlay.get(k).rows.push(r);
+  }
+  // Whose lineups: the season leagues' starters (read at most every 5 minutes) and the opponents across each matchup.
+  const wk = await upcomingWeek(now - 6 * 3_600_000);
+  if (!wk) return;
+  if (bigSeats.week !== wk.week || now - bigSeats.at > 5 * 60_000) bigSeats = { at: now, week: wk.week, seats: [...await seasonSeats(wk.season, wk.week), ...await squadSeats(wk.season, wk.week)] };
+  const seats = bigSeats.seats;
+  const byMid = new Map();
+  for (const x of seats) { if (x.mid == null) continue; if (!byMid.has(x.mid)) byMid.set(x.mid, []); byMid.get(x.mid).push(x); }
+  const names = new Map();
+  const interest = new Map();
+  // Each league's own switches (0499): a muted league, or its big plays switched off, drops out here —
+  // a rolled-up push spans leagues, so the sender's per-league check can't do it.
+  const { data: lpRows } = await db().from('league_push_pref').select('app_user_id, league_id, prefs').in('app_user_id', [...want.keys()]);
+  const lpOf = new Map((lpRows ?? []).map((r) => [`${r.app_user_id}:${r.league_id}`, r.prefs]));
+  for (const x of seats) {
+    const w = want.get(x.uid);
+    if (!w) continue;
+    const lp = lpOf.get(`${x.uid}:${x.league_id}`);
+    const mineOk = leagueKindOn(lp, 'bigplay'), oppOk = leagueKindOn(lp, 'oppplay');
+    if (!mineOk && !oppOk) continue;
+    const it = interest.get(x.uid) ?? { mine: new Map(), opp: new Map(), wantMine: w.mine, wantOpp: w.opp };
+    if (mineOk) for (const st of x.starters) { if (st.name) names.set(st.slug, st.name); (it.mine.get(st.slug) ?? it.mine.set(st.slug, []).get(st.slug)).push(x.league_name); }
+    if (oppOk) for (const o of byMid.get(x.mid) ?? []) if (o.roster_id !== x.roster_id) for (const st of o.starters) {
+      names.set(st.slug, st.name); (it.opp.get(st.slug) ?? it.opp.set(st.slug, []).get(st.slug)).push(x.league_name);
+    }
+    interest.set(x.uid, it);
+  }
+  const plays = [...byPlay.values()];
+  const rows = bigPlayRows(plays, interest, (slug) => names.get(slug) ?? slugToName(slug), bigSent);
+  for (const pl of plays) bigSeen.set(`${pl.game_id}:${pl.pid}`, now);
+  for (const [k, at] of bigSeen) if (now - at > 6 * 3_600_000) bigSeen.delete(k);
+  if (rows.length) log(`big plays: ${rows.length} push${rows.length === 1 ? '' : 'es'}`);
+  await enqueue(rows);
+}
+
 async function detectContestLock() {
   const { data: slate } = await db().from('nfl_slate').select('season, week, kickoff').not('kickoff', 'is', null);
   const now = Date.now();
@@ -1147,8 +1306,12 @@ async function flush() {
   if (!vapid) q = q.or(`error.is.null,error.neq.${WAITING.web}`);
   if (!token) q = q.or(`error.is.null,error.neq.${WAITING.fcm}`);
   if (!apns) q = q.or(`error.is.null,error.neq.${WAITING.apns}`);
-  const { data: pending } = await q.order('id').limit(50);
-  if (!pending?.length) return;
+  const { data: rawPending } = await q.order('id').limit(50);
+  if (!rawPending?.length) return;
+  // NO ICONS BESIDE THE APP'S OWN (v0.708.2, founder: "Don't use the icons for alerts … Just the drip
+  // icon in the alert"). Here, at the one place every push leaves — the worker's detectors, contestRecap,
+  // contestSubs and the database's own outbox writes alike.
+  const pending = rawPending.map((p) => ({ ...p, title: p.title != null ? plainText(p.title) : p.title, body: p.body != null ? plainText(p.body) : p.body }));
   const uids = [...new Set(pending.map((p) => p.app_user_id))];
   const { data: toks } = await db().from('push_token').select('token, app_user_id, platform, prefs').in('app_user_id', uids);
   const byUser = new Map();
@@ -1156,11 +1319,19 @@ async function flush() {
     if (!byUser.has(t.app_user_id)) byUser.set(t.app_user_id, []);
     byUser.get(t.app_user_id).push(t);
   }
+  // PER LEAGUE (0499, v0.708.3): a push about a league asks that member's switches for it too.
+  const lids = [...new Set(pending.map((p) => p.data?.league_id).filter(Boolean))];
+  const leaguePrefs = new Map();   // `${uid}:${lid}` → prefs
+  if (lids.length) {
+    const { data: lp } = await db().from('league_push_pref').select('app_user_id, league_id, prefs').in('app_user_id', uids).in('league_id', lids);
+    for (const r of lp ?? []) leaguePrefs.set(`${r.app_user_id}:${r.league_id}`, r.prefs);
+  }
   let sent = 0;
   for (const p of pending) {
     // A widget ping has no browser or iPhone to go to (the home-screen widget
     // is Android's): web and iOS devices are skipped for it.
-    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => pushKindOn(t.prefs, p.kind) && !(p.kind === 'widget' && (t.platform === 'web' || t.platform === 'ios')));
+    const lp = p.data?.league_id ? leaguePrefs.get(`${p.app_user_id}:${p.data.league_id}`) : null;
+    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => pushAllowed(t.prefs, lp, p.kind) && !(p.kind === 'widget' && (t.platform === 'web' || t.platform === 'ios')));
     let attempted = devices.length === 0; // deviceless rows resolve immediately
     let waiting = null;
     // PER-DEVICE OUTCOMES (v0.392.2). One row can go to a phone and a browser;
@@ -1276,6 +1447,7 @@ export async function sweepPush() {
   await detectSeasonStatus().catch((e) => log('season status detector error', e.message));
   await detectRosterQc().catch((e) => log('lineup check detector error', e.message));
   await detectTimingAndResults().catch((e) => log('timing & results detector error', e.message));
+  await detectBigPlays().catch((e) => log('big plays detector error', e.message));
   try { await detectWidget(); } catch (e) { log('detectWidget', e.message); }
   await detectChopped().catch((e) => log('chopped detector error', e.message));
   await detectBitten().catch((e) => log('bitten detector error', e.message));

@@ -3946,6 +3946,11 @@ export function pushLogStatus(r: PushLogRow): { glyph: string; text: string; ton
 // are global — turning chat off turns it off everywhere — so "every word of
 // THIS league" is a different question and gets its own answer. Off unless
 // somebody said yes.
+/** A league's own notification switches (0499): `muted`, and one per type; untouched = follows overall. */
+export const myLeaguePushPrefs = (leagueId: string) =>
+  rpc<{ ok: boolean; prefs?: Record<string, boolean> }>('my_league_push_prefs', { p_league_id: leagueId });
+export const setLeaguePushPrefs = (leagueId: string, prefs: Record<string, boolean>) =>
+  rpc<{ ok: boolean; error?: string; prefs?: Record<string, boolean> }>('set_league_push_prefs', { p_league_id: leagueId, p_prefs: prefs });
 export const myLeagueChatPush = (leagueId: string) =>
   rpc<{ ok: boolean; all_messages: boolean }>('my_league_chat_push', { p_league_id: leagueId });
 export const setLeagueChatPush = (leagueId: string, on: boolean) =>

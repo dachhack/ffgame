@@ -65,7 +65,7 @@ export function ContestSettingsTiles({ lg, onGo }: { lg: Lg; onGo: (room: 'leagu
       {open === 'scoring' && <Sheet title="⊞ Scoring settings" subtitle="HOW THIS LEAGUE TURNS PLAYS INTO POINTS" max={760} onClose={() => setOpen(null)}><ScoringPanel leagueId={leagueId} bare /></Sheet>}
       {open === 'rules' && <Sheet title="🧢 Squad & rules" subtitle="SPOTS · BUDGET · THE LOCK · NO-SHOWS · PLAYOFFS" onClose={() => setOpen(null)}><RulesView leagueId={leagueId} b={lg.bullseye!} /></Sheet>}
       {open === 'money' && <Sheet title="💵 Dues & prizes" subtitle="THE PLATFORM PRINTS IT, NEVER COLLECTS IT" onClose={() => setOpen(null)}><MoneyView leagueId={leagueId} b={lg.bullseye!} /></Sheet>}
-      {open === 'alerts' && <Sheet title="🔔 Alerts" subtitle="WHAT PINGS THIS BROWSER" onClose={() => setOpen(null)}><NotifPrefsCard bare leagueId={leagueId} /></Sheet>}
+      {open === 'alerts' && <Sheet title="Alerts" subtitle="THIS LEAGUE · EVERY DEVICE" onClose={() => setOpen(null)}><NotifPrefsCard bare leagueId={leagueId} /></Sheet>}
       {open === 'recruit' && <Sheet title="📣 Recruit" subtitle={commish ? 'SEND A LINK · POST TO THE BOARD' : 'SEND A LINK TO A FRIEND'} onClose={() => setOpen(null)}><RecruitPanel leagueId={leagueId} commish={commish} bare /></Sheet>}
       {open === 'api' && <Sheet title="🔑 API keys" subtitle="LET ANOTHER TOOL RUN YOUR TEAM" onClose={() => setOpen(null)}><ApiKeysPanel leagueId={leagueId} bare /></Sheet>}
     </>
