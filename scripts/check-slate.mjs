@@ -8,6 +8,7 @@
 import {
   recordLabel, verdictOf, isLoud, unreadBadge, sideLabel, scoreLabel, sortSlate,
 } from '../packages/core/src/data/leagueSlate.ts';
+import { slateByTeam, slateOppLabel, wireWeekFrom } from '../packages/core/src/data/liveApi.ts';
 
 let fails = 0;
 const ok = (cond, label) => { console.log(`${cond ? 'PASS' : 'PROBE FAIL'}  ${label}`); if (!cond) fails++; };
@@ -38,6 +39,18 @@ ok(verdictOf(game(null, null)) === null,
   'before either side has a published score there is no verdict to give');
 ok(verdictOf(game(100, null)) === null, '…and one score alone is still not a comparison');
 ok(verdictOf(null) === null, 'a bye has no verdict');
+
+// ── the wire's opponent (v0.707.7, founder: "Def on waivers doesn't show the opponent for the week") ──
+{
+  const sl = slateByTeam([{ home: 'DEN', away: 'LV', kickoff: '2026-10-18T20:05:00Z' }, { home: 'LA', away: 'SEA', kickoff: '2026-10-19T00:20:00Z' }]);
+  ok(slateOppLabel(sl, 'DEN') === 'vs LV' && slateOppLabel(sl, 'LV') === '@ DEN', 'home reads vs, away reads @');
+  ok(slateOppLabel(sl, 'LAR') === 'vs SEA', 'the Rams find their game under either code (TeamMap)');
+  ok(slateOppLabel(sl, 'KC') === 'BYE', 'a team with no game in a week that has games is on a bye');
+  ok(slateOppLabel(new Map(), 'KC') === null && slateOppLabel(null, 'KC') === null, 'no slate, no label');
+  const last = Date.parse('2026-10-19T00:20:00Z');
+  ok(wireWeekFrom(6, sl, last + 3_600_000) === 6, 'the wire shops the open week while its games are on');
+  ok(wireWeekFrom(6, sl, last + 5 * 3_600_000) === 7, '…and the next week once every game is over (a Wednesday wire is for next week)');
+}
 ok(verdictOf(game(32.6, 36.9), true) === 'won',
   'a lower-wins league (Bullseye total, golf): 32.60 v 36.90 is WON — the founder\'s card read LOST beside a 1-0 record');
 ok(verdictOf(game(36.9, 32.6), true) === 'lost', '…and the higher score loses');

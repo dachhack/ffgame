@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.7 — The wire shows who they play
+
+> - Every NFL player and defense in the waiver pool now shows the week's opponent beside the team: "vs LV", "@ DEN", or BYE. App and site.
+> - Midweek it's the coming week, the one you're claiming for, not the week just played.
+
+Founder (phone wire, DEF filter): "Def on waivers doesn't show the opponent
+for the week." No pool row showed an opponent; a defense is where it matters
+most. Core `liveApi.ts`: `wireWeekSlate(leagueId)` takes `defaultOpenWeek`
+(which waits for the waiver run) and moves to the next week once every game
+of the open week is over (`wireWeekFrom`, last kickoff + 4h), then reads
+`weekSlateByTeam` (a TeamMap, so LA/LAR both find the Rams);
+`slateOppLabel` gives "vs X" / "@ X" / "BYE". Phone: Team.tsx pool row, after
+the team code; web: TeamManage pool row, a 44px column. College players get
+nothing (their teams are not on the NFL slate). Tests in `check-slate` (6).
+All JS; no iPhone build.
+
 ### v0.707.6 — Add limits hold again; practice rooms open; the probe battery runs whole
 
 > - A commissioner's transaction limits (adds per week, adds per season) are enforced again on free-agent adds, waiver claims and the waiver run. A rewrite earlier this season had quietly switched them off.

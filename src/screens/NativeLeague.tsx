@@ -80,7 +80,7 @@ import { TENURE_BANDS, tenureMatches, type TenureBand } from '@drip/core/data/te
 import { setLeagueFlags, flagRulesFor, flagFor } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardsFromRows, type BullseyeCard, type BullseyeConfig } from '@drip/core/engine/bullseye';
-import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc } from '@drip/core/data/liveApi';
+import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWeekSlate, slateOppLabel, type SlateSpot } from '@drip/core/data/liveApi';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
 import { LabelInfo } from './adminUi';
@@ -3362,6 +3362,13 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
   // closest to. Published card first; dealt from the seed until it is.
   const bullCfg = useMemo<BullseyeConfig | null>(() => (gm?.mode === 'classic' ? bullseyeConfigOf(gm) : null), [gm]);
   const [bullCard, setBullCard] = useState<BullseyeCard | null>(null);
+  // THE WEEK'S OPPONENT ON THE WIRE (v0.707.7, founder: "Def on waivers doesn't show the opponent for the week").
+  const [wireSlate, setWireSlate] = useState<Map<string, SlateSpot> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    wireWeekSlate(leagueId).then((r) => { if (alive) setWireSlate(r.slate); }).catch(() => {});
+    return () => { alive = false; };
+  }, [leagueId]);
   useEffect(() => {
     if (!bullCfg || !gm) { setBullCard(null); return; }
     let alive = true;
@@ -4051,6 +4058,10 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
                   );
                 })()}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', width: 34 }}>{teamLabel(p)}</span>
+                {/* v0.707.7: who he plays in the week the wire is shopping for */}
+                <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)', width: 44, whiteSpace: 'nowrap' }}>
+                  {isCollegeSlug(p.slug) ? '' : slateOppLabel(wireSlate, p.team) ?? ''}
+                </span>
                 {ownRid != null ? (
                   // AN OWNED PLAYER IS NOT AN ADD. The button in his row is the
                   // move that is actually available — an offer to whoever holds

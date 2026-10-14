@@ -813,6 +813,28 @@ export function slateByTeam(rows: SlateGameRow[]): Map<string, SlateSpot> {
   return m;
 }
 
+/** THE WIRE'S OPPONENT (v0.707.7, founder: "Def on waivers doesn't show the
+ *  opponent for the week"). The wire is shopping for the week AHEAD: the
+ *  league's open week (defaultOpenWeek, which waits for the waiver run) until
+ *  every one of its games is over, then the next. Pure, for the check. */
+export function wireWeekFrom(openWeek: number, open: Map<string, SlateSpot>, nowMs: number, overMs = 4 * 3_600_000): number {
+  const kicks = [...open.values()].map((s) => s.kickoff).filter((k): k is number => k != null);
+  return kicks.length && Math.max(...kicks) + overMs < nowMs ? openWeek + 1 : openWeek;
+}
+/** "vs KC" / "@ KC", "BYE" when the week has games and his team has none, null with no slate. Pure. */
+export function slateOppLabel(slate: Map<string, SlateSpot> | null | undefined, team: string | null | undefined): string | null {
+  if (!slate || !slate.size || !team) return null;
+  const s = slate.get(team);
+  return s ? `${s.home ? 'vs' : '@'} ${s.opp}` : 'BYE';
+}
+/** The wire's week and its slate by team, for a league. */
+export async function wireWeekSlate(leagueId: string): Promise<{ week: number; slate: Map<string, SlateSpot> }> {
+  const open = await defaultOpenWeek(leagueId);
+  const now = await weekSlateByTeam(open);
+  const week = wireWeekFrom(open, now, Date.now());
+  return { week, slate: week === open ? now : await weekSlateByTeam(week) };
+}
+
 /** Save the caller's pod/showdown entry (9 slugs). Server validates membership,
  *  week, per-game locks (0093), roster shape (QB·2RB·3WR·TE·K·DST), and the $50k cap. */
 export async function savePodEntry(leagueId: string, week: number, picks: string[]): Promise<{ ok: boolean; error?: string; spent?: number; cap?: number }> {
