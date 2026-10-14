@@ -3,7 +3,9 @@
 -- What must hold:
 --   • register upserts BY TOKEN and moves a token between accounts (a phone
 --     that switches users must stop notifying the old one);
---   • prefs sanitize to the known boolean keys (0273 adds `format`);
+--   • prefs sanitize to the known boolean keys (0273 adds `format`; 0498 the
+--     seven new types, bigplay among them);
+--   • the outbox accepts the 0498 kinds;
 --   • remove and set_push_prefs bite only the caller's own token;
 --   • the tables answer nothing to the caller role directly (worker-only).
 \set QUIET on
@@ -136,6 +138,19 @@ begin
   set local role authenticated;
   perform assert_true(coalesce((push_test() ->> 'ok')::boolean, true) is false, 'pu25 signed out cannot test');
   reset role;
+end $$;
+
+-- ── 0498: the seven new types — a stored switch, and an outbox row ──
+do $$
+declare k text;
+begin
+  perform assert_true(_sanitize_push_prefs('{"bigplay": true, "status": false, "coin": true, "nonsense": true, "result": "yes"}'::jsonb)
+                      = '{"bigplay": true, "status": false, "coin": true}'::jsonb,
+    'pu30 the new switches are kept; unknown keys and non-booleans are not');
+  foreach k in array array['status', 'rosterqc', 'timing', 'result', 'bigplay', 'oppplay', 'coin', 'lineup', 'widget'] loop
+    perform assert_true(pg_get_constraintdef((select oid from pg_constraint where conname = 'push_outbox_kind_check')) like '%''' || k || '''%',
+      'pu31 the outbox accepts kind ' || k);
+  end loop;
 end $$;
 
 select 'ALL PUSH PROBES PASSED' as result;

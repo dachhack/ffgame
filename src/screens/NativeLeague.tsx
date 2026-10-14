@@ -83,7 +83,8 @@ import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardsFromRows, type Bu
 import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWeekSlate, slateOppLabel, type SlateSpot } from '@drip/core/data/liveApi';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { webPushState, enableWebPush, disableWebPush, type WebPushState } from '../app/webPush';
-import { LabelInfo } from './adminUi';
+import { LabelInfo, InfoChip } from './adminUi';
+import { PUSH_KINDS, pushKindOn, flipPushKind } from '@drip/core/data/pushKinds';
 import { BullseyeStart } from './BullseyeLeague';
 import { normTeam } from '../../packages/core/src/data/teamCodes';
 
@@ -5225,17 +5226,8 @@ function NightEditorWeb({ current, busy, onSet, onClear }: {
 // Prefs live server-side per registered device; this lists your devices and
 // flips their mutes. Since v0.194.0 the browser itself can be one of those
 // devices — the enable row below subscribes THIS browser via web push.
-const NOTIF_KINDS: { key: string; label: string }[] = [
-  { key: 'lineup', label: '⚠ lineup locks soon' },
-  { key: 'chat', label: '💬 mentions & DMs' },
-  { key: 'trades', label: '⇄ trade offers' },
-  { key: 'waivers', label: '✚ waiver results' },
-  { key: 'draft', label: 'draft alerts' },
-  { key: 'members', label: 'new managers' },
-  // 0273: the two format events — the guillotine taking your team, a vampire
-  // feeding on you. One key, because a manager who wants one wants the other.
-  { key: 'format', label: '🪓 chopped & 🩸 bitten' },
-];
+// One list for the phone, the web and the worker since v0.708.0: core/data/pushKinds.ts.
+const NOTIF_KINDS = PUSH_KINDS;
 
 /** Push/alert preferences, per device (exported since v0.287.0 so the league
  *  hub's 🔔 Alerts tile can host the same card the team screen does — the app
@@ -5265,7 +5257,7 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
     void setLeagueChatPush(leagueId, next).catch(() => setAllChat(!next));
   };
   const toggle = (tok: PushTokenRow, key: string) => {
-    const next = { ...(tok.prefs ?? {}), [key]: tok.prefs?.[key] === false };
+    const next = flipPushKind((tok.prefs ?? {}) as Record<string, boolean>, key);
     setTokens((cur) => (cur ?? []).map((x) => (x.token === tok.token ? { ...x, prefs: next } : x)));
     void setPushPrefs(tok.token, next).catch(() => {});
   };
@@ -5297,7 +5289,7 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
     // BARE inside a Sheet (v0.296.3) — a card in a card is two frames around
     // one picture, and the sheet's own title already says NOTIFICATIONS.
     <div style={bare ? {} : { background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 8, padding: '12px 14px' }}>
-      {!bare && <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS</div>}
+      {!bare && <div className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--faint)', marginBottom: 8 }}>🔔 NOTIFICATIONS <InfoChip title="What each one is" info={PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} /></div>}
       {web !== 'unsupported' && (
         <div style={{ marginBottom: 8 }}>
           {web === 'denied' ? (
@@ -5328,9 +5320,9 @@ export function NotifPrefsCard({ bare, leagueId }: { bare?: boolean; leagueId?: 
           )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {NOTIF_KINDS.map((k) => {
-              const on = tok.prefs?.[k.key] !== false;
+              const on = pushKindOn(tok.prefs, k.key);
               return (
-                <button key={k.key} onClick={() => toggle(tok, k.key)} className="mono"
+                <button key={k.key} onClick={() => toggle(tok, k.key)} title={k.info} className="mono"
                   style={{ fontSize: 9, fontWeight: 700, borderRadius: 999, padding: '4px 10px', cursor: 'pointer', color: on ? 'var(--you)' : 'var(--dim)', background: on ? 'color-mix(in srgb, var(--you) 12%, transparent)' : 'var(--bg)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}` }}>
                   {k.label}
                 </button>

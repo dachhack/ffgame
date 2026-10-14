@@ -21,6 +21,8 @@ import { DevyValues } from './DevyValues';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
+import { PUSH_KINDS, pushKindOn, flipPushKind } from '@drip/core/data/pushKinds';
+import { LabelInfo } from './InfoChip';
 import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, getSession, deleteMyAccount, type PushLogRow } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
 import { tap } from './feedback';
@@ -401,17 +403,8 @@ function RehearsalToggle() {
 // every message from THIS league, or only the mentions and DMs everyone gets.
 // Rendered only where a league is open — the gear's copy has no league to ask
 // about.
-const PUSH_KINDS: { key: string; label: string }[] = [
-  { key: 'lineup', label: '⚠ lineup locks soon' },
-  { key: 'chat', label: '💬 mentions & DMs' },
-  { key: 'trades', label: '⇄ trade offers' },
-  { key: 'waivers', label: '✚ waiver results' },
-  { key: 'draft', label: 'draft alerts' },
-  { key: 'members', label: '⚑ new managers' },
-  // 0273: the two format events — the guillotine taking your team, a vampire
-  // feeding on you. One key, because a manager who wants one wants the other.
-  { key: 'format', label: '🪓 chopped & 🩸 bitten' },
-];
+// One list for the phone, the web and the worker since v0.708.0: core/data/pushKinds.ts.
+
 
 export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
   const t = useTheme();
@@ -466,14 +459,14 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
   };
   const toggle = (key: string) => {
     if (!token) return;
-    const next = { ...prefs, [key]: prefs[key] === false };
+    const next = flipPushKind(prefs, key);
     setPrefs(next);
     track(Ev.pushPrefSet, { kind: key, muted: next[key] === false });
     void setPushPrefs(token, next).catch(() => {});
   };
   return (
     <View style={{ gap: 8 }}>
-      <Mono size={8.5} weight="700" track={0.16} tone="faint">NOTIFICATIONS</Mono>
+      <LabelInfo label="NOTIFICATIONS" title="What each one is" info={PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} />
       {!token ? (
         <Pressable onPress={() => void enable()} disabled={busy}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingVertical: 9, alignItems: 'center', opacity: busy ? 0.6 : 1 }}>
@@ -482,7 +475,7 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           {PUSH_KINDS.map((k) => {
-            const on = prefs[k.key] !== false;
+            const on = pushKindOn(prefs, k.key);
             return (
               <Pressable key={k.key} onPress={() => toggle(k.key)}
                 style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: on ? t.you : t.bd, backgroundColor: on ? alpha(t.you, 12) : t.surface }}>
