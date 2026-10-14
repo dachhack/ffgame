@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-14 · Build `v0.710.0` · migrations through `0501` (next `0502`) · ops errands through `052` (next `053`)_
+_Last updated: 2026-10-14 · Build `v0.711.0` · migrations through `0502` (next `0503`) · ops errands through `052` (next `053`)_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -25,11 +25,12 @@ customizable relegation system … usually used for large leagues."
     `native_roster` (the PK can't stay (league, roster, slug)).
   - Known limit: the matchup board and multi-team trade builder key by
     slug, so when BOTH teams in one matchup/deal hold him, "my copy" wins.
-- **Relegation (not started).** Founder's picks: tiers of linked leagues;
-  methods W-L standings, total points, playoff result, promotion playoff
-  (commish picks); roster mode a commish setting with all three: redraft
-  (managers move), inherit the seat's roster, take your roster along.
-  `rollover_league` (0411 → 0368 body) makes the new season's league row.
+- **Relegation.** v0.711.0 (0502): the ladder in the database — see STATUS.
+  Founder's picks: tiers of linked leagues; methods W-L standings, total
+  points, playoff result, promotion playoff; roster mode redraft / seat /
+  roster. `ladder_rollover` wraps `rollover_league` per tier.
+  - **Next:** the commissioner's ladder card (build, rules, run the
+    rollover) and the members' tier chip + ladder sheet, web and app.
 
 ## The notifications arc (v0.707.1 → v0.708.4, Oct 13–14)
 

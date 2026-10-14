@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.711.0 — Relegation, part 1: the ladder
+
+> - Groundwork for relegation: commissioners will be able to link leagues into tiers, with teams moving up and down at the end of each season. The commissioner's controls arrive on the app and the site in the next release; nothing changes for any league today.
+
+Founder: "a customizable relegation system … usually used for large
+leagues." Picks: tiers of linked leagues; four methods; roster handling a
+commissioner setting with all three modes.
+
+- 0502: `league_ladder` (method, movers 1–6, roster_mode), `league_ladder_tier`
+  (tier 1 on top, a league in one ladder), `league_ladder_move` (history).
+- Methods (`_ladder_rank`): standings; points (lower-wins aware); playoffs
+  (champion, runner-up, consolation ladder, then standings); promotion
+  playoff (top movers−1 by record + the best playoff finish of the rest;
+  relegation by record).
+- `ladder_rollover`: every tier through `rollover_league`, all or nothing
+  (a refused tier raises), then the worst going down swap seats with the
+  best coming up. Modes: `redraft` (movers' seats start empty), `seat`
+  (inherit the seat's roster/keepers/picks), `roster` (kept players travel;
+  any the new league has no copy free of stay behind, recorded).
+- `league_standings` split into its member gate + `_league_standings_raw`,
+  so a member of any tier sees the whole ladder (`league_ladder_state`).
+- Rules: commissioner of every tier; same season; NFL native leagues; enough
+  teams to move each way; `roster` mode refuses salary-cap leagues.
+- `scripts/db/relegation-probes.sql` (rl1–rl7). liveApi wrappers.
+- No iPhone build (SQL + JavaScript). Next: the commissioner's card and the
+  members' ladder view on web and app.
+
 ### v0.710.0 — Copies of every player, part 2: the apps
 
 > - Commissioners can now set COPIES (1 to 4) in draft setup on the app and the site: with 2, two different teams can each draft or add the same player. Set before the draft; it locks once the draft starts.
