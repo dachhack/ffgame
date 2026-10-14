@@ -10,7 +10,7 @@ You're continuing **Drip Fantasy** — real-time H2H fantasy football, live at
 screenshot. Ship small, verified increments.
 
 **State at handoff: `v0.708.4`, everything merged and deployed (Oct 14).**
-Migrations through **0501** applied (next: **0502**); ops errands through
+Migrations through **0503** applied (next: **0504**); ops errands through
 **052** (next: **053**); latest APK is versionCode 40385; TestFlight's iOS
 runtime is v0.656.3's (`apps/mobile/ios-build-runtime.txt`). Work branch:
 `ccr-9ea4c0a9-m5lxbd` (resynced onto merged `main`). **HANDOFF.md's top

@@ -22,9 +22,10 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.710.1 — Injury tags never come from last season
+### v0.712.1 — Injury tags never come from last season; a lost waiver claim says why
 
 > - Injury tags never come from last season any more: Brock Bowers and Terry McLaurin showed Out (and projected 0) on the phone from a 2025 report, though both are healthy.
+> - A waiver claim lost to a roster problem now says which one, e.g. a player on IR who isn't designated IR or Out any more.
 
 `injuryFor` falls back to the baked 2025 report when the live one isn't
 installed for the week asked. Only `setActiveLeague`/`resetToDemoLeague` move
@@ -46,7 +47,56 @@ Also: `poll/injuries.js`'s prune read now pages (`allRows`). It was the one
 `scripts/db/injury-stale-rows.sql` found 1,050 stranded NFL rows; every one
 shown is keyed by a JSON object (the v0.489.0 bug). Readers can't match those
 keys, and the prune's `.in()` delete may still choke on them: follow-up.
+0504 (#1311): `process_waivers` wrote the bare note "roster over limits" when
+the claimant's roster was illegal, and the "Waivers ran" chat line printed
+it, so a fair 1-for-1 swap (CAR for CLE Defense) lost with no reason given.
+Probe `waiver-over-limits-1311.sql`: seat 6 had David Montgomery on IR listed
+D, in a league whose IR takes IR/O. The note is now
+"roster over limits: <roster_illegal_reason>". check:txnlimits +2 (fail
+without 0504); created clean on a scratch Postgres 16.
 No iPhone build (check:ios-runtime: over the air).
+
+### v0.712.0 — Relegation, part 2: the ladder on the app and the site
+
+> - Commissioners can link their leagues into a relegation ladder: COMMISH TOOLS › 🪜 LADDER. Pick the tiers, how teams move (record, points, playoffs or a promotion playoff), how many go up and down, and what happens to rosters.
+> - When the season ends, one button rolls the whole ladder into next season and moves the teams. Members see their tier and who's going up and down under the standings.
+
+- Web `LadderPanel.tsx` (RUN THE SEASON › 🪜 LADDER, NFL native) and the
+  members' `LadderCard` under the hub's standings; phone `ui/Ladder.tsx`
+  (CommishTools 'ladder', LeagueHome under Standings). Rules are chips with
+  one ⓘ; labels and ⓘ text shared from core `data/ladder.ts`.
+- 0503: `rollover_league` refuses a laddered league unless `ladder_rollover`
+  is calling (`app.ladder_rolling`), so NEXT SEASON can't strand a tier
+  (`_rollover_league_0411` is the old body). Probed (rl1h).
+- No iPhone build (JavaScript and SQL).
+
+### v0.711.0 — Relegation, part 1: the ladder
+
+> - Groundwork for relegation: commissioners will be able to link leagues into tiers, with teams moving up and down at the end of each season. The commissioner's controls arrive on the app and the site in the next release; nothing changes for any league today.
+
+Founder: "a customizable relegation system … usually used for large
+leagues." Picks: tiers of linked leagues; four methods; roster handling a
+commissioner setting with all three modes.
+
+- 0502: `league_ladder` (method, movers 1–6, roster_mode), `league_ladder_tier`
+  (tier 1 on top, a league in one ladder), `league_ladder_move` (history).
+- Methods (`_ladder_rank`): standings; points (lower-wins aware); playoffs
+  (champion, runner-up, consolation ladder, then standings); promotion
+  playoff (top movers−1 by record + the best playoff finish of the rest;
+  relegation by record).
+- `ladder_rollover`: every tier through `rollover_league`, all or nothing
+  (a refused tier raises), then the worst going down swap seats with the
+  best coming up. Modes: `redraft` (movers' seats start empty), `seat`
+  (inherit the seat's roster/keepers/picks), `roster` (kept players travel;
+  any the new league has no copy free of stay behind, recorded).
+- `league_standings` split into its member gate + `_league_standings_raw`,
+  so a member of any tier sees the whole ladder (`league_ladder_state`).
+- Rules: commissioner of every tier; same season; NFL native leagues; enough
+  teams to move each way; `roster` mode refuses salary-cap leagues.
+- `scripts/db/relegation-probes.sql` (rl1–rl7). liveApi wrappers.
+- No iPhone build (SQL + JavaScript). Next: the commissioner's card and the
+  members' ladder view on web and app.
+
 
 ### v0.710.0 — Copies of every player, part 2: the apps
 

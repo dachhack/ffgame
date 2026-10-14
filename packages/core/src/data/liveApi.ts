@@ -5483,3 +5483,36 @@ export async function leagueSyncState(leagueId: string): Promise<SyncState> {
   if (error) return { ok: false, error: error.message };
   return (data ?? { ok: false }) as SyncState;
 }
+
+// ── RELEGATION (0502): tiers of linked leagues ─────────────────────────────
+export type LadderMethod = 'standings' | 'points' | 'playoffs' | 'promotion_playoff';
+export type LadderRosterMode = 'redraft' | 'seat' | 'roster';
+export interface LadderTier {
+  tier: number; league_id: string; name: string; season: string; teams: number; mine: boolean;
+  /** Seats that would go up (best first) / down (worst first) if the season ended now. */
+  up: number[]; down: number[];
+  names: Record<string, string>;
+}
+export interface LadderState {
+  ok: boolean; error?: string;
+  ladder: { id: string; name: string; method: LadderMethod; movers: number; roster_mode: LadderRosterMode; can_edit: boolean } | null;
+  tier?: number; tiers?: LadderTier[];
+  history?: { season: string; direction: 'up' | 'down'; from_tier: number; to_tier: number; team: string | null; left_behind: string[] }[];
+}
+export const leagueLadderState = (leagueId: string) => rpc<LadderState>('league_ladder_state', { p_league_id: leagueId });
+export const myLadderCandidates = () =>
+  rpc<{ league_id: string; name: string; season: string; teams: number; ladder_id: string | null }[]>('my_ladder_candidates', {});
+export const createLeagueLadder = (name: string, leagueIds: string[], method: LadderMethod, movers: number, rosterMode: LadderRosterMode) =>
+  rpc<{ ok: boolean; error?: string; ladder_id?: string }>('create_league_ladder',
+    { p_name: name, p_leagues: leagueIds, p_method: method, p_movers: movers, p_roster_mode: rosterMode });
+export const setLadderRules = (ladderId: string, rules: { method?: LadderMethod; movers?: number; rosterMode?: LadderRosterMode; name?: string }) =>
+  rpc<{ ok: boolean; error?: string }>('set_ladder_rules', { p_ladder: ladderId, p_method: rules.method ?? null,
+    p_movers: rules.movers ?? null, p_roster_mode: rules.rosterMode ?? null, p_name: rules.name ?? null });
+export const setLadderTiers = (ladderId: string, leagueIds: string[]) =>
+  rpc<{ ok: boolean; error?: string }>('set_ladder_tiers', { p_ladder: ladderId, p_leagues: leagueIds });
+export const deleteLeagueLadder = (ladderId: string) =>
+  rpc<{ ok: boolean; error?: string }>('delete_league_ladder', { p_ladder: ladderId });
+/** The end of the season for the whole ladder: every tier rolls over, then the movers swap. All or nothing. */
+export const ladderRollover = (ladderId: string, weeks = 14) =>
+  rpc<{ ok: boolean; error?: string; season?: string; moves?: { team: string | null; direction: 'up' | 'down'; from_tier: number; to_tier: number; left_behind: string[] }[] }>(
+    'ladder_rollover', { p_ladder: ladderId, p_weeks: weeks });

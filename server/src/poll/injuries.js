@@ -138,7 +138,7 @@ export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
   const canPrune = wrote && malformed === 0 && sleeper != null && espnEntries >= PRUNE_FLOOR;
   if (canPrune) {
     const keep = new Set(clean.map((r) => r.player_slug));
-    // PAGED (v0.710.1). This read was the one left on PostgREST's silent
+    // PAGED (v0.712.1). This read was the one left on PostgREST's silent
     // 1000-row cap after v0.489.4 paged the client's: once the college rows
     // and the sport directories (nba-…, mlb-…) shared the table, it passed a
     // thousand, and every NFL row past the cap was never even considered for
