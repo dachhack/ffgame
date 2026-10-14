@@ -683,7 +683,14 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
     const storedBy = new Set();
     let ruledOut;
     let riskOf;
-    if (homePicks == null || awayPicks == null) {
+    // A SIDE WITH NO 'wk' ROWS (v0.707.1). Founder, on his test league's week 5: "Test Wedding is calculating my
+    // score as 0" — 0.0 against 89.4, every card 0.0. The league drafted fifteen minutes AFTER the week's lock,
+    // so the lock-time fill found no roster; the CPU seats were filled on the agent path right after the draft,
+    // the human seat was left with no rows at all. That seat then reached here through the drip fallback
+    // (aiSide: a drip-shaped auto-lineup), which is non-null, so `picks != null` counted as "stored a lineup"
+    // and the classic side scored its stored nothing. Only 'wk' rows are a classic lineup; ask about those.
+    const wkRows = (picks) => (picks ?? []).some((p) => p.win === CLASSIC_WIN);
+    if (!wkRows(homePicks) || !wkRows(awayPicks)) {
       const uids = [homeMem?.app_user_id, awayMem?.app_user_id].filter(Boolean);
       if (uids.length) {
         const { data: anyRows } = await db().from('sealed_pick')
@@ -702,7 +709,7 @@ export async function resolveMatchup(matchup, playerIndex, override, opts = {}) 
       const statuses = await injuryStatusMap();
       riskOf = (slug) => playRisk(statuses.get(slug));
     }
-    const hasRows = (picks, rosterId) => picks != null
+    const hasRows = (picks, rosterId) => wkRows(picks)
       || storedBy.has(byRoster.get(rosterId)?.app_user_id);
     // The roster feeds BOTH auto-fills — best ball's (0159) and the unmanaged
     // seat's — so it is loaded for every classic matchup now, not just

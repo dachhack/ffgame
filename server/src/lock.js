@@ -503,12 +503,17 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
           // A human's seat is filled at lock and then left to the human: the
           // per-player seal already lets them late-swap, and a fill landing
           // mid-week would be a decision made for them.
-          if (live) continue;
           // A MANAGED seat: fill only the spots with no row at all. A row is a
           // decision — including a NULL a manager wrote on purpose.
           const stored = storedBy.get(`${m.id}#${uid}`) ?? {};
+          // …except a seat with NO rows at all on a live week (v0.707.1): the draft landed after the week's
+          // lock (Test Wedding, week 5: locked 00:15 UTC, drafted 00:30), so the lock-time fill found no
+          // roster and the human had nothing all week while the CPU seats were filled. One first fill, on the
+          // agent path's rails — only players whose games have not started — and never again once rows exist.
+          if (live && Object.keys(stored).length) continue;
+          const cands = live ? roster.filter((p) => !kickedOff(p.team)) : roster;
           setBullseyeRoster(rosterId);   // per-team deal: this seat's card
-          for (const p of autoSlotPlan(slots, bestball, stored, roster, valueOf)) {
+          for (const p of autoSlotPlan(slots, bestball, stored, cands, valueOf)) {
             humanPayload.push({
               matchup_id: m.id, app_user_id: uid, game_window: CLASSIC_WIN,
               roster_slot: p.slot, player_slug: p.player, metric_id: null, locked: false,
