@@ -4,7 +4,8 @@
 // Pure rows only. Run from server/: npx tsx test/push-season.mjs
 import { nightBeforeMs, starterIssue, seasonStatusRows, rosterQcNightRows, rosterQcKickRows,
   quietHours, nextRunMs, waiverRemindAt, waiverRemindRows, tradeDeadlineRows, contractLockRows, finalRows, lastDayStartMs, sweatRows,
-  isBigPlay, bigPlayLine, bigPlayRows, slugToName } from '../src/push.js';
+  isBigPlay, bigPlayLine, bigPlayRows, slugToName, coinEarnedRows, coinAffordRow } from '../src/push.js';
+import { coinReasonWord } from '../../packages/core/src/engine/contest.ts';
 import { TeamMap } from '../../packages/core/src/data/teamCodes.ts';
 import { pushKindOn, flipPushKind, PUSH_KINDS, plainText, leagueKindOn, pushAllowed } from '../../packages/core/src/data/pushKinds.ts';
 
@@ -132,6 +133,28 @@ ok('league: an untouched league follows overall', leagueKindOn({}, 'status') && 
 ok('league: a type off in this league is off here, whatever overall says', !pushAllowed({ status: true }, { status: false }, 'status') && pushAllowed({ status: true }, { result: false }, 'status'));
 ok('league: muted silences every type in it', !leagueKindOn({ muted: true, status: true }, 'status') && !pushAllowed({ chat: true }, { muted: true }, 'chat'));
 ok('league: the league cannot switch on what is off overall', !pushAllowed({ bigplay: false }, { bigplay: true }, 'bigplay') && pushAllowed({ bigplay: true }, { bigplay: true }, 'bigplay'));
+
+// ── part 4 (v0.708.4): drip coin ──
+const L2 = new Map([['C1', 'Weekly Cointest']]);
+const own2 = new Map([['C1:4', 'u1'], ['C1:5', 'u2']]);
+const ledger = [
+  { id: 10, league_id: 'C1', roster_id: 4, delta: 40, reason: 'built' },
+  { id: 11, league_id: 'C1', roster_id: 4, delta: 25, reason: 'loss' },
+  { id: 12, league_id: 'C1', roster_id: 4, delta: -80, reason: 'play' },
+  { id: 13, league_id: 'C1', roster_id: 5, delta: 200, reason: 'seed' },
+];
+const ce = coinEarnedRows(ledger, new Map([['C1:4', 185]]), L2, own2, coinReasonWord);
+ok('coin: a settle batch is one push per team, with the reasons and the wallet', ce.length === 1 && ce[0].kind === 'coin' && ce[0].title === '◎65 earned in Weekly Cointest'
+  && ce[0].body === 'built your squad, a loss · wallet ◎185.' && ce[0].dedupe_key === 'coin:earned:C1:4:11', ce);
+ok('coin: spending and the starting seed are not news', !ce.some((r) => r.app_user_id === 'u2'));
+const offered = [{ name: 'Underdog', price: 35 }, { name: 'Double or Nothing', price: 80 }, { name: 'Ghost Player', price: 75 }];
+const LC = { id: 'C1', name: 'Weekly Cointest' };
+const af = coinAffordRow(LC, 7, 4, 'u1', 120, offered, false, THU, nightBeforeMs(THU) + 60_000);
+ok('coin: the evening before, a wallet that covers a play hears about the dearest one', af?.title === '◎120 to spend in Weekly Cointest'
+  && af?.body === 'Enough for Double or Nothing (◎80) and 2 more. Plays go in before Thu 8:15 PM ET.' && af?.dedupe_key === 'coin:afford:C1:7:4:u1', af);
+ok('coin: not before the evening, not after kickoff', coinAffordRow(LC, 7, 4, 'u1', 120, offered, false, THU, nightBeforeMs(THU) - 60_000) === null && coinAffordRow(LC, 7, 4, 'u1', 120, offered, false, THU, THU + 1) === null);
+ok('coin: not once a play is in, nor when nothing is affordable', coinAffordRow(LC, 7, 4, 'u1', 120, offered, true, THU, nightBeforeMs(THU) + 60_000) === null
+  && coinAffordRow(LC, 7, 4, 'u1', 20, offered, false, THU, nightBeforeMs(THU) + 60_000) === null);
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

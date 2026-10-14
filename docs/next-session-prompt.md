@@ -9,12 +9,12 @@ You're continuing **Drip Fantasy** — real-time H2H fantasy football, live at
 (super admin: mlporritt@gmail.com) drives, usually from a phone, usually with a
 screenshot. Ship small, verified increments.
 
-**State at handoff: `v0.707.0`, everything merged and deployed (Oct 13).**
+**State at handoff: `v0.708.4`, everything merged and deployed (Oct 14).**
 Migrations through **0499** applied (next: **0500**); ops errands through
 **052** (next: **053**); latest APK is versionCode 40385; TestFlight's iOS
 runtime is v0.656.3's (`apps/mobile/ios-build-runtime.txt`). Work branch:
 `ccr-9ea4c0a9-m5lxbd` (resynced onto merged `main`). **HANDOFF.md's top
-section ("The contest-week live-fire arc") is the current state; the
+section ("The notifications arc") is the current state; the
 numbers elsewhere in this prompt are from August and only the discipline
 still holds.**
 
@@ -214,6 +214,9 @@ Deploys are automatic from `main` (`deploy.yml` web, `deploy-worker.yml` Fly,
 
 ## What to pick up
 
+0. **The new notifications' first live week** (v0.708.x): the night-before
+   lineup check, waiver eves, big plays, the sweat, finals and coin — see
+   HANDOFF's top section for where each lives and what to watch.
 1. **Week 6 settles Tuesday Oct 20** — the first live week for the auto
    "hurt in his game" (v0.701.0, the 🩹), the landing week's flip on
    Wednesday (v0.699.2), the result cards, and the coin lines. **In week 5
