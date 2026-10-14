@@ -41,7 +41,7 @@ import {
   liveSlate, leagueStandings,
   leagueGameMode, bullseyeCard, sportLeagueGames, sportLeagueMarket, leagueMarket, installCollegeProjections, weekLivePlays, weekGameFeeds, friendlyError, playerFlags, leaguePoolExp, leaguePoolIds, leagueScoringGet, leagueTestLiveAt,
   type LiveMatchup, type PoolPlayer, type TeamInfo, type GameFeedRow,
-  nativeRosters, loadLiveInjuries, playoffState, loadTeamOverrides, loadDepthChart,
+  nativeRosters, loadLiveInjuries, ensureTeamByes, byeTag, playoffState, loadTeamOverrides, loadDepthChart,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
 import { boardStashSets } from '@drip/core/data/copies';
@@ -315,6 +315,8 @@ function BoardCell({ e, align, onGame, onName, empty }: {
       <Text numberOfLines={1} style={{ fontSize: 9, marginTop: 1, color: t.faint, textAlign: right ? 'right' : 'left' }}>
         <Text style={{ color: t.pos[e.pos as keyof typeof t.pos]?.fg ?? t.dim, fontWeight: '700' }}>{e.pos}</Text>
         {(e.team || collegeNameFor(e.slug)?.school) ? ` · ${e.team || collegeNameFor(e.slug)?.school}` : ''}
+        {/* v0.712.4: the bye week beside the team, Sleeper's "CLE (11)". */}
+        {e.team ? byeTag(e.team) : ''}
         {e.injury ? <Text style={{ color: t.warn, fontWeight: '700' }}>{` ${e.injury}`}</Text> : null}
       </Text>
       {/* Venue/night marks ride only the pre-kick line — game info, and the
@@ -348,7 +350,10 @@ function gameLineOf(e: BoardEntry): string {
     // once his game is final that is "no stats", not "in progress". The web
     // board already prints the dash; the app said both words at once.
     : started ? `${e.state === 'done' ? 'Final · ' : ''}${e.statline ?? (e.state === 'done' ? '—' : 'In progress')}`
-    : (`${e.kickoff ?? ''} ${e.opponent ?? ''}`.trim() || 'no game listed');
+    // OPPONENT FIRST (v0.712.4, founder beside a Sleeper screenshot: "make
+    // sure the opponent is visible"). Kickoff-then-opponent ran out of cell
+    // at "Sun, 9:30 AM vs H…"; the time is what may ellipsize now.
+    : ([e.opponent, e.kickoff].filter(Boolean).join(' · ') || 'no game listed');
 }
 
 /** The game-line markers, as text so they cost no layout: 🏟 roofed, ☾ night. */
@@ -643,6 +648,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
         // `injuryFor` was answering out of the BAKED 2025 report, so one player
         // wore last year's Q and everybody else wore nothing.
         loadLiveInjuries(m.week).then((n) => { if (n) setInjuryVer((v) => v + 1); }).catch(() => {});
+        // v0.712.4: the season's bye weeks, for the "(8)" beside each team.
+        ensureTeamByes().then((ok) => { if (ok) setInjuryVer((v) => v + 1); }).catch(() => {});
         // The last regular-season week, for the stepper's far end.
         leagueTestLiveAt(leagueId).then(setTestLive).catch(() => setTestLive(null));
         playoffState(leagueId).then((ps) => {
@@ -1619,7 +1626,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
                       <InjuryNow slug={benchPick} size={8} />
                     </View>
                     <Mono size={8.5} tone={me.opponent === 'BYE' ? 'warn' : 'faint'} numberOfLines={1}>
-                      {`${me.pos}${me.team ? ` · ${me.team}` : ''} · ${gameLineOf(me)}${me.state === 'pre' ? roofMark(me) : ''}`}
+                      {`${me.pos}${me.team ? ` · ${me.team}${byeTag(me.team)}` : ''} · ${gameLineOf(me)}${me.state === 'pre' ? roofMark(me) : ''}`}
                     </Mono>
                   </View>
                   <Mono size={11} tone="dim" weight="700">{me.proj.toFixed(1)}</Mono>

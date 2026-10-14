@@ -60,7 +60,7 @@ import { FlagChip, InjuryBadge, InjuryNow } from '../ui/rosterGroup';
 import { setLeagueFlags, flagRulesFor, flagFor } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { bullseyeConfigOf, bullseyeFit, dealBullseyeCard, cardsFromRows, type BullseyeCard, type BullseyeConfig } from '@drip/core/engine/bullseye';
-import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWeekSlate, slateOppLabel, type SlateSpot } from '@drip/core/data/liveApi';
+import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWeekSlate, slateOppLabel, ensureTeamByes, byeTag, type SlateSpot } from '@drip/core/data/liveApi';
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { weekTitle } from '@drip/core/data/nflSlate';
 import { normTeam } from '../../../../packages/core/src/data/teamCodes';
@@ -228,7 +228,7 @@ function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: numb
  *    • DROPPING is now the PLAYER CARD's job — one deliberate trip into a
  *      player, two taps to confirm, and the same button wherever you found him.
  */
-function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, inj, emptyLabel, sub }: {
+function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, inj, emptyLabel, sub, slate }: {
   badge: string;
   /** First position the spot accepts — colours the badge like the board's. */
   badgePos?: string;
@@ -253,6 +253,9 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
   /** Replaces the team beside the position — a devy player's school and
    *  class (0366). */
   sub?: string;
+  /** The week's slate by team (v0.712.4, founder beside a Sleeper screenshot:
+   *  "make sure the opponent is visible"): "vs HOU" / "@ ARI" / "BYE" on the row. */
+  slate?: Map<string, SlateSpot> | null;
 }) {
   const posC = badgePos ? t.pos[badgePos as keyof typeof t.pos] : undefined;
   const fg = tone === 'warn' ? t.warn : tone === 'you' ? t.you : posC?.fg ?? t.dim;
@@ -281,7 +284,10 @@ function RosterRow({ badge, badgePos, tone, p, busy, t, onSlot, slotVerb, deal, 
             <Text numberOfLines={1} style={{ fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
               <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.pos[p.pos as keyof typeof t.pos]?.fg ?? t.dim }}>{p.pos}</Text>
-              <Mono size={8.5} tone="faint">{sub ?? teamLabel(p)}</Mono>
+              <Mono size={8.5} tone="faint">{sub ?? `${teamLabel(p)}${isCollegeSlug(p.slug) ? '' : byeTag(p.team)}`}</Mono>
+              {!sub && !isCollegeSlug(p.slug) && !!slateOppLabel(slate, p.team) && (
+                <Mono size={8.5} tone="dim" weight="700">{slateOppLabel(slate, p.team)}</Mono>
+              )}
               <InjuryBadge status={inj ?? null} size={7.5} />
               <FlagChip slug={p.slug} size={7.5} />
             </View>
@@ -641,9 +647,12 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
   }, [leagueId, gm, bullCfg, myRoster]);
   // THE WEEK'S OPPONENT ON THE WIRE (v0.707.7, founder: "Def on waivers doesn't show the opponent for the week").
   const [wireSlate, setWireSlate] = useState<Map<string, SlateSpot> | null>(null);
+  const [, setByesVer] = useState(0);
   useEffect(() => {
     let alive = true;
     wireWeekSlate(leagueId).then((r) => { if (alive) setWireSlate(r.slate); }).catch(() => {});
+    // v0.712.4: the season's bye weeks, for the "(8)" beside each team.
+    ensureTeamByes().then((ok) => { if (alive && ok) setByesVer((v) => v + 1); }).catch(() => {});
     return () => { alive = false; };
   }, [leagueId]);
   const fitOf = (slug: string, pos: string) => (bullCfg && bullCard ? bullseyeFit(pos, projFor(slug, pos) ?? 0, slotDefs, bullCard, bullCfg.radius) : null);
@@ -864,7 +873,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
         it says so, and where the lineup is. */}
     <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 10 }}>{gm?.mode === 'classic' ? 'BEST FIT · NOT YOUR LINEUP — SET THAT ON MATCHUP' : 'STARTING SPOTS'}</Mono>
     {bySpot.starters.map((row, i) => (
-      <RosterRow key={`spot-${i}`} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} inj={row.player ? injTags[row.player.slug] : null} />
+      <RosterRow key={`spot-${i}`} slate={wireSlate} badge={row.label} badgePos={row.pos[0]} p={row.player} busy={busy} t={t} deal={row.player ? deals?.get(row.player.slug) : undefined} inj={row.player ? injTags[row.player.slug] : null} />
     ))}
   </>) : null;
   const fitBench = (bySpot.bench.length > 0 || !!gm?.shape?.bench) ? (<>
@@ -872,7 +881,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
       BENCH ({bySpot.bench.length}{gm?.shape?.bench ? `/${gm.shape.bench}` : ''})
     </Mono>
     {bySpot.bench.map((p) => (
-      <RosterRow key={p.slug} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} />
+      <RosterRow key={p.slug} slate={wireSlate} badge="BN" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} />
     ))}
     {Array.from({ length: Math.max(0, (gm?.shape?.bench ?? 0) - bySpot.bench.length) }, (_, i) => (
       <RosterRow key={`bn-empty-${i}`} badge="BN" p={null} busy={busy} t={t} emptyLabel="Open" />
@@ -1027,7 +1036,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
             INJURED RESERVE ({bySpot.ir.length}{gm?.shape?.ir ? `/${gm.shape.ir}` : ''})
           </Mono>
           {bySpot.ir.map((p) => (
-            <RosterRow key={p.slug} badge="IR" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('ir', p.slug) : undefined} />
+            <RosterRow key={p.slug} slate={wireSlate} badge="IR" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('ir', p.slug) : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.ir ?? 0) - bySpot.ir.length) }, (_, i) => (
             <RosterRow key={`ir-empty-${i}`} badge="IR" tone="warn" p={null} busy={busy} t={t}
@@ -1041,7 +1050,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
             OUT ({bySpot.out.length}{gm?.shape?.out ? `/${gm.shape.out}` : ''})
           </Mono>
           {bySpot.out.map((p) => (
-            <RosterRow key={p.slug} badge="OUT" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('out', p.slug) : undefined} />
+            <RosterRow key={p.slug} slate={wireSlate} badge="OUT" tone="warn" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('out', p.slug) : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.out ?? 0) - bySpot.out.length) }, (_, i) => (
             <RosterRow key={`out-empty-${i}`} badge="OUT" tone="warn" p={null} busy={busy} t={t}
@@ -1055,7 +1064,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
             TAXI SQUAD ({bySpot.taxi.length}{gm?.shape?.taxi ? `/${gm.shape.taxi}` : ''})
           </Mono>
           {bySpot.taxi.map((p) => (
-            <RosterRow key={p.slug} badge="TX" tone="you" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('taxi', p.slug) : undefined} />
+            <RosterRow key={p.slug} slate={wireSlate} badge="TX" tone="you" p={p} busy={busy} t={t} deal={deals?.get(p.slug)} inj={injTags[p.slug]} onSlot={canStash ? () => openSpot('taxi', p.slug) : undefined} />
           ))}
           {Array.from({ length: Math.max(0, (gm?.shape?.taxi ?? 0) - bySpot.taxi.length) }, (_, i) => (
             <RosterRow key={`tx-empty-${i}`} badge="TX" tone="you" p={null} busy={busy} t={t}
@@ -1074,7 +1083,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
             const c = college[p.slug];
             const grad = !isCollegeSlug(p.slug);
             return (
-              <RosterRow key={p.slug} badge="DV" tone="you" p={p} busy={busy} t={t}
+              <RosterRow key={p.slug} slate={wireSlate} badge="DV" tone="you" p={p} busy={busy} t={t}
                 sub={grad ? `${p.team} · drafted — tap DV to activate` : [c?.declared ? 'DECLARED' : null, c?.custom ? c.level : null, c?.school_abbr, c?.class_label].filter(Boolean).join(' · ')}
                 // 0440: in a mixed league the shelf is a taxi squad — the chip
                 // opens the picker, with his way back to active at the top.
@@ -1353,7 +1362,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
                   <PosPill pos={p.pos} size={7.5} />
-                  <Mono size={8.5} tone="faint">{teamLabel(p)}</Mono>
+                  <Mono size={8.5} tone="faint">{`${teamLabel(p)}${isCollegeSlug(p.slug) ? '' : byeTag(p.team)}`}</Mono>
                   {!isCollegeSlug(p.slug) && !!slateOppLabel(wireSlate, p.team) && (
                     <Mono size={8.5} tone="dim" weight="700">{slateOppLabel(wireSlate, p.team)}</Mono>
                   )}
@@ -1568,7 +1577,7 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                 <PosPill pos={p.pos} size={8} />
                 <Text numberOfLines={1} style={{ flex: 1, fontSize: fs(12.5), color: t.text }}>{p.full_name}</Text>
                 {fillFor !== 'taxi' && !!injTags[p.slug] && <Mono size={8.5} weight="700" tone="warn">{injTags[p.slug]}</Mono>}
-                <Mono size={8.5} tone="faint">{teamLabel(p)}</Mono>
+                <Mono size={8.5} tone="faint">{`${teamLabel(p)}${isCollegeSlug(p.slug) ? '' : byeTag(p.team)}`}</Mono>
                 <Mono size={9} weight="700" tone={why ? 'faint' : 'you'}>{swapOcc ? '\u21c4 SWAP' : fillFor === 'ir' ? '\u2192IR' : fillFor === 'out' ? '\u2192OUT' : fillFor === 'devy' ? '\u2192DV' : '\u2192TX'}</Mono>
               </View>
               {!!why && <Mono size={8} tone="faint" style={{ marginTop: 3, lineHeight: fs(11) }}>{why}</Mono>}

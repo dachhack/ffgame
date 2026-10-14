@@ -84,5 +84,36 @@ for (const f of ['apps/mobile/src/ui/LeagueExtras.tsx', 'src/screens/GuillotineP
     /where t\.pts is not null/.test(mig) && !/limit 1\), 0\) as pts/.test(mig));
 }
 
+// ── A PLAYER'S BYE WEEK, beside his team (v0.712.4) ─────────────────────────
+// Founder, beside Sleeper's "RB • CLE (11)". byeWeeksFrom reads it off the
+// season slate: the one full regular-season week a team is missing from.
+{
+  const { byeWeeksFrom } = await import('../packages/core/src/data/liveApi.ts');
+  const TEAMS = ['ARI','ATL','BAL','BUF','CAR','CHI','CIN','CLE','DAL','DEN','DET','GB','HOU','IND','JAX','KC','LA','LAC','LV','MIA','MIN','NE','NO','NYG','NYJ','PHI','PIT','SEA','SF','TB','TEN','WAS'];
+  // Week w: teams 2(w-1) and 2(w-1)+1 are off; everyone else plays, paired in order.
+  const rows = [];
+  for (let w = 1; w <= 4; w++) {
+    const on = TEAMS.filter((_, i) => i !== 2 * (w - 1) && i !== 2 * (w - 1) + 1);
+    for (let i = 0; i < on.length; i += 2) rows.push({ week: w, home: on[i], away: on[i + 1] });
+  }
+  rows.push({ week: 5, home: 'ARI', away: 'ATL' });          // a week still loading: 2 teams
+  rows.push({ week: 201, home: 'c-1', away: 'c-2' });         // a college week: ignored
+  const byes = byeWeeksFrom(rows);
+  ok('bye: a team gets the full week it is missing from', byes.get('ARI') === 1 && byes.get('BAL') === 2, [byes.get('ARI'), byes.get('BAL')]);
+  ok('bye: a partial week (2 games of 16) invents no bye', byes.get('CAR') === 3 && byes.get('CIN') === 4, [byes.get('CAR'), byes.get('CIN')]);
+  ok('bye: a team with no missing full week has none yet', byes.get('SEA') === undefined, byes.get('SEA'));
+  ok('bye: the Rams answer to LA and LAR alike', byes.get('LAR') === byes.get('LA'));
+  ok('bye: college weeks are not NFL weeks', byes.get('c-1') === undefined);
+  // Two missing full weeks means the schedule is wrong or partial: say nothing.
+  // ARI is off in week 1; drop its week-2 game too and it is missing two.
+  const twice = byeWeeksFrom(rows.filter((r) => !(r.week === 2 && (r.home === 'ARI' || r.away === 'ARI'))));
+  ok('bye: two missing weeks give no number', twice.get('ARI') === undefined, twice.get('ARI'));
+  const app = read('apps/mobile/src/ui/ClassicBoard.tsx');
+  ok('board: the pre-kick line leads with the opponent', /\[e\.opponent, e\.kickoff\]\.filter\(Boolean\)\.join\(' · '\)/.test(app));
+  ok('board: the team line carries the bye', /byeTag\(e\.team\)/.test(app));
+  const team = read('apps/mobile/src/screens/Team.tsx');
+  ok('my team: roster rows carry the bye and the week\'s opponent', /byeTag\(p\.team\)/.test(team) && /slateOppLabel\(slate, p\.team\)/.test(team));
+}
+
 if (fails) { console.log(`\n${fails} BYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL BYE ASSERTIONS PASSED');

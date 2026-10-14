@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.4 — The opponent and the bye week on every phone row
+
+> - On the phone's matchup board the opponent now comes first ("vs HOU · Sun, 9:30 AM"), so it no longer gets cut off.
+> - Every player shows his bye week beside his team, like "JAX (7)", and the My Team rows show this week's opponent too.
+
+Founder, beside a Sleeper screenshot ("RB • CLE (11)"). Core `liveApi`:
+`byeWeeksFrom(rows)` (pure: the one full week 1–18, 13+ games, a team is
+missing from; a TeamMap, so LA/LAR agree), `ensureTeamByes()` (one
+`nfl_slate` read per season), `byeWeekOf` / `byeTag`. Against the live 2026
+slate it gives all 32 teams a bye and matches Sleeper's (CLE 11, NYG 8,
+CHI 10, DAL 14). Phone `ClassicBoard`: `gameLineOf` leads with the opponent;
+the team line and your own row carry the bye. Phone `Team`: roster rows
+carry the bye and `slateOppLabel` for the open week (the wire's slate), and
+so do the wire's rows. check:bye +9. Web unchanged. JavaScript only; no
+iPhone build (check:ios-runtime).
+
 ### v0.712.3 — The injury table loses its 1,050 junk rows
 
 > - Behind the scenes: about a thousand broken injury records left over from September are cleared out. Nothing you see changes.
