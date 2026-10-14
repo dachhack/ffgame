@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.4 — The chip row fits again; the app chip moves under fields
+
+> - The chips above your leagues (ALL, COMMISH, WEEKLY, FIND, ADD, 🗂) sit a little closer together, so the whole row fits on the screen again.
+> - On a phone's browser, GET THE APP now sits under ▦ fields instead of running into the Drip Fantasy title.
+> - A college week on the website's leagues list reads as its dates, as in the app, instead of "WEEK 206".
+> - The highlight on the room you're in (LEAGUE, MATCHUP, MY TEAM, CHAT) at the foot of the app has rounded corners again.
+
+Founder: "Row is running off the page now, but plenty of room if we decrease
+the spacing." `Chip` gains `tight` (6dp sides, same height and type); the
+leagues row uses it with a 4dp gap. Measured in Chromium against the
+screenshot's own chip widths (ALL 11 = 42dp of text, COMMISH 11 = 80): the row
+goes from ~424dp to ~368dp of the ~380dp available..
+
+Founder (mobile web screenshot): "Let's put the get the app chip on mobile web
+below the fields chip where there is room." `LiveOnboard`'s header builds
+`appChips` once; on a phone (`mobileOs() != null`) they go in a column under
+▦ fields, on a desktop beside the gear as before. Measured off the screenshot:
+the chip is ~104dp, so it ends ~120dp in, clear of the centred wordmark
+(~128dp on a 360dp phone). The web's SlateStrip printed `WEEK ${row.week}`
+(206 for a college week) where the app uses `weekTitle`; now both do.
+Founder (screenshot of the room bar): "The highlights on the selected
+section (my team, here) should have rounded corners." `LeagueBottomBar`'s
+pill already had `borderRadius: 9` but drew square on Android; it now clips
+(`overflow: 'hidden'`). Unconfirmed on a device from here.
+All JS; no iPhone build.
+
 ### v0.707.3 — 🗂 The archive, beside ADD
 
 > - A small 🗂 chip sits to the right of ADD on your leagues list. Tap it to choose which leagues are shown and which are archived: an archived league leaves your list, just for you, and comes back with one tap.

@@ -755,7 +755,11 @@ function LeagueBottomBar({ theme, shift, items, active, leagueId, onGo }: {
             accessibilityLabel={label}
             accessibilityState={{ selected: on }}
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ alignItems: 'center', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: on ? alpha(theme.you, 16) : 'transparent' }}>
+            {/* overflow:hidden (v0.707.4, founder: "The highlights on the selected
+                section should have rounded corners"): Android drew this pill
+                square despite its radius; clipping makes it honour it. The
+                chat dot sits inside the padding, so nothing is cut. */}
+            <View style={{ alignItems: 'center', borderRadius: 9, overflow: 'hidden', paddingHorizontal: 10, paddingVertical: 7, backgroundColor: on ? alpha(theme.you, 16) : 'transparent' }}>
               <View>
                 <Text numberOfLines={1} style={{
                   fontFamily: MONO, fontSize: 13.5, fontWeight: '700', letterSpacing: 0.2,
