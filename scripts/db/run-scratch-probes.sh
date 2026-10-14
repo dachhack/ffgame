@@ -279,3 +279,4 @@ $RUN -f scripts/db/autodraft-default-lineup-probes.sql | grep -E "PROBE FAIL|ALL
 $RUN -f scripts/db/season-rules-probes.sql | grep -E "PROBE FAIL|ALL SEASON-RULES PROBES" || { echo "SEASON-RULES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/copies-probes.sql | grep -E "PROBE FAIL|ALL COPIES PROBES" || { echo "COPIES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/relegation-probes.sql | grep -E "PROBE FAIL|ALL RELEGATION PROBES" || { echo "RELEGATION PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/claim-tag-lapse-probes.sql | grep -E "PROBE FAIL|ALL CLAIM-TAG-LAPSE PROBES" || { echo "CLAIM-TAG-LAPSE PROBES FAILED"; exit 1; }
