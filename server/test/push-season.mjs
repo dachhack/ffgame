@@ -2,7 +2,8 @@
 // lineup check, ⚠ the 90-minute check, and the per-type switches they ride.
 // Founder: "Night before + 90 min before kick", only when something is wrong.
 // Pure rows only. Run from server/: npx tsx test/push-season.mjs
-import { nightBeforeMs, starterIssue, seasonStatusRows, rosterQcNightRows, rosterQcKickRows } from '../src/push.js';
+import { nightBeforeMs, starterIssue, seasonStatusRows, rosterQcNightRows, rosterQcKickRows,
+  quietHours, nextRunMs, waiverRemindAt, waiverRemindRows, tradeDeadlineRows, contractLockRows, finalRows, lastDayStartMs, sweatRows } from '../src/push.js';
 import { TeamMap } from '../../packages/core/src/data/teamCodes.ts';
 import { pushKindOn, flipPushKind, PUSH_KINDS } from '../../packages/core/src/data/pushKinds.ts';
 
@@ -55,6 +56,44 @@ ok('switches: the new types start on; the live play-by-play ones start off', pus
 ok('switches: a touched switch wins; an unknown type stays on', pushKindOn({ bigplay: true }, 'bigplay') && !pushKindOn({ status: false }, 'status') && pushKindOn({}, 'widget'));
 ok('switches: flipping an untouched off-by-default type turns it on', flipPushKind({}, 'bigplay').bigplay === true && flipPushKind({}, 'status').status === false);
 ok('switches: every type has words for the ⓘ', PUSH_KINDS.every((x) => x.label && x.info));
+
+// ── part 2 (v0.708.1): ⏰ league timing and 🏁 results ──
+const LG = { id: 'L1', name: 'Turf Warriors' };
+const iso = (ms) => new Date(ms).toISOString();
+ok('quiet hours are 9 PM – 9 AM ET', quietHours(Date.parse('2026-10-15T02:00:00Z')) && !quietHours(Date.parse('2026-10-15T00:30:00Z')) && quietHours(Date.parse('2026-10-15T12:30:00Z')) && !quietHours(Date.parse('2026-10-15T13:30:00Z')));
+// Wednesday 3 AM ET runs (dow 3, minute 180). From Tue Oct 13 noon ET → Wed Oct 14 3 AM ET = 07:00Z.
+const tueNoon = Date.parse('2026-10-13T16:00:00Z');
+const run = nextRunMs(3, 180, tueNoon);
+ok('the next Wednesday 3 AM ET run', iso(run) === '2026-10-14T07:00:00.000Z', iso(run));
+ok('…and a week later once it has passed', iso(nextRunMs(3, 180, run + 60_000)) === '2026-10-21T07:00:00.000Z');
+ok('a pre-noon run is flagged at 8 PM ET the evening before; a later one 3 hours ahead', iso(waiverRemindAt(run)) === '2026-10-14T00:00:00.000Z'
+  && iso(waiverRemindAt(Date.parse('2026-10-14T23:00:00Z'))) === '2026-10-14T20:00:00.000Z');
+ok('⏰ waivers: nothing before the evening', waiverRemindRows(LG, ['u1'], run, waiverRemindAt(run) - 60_000).length === 0);
+const wr = waiverRemindRows(LG, ['u1', 'u2'], run, waiverRemindAt(run) + 60_000);
+ok('⏰ waivers: every member, once per run', wr.length === 2 && wr[0].kind === 'timing' && wr[0].title === '⏰ Turf Warriors: waivers run Wed 3:00 AM ET' && wr[0].dedupe_key === 'timing:waivers:L1:2026-10-14:u1', wr[0]);
+ok('⏰ trade deadline: only in the deadline week', tradeDeadlineRows(LG, ['u1'], 9, 10).length === 0 && tradeDeadlineRows(LG, ['u1'], 10, 10)[0]?.body === "Trades close when week 10's games are over." && tradeDeadlineRows(LG, ['u1'], 10, null).length === 0);
+const cdl = Date.parse('2026-10-16T23:00:00Z');
+ok('⏰ contracts: inside the last day, not the last hour', contractLockRows(LG, ['u1'], cdl, cdl - 20 * 3_600_000).length === 1
+  && contractLockRows(LG, ['u1'], cdl, cdl - 30 * 3_600_000).length === 0 && contractLockRows(LG, ['u1'], cdl, cdl - 30 * 60_000).length === 0);
+const names = new Map([[1, 'Bank Roll'], [2, 'Super Crisp']]);
+const owners = new Map([['L1:1', 'u1'], ['L1:2', 'u2']]);
+const fin = finalRows(LG, { id: 'M1', week: 6, home_roster_id: 1, away_roster_id: 2, home_final: 154.3, away_final: 184.2 }, names, owners, false);
+ok('🏁 final: each side told, from its own side', fin.length === 2 && fin[0].title === '🏁 Turf Warriors: Lost week 6' && fin[0].body === 'Bank Roll 154.30 – 184.20 Super Crisp'
+  && fin[1].title === '🏁 Turf Warriors: Won week 6' && fin[1].body === 'Super Crisp 184.20 – 154.30 Bank Roll', fin);
+ok('🏁 final: a lower-wins league reads it the other way', finalRows(LG, { id: 'M2', week: 6, home_roster_id: 1, away_roster_id: 2, home_final: 32.6, away_final: 36.9 }, names, owners, true)[0].title === '🏁 Turf Warriors: Won week 6');
+// The sweat: Sunday slate, then MNF (Mon Oct 19 8:15 PM ET = Oct 20 00:15Z)
+const MNF = Date.parse('2026-10-20T00:15:00Z');
+const wkKicks = new TeamMap();
+for (const [t, k] of [['KC', SUN], ['LV', SUN], ['DAL', MNF], ['NYG', MNF]]) wkKicks.set(t, k);
+ok('the last game day starts with its first kickoff', lastDayStartMs([SUN, SUN, MNF, MNF]) === MNF && lastDayStartMs([]) === null);
+const seatsByRid = new Map([[1, { uid: 'u1', starters: [P('lamb', 'DAL', 'CeeDee Lamb'), P('mahomes', 'KC', 'Patrick Mahomes')] }], [2, { uid: 'u2', starters: [P('pacheco', 'KC', 'Isiah Pacheco')] }]]);
+const M = { id: 'M3', week: 7, home_roster_id: 1, away_roster_id: 2 };
+ok('🏈 sweat: not before half an hour out', sweatRows(LG, M, { home: 98.4, away: 112.6 }, seatsByRid, names, wkKicks, MNF, MNF - 40 * 60_000).length === 0);
+const sw = sweatRows(LG, M, { home: 98.4, away: 112.6 }, seatsByRid, names, wkKicks, MNF, MNF - 20 * 60_000);
+ok('🏈 sweat: the score and who is still to play, both sides', sw.length === 2 && sw[0].title === '🏈 Turf Warriors: Monday night'
+  && sw[0].body === 'Bank Roll 98.40 – 112.60 Super Crisp. Still to play — yours: CeeDee Lamb (DAL); theirs: 0.'
+  && sw[1].body === 'Super Crisp 112.60 – 98.40 Bank Roll. Still to play — yours: nobody; theirs: 1.', sw);
+ok('🏈 sweat: a matchup nobody plays in tonight gets nothing', sweatRows(LG, M, { home: 1, away: 2 }, new Map([[1, { uid: 'u1', starters: [P('mahomes', 'KC')] }], [2, { uid: 'u2', starters: [] }]]), names, wkKicks, MNF, MNF - 20 * 60_000).length === 0);
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);
