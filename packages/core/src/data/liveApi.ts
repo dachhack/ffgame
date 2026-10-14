@@ -2604,12 +2604,14 @@ export type RosterSpot = 'active' | 'taxi' | 'ir' | 'out' | 'devy';
 /** 0461 (#1188): one move for a FULL stash place — `outSlug` (in IR, OUT,
  *  taxi or devy) back to active and `inSlug` (active) into his place. Each
  *  half is held to set_roster_spot's rules; a refusal undoes both. */
-export const swapRosterSpot = (leagueId: string, outSlug: string, inSlug: string) =>
+// `rosterId` (0500, copies): whose copy. Left out, the server takes the caller's
+// own copy, or the only holder — every one-copy league is unchanged.
+export const swapRosterSpot = (leagueId: string, outSlug: string, inSlug: string, rosterId?: number | null) =>
   rpc<{ ok: boolean; error?: string; spot?: string }>('swap_roster_spot',
-    { p_league_id: leagueId, p_out_slug: outSlug, p_in_slug: inSlug });
-export const setRosterSpot = (leagueId: string, slug: string, spot: RosterSpot) =>
+    { p_league_id: leagueId, p_out_slug: outSlug, p_in_slug: inSlug, ...(rosterId != null ? { p_roster_id: rosterId } : {}) });
+export const setRosterSpot = (leagueId: string, slug: string, spot: RosterSpot, rosterId?: number | null) =>
   rpc<{ ok: boolean; error?: string; slug?: string; spot?: string }>('set_roster_spot',
-    { p_league_id: leagueId, p_slug: slug, p_spot: spot });
+    { p_league_id: leagueId, p_slug: slug, p_spot: spot, ...(rosterId != null ? { p_roster_id: rosterId } : {}) });
 /** Full classic scoring overrides (0160) — camelCase ClassicScoring keys,
  *  sanitized + clamped server-side; {} resets to the engine defaults. */
 export const setLeagueClassicScoring = (leagueId: string, scoring: Record<string, number>) =>
@@ -3510,11 +3512,18 @@ export const leagueRosterIssues = (leagueId: string) =>
 
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
-export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>
-  rpc<{ ok: boolean; error?: string }>('commish_move_player', { p_league_id: leagueId, p_slug: slug, p_to_roster: toRoster });
-/** Commissioner override: pull a player off his roster — to waivers or straight to FA. */
-export const commishRemovePlayer = (leagueId: string, slug: string, waive = true) =>
-  rpc<{ ok: boolean; error?: string }>('commish_remove_player', { p_league_id: leagueId, p_slug: slug, p_waive: waive });
+export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number, fromRoster?: number | null) =>
+  rpc<{ ok: boolean; error?: string }>('commish_move_player', { p_league_id: leagueId, p_slug: slug, p_to_roster: toRoster,
+    ...(fromRoster != null ? { p_from_roster: fromRoster } : {}) });
+/** Commissioner override: pull a player off his roster — to waivers or straight to FA. `rosterId`: whose copy (0500). */
+export const commishRemovePlayer = (leagueId: string, slug: string, waive = true, rosterId?: number | null) =>
+  rpc<{ ok: boolean; error?: string }>('commish_remove_player', { p_league_id: leagueId, p_slug: slug, p_waive: waive,
+    ...(rosterId != null ? { p_roster_id: rosterId } : {}) });
+/** COPIES OF EVERY PLAYER (0500): 1–4, set by the commissioner before the draft; locked once it starts. */
+export const setLeagueCopies = (leagueId: string, copies: number) =>
+  rpc<{ ok: boolean; error?: string; copies?: number }>('set_league_copies', { p_league_id: leagueId, p_copies: copies });
+export const leagueCopiesOf = (settings: Record<string, unknown> | null | undefined): number =>
+  Math.max(1, Math.min(4, Number(settings?.copies) || 1));
 
 /** A tradeable draft pick (0183): season + round + the seat whose slot it is. */
 export interface TradePick { season: string; round: number; orig: number; }
