@@ -22,10 +22,9 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.712.1 — Injury tags never come from last season; a lost waiver claim says why
+### v0.712.2 — Injury tags never come from last season
 
 > - Injury tags never come from last season any more: Brock Bowers and Terry McLaurin showed Out (and projected 0) on the phone from a 2025 report, though both are healthy.
-> - A waiver claim lost to a roster problem now says which one, e.g. a player on IR who isn't designated IR or Out any more.
 
 `injuryFor` falls back to the baked 2025 report when the live one isn't
 installed for the week asked. Only `setActiveLeague`/`resetToDemoLeague` move
@@ -47,14 +46,27 @@ Also: `poll/injuries.js`'s prune read now pages (`allRows`). It was the one
 `scripts/db/injury-stale-rows.sql` found 1,050 stranded NFL rows; every one
 shown is keyed by a JSON object (the v0.489.0 bug). Readers can't match those
 keys, and the prune's `.in()` delete may still choke on them: follow-up.
-0504 (#1311): `process_waivers` wrote the bare note "roster over limits" when
-the claimant's roster was illegal, and the "Waivers ran" chat line printed
-it, so a fair 1-for-1 swap (CAR for CLE Defense) lost with no reason given.
-Probe `waiver-over-limits-1311.sql`: seat 6 had David Montgomery on IR listed
-D, in a league whose IR takes IR/O. The note is now
-"roster over limits: <roster_illegal_reason>". check:txnlimits +2 (fail
-without 0504); created clean on a scratch Postgres 16.
 No iPhone build (check:ios-runtime: over the air).
+
+### v0.712.1 — A waiver claim isn't thrown out by an injury tag that changed overnight
+
+> - Fixed: a waiver claim could fail as "roster over limits" when a player you'd put on IR as Out had his injury tag change overnight, before waivers ran. Claims now go through as long as the roster is within its real limits, and a claim that does fail says exactly why.
+
+#1311 (Kickoff League, Oct 14): a 1-for-1 CAR Defense claim lost as "roster
+over limits". Ops 057 (read only): nothing on the seat moved after Oct 11, and
+every hard limit held (24/24, 21/21 active, IR 3/3, QB 3/5); the one rule
+broken was "David Montgomery is on IR but isn't designated IR/O (he's D)".
+The claim was filed at 02:42 — submit_waiver_claim requires a legal roster —
+so the tag lapsed between filing and the 08:00 run.
+
+- 0504: `roster_hard_limit_reason` = `roster_illegal_reason` without the
+  injury-designation checks; `process_waivers` (0500's) checks it and writes
+  the reason into the note (and so the chat line). A lapsed tag still blocks
+  new adds, claims and lineups until fixed.
+- `claim-tag-lapse-probes.sql` (tl1–tl4); tl3 fails on 0500's
+  process_waivers with exactly the member's "lost / roster over limits".
+- No iPhone build (SQL only).
+
 
 ### v0.712.0 — Relegation, part 2: the ladder on the app and the site
 

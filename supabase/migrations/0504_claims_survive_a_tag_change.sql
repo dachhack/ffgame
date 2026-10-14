@@ -1,15 +1,98 @@
--- 0504: A LOST WAIVER CLAIM SAYS WHICH LIMIT (#1311).
+-- 0504: A CLAIM ISN'T VOIDED BY AN INJURY TAG THAT CHANGED OVERNIGHT (#1311).
 --
--- From chat: "Any reason why [the manager's] def claim failed? Looks like it was a
--- 1 for 1 swap." It was a fair 1-for-1 swap (CAR Defense for CLE Defense);
--- the run refused it because the claimant's roster was already illegal: a
--- player on IR listed Doubtful, in a league whose IR holds IR/O only. The
--- run knew that sentence and wrote "roster over limits" instead, and the
--- chat line printed exactly that.
+-- Kickoff League, Oct 14: a 1-for-1 DEF claim lost as "roster over limits".
+-- The roster was legal when it was filed at 02:42 (submit_waiver_claim checks)
+-- and nothing on it moved before the 08:00 run; the only rule it broke was
+-- roster_illegal_reason's injury check — a player stashed on IR as Out on
+-- Sunday was tagged Doubtful by Wednesday morning, and this league's IR takes
+-- IR/O. Every claim the team had was thrown out by a feed update.
 --
--- process_waivers as 0500 left it, with one change: the note carries
--- roster_illegal_reason's own text after "roster over limits: ".
+-- The run now checks the HARD limits (roster size, active seats, the shelves'
+-- counts, taxi experience, devy spots, position caps) — roster_hard_limit_reason,
+-- roster_illegal_reason without the injury-designation checks — and writes the
+-- reason into the note. A lapsed tag still makes the roster illegal everywhere
+-- else: new adds and claims refuse, and lineups say to fix it.
 
+create or replace function roster_hard_limit_reason(p_league_id uuid, p_roster_id integer) returns text
+  language plpgsql stable security definer set search_path = public as $$
+declare d draft%rowtype; cnt int; rec record; cap int; sh jsonb; seats int; mx int; dv int;
+begin
+  select * into d from draft where league_id = p_league_id;
+  if not found or d.status <> 'complete' then return null; end if;
+  sh := _roster_shape(p_league_id);
+  dv := coalesce((sh ->> 'devy')::int, 0);
+
+  -- ── 0366: a college player outside the devy spots ──
+  -- 0440: not in a mixed league, where he may be active and start.
+  if dv > 0 and not league_is_mixed(p_league_id) then
+    select lp.full_name into rec
+      from native_roster nr join league_pool lp on lp.league_id = nr.league_id and lp.slug = nr.slug
+     where nr.league_id = p_league_id and nr.roster_id = p_roster_id
+       and nr.slug ~ '^c-[0-9]+$' and nr.spot <> 'devy'
+     order by lp.full_name limit 1;
+    if found then
+      return rec.full_name || ' is a college player outside the devy spots — move him to devy or drop him';
+    end if;
+  end if;
+
+  mx := (select nullif(settings_json -> 'taxi' ->> 'max_exp', '')::int from league where id = p_league_id);
+  if mx is not null then
+    select lp.full_name, lp.exp into rec
+      from native_roster nr join league_pool lp on lp.league_id = nr.league_id and lp.slug = nr.slug
+     where nr.league_id = p_league_id and nr.roster_id = p_roster_id and nr.spot = 'taxi' and lp.exp > mx
+     order by lp.full_name limit 1;
+    if found then
+      return rec.full_name || ' is on the taxi squad with ' || rec.exp || case when rec.exp = 1 then ' year' else ' years' end || ' (the limit is ' || mx
+        || ') — move him to your active roster or drop him';
+    end if;
+  end if;
+
+  -- ── a shelf, or the active roster, over its size ──
+  if sh <> '{}'::jsonb then
+    for rec in select s.spot, s.label from (values ('taxi', 'taxi squad'), ('ir', 'IR'), ('out', 'OUT'), ('devy', 'devy squad')) s(spot, label) loop
+      cap := coalesce((sh ->> rec.spot)::int, 0);
+      select count(*) into cnt from native_roster where league_id = p_league_id and roster_id = p_roster_id and spot = rec.spot;
+      if cnt > cap then
+        return 'the ' || rec.label || ' holds ' || cnt || ' (limit ' || cap || ') — move or drop ' || (cnt - cap);
+      end if;
+    end loop;
+  end if;
+  -- The active roster may run over its seats by the taxi spots still open: a
+  -- draft fills the taxi's share of the roster as ACTIVE players (seat-cap
+  -- probes, sc2), and they stay legal until the taxi has room they won't use.
+  -- Beyond that, there's nowhere for them to be.
+  seats := league_active_seats(p_league_id);
+  if seats is not null and sh <> '{}'::jsonb then
+    select count(*) into cnt from native_roster where league_id = p_league_id and roster_id = p_roster_id and spot = 'active';
+    cap := seats + greatest(coalesce((sh ->> 'taxi')::int, 0)
+             - (select count(*)::int from native_roster where league_id = p_league_id and roster_id = p_roster_id and spot = 'taxi'), 0);
+    if cnt > cap then
+      return 'the active roster holds ' || cnt || ' (room for ' || cap || ') — drop or stash ' || (cnt - cap);
+    end if;
+  end if;
+
+  -- ── the two it always knew ──
+  select count(*) into cnt from native_roster where league_id = p_league_id and roster_id = p_roster_id;
+  if cnt > d.rounds then
+    return 'roster holds ' || cnt || ' players (limit ' || d.rounds || ') — drop ' || (cnt - d.rounds);
+  end if;
+  for rec in
+    select lp.pos, count(*)::int as n
+    from native_roster nr join league_pool lp on lp.league_id = nr.league_id and lp.slug = nr.slug
+    where nr.league_id = p_league_id and nr.roster_id = p_roster_id
+      and (dv = 0 or nr.spot <> 'devy') group by lp.pos
+  loop
+    cap := league_pos_cap(p_league_id, rec.pos);
+    if cap is not null and rec.n > cap then
+      return 'over the ' || pos_label(rec.pos) || ' limit (' || rec.n || '/' || cap || ') — drop ' || (rec.n - cap);
+    end if;
+  end loop;
+  return null;
+end $$;
+revoke all on function roster_hard_limit_reason(uuid, integer) from public, anon;
+grant execute on function roster_hard_limit_reason(uuid, integer) to authenticated;
+
+-- process_waivers: 0500's, with the hard-limit check and its reason.
 create or replace function process_waivers(p_league_id uuid)
   returns jsonb language plpgsql security definer set search_path = public as $$
 declare
@@ -138,14 +221,13 @@ begin
       update waiver_claim set status = 'lost', note = 'active roster full', processed_at = now() where id = c.id;
       lost := lost + 1; continue;
     end if;
-    -- 0504: SAY WHICH LIMIT. The note used to be the bare words "roster over
-    -- limits", and the "Waivers ran" chat line is built from it, so a manager
-    -- whose 1-for-1 swap lost had nothing to go on (#1311: a David Montgomery
-    -- on IR while listed Doubtful, in a league whose IR takes IR/O only). The
-    -- reason roster_illegal_reason already wrote rides along with it now.
-    err := roster_illegal_reason(p_league_id, c.roster_id);
+    -- 0504: the HARD limits only, and the note says which. An injury tag that
+    -- lapsed after the claim was filed (Out on Sunday, Doubtful by the
+    -- Wednesday run) no longer voids it; it still blocks new adds, claims
+    -- and lineups until the manager fixes it.
+    err := roster_hard_limit_reason(p_league_id, c.roster_id);
     if err is not null then
-      update waiver_claim set status = 'lost', note = 'roster over limits: ' || err, processed_at = now() where id = c.id;
+      update waiver_claim set status = 'lost', note = 'roster over limits — ' || err, processed_at = now() where id = c.id;
       lost := lost + 1; continue;
     end if;
     err := pos_cap_error(p_league_id, c.roster_id, c.add_slug, false, c.drop_slug);

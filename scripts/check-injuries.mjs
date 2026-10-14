@@ -43,7 +43,7 @@ eq('live: hasLiveInjuries', hasLiveInjuries(3), true);
 eq('live: player off the report', injuryFor(3, 'josh-allen'), null);
 eq('live: detail row', injuryRowFor(3, 'christian-mccaffrey')?.comment, 'knee');
 
-// 4. Another week HOLDS the current report (v0.712.1). The feed is a snapshot
+// 4. Another week HOLDS the current report (v0.712.2). The feed is a snapshot
 //    of right now with no week in it; before this, a week it was not loaded
 //    for read nothing, or (on a board left on 2025) last season's bake.
 eq('live: another week is not covered', hasLiveInjuries(4), false);
@@ -144,7 +144,7 @@ eq('now: a newer sheet clears an old tag', injuryNow('a-guy'), null);
 eq('now: it is independent of the board\'s week-keyed cache', injuryFor(99, 'a-guy'), null);
 
 
-// ── THE PHONE'S SEASON (v0.712.1) ─────────────────────────────────────────
+// ── THE PHONE'S SEASON (v0.712.2) ─────────────────────────────────────────
 // A week-6 phone board wore 2025's week 6 (Brock Bowers and Terry McLaurin
 // "O", both healthy on every 2026 feed): the live report was installed for
 // another week, and the phone never moved the injury season off 2025.
