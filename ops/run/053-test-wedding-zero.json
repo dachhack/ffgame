@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/test-wedding-zero.sql",
+  "why": "Founder: 'Test Wedding is calculating my score as 0' (week 5, seat 1: 0.0 vs 89.4, every card 0.0). Read the league, its lineups, matchups, edits and weddings before touching anything. Read only; seats, not names."
+}
