@@ -113,7 +113,7 @@ for (const [name, t] of Object.entries(THEMES)) {
 // the bigger type never wraps ("Let's not do anything that causes wrap").
 {
   const { readFileSync } = await import('node:fs');
-  const FLOORED = ['apps/mobile/src/ui/Chat.tsx', 'apps/mobile/src/ui/PlayLog.tsx', 'apps/mobile/src/ui/LiveCard.tsx'];
+  const FLOORED = ['apps/mobile/src/ui/Chat.tsx', 'apps/mobile/src/ui/PlayLog.tsx', 'apps/mobile/src/ui/LiveCard.tsx', 'apps/mobile/src/ui/PlayerPicker.tsx', 'apps/mobile/src/screens/Draft.tsx'];
   for (const f of FLOORED) {
     const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
     const raw = [...src.matchAll(/fontSize: ([0-9]+(?:\.[0-9]+)?)[,} ]/g)].map((m) => Number(m[1])).filter((n) => n < 9);

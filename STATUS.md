@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.9 — Bigger small text in the player picker and the draft room
+
+> - The player picker's cards and the draft room (board cells, pick buttons, prices) use larger text on the phone, without wrapping; injury tags are a little larger everywhere.
+
+Founder: "keep going with the picker and draft". PlayerPicker.tsx (7) and
+Draft.tsx (7) leave raw sizes under 9. New in theme.native: fsTight(n) =
+max(n, 9), for fixed-width spots that can't take fs()'s jump (the picker
+card's header pills, the draft board's 86px cells: pos, pick no., team
+name, the empty "1.4" / "⏱ clock"), always with numberOfLines={1} +
+shrink-to-fit. Roomier text uses fs(): the picker's stat line, the 46/50px
+DRAFT/NOM buttons (shrink-to-fit, "NOM $1" included), the queue's max-bid.
+InjuryBadge takes fsTight(size), so every caller's 6–7.5 injury tag reads at
+9. Both screens join check:themes' FLOORED list. JavaScript only; no iPhone
+build.
+
 ### v0.712.8 — The live card: bigger text, and readable in light themes
 
 > - The live card's small text (game, stat line, PTS, power-up chips, the card's own labels) is larger on the phone, without wrapping.

@@ -43,7 +43,7 @@ import { InfoChip } from '../ui/InfoChip';
 import { setLeagueFlags } from '@drip/core/data/commish';
 import { setLeagueProjScoring, leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { FlagChip, InjuryNow } from '../ui/rosterGroup';
-import { useTheme, MONO } from '../theme.native';
+import { useTheme, MONO, fs, fsTight } from '../theme.native';
 import { useLeagueScroll } from '../ui/scrollChrome';
 import { tap, commit, warn } from '../ui/feedback';
 import { Card, Chip, Display, LinkButton, Mono, Notice, PosPill, PrimaryButton, ChipStrip } from '../ui/prims';
@@ -1096,7 +1096,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                 {!gone && (
                   <Pressable disabled={!can} onPress={() => { tap(); act(p.slug); }}
                     style={{ backgroundColor: can ? (assigning ? t.warn : t.you) : t.sh, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 7, width: 50, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
+                    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: can ? t.onAccent : t.faint }}>
                       {assigning ? 'ASSIGN' : capped ? 'LIMIT' : auction ? 'NOM $1' : 'DRAFT'}
                     </Text>
                   </Pressable>
@@ -1158,7 +1158,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
               {(st.order ?? []).map((rid) => (
                 <View key={rid} style={{ width: 86, gap: 4 }}>
                   <View style={{ paddingVertical: 3, alignItems: 'center' }}>
-                    <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: rid === myRoster ? t.you : t.dim }}>
+                    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(8), fontWeight: '700', color: rid === myRoster ? t.you : t.dim }}>
                       {teamName(rid) ?? `Team ${rid}`}
                     </Text>
                     {auction && st.budgets && (
@@ -1189,17 +1189,17 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                           <>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                                <Text style={{ fontFamily: MONO, fontSize: 7, fontWeight: '700', color: pc.fg }}>{pl?.pos ?? ''}</Text>
+                                <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fsTight(7), fontWeight: '700', color: pc.fg }}>{pl?.pos ?? ''}</Text>
                                 <InjuryNow slug={cell.slug} size={6} />
                               </View>
-                              <Text style={{ fontFamily: MONO, fontSize: 7, color: pc.fg, opacity: 0.8 }}>
+                              <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7), color: pc.fg, opacity: 0.8 }}>
                                 {auction ? `$${cell.price ?? 1}` : `${cell.round}.${((cell.overall - 1) % teams) + 1}`}{cell.auto ? ' 🤖' : ''}
                               </Text>
                             </View>
                             <Text numberOfLines={1} style={{ fontSize: 9.5, fontWeight: '700', color: pc.fg, marginTop: 2 }}>{last}</Text>
                           </>
                         ) : (
-                          <Text style={{ fontFamily: MONO, fontSize: 7.5, color: onClock ? t.you : t.faint, marginTop: 4 }}>
+                          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fsTight(7.5), color: onClock ? t.you : t.faint, marginTop: 4 }}>
                             {onClock ? '⏱ clock' : auction ? '—' : `${r + 1}.${r % 2 === 0 ? c + 1 : teams - c}`}
                           </Text>
                         )}
@@ -1351,7 +1351,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                     <Pressable disabled={!can} onPress={() => { tap(); act(slug); }}
                       accessibilityLabel={`${auction ? 'Nominate' : 'Draft'} ${p?.full_name ?? slug} from your queue`}
                       style={{ backgroundColor: can ? (assigning ? t.warn : t.you) : t.sh, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 5, width: 46, alignItems: 'center', opacity: can ? 1 : 0.45 }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: '700', color: can ? t.onAccent : t.faint }}>
+                      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: can ? t.onAccent : t.faint }}>
                         {assigning ? 'ASSIGN' : onBlock ? 'UP' : capped ? 'LIMIT' : auction ? 'NOM' : 'DRAFT'}
                       </Text>
                     </Pressable>
@@ -1393,7 +1393,7 @@ export function Draft({ leagueId, onBack, onOpenLeague, onDeleted }: {
                   return mkt != null && qMax[slug] !== mkt ? (
                     <Pressable hitSlop={6}
                       onPress={() => { tap(); void setQueueMax(leagueId, myRoster, slug, mkt).then((r) => { if (r.ok) { setQMax((m) => ({ ...m, [slug]: mkt })); setQMaxDraft((d2) => ({ ...d2, [slug]: '' })); } }).catch(() => {}); }}>
-                      <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: '700', color: t.dim }}>${mkt}</Text>
+                      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.dim }}>${mkt}</Text>
                     </Pressable>
                   ) : null;
                 })()}
