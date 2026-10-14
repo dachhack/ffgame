@@ -29,6 +29,10 @@ export function HelmetFace({ team, num, size, facing }: { team: string; num: num
   );
 }
 
+/** How big a helmet draws in a spot sized for a round photo (v0.713.5): 1.5×,
+ *  because the helmet is a side view with air around it, not a cropped face. */
+export const helmetSize = (photo: number) => Math.round(photo * 1.5);
+
 /** A player's helmet when helmet mode is on and his team is known, else null
  *  (the caller draws its headshot as before). */
 export function playerHelmetFace(slug: string | null | undefined, size?: number, teamHint?: string | null, opponent?: boolean): React.ReactElement | null {

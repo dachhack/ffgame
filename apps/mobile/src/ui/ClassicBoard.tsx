@@ -60,7 +60,7 @@ import { openPlayerCard } from './PlayerCardSheet';
 import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, leagueWeekProjections, type MatchupResult, type PlayerAdjustment, type WeekProjRow } from '@drip/core/data/liveApi';
 import { matchupGrade, matchupGradeLabel, MATCHUP_BAND_COLOR, MATCHUP_BAND_WORD } from '@drip/core/data/weekProj';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
-import { playerHelmetFace } from './HelmetFace';
+import { playerHelmetFace, helmetSize } from './HelmetFace';
 
 /** ── THE WEEK'S SLATE, IN THE SCOREBOARD'S DEAD SPACE (v0.312.0) ───────────
  *  Founder: "the middle of the top is super empty. Maybe have the week's game
@@ -261,7 +261,10 @@ function SlotPill({ pos, label }: { pos: string[]; label: string }) {
  *  as a new component type on every render. */
 function Face({ slug, size = 26 }: { slug: string; size?: number }) {
   const t = useTheme();
-  const helmet = playerHelmetFace(slug, size);
+  // Helmets draw 1.5× a photo's size (v0.713.5, founder: "Could probably make
+  // the helmets a bit bigger in classic"): the art is a side view with air
+  // around it, so at a photo's 24px it read small beside a three-line row.
+  const helmet = playerHelmetFace(slug, helmetSize(size));
   if (helmet) return helmet;
   const uri = headshot(slug);
   return uri

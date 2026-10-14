@@ -139,6 +139,8 @@ for (const f of ['ui/ClassicBoard.tsx', 'screens/Team.tsx', 'screens/Draft.tsx',
 // v0.713.4, founder: "Numbers on helmets for weekly contest leagues please".
 ok('contest: the phone\'s card face draws the numbered helmet, theirs facing left', /playerHelmetFace\(slug, undefined, team, !mine\)/.test(read('apps/mobile/src/ui/ContestCards.tsx')));
 ok('contest: the web\'s playing card draws it, the opponent\'s facing left', /const helmet = helmetArt\(slug, team, opp\);/.test(read('src/app/cardTable.tsx')));
+ok('app: Team and the board draw helmets 1.5× the photo size (v0.713.5)', /export const helmetSize = \(photo: number\) => Math\.round\(photo \* 1\.5\)/.test(face)
+  && ['apps/mobile/src/screens/Team.tsx', 'apps/mobile/src/ui/ClassicBoard.tsx'].every((f) => /playerHelmetFace\(slug, helmetSize\(size\)\)/.test(read(f))));
 ok('app: the tree re-renders when it flips', /onHelmetMode\(/.test(read('apps/mobile/App.tsx')));
 
 if (fails) { console.log(`\n${fails} HELMET ASSERTION(S) FAILED`); process.exit(1); }

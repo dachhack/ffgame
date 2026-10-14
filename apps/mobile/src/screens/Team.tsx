@@ -64,7 +64,7 @@ import { bullseyeCard as bullseyeCardRpc, defaultOpenWeek as openWeekRpc, wireWe
 import { onRosterChanged, notifyRosterChanged } from '@drip/core/data/rosterBus';
 import { weekTitle } from '@drip/core/data/nflSlate';
 import { normTeam } from '../../../../packages/core/src/data/teamCodes';
-import { playerHelmetFace } from '../ui/HelmetFace';
+import { playerHelmetFace, helmetSize } from '../ui/HelmetFace';
 
 /** Every spot chip is this wide, so the player column starts at the same x on
  *  every row (v0.289.0).
@@ -189,7 +189,10 @@ function KeepersCard({ leagueId, myRoster, mine }: {
 
 function Face({ slug, pos, size = 24 }: { slug: string; pos: string; size?: number }) {
   const t = useTheme();
-  const helmet = playerHelmetFace(slug, size);
+  // Helmets draw 1.5× a photo's size (v0.713.5, founder: "Could probably make
+  // the helmets a bit bigger in classic"): the art is a side view with air
+  // around it, so at a photo's 24px it read small beside a three-line row.
+  const helmet = playerHelmetFace(slug, helmetSize(size));
   if (helmet) return helmet;
   const src = headshot(slug);
   return (

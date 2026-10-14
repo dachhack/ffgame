@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.5 — Bigger helmets on the phone's team and lineup rows
+
+> - Helmets on My Team and the lineup picker are half again as big, so they read beside a player's three lines.
+
+Founder, from My Team: "Could probably make the helmets a bit bigger in
+classic". The helmet drew at the round photo's size (24px on Team, 26–30 on
+the board's setter and picker), and a side-view helmet with air around it
+reads smaller than a cropped face at the same box. New `helmetSize(photo)`
+(1.5×) in HelmetFace; Team's and ClassicBoard's Face use it in helmet mode
+only, so photos keep their size. check:helmets +1. JavaScript only; no
+iPhone build.
+
 ### v0.713.4 — Helmets face each other; numbers on contest cards; a traded player's row follows him
 
 > - In helmet mode, your helmets face right and your opponent's face left, so on a matchup the two sides face each other.
