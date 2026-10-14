@@ -29,6 +29,7 @@ import {
   type PickReadiness, type PickSide, type AdminHealth, type Controller, type LineupPolicy, type LeagueKdst, type KdstMode,
   isContestKind,
 } from '@drip/core/data/liveApi';
+import { holdersBySlug, copyOpen } from '@drip/core/data/copies';
 import { DAY_LABEL, DEFAULT_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
   waiverDaysOf, waiverDayModesFor, normalizeWaiverDays, effectiveGameHoldDow,
   holdLine, waiverConflicts, etTime, type WaiverDayMode } from '@drip/core/data/waiverDays';
@@ -865,7 +866,9 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
   const [view, setView] = useState<string>('all');
   const [dest, setDest] = useState<Record<string, string>>({});   // slug → target roster id
   /** The move/waive/cut awaiting a yes (v0.293.1). One at a time; null = none. */
-  const [ask, setAsk] = useState<null | { slug: string; name: string; act: 'move' | 'waive' | 'cut'; toRoster?: number; toName?: string; from: string }>(null);
+  const [ask, setAsk] = useState<null | { slug: string; name: string; act: 'move' | 'waive' | 'cut'; toRoster?: number; toName?: string; from: string; fromRid?: number }>(null);
+  /** COPIES (0500): how many teams may hold the same player. */
+  const [copies, setCopies] = useState(1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const load = async () => {
@@ -874,9 +877,12 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
     ]);
     setTeams(t.waiver_order ?? []); setRosters(r); setPool(p);
     setTrades(Array.isArray(tr) ? tr : []);
+    leagueGameMode(leagueId).then((g) => { if (g.ok) setCopies(g.copies ?? 1); }).catch(() => {});
   };
   useEffect(() => { load().catch((e) => setMsg(errMsg(e, 'load failed'))); /* eslint-disable-next-line */ }, [leagueId]);
-  const bySlugRoster = new Map(rosters.map((r) => [r.slug, r.roster_id]));
+  // COPIES (0500): a player can sit on several teams, so the console lists
+  // one row per copy held, and a free copy is a free agent row.
+  const held = holdersBySlug(rosters);
   const poolBySlug = new Map(pool.map((p) => [p.slug, p]));
   const teamName = (rid: number) => teams.find((t) => t.roster_id === rid)?.team ?? `Team ${rid}`;
   const playerName = (slug: string) => poolBySlug.get(slug)?.full_name ?? slug;
@@ -892,15 +898,18 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
   // waiver wire (everyone unrostered — who's actually available to move), or
   // every rostered player as before. Picking a team answers "what does this
   // manager have" without reading a league-wide list and matching names.
-  const spotOf = new Map(rosters.map((r) => [r.slug, r.spot ?? 'active']));
-  const inView = view === 'all' ? pool.filter((p) => bySlugRoster.has(p.slug))
-    : view === 'fa' ? pool.filter((p) => !bySlugRoster.has(p.slug))
-    : pool.filter((p) => bySlugRoster.get(p.slug) === Number(view));
+  const spotOf = new Map(rosters.map((r) => [`${r.roster_id}:${r.slug}`, r.spot ?? 'active']));
+  type ConsoleRow = { p: LeaguePoolPlayer; rid?: number };
+  const copyRows = (p: LeaguePoolPlayer): ConsoleRow[] => (held.get(p.slug) ?? []).map((rid) => ({ p, rid }));
+  const faRow = (p: LeaguePoolPlayer): ConsoleRow[] => (copyOpen(held, p.slug, copies) ? [{ p }] : []);
+  const inView: ConsoleRow[] = view === 'all' ? pool.flatMap(copyRows)
+    : view === 'fa' ? pool.flatMap(faRow)
+    : pool.filter((p) => (held.get(p.slug) ?? []).includes(Number(view))).map((p) => ({ p, rid: Number(view) }));
   // In the ALL view search still reaches the WHOLE pool — that was the only
   // way to find a free agent before this selector existed, and muscle memory
   // shouldn't break. Inside a team / the wire, search filters that set.
   const searched = needle
-    ? (view === 'all' ? pool : inView).filter((p) => p.full_name.toLowerCase().includes(needle))
+    ? (view === 'all' ? pool.flatMap((p) => [...copyRows(p), ...faRow(p)]) : inView).filter((x) => x.p.full_name.toLowerCase().includes(needle))
     : inView;
   const CAP = 60;
   const rows = searched.slice(0, CAP);
@@ -989,19 +998,19 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
           {searched.length > CAP && <span> · showing first {CAP} of {searched.length}</span>}
         </div>
         <div style={{ maxHeight: 380, overflowY: 'auto' }}>
-          {rows.map((p) => {
-            const rid = bySlugRoster.get(p.slug);
-            const to = dest[p.slug] ?? '';
+          {rows.map(({ p, rid }) => {
+            const key = `${rid ?? 'fa'}:${p.slug}`;
+            const to = dest[key] ?? '';
             return (
-              <div key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid var(--bd)', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.full_name} <span className="mono" style={{ ...mono, fontSize: 11, color: 'var(--faint)' }}>{p.pos} · {p.team}</span>
                 </span>
                 {/* Stash spot (taxi/IR) and any live waiver hold — the two
                     facts that decide whether a move is even sensible. */}
-                {rid != null && spotOf.get(p.slug) && spotOf.get(p.slug) !== 'active' && (
+                {rid != null && spotOf.get(`${rid}:${p.slug}`) && spotOf.get(`${rid}:${p.slug}`) !== 'active' && (
                   <span className="mono" style={{ ...mono, fontSize: 10.5, fontWeight: 700, color: 'var(--warn)', border: '1px solid var(--warn)', borderRadius: RADIUS, padding: '1px 4px' }}>
-                    {String(spotOf.get(p.slug)).toUpperCase()}
+                    {String(spotOf.get(`${rid}:${p.slug}`)).toUpperCase()}
                   </span>
                 )}
                 {rid == null && holdLeft(p.waived_until) && (
@@ -1013,10 +1022,10 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
                 <span className="mono" style={{ ...mono, fontSize: 11, fontWeight: 700, color: rid != null ? 'var(--you)' : 'var(--faint)', minWidth: 76, textAlign: 'right' }}>
                   {rid != null ? teamName(rid) : 'FREE AGENT'}
                 </span>
-                <select value={to} onChange={(e) => setDest({ ...dest, [p.slug]: e.target.value })}
+                <select value={to} onChange={(e) => setDest({ ...dest, [key]: e.target.value })}
                   className="mono" style={{ ...mono, fontSize: 12, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 6px' }}>
                   <option value="">move to…</option>
-                  {teams.filter((t) => t.roster_id !== rid).map((t) => (
+                  {teams.filter((t) => !(held.get(p.slug) ?? []).includes(t.roster_id)).map((t) => (
                     <option key={t.roster_id} value={t.roster_id}>{t.team ?? `Team ${t.roster_id}`}</option>
                   ))}
                 </select>
@@ -1026,11 +1035,11 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
                     action in the console where the person who feels it isn't the
                     person clicking — and they sat one stray click from a select
                     box you have to use to reach them. */}
-                <button onClick={() => to && setAsk({ slug: p.slug, name: p.full_name, act: 'move', toRoster: parseInt(to, 10), toName: teamName(parseInt(to, 10)), from: rid != null ? teamName(rid) : 'free agency' })}
+                <button onClick={() => to && setAsk({ slug: p.slug, name: p.full_name, act: 'move', toRoster: parseInt(to, 10), toName: teamName(parseInt(to, 10)), from: rid != null ? teamName(rid) : 'free agency', fromRid: rid })}
                   disabled={busy || !to} className="mono" style={{ ...btn(true), opacity: to ? 1 : 0.4 }}>→ move</button>
                 {rid != null && <>
-                  <button onClick={() => setAsk({ slug: p.slug, name: p.full_name, act: 'waive', from: teamName(rid) })} disabled={busy} className="mono" style={btn(false)} title="off the roster, 24h waiver hold">⏳ waive</button>
-                  <button onClick={() => setAsk({ slug: p.slug, name: p.full_name, act: 'cut', from: teamName(rid) })} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }} title="off the roster, instant free agent">✕ cut</button>
+                  <button onClick={() => setAsk({ slug: p.slug, name: p.full_name, act: 'waive', from: teamName(rid), fromRid: rid })} disabled={busy} className="mono" style={btn(false)} title="off the roster, 24h waiver hold">⏳ waive</button>
+                  <button onClick={() => setAsk({ slug: p.slug, name: p.full_name, act: 'cut', from: teamName(rid), fromRid: rid })} disabled={busy} className="mono" style={{ ...btn(false), color: 'var(--opp)' }} title="off the roster, instant free agent">✕ cut</button>
                 </>}
               </div>
             );
@@ -1079,8 +1088,8 @@ function NativeRosterTools({ leagueId }: { leagueId: string }) {
                 style={{ ...btn(ask.act === 'move'), flex: 1, padding: '9px 0', ...(ask.act === 'cut' ? { color: 'var(--opp)' } : {}) }}
                 onClick={() => {
                   const a = ask; setAsk(null);
-                  if (a.act === 'move' && a.toRoster != null) run(() => commishMovePlayer(leagueId, a.slug, a.toRoster!));
-                  else if (a.act !== 'move') run(() => commishRemovePlayer(leagueId, a.slug, a.act === 'waive'));
+                  if (a.act === 'move' && a.toRoster != null) run(() => commishMovePlayer(leagueId, a.slug, a.toRoster!, a.fromRid));
+                  else if (a.act !== 'move') run(() => commishRemovePlayer(leagueId, a.slug, a.act === 'waive', a.fromRid));
                 }}>
                 {ask.act === 'move' ? '→ move him' : ask.act === 'waive' ? '⏳ waive him' : '✕ cut him'}
               </button>

@@ -277,3 +277,4 @@ $RUN -f scripts/db/mixed-devy-probes.sql | grep -E "PROBE FAIL|ALL MIXED-DEVY PR
 $RUN -f scripts/db/autodraft-mixed-probes.sql | grep -E "PROBE FAIL|ALL AUTODRAFT-MIXED PROBES" || { echo "AUTODRAFT-MIXED PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/autodraft-default-lineup-probes.sql | grep -E "PROBE FAIL|ALL AUTODRAFT-DEFAULT-LINEUP PROBES" || { echo "AUTODRAFT-DEFAULT-LINEUP PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/season-rules-probes.sql | grep -E "PROBE FAIL|ALL SEASON-RULES PROBES" || { echo "SEASON-RULES PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/copies-probes.sql | grep -E "PROBE FAIL|ALL COPIES PROBES" || { echo "COPIES PROBES FAILED"; exit 1; }

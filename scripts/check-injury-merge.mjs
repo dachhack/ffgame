@@ -202,7 +202,7 @@ const ok = (name, cond, got) => {
     (worker.match(/\.order\('player_slug'\)/g) ?? []).length === 3
     && (api.match(/\.order\('player_slug'\)/g) ?? []).length === 2);
   ok('the hurt-in-game read pages and is ordered too', /select\('player_slug,status,designation_date,team'\)\.order\('player_slug'\)\.range/.test(worker));
-  // v0.708.5: the poller's prune read was the one left unpaged, so NFL rows
+  // v0.710.1: the poller's prune read was the one left unpaged, so NFL rows
   // past the first thousand were never pruned (Brock Bowers, cleared by both
   // feeds, stayed Out).
   const prunePoll = readFileSync(new URL('../server/src/poll/injuries.js', import.meta.url), 'utf8');

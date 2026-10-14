@@ -133,12 +133,14 @@ function PlayerCardModal({ req, onClose }: { req: PlayerCardReq; onClose: () => 
       .catch(() => { if (!dead) setNews(null); });
     Promise.all([nativeRosters(leagueId), nativeTeamState(leagueId).catch(() => null)])
       .then(async ([rows, team]) => {
-        const held = rows.find((r) => r.slug === slug);
+        // COPIES (0500): every team that holds him, mine first.
+        const rids = rows.filter((r) => r.slug === slug).map((r) => r.roster_id);
         if (dead) return;
-        setMyRoster(held && team?.my_roster_id === held.roster_id ? held.roster_id : null);
-        if (!held) { setOwner(null); return; }
-        const teams = await matchupTeams(leagueId, [held.roster_id]).catch(() => ({} as Record<number, { team_name: string }>));
-        if (!dead) setOwner(teams[held.roster_id]?.team_name ?? `Roster ${held.roster_id}`);
+        const me = team?.my_roster_id ?? null;
+        setMyRoster(me != null && rids.includes(me) ? me : null);
+        if (!rids.length) { setOwner(null); return; }
+        const teams = await matchupTeams(leagueId, rids).catch(() => ({} as Record<number, { team_name: string }>));
+        if (!dead) setOwner(rids.map((r) => teams[r]?.team_name ?? `Roster ${r}`).join(', '));
       })
       .catch(() => { if (!dead) setOwner(undefined); });
     leagueRegister(leagueId, 200)

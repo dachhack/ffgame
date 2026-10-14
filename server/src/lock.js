@@ -759,9 +759,16 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
     const noStart = new Set((flagRows ?? []).filter((f) => f.rules?.no_start === true).map((f) => f.slug));
     // TAXI/IR (0164): a stashed player can't start — the DB trigger would
     // refuse the row and take the whole autofill batch down with it.
+    // COPIES (0500): only this matchup's two teams' stashes, per team — a
+    // rival's IR copy must not bench this team's active one.
     const { data: stashedRows } = await db().from('native_roster')
-      .select('slug').eq('league_id', m.league_id).neq('spot', 'active');
-    for (const r of stashedRows ?? []) noStart.add(r.slug);
+      .select('roster_id,slug').eq('league_id', m.league_id).neq('spot', 'active')
+      .in('roster_id', [m.home_roster_id, m.away_roster_id]);
+    const stashedBy = new Map();
+    for (const r of stashedRows ?? []) {
+      if (!stashedBy.has(r.roster_id)) stashedBy.set(r.roster_id, new Set());
+      stashedBy.get(r.roster_id).add(r.slug);
+    }
     const { data: mems } = await db().from('league_membership')
       .select('sleeper_roster_id,app_user_id,enrolled,controller').eq('league_id', m.league_id)
       .in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]);
@@ -867,7 +874,7 @@ export async function materializeAutoLineups(matchupIds, iso = new Date().toISOS
       // autoLineup builds blind from the pool it's given, so give it the pool
       // MINUS the fielded players (a full AI rewrite keeps it all).
       const slugs = starters.map((s) => s.player_slug).filter(Boolean)
-        .filter((slug) => !noStart.has(slug))
+        .filter((slug) => !noStart.has(slug) && !stashedBy.get(rosterId)?.has(slug))
         .filter((slug) => !ruledOut.has(slug))
         .filter((slug) => fullRewrite || !fieldedSlugs.has(slug));
       let owned, extra;

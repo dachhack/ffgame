@@ -33,7 +33,7 @@ initNativeAnalytics();
 // the web sends `standalone` from the same seam.
 initAnalytics({ native: true });
 
-// THE PHONE PLAYS THE LIVE SEASON (v0.708.5). injuryFor falls back to the
+// THE PHONE PLAYS THE LIVE SEASON (v0.710.1). injuryFor falls back to the
 // baked 2025 report whenever the live one is not installed for the week asked
 // (another screen or the widget loaded a different week, or the read failed),
 // and only setActiveLeague / resetToDemoLeague ever move that season off 2025:

@@ -2483,7 +2483,9 @@ export const leagueLiveBuffs = (leagueId: string) =>
  *  the draft starts. `ppr` (0 | 0.5 | 1, default 1) applies in classic only. */
 export interface GameModeInfo { ok: boolean; error?: string; mode?: 'drip' | 'classic'; ppr?: number; classic_ok?: boolean; bestball?: string[]; scoring?: Record<string, number>; roster?: Record<string, number>; slots?: { pos: string[]; bb?: boolean; label?: string; teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; flags?: string[] | null; zero_pts?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null }[] | null; shape?: { bench?: number; taxi?: number; ir?: number; out?: number; devy?: number } | null; golf?: boolean; bullseye?: 'slots' | 'total' | null; bullseye_radius?: number | null; bullseye_deal?: 'shared' | 'team' | null; rounds?: number | null; positions?: string[] | null; pool_filter?: { teams?: string[] | null; min_exp?: number | null; max_exp?: number | null; level?: 'nfl' | 'college' | null; confs?: string[] | null; classes?: number[] | null } | null; can_edit?: boolean;
   /** 0426: which sport the league plays ('nfl' for every league before it) and its sport block. */
-  sport?: Sport; sport_settings?: Record<string, unknown> | null }
+  sport?: Sport; sport_settings?: Record<string, unknown> | null;
+  /** 0500/0501: copies of every player (1–4); each copy on a different team. */
+  copies?: number }
 export const setLeagueGameMode = (leagueId: string, mode: 'drip' | 'classic', ppr?: number) =>
   tracked(rpc<{ ok: boolean; error?: string; mode?: string }>('set_league_game_mode',
     { p_league_id: leagueId, p_mode: mode, p_ppr: ppr ?? null }),
@@ -2604,12 +2606,14 @@ export type RosterSpot = 'active' | 'taxi' | 'ir' | 'out' | 'devy';
 /** 0461 (#1188): one move for a FULL stash place — `outSlug` (in IR, OUT,
  *  taxi or devy) back to active and `inSlug` (active) into his place. Each
  *  half is held to set_roster_spot's rules; a refusal undoes both. */
-export const swapRosterSpot = (leagueId: string, outSlug: string, inSlug: string) =>
+// `rosterId` (0500, copies): whose copy. Left out, the server takes the caller's
+// own copy, or the only holder — every one-copy league is unchanged.
+export const swapRosterSpot = (leagueId: string, outSlug: string, inSlug: string, rosterId?: number | null) =>
   rpc<{ ok: boolean; error?: string; spot?: string }>('swap_roster_spot',
-    { p_league_id: leagueId, p_out_slug: outSlug, p_in_slug: inSlug });
-export const setRosterSpot = (leagueId: string, slug: string, spot: RosterSpot) =>
+    { p_league_id: leagueId, p_out_slug: outSlug, p_in_slug: inSlug, ...(rosterId != null ? { p_roster_id: rosterId } : {}) });
+export const setRosterSpot = (leagueId: string, slug: string, spot: RosterSpot, rosterId?: number | null) =>
   rpc<{ ok: boolean; error?: string; slug?: string; spot?: string }>('set_roster_spot',
-    { p_league_id: leagueId, p_slug: slug, p_spot: spot });
+    { p_league_id: leagueId, p_slug: slug, p_spot: spot, ...(rosterId != null ? { p_roster_id: rosterId } : {}) });
 /** Full classic scoring overrides (0160) — camelCase ClassicScoring keys,
  *  sanitized + clamped server-side; {} resets to the engine defaults. */
 export const setLeagueClassicScoring = (leagueId: string, scoring: Record<string, number>) =>
@@ -3510,11 +3514,18 @@ export const leagueRosterIssues = (leagueId: string) =>
 
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
-export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number) =>
-  rpc<{ ok: boolean; error?: string }>('commish_move_player', { p_league_id: leagueId, p_slug: slug, p_to_roster: toRoster });
-/** Commissioner override: pull a player off his roster — to waivers or straight to FA. */
-export const commishRemovePlayer = (leagueId: string, slug: string, waive = true) =>
-  rpc<{ ok: boolean; error?: string }>('commish_remove_player', { p_league_id: leagueId, p_slug: slug, p_waive: waive });
+export const commishMovePlayer = (leagueId: string, slug: string, toRoster: number, fromRoster?: number | null) =>
+  rpc<{ ok: boolean; error?: string }>('commish_move_player', { p_league_id: leagueId, p_slug: slug, p_to_roster: toRoster,
+    ...(fromRoster != null ? { p_from_roster: fromRoster } : {}) });
+/** Commissioner override: pull a player off his roster — to waivers or straight to FA. `rosterId`: whose copy (0500). */
+export const commishRemovePlayer = (leagueId: string, slug: string, waive = true, rosterId?: number | null) =>
+  rpc<{ ok: boolean; error?: string }>('commish_remove_player', { p_league_id: leagueId, p_slug: slug, p_waive: waive,
+    ...(rosterId != null ? { p_roster_id: rosterId } : {}) });
+/** COPIES OF EVERY PLAYER (0500): 1–4, set by the commissioner before the draft; locked once it starts. */
+export const setLeagueCopies = (leagueId: string, copies: number) =>
+  rpc<{ ok: boolean; error?: string; copies?: number }>('set_league_copies', { p_league_id: leagueId, p_copies: copies });
+export const leagueCopiesOf = (settings: Record<string, unknown> | null | undefined): number =>
+  Math.max(1, Math.min(4, Number(settings?.copies) || 1));
 
 /** A tradeable draft pick (0183): season + round + the seat whose slot it is. */
 export interface TradePick { season: string; round: number; orig: number; }
@@ -4807,6 +4818,8 @@ export interface DraftState {
    *  above is already net of them; this is here so a screen can SAY why the
    *  roster is bigger than the draft. */
   stash_slots?: number;
+  /** 0501: copies of every player the league runs (1–4). */
+  copies?: number;
 }
 export const draftState = (leagueId: string) => rpc<DraftState>('draft_state', { p_league_id: leagueId });
 /** Change the number of teams before the draft (0458): grow adds open seats;

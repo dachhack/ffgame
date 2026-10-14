@@ -22,7 +22,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.708.5 — No more last season's injury tags on the phone
+### v0.710.1 — Injury tags never come from last season
 
 > - Injury tags never come from last season any more: Brock Bowers and Terry McLaurin showed Out (and projected 0) on the phone from a 2025 report, though both are healthy.
 
@@ -47,6 +47,66 @@ Also: `poll/injuries.js`'s prune read now pages (`allRows`). It was the one
 shown is keyed by a JSON object (the v0.489.0 bug). Readers can't match those
 keys, and the prune's `.in()` delete may still choke on them: follow-up.
 No iPhone build (check:ios-runtime: over the air).
+
+### v0.710.0 — Copies of every player, part 2: the apps
+
+> - Commissioners can now set COPIES (1 to 4) in draft setup on the app and the site: with 2, two different teams can each draft or add the same player. Set before the draft; it locks once the draft starts.
+> - In a copies league, the waiver wire, draft board and player cards show every team that holds a player and how many copies are left.
+
+Part 2 of the founder's copies ask (0500 was the database).
+
+- 0501: `draft_state` and `league_game_mode` carry `copies`.
+- core `data/copies.ts`: `holdersBySlug`, `copyOpen`, `copiesLeft`,
+  `holderFor`, `boardStashSets` — one rule for both apps; one copy answers
+  exactly as the old one-owner maps (pinned by `check:copies`, in parity).
+- Web + app: COPIES chips (ⓘ) in draft setup (hidden for auction/contracts);
+  draft "taken" = every copy drafted or I hold one; wire shows a held
+  player with a copy left as an ADD and names every holder with "n/m left";
+  player cards list every holder; trade composer picks the holder in the
+  deal; commish roster console lists one row per copy and names the team on
+  move/waive/cut; taxi/IR moves name the team being edited; matchup board
+  stash sets only read the two teams on it, my copy first.
+- Worker: `seatWire` takes a held player off the wire only once every copy
+  is held, and never offers a seat a second copy; `lock.js` autofill reads
+  taxi/IR per team.
+- No iPhone build (JavaScript and SQL only). Next: part 3, stacking.
+
+### v0.709.0 — Copies of every player, part 1: the database
+
+> - Groundwork for a new league option: up to 4 copies of every player, so up to 4 different teams can roster the same player. The commissioner's setting arrives on the app and the site in the next release; every league today stays at one copy and plays exactly as before.
+
+Founder: "Let's build multiple copies of all players as an option. 1-4
+copies." Decided with the founder: different teams first (one team stacking
+copies is a commissioner option, next); set before the draft, locked once it
+starts; a copies league leaves out — for now — contracts/salary cap, college
+players (devy), guillotine, vampire, shotgun wedding and auction drafts.
+
+**0500** (≈3,000 lines, mostly copied bodies):
+- native_roster's key (league, player) → (league, team, player) + a
+  (league, player) index; keeper_pick follows (each team keeps its own copy)
+  with its foreign key on the new key.
+- `league_copies`, `_copy_open(league, player, team)` ("a copy left, and not
+  one this team holds" — with one copy, exactly "nobody owns him"),
+  `_copy_refusal` (the old words in a one-copy league), `_copy_holder`.
+- `set_league_copies` (commissioner, before the draft; refuses the left-out
+  features and auctions); `_copies_conflict` in the league backstop trigger
+  refuses a NEW combination either way round; `_start_draft_now` refuses an
+  auction with copies and counts copies left to fill the draft.
+- 28 functions re-pointed at copies (draft pick/autopick/queue ×7, edit pick,
+  add/claim/waiver run, holds ×4, undo blocker, trades ×4 with "the receiver
+  already holds him", trade_cap_error counting each player once,
+  set_trade_signal, api_players (+roster_ids), adjustments, convert).
+- set_roster_spot / swap_roster_spot / commish_move_player /
+  commish_remove_player take the team (old signatures dropped; without it:
+  the caller's own copy, else the only holder, else "say which team");
+  the stash trigger reads the lineup's own team's copy; api_write too.
+Found by a full map of one-owner assumptions (≈80 functions); the ones in
+left-out features stay single-owner and are unreachable with copies.
+Probes: **copies-probes** (cp1–cp6) — and all 171 existing suites pass
+unchanged on the new key, which is the one-copy guarantee. liveApi gains
+`setLeagueCopies`, `leagueCopiesOf`, and an optional team on the four calls.
+Next: the apps (setting, draft board, wire, trade composer, player card,
+commish tools) and the worker (AI seats' wire, the no-start set). No iPhone build.
 
 ### v0.708.4 — Notifications, part 4: drip coin
 

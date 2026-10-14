@@ -11,6 +11,7 @@ import {
   type GuillotineState, type VampireState, type VampireChair,
   type LeaguePoolPlayer, type PlayoffState, type StandingsRow, type LeagueContracts,
 } from '@drip/core/data/liveApi';
+import { holdersBySlug, copyOpen } from '@drip/core/data/copies';
 import { useTheme, MONO, fs } from '../theme.native';
 import { tap, commit, warn } from './feedback';
 import { Card, Chip, Mono, PosPill, PrimaryButton } from './prims';
@@ -879,9 +880,11 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const [moveFor, setMoveFor] = useState<LeaguePoolPlayer | null>(null);
+  const [moveFor, setMoveFor] = useState<{ p: LeaguePoolPlayer; rid?: number } | null>(null);
   /** The move/waive/cut awaiting a yes (v0.293.1). One at a time; null = none. */
-  const [ask, setAsk] = useState<null | { p: LeaguePoolPlayer; act: 'move' | 'waive' | 'cut'; toRoster?: number; toName?: string; from: string }>(null);
+  const [ask, setAsk] = useState<null | { p: LeaguePoolPlayer; act: 'move' | 'waive' | 'cut'; toRoster?: number; toName?: string; from: string; fromRid?: number }>(null);
+  /** COPIES (0500): how many teams may hold the same player. */
+  const [copies, setCopies] = useState(1);
   /** 'all' = everyone rostered · 'fa' = the waiver wire · a roster id = one team. */
   const [view, setView] = useState<'all' | 'fa' | number>('all');
 
@@ -892,10 +895,12 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
     ]);
     setPool(p); setRosters(r);
     setTeams(new Map(s.map((row) => [row.roster_id, row.team ?? `Roster ${row.roster_id}`])));
+    gameModeRpc(leagueId).then((g) => { if (g.ok) setCopies(g.copies ?? 1); }).catch(() => {});
   };
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leagueId]);
 
-  const bySlug = useMemo(() => new Map(rosters.map((r) => [r.slug, r.roster_id])), [rosters]);
+  // COPIES (0500): one row per copy held; a free copy is a free agent row.
+  const held = useMemo(() => holdersBySlug(rosters), [rosters]);
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
     if (busy) return;
@@ -918,17 +923,16 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
   // before this selector existed and muscle memory shouldn't break. Inside a
   // team or the wire it filters that set instead.
   const needle = q.trim().toLowerCase();
-  const inView = (p: LeaguePoolPlayer) => {
-    const rid = bySlug.get(p.slug);
-    if (view === 'all') return needle ? true : rid != null;
-    if (view === 'fa') return rid == null;
-    return rid === view;
-  };
+  const copyRows = (p: LeaguePoolPlayer) => (held.get(p.slug) ?? []).map((rid) => ({ p, rid: rid as number | undefined }));
+  const faRow = (p: LeaguePoolPlayer) => (copyOpen(held, p.slug, copies) ? [{ p, rid: undefined as number | undefined }] : []);
   const rows = pool
-    .filter((p) => inView(p) && (!needle || p.full_name.toLowerCase().includes(needle)))
+    .filter((p) => !needle || p.full_name.toLowerCase().includes(needle))
+    .flatMap((p) => view === 'all' ? (needle ? [...copyRows(p), ...faRow(p)] : copyRows(p))
+      : view === 'fa' ? faRow(p)
+      : copyRows(p).filter((x) => x.rid === view))
     .slice(0, 40);
-  const rosteredCount = pool.filter((p) => bySlug.has(p.slug)).length;
-  const faCount = pool.length - rosteredCount;
+  const rosteredCount = pool.filter((p) => held.has(p.slug)).length;
+  const faCount = pool.filter((p) => copyOpen(held, p.slug, copies)).length;
   const teamIds = [...new Set(rosters.map((r) => r.roster_id))].sort((a, b) => a - b);
 
   return (
@@ -945,7 +949,7 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
       <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>
         {view === 'all' ? `${rosteredCount} rostered across the league · search reaches free agents too`
           : view === 'fa' ? `${faCount} available — nobody's roster`
-          : `${pool.filter((p) => bySlug.get(p.slug) === view).length} on ${teams.get(view as number) ?? `roster ${view}`}`}
+          : `${pool.filter((p) => (held.get(p.slug) ?? []).includes(view as number)).length} on ${teams.get(view as number) ?? `roster ${view}`}`}
       </Mono>
       <TextInput value={q} onChangeText={setQ}
         placeholder={view === 'all' ? 'Search the whole pool (free agents too)…' : 'Search this list…'}
@@ -959,10 +963,9 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
             : 'This team has no players yet.'}
         </Mono>
       )}
-      {rows.map((p) => {
-        const rid = bySlug.get(p.slug);
+      {rows.map(({ p, rid }) => {
         return (
-          <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+          <View key={`${rid ?? 'fa'}:${p.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
             <PosPill pos={p.pos} size={8} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={{ fontSize: fs(12), color: t.text }}>{p.full_name}</Text>
@@ -974,11 +977,11 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
                 two unlabelled glyphs, side by side, taking a player off SOMEBODY
                 ELSE'S roster with no way back. The move picker already asked
                 "to whom", which is not the same as asking "are you sure". */}
-            <Chip label="⇄ MOVE" onPress={() => { tap(); setMoveFor(p); }} />
+            <Chip label="⇄ MOVE" onPress={() => { tap(); setMoveFor({ p, rid }); }} />
             {rid != null && (
               <>
-                <Chip label="⏳" onPress={() => { tap(); setAsk({ p, act: 'waive', from: teams.get(rid) ?? `Roster ${rid}` }); }} />
-                <Chip label="✂" onPress={() => { tap(); setAsk({ p, act: 'cut', from: teams.get(rid) ?? `Roster ${rid}` }); }} />
+                <Chip label="⏳" onPress={() => { tap(); setAsk({ p, act: 'waive', from: teams.get(rid) ?? `Roster ${rid}`, fromRid: rid }); }} />
+                <Chip label="✂" onPress={() => { tap(); setAsk({ p, act: 'cut', from: teams.get(rid) ?? `Roster ${rid}`, fromRid: rid }); }} />
               </>
             )}
           </View>
@@ -988,12 +991,12 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
         ⇄ move puts a player on any roster (clears waiver holds; position limits bypassed, roster size still enforced). ⏳ waives with the 24h claim hold; ✂ cuts straight to free agency.
       </Mono>
 
-      <Overlay visible={!!moveFor} title={moveFor ? `Move ${moveFor.full_name} to…` : ''} onClose={() => setMoveFor(null)}>
-        {[...teams.entries()].map(([rid, name]) => (
+      <Overlay visible={!!moveFor} title={moveFor ? `Move ${moveFor.p.full_name} to…` : ''} onClose={() => setMoveFor(null)}>
+        {[...teams.entries()].filter(([rid]) => !moveFor || !(held.get(moveFor.p.slug) ?? []).includes(rid)).map(([rid, name]) => (
           <Pressable key={rid} disabled={busy}
             onPress={() => {
-              const p = moveFor; setMoveFor(null);
-              if (p) setAsk({ p, act: 'move', toRoster: rid, toName: name, from: bySlug.get(p.slug) != null ? (teams.get(bySlug.get(p.slug)!) ?? 'their team') : 'free agency' });
+              const m = moveFor; setMoveFor(null);
+              if (m) setAsk({ p: m.p, act: 'move', toRoster: rid, toName: name, from: m.rid != null ? (teams.get(m.rid) ?? 'their team') : 'free agency', fromRid: m.rid });
             }}
             style={{ paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
             <Text style={{ fontFamily: MONO, fontSize: fs(12.5), fontWeight: '700', color: t.you }}>{name}</Text>
@@ -1032,8 +1035,8 @@ export function CommishPlayers({ leagueId, onChanged }: { leagueId: string; onCh
               onPress={() => {
                 const a = ask; setAsk(null);
                 if (!a) return;
-                if (a.act === 'move' && a.toRoster != null) void run(() => commishMovePlayer(leagueId, a.p.slug, a.toRoster!), `${a.p.full_name} → ${a.toName}`);
-                else if (a.act !== 'move') void run(() => commishRemovePlayer(leagueId, a.p.slug, a.act === 'waive'), `${a.p.full_name} → ${a.act === 'waive' ? 'waivers (24h)' : 'free agent'}`);
+                if (a.act === 'move' && a.toRoster != null) void run(() => commishMovePlayer(leagueId, a.p.slug, a.toRoster!, a.fromRid), `${a.p.full_name} → ${a.toName}`);
+                else if (a.act !== 'move') void run(() => commishRemovePlayer(leagueId, a.p.slug, a.act === 'waive', a.fromRid), `${a.p.full_name} → ${a.act === 'waive' ? 'waivers (24h)' : 'free agent'}`);
               }}
               style={{ flex: 1, borderWidth: 1, borderColor: ask?.act === 'cut' ? t.opp : t.you, borderRadius: 6, paddingVertical: 11, alignItems: 'center', opacity: busy ? 0.5 : 1 }}>
               <Mono size={10} weight="700" tone={ask?.act === 'cut' ? 'opp' : 'you'}>

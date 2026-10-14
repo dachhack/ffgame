@@ -52,7 +52,7 @@ export function setInjurySeason(year: number): void {
 // live-plays and game-feed overlays (`setLivePlays` / `clearLivePlays`), loaded
 // once per league open and cleared on exit.
 //
-// KEYED TO ONE WEEK, but no longer silent outside it (v0.708.5). The feed is a
+// KEYED TO ONE WEEK, but no longer silent outside it (v0.710.1). The feed is a
 // snapshot of the designations standing right now; it carries no week and
 // keeps no history. Asked about a week it was not loaded for, it holds that
 // current snapshot (heldRows below) rather than answering with nothing or,
@@ -126,7 +126,7 @@ export function injuryRowFor(week: number, slug: string): InjuryRow | null {
   return heldRows()?.[slug] ?? null;
 }
 
-// HOLD THE CURRENT REPORT, NEVER LAST SEASON'S (v0.708.5). Founder: "I don't
+// HOLD THE CURRENT REPORT, NEVER LAST SEASON'S (v0.710.1). Founder: "I don't
 // think it ever makes sense to do the fall back to previous season. Maybe just
 // hold the current value." A week-6 phone board whose live report had been
 // installed for another week fell through to the baked 2025 week 6 and wore
