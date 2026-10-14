@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.708.4 — Notifications, part 4: drip coin
+
+> - Drip coin earned comes as a notification: how much, for what ("built your squad, a loss"), and your new wallet.
+> - The evening before the week's first kickoff, a weekly squad league tells you when your wallet covers a play you haven't made, and names the best one you can afford.
+
+Part 4 of 4 (the `coin` switch). Worker `push.js` `detectCoin`:
+`coinEarnedRows` groups new positive `coin_ledger` rows (not the seed) per
+team into one push with the reasons (`coinReasonWord`) and the wallet; a
+high-water mark set to the newest row when the worker starts (no backfill),
+a batch under 90 s old waits a sweep, and quiet hours hold it until 9 AM ET.
+`coinAffordRow`: coin-on squad leagues, 8 PM ET the evening before the
+week's first kickoff, a human seat with no `contest_play` this week whose
+wallet covers an offered play (`contestPlaysFor`, plays_off honoured).
+Tests: push-season (+5). The notification arc is complete — HANDOFF's top
+section. No iPhone build.
+
 ### v0.708.3 — Notifications per league, and overall
 
 > - Each league's Alerts now has its own switches: mute the whole league, or turn off any type just for that league. They follow your account, so they hold on every device.

@@ -24,7 +24,7 @@
 //             took your team, or a vampire fed on you. Both are rare and
 //             high-stakes, and both had only ever been a banner you had to
 //             open the app to find.
-import { contestConfigOf } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestPlaysFor, coinReasonWord } from '../../packages/core/src/engine/contest.ts';
 import { pushKindOn, plainText, leagueKindOn, pushAllowed } from '../../packages/core/src/data/pushKinds.ts';
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
@@ -1187,6 +1187,113 @@ async function detectBigPlays() {
   await enqueue(rows);
 }
 
+// ── DRIP COIN (v0.708.4) ─────────────────────────────────────────────────────
+// Part 4 of the founder's notification list (the coin switch): coin earned,
+// and a wallet that can afford a play the evening before the week locks.
+//   • earned: new positive coin_ledger rows (not the starting seed), one push
+//     per team per settle batch with the reasons and the new wallet. A high-
+//     water mark in the worker, set to the newest row when it starts, so a
+//     deploy never announces the past; a batch still landing (under 90 s old)
+//     waits for the next sweep, and nothing goes out between 9 PM and 9 AM ET.
+//   • afford: a coin squad league, 8 PM ET the evening before the week's first
+//     kickoff, a human seat that has played nothing this week and can afford
+//     an offered play — named, the dearest the wallet covers.
+/** PURE: ◎ earned — rows grouped per team. */
+export function coinEarnedRows(rows, wallets, leagueNames, owners, reasonWord) {
+  const by = new Map();
+  for (const r of rows) {
+    if (!(Number(r.delta) > 0) || r.reason === 'seed') continue;
+    const k = `${r.league_id}:${r.roster_id}`;
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(r);
+  }
+  const out = [];
+  for (const [k, rs] of by) {
+    const uid = owners.get(k);
+    if (!uid) continue;
+    const [lid] = k.split(':');
+    const total = rs.reduce((a, r) => a + Number(r.delta), 0);
+    const why = [...new Set(rs.map((r) => reasonWord(r.reason)))].slice(0, 3).join(', ');
+    const wallet = wallets.get(k);
+    out.push({
+      app_user_id: uid, kind: 'coin',
+      title: `◎${Math.round(total)} earned in ${leagueNames.get(lid) ?? 'your league'}`,
+      body: `${why}${wallet != null ? ` · wallet ◎${Math.round(Number(wallet))}` : ''}.`,
+      data: { league_id: lid, open: 'league' },
+      dedupe_key: `coin:earned:${k}:${Math.max(...rs.map((r) => Number(r.id)))}`,
+    });
+  }
+  return out;
+}
+/** PURE: ◎ can afford a play — one seat. `offered` is the league's plays [{ name, price }]. */
+export function coinAffordRow(league, week, rid, uid, wallet, offered, played, firstKick, now) {
+  if (played || now < nightBeforeMs(firstKick) || now >= firstKick) return null;
+  const can = offered.filter((p) => p.price <= wallet).sort((a, b) => b.price - a.price);
+  if (!can.length) return null;
+  return {
+    app_user_id: uid, kind: 'coin',
+    title: `◎${Math.round(wallet)} to spend in ${league.name}`,
+    body: `Enough for ${can[0].name} (◎${can[0].price})${can.length > 1 ? ` and ${can.length - 1} more` : ''}. Plays go in before ${etLabel(firstKick)} ET.`,
+    data: { league_id: league.id, open: 'league', roster_id: rid },
+    dedupe_key: `coin:afford:${league.id}:${week}:${rid}:${uid}`,
+  };
+}
+
+let coinHigh = null;   // the ledger's high-water mark (null until the first sweep reads it)
+async function detectCoin() {
+  const now = Date.now();
+  if (coinHigh == null) {
+    const { data: top } = await db().from('coin_ledger').select('id').order('id', { ascending: false }).limit(1);
+    coinHigh = Number(top?.[0]?.id ?? 0);
+  } else if (!quietHours(now)) {
+    const { data: fresh } = await db().from('coin_ledger').select('id, league_id, roster_id, delta, reason, created_at')
+      .gt('id', coinHigh).order('id').limit(2000);
+    const ready = [];
+    for (const r of fresh ?? []) { if (now - Date.parse(r.created_at) < 90_000) break; ready.push(r); }
+    if (ready.length) {
+      coinHigh = Number(ready[ready.length - 1].id);
+      const pairs = [...new Set(ready.map((r) => `${r.league_id}:${r.roster_id}`))].map((k) => { const [l, r] = k.split(':'); return [l, Number(r)]; });
+      const owners = await ownersFor(pairs);
+      const lids = [...new Set(pairs.map(([l]) => l))];
+      const [{ data: lgs }, { data: ws }] = await Promise.all([
+        db().from('league').select('id, name').in('id', lids),
+        db().from('team_wallet').select('league_id, roster_id, coins').in('league_id', lids),
+      ]);
+      const rows = coinEarnedRows(ready, new Map((ws ?? []).map((w) => [`${w.league_id}:${w.roster_id}`, w.coins])),
+        new Map((lgs ?? []).map((l) => [l.id, l.name])), owners, coinReasonWord);
+      if (rows.length) log(`coin earned: ${rows.length} push${rows.length === 1 ? '' : 'es'}`);
+      await enqueue(rows);
+    }
+  }
+  // ◎ can afford a play — only in the evening before the week's first kickoff.
+  const wk = await upcomingWeek(now);
+  if (!wk) return;
+  const firstKick = Math.min(...wk.kicks.values());
+  if (!Number.isFinite(firstKick) || now < nightBeforeMs(firstKick) || now >= firstKick) return;
+  const { data: leagues } = await db().from('league').select('id, name, kind, contest_week, settings_json').in('kind', ['dfs', 'bullseye']).eq('season', wk.season);
+  const rows = [];
+  for (const lg of (leagues ?? []).filter((l) => l.settings_json?.coin === true && (l.contest_week == null || Number(l.contest_week) === wk.week))) {
+    const cfg = contestConfigOf(lg.settings_json, lg.kind);
+    if (!cfg) continue;
+    const offered = contestPlaysFor(cfg.format, cfg.contest, Array.isArray(lg.settings_json?.plays_off) ? lg.settings_json.plays_off : []).map((d) => ({ name: d.name, price: d.price }));
+    if (!offered.length) continue;
+    const [{ data: mem }, { data: ws }, { data: played }] = await Promise.all([
+      db().from('league_membership').select('sleeper_roster_id, app_user_id, controller').eq('league_id', lg.id).eq('enrolled', true),
+      db().from('team_wallet').select('roster_id, coins').eq('league_id', lg.id),
+      db().from('contest_play').select('roster_id').eq('league_id', lg.id).eq('week', wk.week),
+    ]);
+    const wallet = new Map((ws ?? []).map((w) => [w.roster_id, Number(w.coins)]));
+    const hasPlay = new Set((played ?? []).map((p) => p.roster_id));
+    for (const m of mem ?? []) {
+      if (!m.app_user_id || m.controller === 'ai') continue;
+      const row = coinAffordRow(lg, wk.week, m.sleeper_roster_id, m.app_user_id, wallet.get(m.sleeper_roster_id) ?? 0, offered, hasPlay.has(m.sleeper_roster_id), firstKick, now);
+      if (row) rows.push(row);
+    }
+  }
+  if (rows.length) log(`coin afford: ${rows.length} push${rows.length === 1 ? '' : 'es'}`);
+  await enqueue(rows);
+}
+
 async function detectContestLock() {
   const { data: slate } = await db().from('nfl_slate').select('season, week, kickoff').not('kickoff', 'is', null);
   const now = Date.now();
@@ -1448,6 +1555,7 @@ export async function sweepPush() {
   await detectRosterQc().catch((e) => log('lineup check detector error', e.message));
   await detectTimingAndResults().catch((e) => log('timing & results detector error', e.message));
   await detectBigPlays().catch((e) => log('big plays detector error', e.message));
+  await detectCoin().catch((e) => log('coin detector error', e.message));
   try { await detectWidget(); } catch (e) { log('detectWidget', e.message); }
   await detectChopped().catch((e) => log('chopped detector error', e.message));
   await detectBitten().catch((e) => log('bitten detector error', e.message));

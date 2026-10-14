@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-13 · Build `v0.707.0` · migrations through `0499` (next `0500`) · ops errands through `052` (next `053`)_
+_Last updated: 2026-10-14 · Build `v0.708.4` · migrations through `0499` (next `0500`) · ops errands through `052` (next `053`)_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -8,6 +8,55 @@ _Last updated: 2026-10-13 · Build `v0.707.0` · migrations through `0499` (next
 > behind it, newest section first. Everything below the v0.375.3 section's
 > design decisions still hold, but only the kickoff prompt's pick-up list is
 > current.
+
+## The notifications arc (v0.707.1 → v0.708.4, Oct 13–14)
+
+One session on branch `ccr-ac0010ae-38nbja`, PRs #1293–#1306, everything
+squash-merged and deployed. `STATUS.md` has the per-version reasoning.
+
+### Where things stand
+
+- **Notifications, all four parts live** (founder: "Let's do them all but
+  work through tuning and turn off/on options for each"):
+  - One list of types, `packages/core/src/data/pushKinds.ts` (label, ⓘ
+    line, default), read by the phone (`SettingsModal` `PushPrefs`), the web
+    (`NativeLeague` `NotifPrefsCard`) and the sender (`push.js` `flush`,
+    `pushAllowed`). bigplay/oppplay default OFF; the rest on.
+  - **0498** widened `push_outbox_kind_check` and `_sanitize_push_prefs` —
+    a new type needs BOTH or its pushes are rejected and its switch stripped.
+    **0499** `league_push_pref`: per-league switches (`muted` + per type),
+    per account; a push carrying `data.league_id` must pass device AND league.
+  - Detectors in `server/src/push.js` (pure row builders, tested in
+    `server/test/push-season.mjs`, 58 assertions): `detectSeasonStatus` 🚑,
+    `detectRosterQc` (night before 8 PM ET + 90 min before kick),
+    `detectTimingAndResults` (waiver run eve, trade-deadline week, contract
+    lock, finals from week 6, Monday sweat; quiet 9 PM–9 AM ET),
+    `detectBigPlays` (live TDs + 20+ yd, ≤3/player/game, roll-ups, opt-in
+    only, `game_feed` state guards replays), `detectCoin` (earned, high-water
+    mark; can-afford-a-play the evening before).
+  - **No icons** (founder): `plainText` strips emoji at `flush`, so no writer
+    can put one beside the app icon; settings labels are plain words.
+  - Not built: keeper deadline (no such thing in the app), clinched /
+    eliminated (no clinch math). A tap opens the app, not the screen — no
+    host routes `data.open` yet.
+- **The scratch runner runs whole again (171 suites, v0.707.6).** It had
+  stopped at its first suite since 0422. Running it end to end found two real
+  bugs, both fixed: **0497** add limits (0487 had dropped `add_limit_reason`
+  from all three add paths) and **0496** practice rooms from keeper leagues
+  with a taxi squad.
+- Smaller, all live: the "you" tags gone; lower-wins verdict on the leagues
+  list (0495); no college-week contest lock pushes; 🗂 archive chip beside
+  ADD (phone + web); GET THE APP under fields on mobile web; the wedding
+  congratulations banner; the wire shows opponents ("vs LV"/"@ DEN"/BYE);
+  equal-size league boxes on desktop.
+
+### What to watch first next session
+
+1. Tonight's (Wed Oct 14, 8 PM ET) first lineup check and coin "afford"
+   pushes for Thursday's game; the waiver-run eve pushes.
+2. Sunday: big plays for anyone who switched them on; the 90-minute checks.
+3. Monday night: the sweat; Tuesday: finals (from week 6) and coin earned.
+4. The push log (`push_outbox`) for errors on the new kinds.
 
 ## The contest-week live-fire arc (v0.699.2 → v0.707.0, Oct 12–13)
 
