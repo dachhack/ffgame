@@ -25,6 +25,35 @@ Output (committed):
 
 `scripts/helmets/preview/sheet.png` (ignored) shows every helmet with sample numbers. Check it after any change.
 
+## AI helmet art (named helmets)
+
+The named helmets use AI-drawn art with the lettering painted in. The template above is only a fallback.
+
+```
+npm run import:helmets   # source/ → ai/ (ignored), check preview/ai-sheet.png
+npm run gen:helmets      # ai/ + template → public/helmets/
+```
+
+| File | What it is |
+| --- | --- |
+| `source/ai-left/h1–h8.jpg` | Gemini sheets, four left-facing helmets each, in the team order in `ai-helmets.json` |
+| `source/ai-right/` | Right-facing helmets (h1–h8 here are ChatGPT redraws of the left sheets): `{ABBR}.png` for one helmet, or `hN.png` for a whole sheet in `hN`'s team order |
+| `ai-helmets.json` | Sheet → team mapping, and `mirrorOk`: teams whose right-facing helmet can be made by mirroring |
+| `import-sheets.mjs` | Cuts helmets out, removes the white background, frames them like `template.png` |
+
+Where each right-facing helmet comes from, in order:
+
+1. `source/ai-right/{ABBR}.*`
+2. `source/ai-right/hN.*`
+3. Mirroring, for `mirrorOk` teams only. The script lifts the lettering off, paints the shell back, mirrors the helmet and puts the lettering back unmirrored. This breaks on dark, patterned or low-contrast shells, so only teams that came out clean are listed.
+4. Otherwise the template helmet, with a warning from `gen-helmets`.
+
+Once a team's AI right-facing helmet is in `source/ai-right/`, it wins over mirroring automatically.
+
+Prompt for right-facing sheets (works in ChatGPT and Gemini):
+
+> Redraw this exact image with every helmet facing RIGHT (face mask on the right). Keep each helmet's colors, stripes, face mask, shading and lettering identical, and keep all text reading normally left to right, not mirrored. Same layout, same size, plain white background.
+
 ## Variants
 
 - **named**: abbreviation + nickname ("KC / CHIEFS").

@@ -1,0 +1,14 @@
+{
+  "_": "AI helmet art, read by import-sheets.mjs. Each left sheet holds four left-facing helmets, read left to right, top row first. A right-facing helmet comes from source/ai-right/{ABBR}.png|jpg, else from a right sheet source/ai-right/hN.png|jpg with the same team order as hN, else (for teams in mirrorOk only) by mirroring the left helmet and putting its lettering back unmirrored.",
+  "sheets": [
+    { "file": "h1", "teams": ["ARI", "ATL", "BAL", "BUF"] },
+    { "file": "h2", "teams": ["CAR", "CHI", "CIN", "CLE"] },
+    { "file": "h3", "teams": ["DAL", "DEN", "DET", "GB"] },
+    { "file": "h4", "teams": ["HOU", "IND", "JAX", "KC"] },
+    { "file": "h5", "teams": ["LV", "LAC", "LAR", "MIA"] },
+    { "file": "h6", "teams": ["MIN", "NE", "NO", "NYG"] },
+    { "file": "h7", "teams": ["SEA", "TB", "TEN", "WAS"] },
+    { "file": "h8", "teams": ["NYJ", "PHI", "PIT", "SF"] }
+  ],
+  "mirrorOk": ["CLE", "DAL", "DET", "GB", "IND", "KC", "LV", "LAC", "NE", "NO", "NYJ", "SF", "TEN", "WAS"]
+}
