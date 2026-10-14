@@ -1,6 +1,6 @@
 # Drip League FF — Session Handoff
 
-_Last updated: 2026-10-14 · Build `v0.711.0` · migrations through `0502` (next `0503`) · ops errands through `052` (next `053`)_
+_Last updated: 2026-10-14 · Build `v0.712.0` · migrations through `0503` (next `0504`) · ops errands through `052` (next `053`)_
 
 > **Read `docs/next-session-prompt.md` first** — it is the current, complete
 > kickoff: hosts, discipline, the battery, the APK ritual, this environment's
@@ -29,8 +29,11 @@ customizable relegation system … usually used for large leagues."
   Founder's picks: tiers of linked leagues; methods W-L standings, total
   points, playoff result, promotion playoff; roster mode redraft / seat /
   roster. `ladder_rollover` wraps `rollover_league` per tier.
-  - **Next:** the commissioner's ladder card (build, rules, run the
-    rollover) and the members' tier chip + ladder sheet, web and app.
+  - v0.712.0 (0503): the commissioner's 🪜 LADDER tab and the members'
+    ladder card on web and app; a laddered league only rolls over with its
+    ladder.
+  - Watch: the first real ladder rollover (after the Super Bowl). Stacking
+    (copies part 3) is shelved pending the founder's call.
 
 ## The notifications arc (v0.707.1 → v0.708.4, Oct 13–14)
 

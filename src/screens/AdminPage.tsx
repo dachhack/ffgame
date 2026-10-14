@@ -54,6 +54,7 @@ import { draftState, commishSetLeagueSize } from '@drip/core/data/liveApi';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier, markFreeState, adminSetGlobalMarkFree, syncMarkFree, setMyMarkFree } from '@drip/core/data/liveApi';
 import { personalMarkFree } from '@drip/core/data/markFree';
 import { POWERUPS } from '@drip/core/data/powerups';
+import { LadderPanel } from './LadderPanel';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
 import { seedStart, seedsCustom, moveSeed as moveSeedIn } from '@drip/core/data/seeds';
 import { CommissionersPanel, LocksPanel, WaiverOrderPanel, WaiverHoldsPanel, TxnLimitsPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, WriteApiPanel, ScoresPanel, WeeklyReportPanel, SchedulePanel, PlayedWeeksPanel, DuesPanel, TopUpPoolPanel } from './CommishDesk';
@@ -346,7 +347,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 export type LeagueTab =
   | 'overview' | 'waivers' | 'admin' | 'salary'
   | 'mode' | 'lineup' | 'scoring'
-  | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
+  | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'ladder' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
   | 'activity' | 'buffs' | 'awards' | 'delete' | 'contest' | 'contestseats' | 'contestcoin' | 'contestweeks' | 'contestmoney' | 'contestboard';
 
 // ── Roster rules editor (native leagues, 0071): per-position limits any time,
@@ -1614,6 +1615,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
           ...(nflOnly ? [{ id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>] : []),
           { id: 'dynasty', label: '🔁 NEXT SEASON' } as TabDef<LeagueTab>,
+          ...(nflOnly ? [{ id: 'ladder', label: '🪜 LADDER' } as TabDef<LeagueTab>] : []),
         ] : []),
       ],
     },
@@ -1740,6 +1742,9 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
 
       {/* dynasty (0182): keepers + the rollover into next season */}
       {tab === 'dynasty' && l.provider === 'native' && <DynastyPanel leagueId={l.league_id} leagueName={l.name} />}
+
+      {/* 🪜 relegation (0502): tiers of linked leagues, rolled over together */}
+      {tab === 'ladder' && l.provider === 'native' && <LadderPanel leagueId={l.league_id} leagueName={l.name} />}
 
       {/* 📜 SALARY (0217–0220): cap, lengths, and the whole salary rulebook */}
       {tab === 'salary' && l.provider === 'native' && <SalaryPanel leagueId={l.league_id} />}

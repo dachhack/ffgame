@@ -10,6 +10,7 @@
 // home already holds — a cold-loadable #/hub/:id route can come later.
 //
 // (Not to be confused with screens/LeagueHub.tsx, the demo-era portfolio.)
+import { LadderCard } from './LadderPanel';
 import { Ev, track } from '@drip/core/analytics';
 import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { useEffect, useState } from 'react';
@@ -559,6 +560,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
       {native && <div style={{ marginTop: 14 }}><ShotgunWeddingCard leagueId={e.league_id} /></div>}
       <HubMatchups leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} wide={wide} />
       <HubStandings leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} onFull={onResults} />
+      <LadderCard leagueId={e.league_id} />
       <HubDartsBoard leagueId={e.league_id} myRoster={e.sleeper_roster_id ?? null} />
       {native && (
         <div style={{ marginTop: 22 }}>
