@@ -6,6 +6,8 @@
 --   • prefs sanitize to the known boolean keys (0273 adds `format`; 0498 the
 --     seven new types, bigplay among them);
 --   • the outbox accepts the 0498 kinds;
+--   • 0499: per-league switches — a member sets them, a stranger cannot,
+--     unknown keys are dropped, and they are the caller's own;
 --   • remove and set_push_prefs bite only the caller's own token;
 --   • the tables answer nothing to the caller role directly (worker-only).
 \set QUIET on
@@ -151,6 +153,32 @@ begin
     perform assert_true(pg_get_constraintdef((select oid from pg_constraint where conname = 'push_outbox_kind_check')) like '%''' || k || '''%',
       'pu31 the outbox accepts kind ' || k);
   end loop;
+end $$;
+
+-- ── 0499: a league's own switches ──
+do $$
+declare r jsonb; lid uuid;
+begin
+  update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": true}'::jsonb where id = '00000000-0000-0000-0000-00000000000b';
+  perform probe_as('b');
+  r := create_native_league('PushPrefLeague', '2026', 2);
+  perform assert_ok(r, 'pu40 b makes a league');
+  lid := (r ->> 'league_id')::uuid;
+  set local role authenticated;
+  perform assert_true((my_league_push_prefs(lid) -> 'prefs') = '{}'::jsonb, 'pu41 untouched: no switches stored (every type follows overall)');
+  r := set_league_push_prefs(lid, '{"muted": false, "bigplay": false, "result": true, "nonsense": true, "chat": "no"}'::jsonb);
+  perform assert_ok(r, 'pu42 a member sets this league''s switches');
+  perform assert_true((my_league_push_prefs(lid) -> 'prefs') = '{"muted": false, "bigplay": false, "result": true}'::jsonb,
+    'pu43 …kept as sent, unknown keys and non-booleans dropped: ' || (my_league_push_prefs(lid) -> 'prefs')::text);
+  perform assert_ok(set_league_push_prefs(lid, '{"muted": true}'::jsonb), 'pu44 mute the whole league');
+  perform assert_true((my_league_push_prefs(lid) -> 'prefs') = '{"muted": true}'::jsonb, 'pu44b …a save replaces the set');
+  reset role;
+  perform probe_as('c');
+  set local role authenticated;
+  perform assert_true(coalesce((set_league_push_prefs(lid, '{"muted": true}'::jsonb) ->> 'ok')::boolean, true) is false, 'pu45 a stranger cannot set a league''s switches');
+  perform assert_true((my_league_push_prefs(lid) -> 'prefs') = '{}'::jsonb, 'pu46 …and sees only their own (none)');
+  reset role;
+  perform assert_true((select count(*) from league_push_pref where league_id = lid) = 1, 'pu47 one row: b''s');
 end $$;
 
 select 'ALL PUSH PROBES PASSED' as result;

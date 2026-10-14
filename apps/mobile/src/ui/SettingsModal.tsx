@@ -21,8 +21,9 @@ import { DevyValues } from './DevyValues';
 import { rehearsalToolsOn, setRehearsalTools } from '@drip/core/data/rehearsalTools';
 import { Ev, track } from '@drip/core/analytics';
 import { useEffect, useState } from 'react';
-import { PUSH_KINDS, pushKindOn, flipPushKind, plainText } from '@drip/core/data/pushKinds';
+import { PUSH_KINDS, pushKindOn, flipPushKind, plainText, leagueKindOn } from '@drip/core/data/pushKinds';
 import { LabelInfo } from './InfoChip';
+import { myLeaguePushPrefs, setLeaguePushPrefs } from '@drip/core/data/liveApi';
 import { myPushTokens, setPushPrefs, myLeagueChatPush, setLeagueChatPush, pushTest, myPushLog, pushLogStatus, friendlyError, getSession, deleteMyAccount, type PushLogRow } from '@drip/core/data/liveApi';
 import { registerForPush, registeredPushToken } from './push';
 import { tap } from './feedback';
@@ -425,6 +426,20 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
     myLeagueChatPush(leagueId).then((r) => { if (!dead) setAllChat(!!r?.all_messages); }).catch(() => {});
     return () => { dead = true; };
   }, [leagueId]);
+  // THIS LEAGUE'S SWITCHES (0499, v0.708.3, founder: "Let's do per league settings and overall").
+  const [lp, setLp] = useState<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    if (!leagueId) { setLp(null); return; }
+    let dead = false;
+    myLeaguePushPrefs(leagueId).then((r) => { if (!dead) setLp(r?.prefs ?? {}); }).catch(() => { if (!dead) setLp({}); });
+    return () => { dead = true; };
+  }, [leagueId]);
+  const saveLp = (next: Record<string, boolean>) => {
+    if (!leagueId || !lp) return;
+    const was = lp;
+    setLp(next);
+    void setLeaguePushPrefs(leagueId, next).then((r) => { if (!r?.ok) setLp(was); }).catch(() => setLp(was));
+  };
   const flipAllChat = () => {
     if (!leagueId || allChat === null) return;
     const next = !allChat;
@@ -466,12 +481,41 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
   };
   return (
     <View style={{ gap: 8 }}>
-      <LabelInfo label="NOTIFICATIONS" title="What each one is" info={PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} />
+      <LabelInfo label={leagueId ? 'THIS LEAGUE' : 'NOTIFICATIONS'} title="What each one is"
+        info={(leagueId
+          ? 'These switches are this league’s, for your account on every device. A notification goes out when both this league’s switch and your overall one (⚙ → Notifications) are on. The chat switch below picks every chat message or only mentions & DMs; mentions, DMs and polls always come through.\n\n'
+          : 'These are this phone’s overall switches. Each league can also turn types off, or mute itself, under its own alerts.\n\n')
+          + PUSH_KINDS.map((k) => `${k.label}${k.defaultOn ? '' : ' (off until you switch it on)'} — ${k.info}`).join('\n\n')} />
       {!token ? (
         <Pressable onPress={() => void enable()} disabled={busy}
           style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, paddingVertical: 9, alignItems: 'center', opacity: busy ? 0.6 : 1 }}>
-          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>🔔 ENABLE PUSH NOTIFICATIONS</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.you }}>ENABLE PUSH NOTIFICATIONS</Text>
         </Pressable>
+      ) : leagueId ? (
+        // IN A LEAGUE: this league's switches. The overall ones live in ⚙ → Notifications;
+        // a type off overall on this phone says so, since the league can't turn it back on.
+        lp === null ? null : (
+          <View style={{ gap: 7 }}>
+            <Pressable onPress={() => { tap(); saveLp({ ...lp, muted: !lp.muted }); }}
+              style={{ alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: lp.muted ? t.opp : t.bd, backgroundColor: lp.muted ? alpha(t.opp, 12) : t.surface }}>
+              <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: lp.muted ? t.opp : t.dim }}>{lp.muted ? 'THIS LEAGUE IS MUTED' : 'MUTE THIS LEAGUE'}</Text>
+            </Pressable>
+            {!lp.muted && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                {PUSH_KINDS.map((k) => {
+                  const on = leagueKindOn(lp, k.key);
+                  const offOverall = !pushKindOn(prefs, k.key);
+                  return (
+                    <Pressable key={k.key} onPress={() => { tap(); saveLp({ ...lp, [k.key]: !on }); }}
+                      style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: on && !offOverall ? t.you : t.bd, backgroundColor: on && !offOverall ? alpha(t.you, 12) : t.surface }}>
+                      <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', color: on && !offOverall ? t.you : t.dim }}>{k.label}{on && offOverall ? ' · off overall' : ''}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           {PUSH_KINDS.map((k) => {
@@ -490,18 +534,15 @@ export function PushPrefs({ leagueId }: { leagueId?: string } = {}) {
           <Pressable onPress={flipAllChat}
             style={{ borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: allChat ? t.you : t.bd, backgroundColor: allChat ? alpha(t.you, 12) : t.surface }}>
             <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: allChat ? t.you : t.dim }}>
-              {allChat ? '✓ EVERY MESSAGE IN THIS LEAGUE' : 'ONLY MENTIONS & DMs IN THIS LEAGUE'}
+              {allChat ? 'EVERY CHAT MESSAGE IN THIS LEAGUE' : 'ONLY MENTIONS & DMs IN THIS LEAGUE'}
             </Text>
           </Pressable>
-          <Mono size={8.5} tone="faint">
-            Per league, not per device — off still pings you for mentions, DMs and polls.
-          </Mono>
         </View>
       )}
       <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10, gap: 6 }}>
         <Pressable onPress={() => void sendTest()}
           style={{ alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 11, paddingVertical: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, backgroundColor: alpha(t.you, 12) }}>
-          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>🔔 SEND ME A TEST PUSH</Text>
+          <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', color: t.you }}>SEND ME A TEST PUSH</Text>
         </Pressable>
         {!!testMsg && <Mono size={9} tone="dim">{testMsg}</Mono>}
         {log && log.length > 0 && (

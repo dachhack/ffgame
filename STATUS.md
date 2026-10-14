@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.708.3 — Notifications per league, and overall
+
+> - Each league's Alerts now has its own switches: mute the whole league, or turn off any type just for that league. They follow your account, so they hold on every device.
+> - Your overall switches stay under ⚙ → Notifications. A notification goes out only when both the league and your overall setting say yes; a type that's off overall shows "off overall" in the league.
+
+Founder: "Let's do per league settings and overall." **0499**:
+`league_push_pref(app_user_id, league_id, prefs)` — `muted` plus one key
+per type; `set_league_push_prefs` / `my_league_push_prefs` (member or
+commissioner only; keys sanitized); push-probes pu40–47. Core `pushKinds`:
+`leagueKindOn` (untouched = follows overall; muted = off), `pushAllowed`
+(device overall AND league). Sender (`flush`): a push carrying
+`data.league_id` asks the member's league switches; the big-play roll-ups
+(which span leagues) drop a muted league or one with its big plays off as
+they are built. Apps: the league's Alerts card (phone `PushPrefs`, web
+`NotifPrefsCard` with `leagueId`) shows THIS LEAGUE — MUTE THIS LEAGUE and a
+switch per type — instead of the device switches, which stay in ⚙; the
+league chat switch stays beside it. The two sentences under those cards
+moved into the ⓘ, and the alert sheets lost their 🔔 (the menu tiles keep
+their icons like every other tile). Tests: push-season (+4). No iPhone build.
+
 ### v0.708.2 — Notifications, part 3: live big plays, and no icons
 
 > - Turn on "your big plays" and you'll hear it live when one of your starters scores a touchdown or makes a 20+ yard play: "TD! Patrick Mahomes → Travis Kelce, 35-yd catch".

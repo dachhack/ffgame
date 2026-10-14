@@ -80,7 +80,7 @@ export function ContestSettingsTiles({ lg, onGo }: { lg: Lg; onGo: (room: 'leagu
       <Overlay visible={open === 'scoring'} title="⊞ Scoring settings" subtitle="HOW THIS LEAGUE TURNS PLAYS INTO POINTS" onClose={() => setOpen(null)}><ScoringView leagueId={leagueId} /></Overlay>
       <Overlay visible={open === 'rules'} title="🧢 Squad & rules" subtitle="SPOTS · BUDGET · THE LOCK · NO-SHOWS · PLAYOFFS" onClose={() => setOpen(null)}><RulesView leagueId={leagueId} b={lg.bullseye!} /></Overlay>
       <Overlay visible={open === 'money'} title="💵 Dues & prizes" subtitle="THE PLATFORM PRINTS IT, NEVER COLLECTS IT" onClose={() => setOpen(null)}><MoneyView leagueId={leagueId} b={lg.bullseye!} /></Overlay>
-      <Overlay visible={open === 'alerts'} title="🔔 Alerts" subtitle="WHAT PINGS THIS PHONE" onClose={() => setOpen(null)}><PushPrefs leagueId={leagueId} /></Overlay>
+      <Overlay visible={open === 'alerts'} title="Alerts" subtitle="THIS LEAGUE · EVERY DEVICE" onClose={() => setOpen(null)}><PushPrefs leagueId={leagueId} /></Overlay>
       <Overlay visible={open === 'recruit'} title="📣 Recruit" subtitle={commish ? 'SEND A LINK · POST TO THE BOARD' : 'SEND A LINK TO A FRIEND'} onClose={() => setOpen(null)}><RecruitView leagueId={leagueId} commish={commish} /></Overlay>
       <Overlay visible={open === 'api'} title="🔑 API keys" subtitle="LET ANOTHER TOOL RUN YOUR TEAM" onClose={() => setOpen(null)}><ApiKeysView leagueId={leagueId} /></Overlay>
     </>

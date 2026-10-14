@@ -25,7 +25,7 @@
 //             high-stakes, and both had only ever been a banner you had to
 //             open the app to find.
 import { contestConfigOf } from '../../packages/core/src/engine/contest.ts';
-import { pushKindOn, plainText } from '../../packages/core/src/data/pushKinds.ts';
+import { pushKindOn, plainText, leagueKindOn, pushAllowed } from '../../packages/core/src/data/pushKinds.ts';
 import { createSign } from 'node:crypto';
 import { db } from './supabase.js';
 import { webPushSend, vapidKeys } from './webpush.js';
@@ -1162,12 +1162,19 @@ async function detectBigPlays() {
   for (const x of seats) { if (x.mid == null) continue; if (!byMid.has(x.mid)) byMid.set(x.mid, []); byMid.get(x.mid).push(x); }
   const names = new Map();
   const interest = new Map();
+  // Each league's own switches (0499): a muted league, or its big plays switched off, drops out here —
+  // a rolled-up push spans leagues, so the sender's per-league check can't do it.
+  const { data: lpRows } = await db().from('league_push_pref').select('app_user_id, league_id, prefs').in('app_user_id', [...want.keys()]);
+  const lpOf = new Map((lpRows ?? []).map((r) => [`${r.app_user_id}:${r.league_id}`, r.prefs]));
   for (const x of seats) {
     const w = want.get(x.uid);
     if (!w) continue;
+    const lp = lpOf.get(`${x.uid}:${x.league_id}`);
+    const mineOk = leagueKindOn(lp, 'bigplay'), oppOk = leagueKindOn(lp, 'oppplay');
+    if (!mineOk && !oppOk) continue;
     const it = interest.get(x.uid) ?? { mine: new Map(), opp: new Map(), wantMine: w.mine, wantOpp: w.opp };
-    for (const st of x.starters) { if (st.name) names.set(st.slug, st.name); (it.mine.get(st.slug) ?? it.mine.set(st.slug, []).get(st.slug)).push(x.league_name); }
-    for (const o of byMid.get(x.mid) ?? []) if (o.roster_id !== x.roster_id) for (const st of o.starters) {
+    if (mineOk) for (const st of x.starters) { if (st.name) names.set(st.slug, st.name); (it.mine.get(st.slug) ?? it.mine.set(st.slug, []).get(st.slug)).push(x.league_name); }
+    if (oppOk) for (const o of byMid.get(x.mid) ?? []) if (o.roster_id !== x.roster_id) for (const st of o.starters) {
       names.set(st.slug, st.name); (it.opp.get(st.slug) ?? it.opp.set(st.slug, []).get(st.slug)).push(x.league_name);
     }
     interest.set(x.uid, it);
@@ -1312,11 +1319,19 @@ async function flush() {
     if (!byUser.has(t.app_user_id)) byUser.set(t.app_user_id, []);
     byUser.get(t.app_user_id).push(t);
   }
+  // PER LEAGUE (0499, v0.708.3): a push about a league asks that member's switches for it too.
+  const lids = [...new Set(pending.map((p) => p.data?.league_id).filter(Boolean))];
+  const leaguePrefs = new Map();   // `${uid}:${lid}` → prefs
+  if (lids.length) {
+    const { data: lp } = await db().from('league_push_pref').select('app_user_id, league_id, prefs').in('app_user_id', uids).in('league_id', lids);
+    for (const r of lp ?? []) leaguePrefs.set(`${r.app_user_id}:${r.league_id}`, r.prefs);
+  }
   let sent = 0;
   for (const p of pending) {
     // A widget ping has no browser or iPhone to go to (the home-screen widget
     // is Android's): web and iOS devices are skipped for it.
-    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => pushKindOn(t.prefs, p.kind) && !(p.kind === 'widget' && (t.platform === 'web' || t.platform === 'ios')));
+    const lp = p.data?.league_id ? leaguePrefs.get(`${p.app_user_id}:${p.data.league_id}`) : null;
+    const devices = (byUser.get(p.app_user_id) ?? []).filter((t) => pushAllowed(t.prefs, lp, p.kind) && !(p.kind === 'widget' && (t.platform === 'web' || t.platform === 'ios')));
     let attempted = devices.length === 0; // deviceless rows resolve immediately
     let waiting = null;
     // PER-DEVICE OUTCOMES (v0.392.2). One row can go to a phone and a browser;

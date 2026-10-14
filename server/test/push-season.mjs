@@ -6,7 +6,7 @@ import { nightBeforeMs, starterIssue, seasonStatusRows, rosterQcNightRows, roste
   quietHours, nextRunMs, waiverRemindAt, waiverRemindRows, tradeDeadlineRows, contractLockRows, finalRows, lastDayStartMs, sweatRows,
   isBigPlay, bigPlayLine, bigPlayRows, slugToName } from '../src/push.js';
 import { TeamMap } from '../../packages/core/src/data/teamCodes.ts';
-import { pushKindOn, flipPushKind, PUSH_KINDS, plainText } from '../../packages/core/src/data/pushKinds.ts';
+import { pushKindOn, flipPushKind, PUSH_KINDS, plainText, leagueKindOn, pushAllowed } from '../../packages/core/src/data/pushKinds.ts';
 
 let fails = 0;
 const ok = (label, cond, got) => { console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}${!cond && got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); if (!cond) fails++; };
@@ -126,6 +126,12 @@ ok('no icons: a title loses its emoji and keeps its words', plainText('🏈 TD! 
   && plainText('⚠ Lineup locks 1:00 PM ET') === 'Lineup locks 1:00 PM ET' && plainText('🗓 Turf Warriors: squads lock Thu') === 'Turf Warriors: squads lock Thu'
   && plainText('Set them on 📜 CONTRACTS') === 'Set them on CONTRACTS' && plainText('◎40 earned') === '◎40 earned', [plainText('Set them on 📜 CONTRACTS')]);
 ok('no icons: not one setting label carries an emoji', PUSH_KINDS.every((k) => plainText(k.label) === k.label), PUSH_KINDS.map((k) => k.label));
+
+// ── per league and overall (v0.708.3, founder: "Let's do per league settings and overall") ──
+ok('league: an untouched league follows overall', leagueKindOn({}, 'status') && leagueKindOn(null, 'bigplay') && pushAllowed({}, {}, 'status') && !pushAllowed({}, {}, 'bigplay'));
+ok('league: a type off in this league is off here, whatever overall says', !pushAllowed({ status: true }, { status: false }, 'status') && pushAllowed({ status: true }, { result: false }, 'status'));
+ok('league: muted silences every type in it', !leagueKindOn({ muted: true, status: true }, 'status') && !pushAllowed({ chat: true }, { muted: true }, 'chat'));
+ok('league: the league cannot switch on what is off overall', !pushAllowed({ bigplay: false }, { bigplay: true }, 'bigplay') && pushAllowed({ bigplay: true }, { bigplay: true }, 'bigplay'));
 
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

@@ -55,3 +55,18 @@ export function pushKindOn(prefs: Record<string, unknown> | null | undefined, ke
 /** The prefs after flipping one switch. */
 export const flipPushKind = (prefs: Record<string, boolean>, key: string): Record<string, boolean> =>
   ({ ...prefs, [key]: !pushKindOn(prefs, key) });
+
+// ── PER LEAGUE (v0.708.3, founder: "Let's do per league settings and overall") ──
+// A league's own switches (0499, per account): `muted` silences the league,
+// and a type left untouched is on — the league follows the overall switch.
+// A push about a league goes out only when the device's overall switch AND
+// the league's both say yes.
+export type LeaguePushPrefs = Record<string, boolean>;
+/** Is this type on for this league? (Before the overall switch is asked.) */
+export function leagueKindOn(lp: LeaguePushPrefs | null | undefined, key: string): boolean {
+  if (lp?.muted === true) return false;
+  return lp?.[key] !== false;
+}
+/** Both answers: the device's overall switch and the league's. */
+export const pushAllowed = (devicePrefs: Record<string, unknown> | null | undefined, lp: LeaguePushPrefs | null | undefined, key: string): boolean =>
+  pushKindOn(devicePrefs, key) && leagueKindOn(lp, key);

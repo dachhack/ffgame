@@ -698,7 +698,7 @@ export function LeagueHubPage({ e, card, commish, userId, viewAsLabel, onBack, o
         </Sheet>
       )}
       {info === 'alerts' && (
-        <Sheet title="🔔 Alerts" subtitle="WHAT PINGS THIS BROWSER" onClose={() => setInfo(null)}>
+        <Sheet title="Alerts" subtitle="THIS LEAGUE · EVERY DEVICE" onClose={() => setInfo(null)}>
           <NotifPrefsCard bare leagueId={e.league_id} />
         </Sheet>
       )}
