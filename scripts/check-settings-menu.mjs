@@ -36,6 +36,23 @@ ok(/function FieldsPicker\(\)/.test(src) && /FIELDS WIDGET · SPORTS/.test(src) 
   'the fields picker names the sports and repaints the fields widgets on every change');
 // 0422: delete my account lives in the Account section and asks for the email back.
 ok(/section === 'account' && <DeleteAccount/.test(src) && /deleteMyAccount\(typed\)/.test(src), 'delete my account is reachable and confirms by typed email');
+// v0.713.6, founder: "Let's nuke the large card setting. Let's add a no cards setting."
+{
+  const cards = readFileSync(new URL('../apps/mobile/src/ui/cards.tsx', import.meta.url), 'utf8');
+  const row = readFileSync(new URL('../apps/mobile/src/ui/SetupRow.tsx', import.meta.url), 'utf8');
+  ok(/export type CardSize = 'none' \| 'small' \| 'medium';/.test(cards) && !/id: 'large'/.test(cards), 'card sizes are No cards / Small / Medium (Large is gone)');
+  ok(/if \(s === 'large'\) return 'medium';/.test(cards), 'a saved Large reads as Medium');
+  ok(/if \(cardSize === 'none'\) \{/.test(row) && /🔒 SEALED/.test(row) && /\+ PICK A METRIC/.test(row), 'No cards draws the setup board as plain rows');
+  ok(/<LabelInfo label="CARD SIZE"/.test(src), 'the card size picker explains itself in an ⓘ, not a paragraph');
+}
+// v0.713.6, founder: "Let's have armed just say how many once they start to
+// wrap. Click to show which." (the drip board's ◈ ARMED strip, beside these
+// board settings).
+{
+  const lp = readFileSync(new URL('../apps/mobile/src/screens/LivePicks.tsx', import.meta.url), 'utf8');
+  ok(/const counted = armedW > 0 && armedNeed > armedW \+ 0\.5;/.test(lp) && /label=\{`⚡ \$\{armed\.length\} ▾`\}/.test(lp) && /visible=\{armedListOpen\}/.test(lp),
+    'ARMED shows a count once its chips would wrap, and a tap lists them');
+}
 // v0.502.0: the demo board left with the 2025 bake it replayed.
 ok(!src.includes('label="Demo board"'), 'the retired "Demo board" action is gone');
 
