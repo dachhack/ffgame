@@ -36,6 +36,10 @@
         "fill": "#FFFFFF",
         "stroke": "#97233F"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/ARI-left.png",
         "leftPlain": "/helmets/png/ARI-left-plain.png",
@@ -56,6 +60,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#A71930"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/ATL-left.png",
@@ -78,6 +86,10 @@
         "fill": "#FFFFFF",
         "stroke": "#241773"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/BAL-left.png",
         "leftPlain": "/helmets/png/BAL-left-plain.png",
@@ -98,6 +110,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#00338D"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/BUF-left.png",
@@ -120,6 +136,10 @@
         "fill": "#FFFFFF",
         "stroke": "#101820"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/CAR-left.png",
         "leftPlain": "/helmets/png/CAR-left-plain.png",
@@ -140,6 +160,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#0B162A"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/CHI-left.png",
@@ -162,6 +186,10 @@
         "fill": "#FFFFFF",
         "stroke": "#000000"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/CIN-left.png",
         "leftPlain": "/helmets/png/CIN-left-plain.png",
@@ -182,6 +210,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#311D00"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/CLE-left.png",
@@ -204,6 +236,10 @@
         "fill": "#FFFFFF",
         "stroke": "#003594"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/DAL-left.png",
         "leftPlain": "/helmets/png/DAL-left-plain.png",
@@ -224,6 +260,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#002244"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/DEN-left.png",
@@ -246,6 +286,10 @@
         "fill": "#FFFFFF",
         "stroke": "#0076B6"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/DET-left.png",
         "leftPlain": "/helmets/png/DET-left-plain.png",
@@ -266,6 +310,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#203731"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/GB-left.png",
@@ -288,6 +336,10 @@
         "fill": "#FFFFFF",
         "stroke": "#03202F"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/HOU-left.png",
         "leftPlain": "/helmets/png/HOU-left-plain.png",
@@ -308,6 +360,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#002C5F"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/IND-left.png",
@@ -330,6 +386,10 @@
         "fill": "#FFFFFF",
         "stroke": "#006778"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/JAX-left.png",
         "leftPlain": "/helmets/png/JAX-left-plain.png",
@@ -350,6 +410,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#E31837"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/KC-left.png",
@@ -372,6 +436,10 @@
         "fill": "#FFFFFF",
         "stroke": "#000000"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/LV-left.png",
         "leftPlain": "/helmets/png/LV-left-plain.png",
@@ -392,6 +460,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#0080C6"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/LAC-left.png",
@@ -414,6 +486,10 @@
         "fill": "#FFFFFF",
         "stroke": "#003594"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/LAR-left.png",
         "leftPlain": "/helmets/png/LAR-left-plain.png",
@@ -434,6 +510,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#005778"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/MIA-left.png",
@@ -456,6 +536,10 @@
         "fill": "#FFFFFF",
         "stroke": "#4F2683"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/MIN-left.png",
         "leftPlain": "/helmets/png/MIN-left-plain.png",
@@ -476,6 +560,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#002244"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/NE-left.png",
@@ -498,6 +586,10 @@
         "fill": "#FFFFFF",
         "stroke": "#101820"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/NO-left.png",
         "leftPlain": "/helmets/png/NO-left-plain.png",
@@ -518,6 +610,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#0B2265"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/NYG-left.png",
@@ -540,6 +636,10 @@
         "fill": "#FFFFFF",
         "stroke": "#125740"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/NYJ-left.png",
         "leftPlain": "/helmets/png/NYJ-left-plain.png",
@@ -560,6 +660,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#004C54"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/PHI-left.png",
@@ -582,6 +686,10 @@
         "fill": "#FFFFFF",
         "stroke": "#101820"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/PIT-left.png",
         "leftPlain": "/helmets/png/PIT-left-plain.png",
@@ -602,6 +710,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#AA0000"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/SF-left.png",
@@ -624,6 +736,10 @@
         "fill": "#FFFFFF",
         "stroke": "#002244"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/SEA-left.png",
         "leftPlain": "/helmets/png/SEA-left-plain.png",
@@ -644,6 +760,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#34302B"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/TB-left.png",
@@ -666,6 +786,10 @@
         "fill": "#FFFFFF",
         "stroke": "#0C2340"
       },
+      "art": {
+        "left": "ai",
+        "right": "ai"
+      },
       "files": {
         "left": "/helmets/png/TEN-left.png",
         "leftPlain": "/helmets/png/TEN-left-plain.png",
@@ -686,6 +810,10 @@
       "number": {
         "fill": "#FFFFFF",
         "stroke": "#5A1414"
+      },
+      "art": {
+        "left": "ai",
+        "right": "ai"
       },
       "files": {
         "left": "/helmets/png/WAS-left.png",

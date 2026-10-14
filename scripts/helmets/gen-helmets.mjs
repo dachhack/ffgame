@@ -18,7 +18,7 @@
 // it reads the same both ways. The player's number is NOT baked in: the app
 // draws it at manifest.number.anchor in Jersey 15 (public/fonts/jersey-15.ttf).
 
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
@@ -152,6 +152,13 @@ function lettering(team, plain, cx) {
 }
 
 function helmetSvg(team, art, dir, plain) {
+  // Named helmets use the AI art (lettering painted in) where import-sheets.mjs
+  // made it; plain ones, and anything missing, come from the template.
+  const ai = !plain && team.ai[dir];
+  if (ai) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="${SIZE}" height="${SIZE}">
+  <defs>${HALO}</defs>
+  <g filter="url(#halo)"><image href="${ai}" width="${SIZE}" height="${SIZE}"/></g>
+</svg>`;
   const cx = DECAL.x + DECAL.w / 2;
   const flip = dir === 'left' ? '' : ` transform="translate(${SIZE} 0) scale(-1 1)"`;
   const text = lettering(team, plain, dir === 'left' ? cx : SIZE - cx);
@@ -221,6 +228,12 @@ for (const team of teams) {
   if (c < 3) warnings.push(`${team.abbr}: lettering ${team.text}/${team.textStroke} on shell ${team.shell} is only ${c.toFixed(2)}:1`);
 
   team.art = recolor(team);
+  team.ai = {};
+  for (const dir of ['left', 'right']) {
+    const f = join(HERE, 'ai', `${team.abbr}-${dir}.png`);
+    if (existsSync(f)) team.ai[dir] = `data:image/png;base64,${readFileSync(f).toString('base64')}`;
+  }
+  if (team.ai.left && !team.ai.right) warnings.push(`${team.abbr}: AI art for left only; right-facing named helmet uses the template`);
   const files = {};
   for (const dir of ['left', 'right']) {
     for (const plain of [false, true]) {
@@ -233,19 +246,20 @@ for (const team of teams) {
     city: team.city, name: team.name,
     colors: { shell: team.shell, stripe: team.stripe, facemask: team.facemask, text: team.text, textStroke: team.textStroke },
     number: team.number,
+    art: { left: team.ai.left ? 'ai' : 'template', right: team.ai.right ? 'ai' : 'template' },
     files,
   };
 }
 writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
-// Contact sheet: each team left (named) and right (plain), with sample numbers
+// Contact sheet: each team's named helmets, left and right, with sample numbers
 // drawn the way the app should draw them.
 const CELL = 200, COLS = 8;
 const SAMPLES = ['1', '12', '88', '7'];
 const cells = teams.flatMap((team, i) => ['left', 'right'].map((dir, j) => {
   const k = i * 2 + j;
   const x = (k % COLS) * CELL, y = Math.floor(k / COLS) * CELL;
-  const svg = helmetSvg(team, team.art, dir, j === 1).replace(/^<svg[^>]*>|<\/svg>\s*$/g, '');
+  const svg = helmetSvg(team, team.art, dir, false).replace(/^<svg[^>]*>|<\/svg>\s*$/g, '');
   return `<g transform="translate(${x} ${y}) scale(${CELL / SIZE})">${svg}${numberSvg(team, dir, SAMPLES[k % SAMPLES.length])}</g>`;
 }));
 const rows = Math.ceil(cells.length / COLS);

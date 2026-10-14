@@ -13,6 +13,7 @@
     "build": "node scripts/gen-changelog.mjs && tsc -b && vite build",
     "gen:changelog": "node scripts/gen-changelog.mjs",
     "gen:helmets": "node scripts/helmets/gen-helmets.mjs",
+    "import:helmets": "node scripts/helmets/import-sheets.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "validate": "node scripts/espn/validate.mjs",
