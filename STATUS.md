@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.712.2 — Injury tags never come from last season
+
+> - Injury tags never come from last season any more: Brock Bowers and Terry McLaurin showed Out (and projected 0) on the phone from a 2025 report, though both are healthy.
+
+`injuryFor` falls back to the baked 2025 report when the live one isn't
+installed for the week asked. Only `setActiveLeague`/`resetToDemoLeague` move
+its season off 2025; the web calls them, the phone never did. So a week-6
+phone board whose live report was for another week (or failed to load) wore
+2025's week 6. Confirmed on a member's screenshot: all 8 players shown match
+2025 week 6 (Bowers and McLaurin O, six untagged); ESPN, Sleeper and StatHead
+all have both healthy. `apps/mobile/index.ts` now sets `setInjurySeason(LIVE_SEASON)`
+at bundle load (the engine's `healthy()` reads the same tags, so auto-lineups
+were affected too). And, founder: "it never makes sense to fall back to
+previous season; hold the current value": `injuryFor`/`injuryRowFor` now
+answer a week the live report wasn't loaded for with the newest snapshot held
+(`heldRows`: the any-screen report, else the board's). The bake is read only
+by a 2025 board with no live report installed, i.e. the demo. check:injuries
+rules 4–5 rewritten to match, +5 for this case.
+
+Also: `poll/injuries.js`'s prune read now pages (`allRows`). It was the one
+`injury_status` read on PostgREST's 1000-row cap. Probe
+`scripts/db/injury-stale-rows.sql` found 1,050 stranded NFL rows; every one
+shown is keyed by a JSON object (the v0.489.0 bug). Readers can't match those
+keys, and the prune's `.in()` delete may still choke on them: follow-up.
+No iPhone build (check:ios-runtime: over the air).
+
 ### v0.712.1 — A waiver claim isn't thrown out by an injury tag that changed overnight
 
 > - Fixed: a waiver claim could fail as "roster over limits" when a player you'd put on IR as Out had his injury tag change overnight, before waivers ran. Claims now go through as long as the roster is within its real limits, and a claim that does fail says exactly why.
@@ -40,6 +66,7 @@ so the tag lapsed between filing and the 08:00 run.
 - `claim-tag-lapse-probes.sql` (tl1–tl4); tl3 fails on 0500's
   process_waivers with exactly the member's "lost / roster over limits".
 - No iPhone build (SQL only).
+
 
 ### v0.712.0 — Relegation, part 2: the ladder on the app and the site
 
@@ -81,6 +108,7 @@ commissioner setting with all three modes.
 - `scripts/db/relegation-probes.sql` (rl1–rl7). liveApi wrappers.
 - No iPhone build (SQL + JavaScript). Next: the commissioner's card and the
   members' ladder view on web and app.
+
 
 ### v0.710.0 — Copies of every player, part 2: the apps
 

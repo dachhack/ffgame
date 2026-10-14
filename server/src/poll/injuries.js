@@ -24,7 +24,7 @@
 import { fetchInjuries, normalizeInjuries } from '../../../scripts/espn/injuries.mjs';
 import { mapSleeperStatus, mergeInjury } from '../../../packages/core/src/data/injuryMerge.ts';
 import { getPlayers } from '../sleeper.js';
-import { db } from '../supabase.js';
+import { db, allRows } from '../supabase.js';
 
 /** ESPN entries below which the report is assumed partial and nothing is
  *  pruned. Its quiet Tuesday is ~150 rows counting Actives; a tenth of that is
@@ -138,7 +138,18 @@ export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
   const canPrune = wrote && malformed === 0 && sleeper != null && espnEntries >= PRUNE_FLOOR;
   if (canPrune) {
     const keep = new Set(clean.map((r) => r.player_slug));
-    const { data: held } = await db().from('injury_status').select('player_slug');
+    // PAGED (v0.712.2). This read was the one left on PostgREST's silent
+    // 1000-row cap after v0.489.4 paged the client's: once the college rows
+    // and the sport directories (nba-…, mlb-…) shared the table, it passed a
+    // thousand, and every NFL row past the cap was never even considered for
+    // the prune. Brock Bowers was cleared by both ESPN (Active) and Sleeper
+    // and stayed Out here. A read that fails now skips the prune, as a short
+    // feed does, instead of failing the poll.
+    let held = null;
+    try {
+      held = await allRows((from, to) => db().from('injury_status')
+        .select('player_slug').order('player_slug').range(from, to));
+    } catch (err) { console.log('[injuries] prune read failed:', err.message); }
     // COLLEGE ROWS ARE NOT THIS POLL'S TO CLEAR (v0.615.0). The conference
     // availability poll (poll/collegeAvailability.js) writes c-<espn_id>
     // slugs into this same table; neither ESPN's NFL report nor Sleeper
