@@ -34,5 +34,14 @@ ok('illegal: the hand-set QB still scores', illegal.slots.some((x) => x.slot ===
 ok('illegal scores less by exactly the fill', Math.abs(legal.home - illegal.home - (flexOf(legal)?.score ?? 0)) < 0.051, { legal: legal.home, illegal: illegal.home });
 ok('the flag is per side: the other side is untouched', legal.away === illegal.away);
 
+// THE BANNER IS YOURS ONLY (v0.712.6, founder: "I don't need the full alerts
+// for when the opposing team doesn't have a legal roster. That's their
+// problem"). Both boards still compute either side's issue (best ball reads
+// it), but the banner returns before drawing anything that isn't yours.
+for (const f of ['apps/mobile/src/ui/ClassicBoard.tsx', 'src/screens/ClassicBoard.tsx']) {
+  const src = readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  ok(`${f}: the illegal-roster banner skips the opponent`, /const mineSide = i === 0 && !browsing;[\s\S]{0,300}if \(!mineSide\) return null;/.test(src));
+}
+
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log('\nbestball-legal: all ok');

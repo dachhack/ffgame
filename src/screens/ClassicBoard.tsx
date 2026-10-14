@@ -2020,6 +2020,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         const why = issues[String(rid)];
         if (!why) return null;
         const mineSide = i === 0 && !browsing;
+        // YOURS ONLY (v0.712.6, founder: "I don't need the full alerts for when the
+        // opposing team doesn't have a legal roster. That's their problem").
+        if (!mineSide) return null;
         return (
           <div key={rid} className="mono" style={{ marginTop: 7, border: '1px solid var(--warn)', borderRadius: 6, padding: '8px 10px', background: 'color-mix(in srgb, var(--warn) 8%, var(--surface))' }}>
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warn)' }}>

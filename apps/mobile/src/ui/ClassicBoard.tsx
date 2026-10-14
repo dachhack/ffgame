@@ -1829,6 +1829,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
           const why = issues[String(rid)];
           if (!why) return null;
           const mineSide = i === 0 && !browsing;
+          // YOURS ONLY (v0.712.6, founder: "I don't need the full alerts for when the
+          // opposing team doesn't have a legal roster. That's their problem").
+          if (!mineSide) return null;
           return (
             <View key={rid} style={{ marginBottom: 9, borderWidth: 1, borderColor: t.warn, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, gap: 4 }}>
               <Mono size={11} tone="warn" weight="700" track={0.08}>

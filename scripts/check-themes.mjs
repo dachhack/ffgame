@@ -57,13 +57,20 @@ const dE = (h1, h2, sim) => {
 };
 
 // ── the assertions ──────────────────────────────────────────────────────────
-// v0.712.5: these dark themes are not the accessible pair, but their faint
-// carried game lines and team codes at 2.5:1, founder: "some of the fonts in
-// all gold are too dark to read well" (prime), then "fix those too". Held to
-// body-text contrast, and kept quieter than dim so the hierarchy survives.
-for (const name of ['prime', 'tactical', 'dusk', 'slate']) {
-  const t = THEMES[name];
-  for (const ground of ['bg', 'surface']) ok(`${name}: faint ≥ 4.5:1 on ${ground}`, contrast(t.faint, t[ground]) >= 4.5);
+// EVERY THEME READS (v0.712.5, widened v0.712.6). Founder: "some of the fonts
+// in all gold are too dark to read well", then "check readability for all
+// themes (dark/light)". Every colour used as text (the greys and the three
+// accents) reaches 4.5:1 on the page and on a card in every theme, not only
+// the accessible pair. Position labels are bold, so they're held to the
+// large/bold-text bar (3:1). faint stays quieter than dim so the hierarchy
+// survives the lift.
+for (const [name, t] of Object.entries(THEMES)) {
+  for (const ground of ['bg', 'surface']) {
+    for (const k of ['text', 'mid', 'dimstrong', 'dim', 'faint', 'you', 'opp', 'warn']) {
+      ok(`${name}: ${k} ≥ 4.5:1 on ${ground}`, contrast(t[k], t[ground]) >= 4.5);
+    }
+    for (const [pos, c] of Object.entries(t.pos)) ok(`${name}: ${pos} label ≥ 3:1 on ${ground}`, contrast(c.fg, t[ground]) >= 3);
+  }
   ok(`${name}: faint stays quieter than dim`, contrast(t.faint, t.surface) < contrast(t.dim, t.surface));
 }
 
