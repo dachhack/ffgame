@@ -1,8 +1,8 @@
 -- 0263 convert-to-native probes: an imported league goes native, in place.
 --
 -- What must hold:
---   • the gates: stranger and plain member refused; a commissioner without
---     the native feature gets the invite-only message; a native league, a
+--   • the gates: signed-out, stranger and plain member refused (since 0422
+--     the native feature is every signed-in account); a native league, a
 --     league mid-season, a league with no synced rosters, and a league with
 --     no commissioner are each refused with their own words;
 --   • DRY RUN returns the full summary and writes NOTHING — provider, pool,
@@ -117,13 +117,10 @@ begin
   r := convert_league_to_native(lid, pool);
   perform assert_err(r, 'forbidden', 'cv1 a stranger cannot convert');
 
-  perform probe_as('7');                                    -- the commissioner…
-  update app_user set features = coalesce(features, '{}'::jsonb) - 'native'
-    where id = '00000000-0000-0000-0000-000000000007';
+  perform set_config('app.uid', '', false);                  -- nobody at all
   r := convert_league_to_native(lid, pool);
-  perform assert_err(r, 'invite-only', 'cv2 …needs the native feature, same door as creation');
-  update app_user set features = coalesce(features, '{}'::jsonb) || '{"native": true}'::jsonb
-    where id = '00000000-0000-0000-0000-000000000007';
+  perform assert_err(r, 'not signed in', 'cv2 …nor a signed-out caller (0422 left signing in as the native door)');
+  perform probe_as('7');                                    -- the commissioner
 
   -- ══ DRY RUN: the whole conversion, then none of it ════════════════════════
   r := convert_league_to_native(lid, pool, true);

@@ -78,3 +78,15 @@ a { color: inherit; }
   .spot-row { grid-template-columns: auto 22px minmax(0, 1fr) auto auto auto auto;
     grid-template-areas: "grip num pos pos pos pos x" ". . label lvl bb zero flt" "filter filter filter filter filter filter filter"; }
 }
+
+/* THE LEAGUES GRID (v0.707.6, founder: "on desktop web, let's make all the
+   league boxes the same size without wrapping lines"). Every row takes the
+   tallest box's height and every box fills its cell; each card's text lines
+   stay on one line with an ellipsis (the title holds the rest). A phone's
+   single column keeps natural heights and wrapped lines. */
+.lg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+@media (min-width: 720px) {
+  .lg-grid { grid-auto-rows: 1fr; align-items: stretch; }
+  .lg-grid > * { height: 100%; box-sizing: border-box; min-width: 0; }
+  .lg-grid .lg-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

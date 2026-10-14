@@ -22,6 +22,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.707.6 — Add limits hold again; practice rooms open; the probe battery runs whole
+
+> - A commissioner's transaction limits (adds per week, adds per season) are enforced again on free-agent adds, waiver claims and the waiver run. A rewrite earlier this season had quietly switched them off.
+> - A practice room opens from a keeper or dynasty league that has a taxi squad; it used to fail.
+> - On a desktop, every league box on your leagues page is the same size, and its lines no longer wrap.
+
+**The scratch runner reaches the end again: 171 suites pass from a fresh
+database.** Since 0422 ("the door is open": `has_native()` = signed in) it had
+stopped at its first suite, native-league 1a0, which still expected the
+"invite-only" refusal, so every later suite went unrun. Stale probes, updated
+to test what the gate is now (a signed-out caller is refused): native-league
+1a0 and 18a, convert-league cv2, practice-room pr0c / pr1 (the flag itself,
+not `has_native()`). taco-locker tl3b read the latest chat card by
+`created_at`, which ties inside one transaction; it orders by id now.
+graduation gr0 gains four columns that arrived unseen, none ever a college
+slug: `team_role.slug` (0468, coach units), `contest_swap.in_slug/out_slug`
+(0478, history), `sport_slot_lock.player_slug` (0426, other sports).
+
+Two real bugs the runner then found:
+- **0497**: 0487 rewrote `add_free_agent`, `submit_waiver_claim` and
+  `process_waivers` from a body older than 0358 and dropped
+  `add_limit_reason` from all three. A normalised diff of 0358 against 0487
+  shows that call as the only loss; 0497 is 0487's bodies with it restored.
+  txn-limit t3 caught it.
+- **0496**: 0442's backstop refuses taxi/devy on a redraft league, and a
+  practice room is a redraft mock that copies its source's roster_shape
+  (0282), so a room from a keeper league with a taxi squad never opened. The
+  trigger skips `is_mock` leagues (a mock never has a second season).
+  practice-room pr2 caught it.
+
+Founder (desktop screenshot): "on desktop web, let's make all the league
+boxes the same size without wrapping lines." The grid is `.lg-grid` in
+styles.css: at 720px and up, `grid-auto-rows: 1fr` with stretched cards, and
+`.lg-line` (type line, settings line, lineup line) on one line with an
+ellipsis and a title. Measured in Chromium: at 1000px three uneven cards are
+all 161px with every line 19px; at 400px heights and wrapping are as before.
+No iPhone build.
+
 ### v0.707.5 — 💍 Just married: the congratulations banner
 
 > - When your shotgun wedding goes through, a congratulations banner appears under the league's name and ⚙ SETTINGS. Tap it to land on My Team › Trades, where the wedding's result is.

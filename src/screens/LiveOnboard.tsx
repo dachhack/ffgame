@@ -1389,7 +1389,8 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
           every league, off the glance snapshots the cards already read. */}
       {total > 0 && <HeroesVillains snaps={Object.values(glance)} />}
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
+      {/* .lg-grid (styles.css): on a desktop every box is one size, its lines unwrapped (v0.707.6). */}
+      <div className="lg-grid">
         {filter !== 'weekly' && commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
         {enrolledCommish.filter((e) => filter !== 'weekly' || weekly(e)).map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
@@ -1646,7 +1647,7 @@ function LineupLine({ snap }: { snap: WidgetSnapshot }) {
   const r = lineupReport(snap);
   if (!r) return null;
   const { text, open } = lineupReportLine(r);
-  return <div className="mono" style={{ fontSize: 12, lineHeight: 1.45, fontWeight: 700, marginTop: 3, color: open ? 'var(--warn)' : 'var(--you)' }}>{text}</div>;
+  return <div className="mono lg-line" title={text} style={{ fontSize: 12, lineHeight: 1.45, fontWeight: 700, marginTop: 3, color: open ? 'var(--warn)' : 'var(--you)' }}>{text}</div>;
 }
 
 /** THE SQUAD BUTTON'S WORDS (v0.682.4, founder: "chip says build your squad
@@ -1720,16 +1721,17 @@ function LeagueCard({ e, commish, slate, glance, unread, seats, onPodBuild, onOp
               {(e.team_name || `Seat ${e.sleeper_roster_id}`).toUpperCase()}
             </div>
           )}
-          {/* Wraps rather than clips (v0.357.2): the line carries the game
-              now, and a clipped ellipsis would hide the very words the founder
-              asked to see. */}
-          <div className="mono" style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>
+          {/* Wraps rather than clips (v0.357.2) on a phone: the line carries
+              the game now. On a desktop it stays on one line (v0.707.6,
+              founder: "make all the league boxes the same size without
+              wrapping lines"); the title carries the whole of it. */}
+          <div className="mono lg-line" title={leagueTypeLine(e)} style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2, lineHeight: 1.4 }}>
             {leagueTypeLine(e)}
           </div>
           {/* The settings line (0421): devy, superflex, PPR, best ball, cap,
               keepers, dues — left out when there is nothing to add. */}
           {leagueDetailLine(e) && (
-            <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1, lineHeight: 1.4 }}>
+            <div className="mono lg-line" title={leagueDetailLine(e)} style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1, lineHeight: 1.4 }}>
               {leagueDetailLine(e)}
             </div>
           )}

@@ -45,7 +45,7 @@ begin
   perform tl_ok(commish_lock_team(lid, b, true), 'tl1 B goes in the Taco Locker');
   select count(*) into n1 from league_message where league_id = lid and kind = 'txn' and txn ->> 'kind' = 'taco_locker';
   perform tl_true(n1 = n0 + 1, 'tl1a the league hears it once');
-  perform tl_true((select body from league_message where league_id = lid and txn ->> 'kind' = 'taco_locker' order by created_at desc limit 1)
+  perform tl_true((select body from league_message where league_id = lid and txn ->> 'kind' = 'taco_locker' order by id desc limit 1)
     like '🌮 TL-B is in the Taco Locker%', 'tl1b …by name, with the taco');
   perform tl_ok(commish_lock_team(lid, b, true), 'tl1c a second tap is fine…');
   select count(*) into n1 from league_message where league_id = lid and kind = 'txn' and txn ->> 'kind' = 'taco_locker';
@@ -73,7 +73,7 @@ begin
   perform tl_ok(commish_lock_team(lid, b, false), 'tl3 B comes out');
   select count(*) into n1 from league_message where league_id = lid and kind = 'txn' and txn ->> 'kind' = 'taco_locker';
   perform tl_true(n1 = n0 + 2, 'tl3a the league hears that too');
-  perform tl_true((select body from league_message where league_id = lid and txn ->> 'kind' = 'taco_locker' order by created_at desc limit 1)
+  perform tl_true((select body from league_message where league_id = lid and txn ->> 'kind' = 'taco_locker' order by id desc limit 1)
     = '🌮 TL-B is out of the Taco Locker', 'tl3b …in those words');
   perform tl_as('02');
   perform tl_ok(drop_player(lid, b, 'tl-3'), 'tl3c B drops again');

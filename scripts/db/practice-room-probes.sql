@@ -66,7 +66,9 @@ begin
   perform set_config('probe.pr_lid', lid::text, false);
   perform pr_as('2'); perform pr_ok(native_join(code, 'Second Team'), 'pr0a pr2 joins by code');
   perform pr_as('3'); perform pr_ok(native_join(code, 'Third Team'), 'pr0b pr3 joins by code');
-  perform pr_true(not has_native(), 'pr0c and a joiner does NOT carry the native flag');
+  -- The flag itself, not has_native(): since 0422 has_native() is any signed-in account.
+  perform pr_true(coalesce((select features ->> 'native' from app_user where id = auth.uid()), '') <> 'true',
+    'pr0c and a joiner does NOT carry the native flag');
   reset role;
   for i in 1..60 loop
     insert into league_pool (league_id, slug, full_name, pos, team, rank)
@@ -106,10 +108,10 @@ do $$
 declare lid uuid := current_setting('probe.pr_lid')::uuid; mid uuid; r jsonb; n int;
 begin
   perform pr_as('2');
-  perform pr_true(not has_native(), 'pr1 pr2 still has no native flag');
-  perform pr_true(not is_league_commish(lid), 'pr1a and is not the commissioner');
-  perform pr_no(create_native_league('Nope', '2026', 4), 'invite-only',
-    'pr1b — and cannot create a real league, so the gate still guards what it guarded');
+  -- 0422 opened native leagues to every signed-in account, so the flag is
+  -- no longer what a practice room is about; holding no seat of power is.
+  perform pr_true(has_native(), 'pr1 since 0422 any signed-in account has the native door');
+  perform pr_true(not is_league_commish(lid), 'pr1a and pr2 is not the commissioner');
   r := create_mock_from_league(lid, 3);
   perform pr_ok(r, 'pr2 but CAN open a practice room');
   mid := (r ->> 'league_id')::uuid;
