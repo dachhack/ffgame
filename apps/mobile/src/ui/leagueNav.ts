@@ -15,8 +15,12 @@ let vows = false;
 /** Installed by the app shell; returns the uninstall. */
 export const onLeagueGo = (fn: (room: LeagueRoomName) => void): (() => void) => { go = fn; return () => { if (go === fn) go = null; }; };
 export const goLeagueRoom = (room: LeagueRoomName): void => { go?.(room); };
-/** The Team screen opens on this tab the next time it mounts. */
-export const requestTeamTab = (tab: TeamTab): void => { teamTab = tab; };
+let tabHand: ((tab: TeamTab) => void) | null = null;
+/** The Team screen opens on this tab the next time it mounts — or now, when
+ *  it is already on screen (v0.707.5: the wedding banner from My Team itself). */
+export const requestTeamTab = (tab: TeamTab): void => { if (tabHand) tabHand(tab); else teamTab = tab; };
+/** Installed by a mounted Team screen; returns the uninstall. */
+export const onTeamTab = (fn: (tab: TeamTab) => void): (() => void) => { tabHand = fn; return () => { if (tabHand === fn) tabHand = null; }; };
 export const takeTeamTab = (): TeamTab | null => { const t = teamTab; teamTab = null; return t; };
 /** The wedding card opens its vows composer the next time it loads your pending wedding. */
 export const requestVows = (): void => { vows = true; };

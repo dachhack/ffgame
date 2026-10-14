@@ -4132,7 +4132,7 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
       </div>{/* /wire + order row */}
       </>)}
 
-      {tab === 'trades' && <ShotgunWeddingCard leagueId={leagueId} onChanged={refresh} />}
+      {tab === 'trades' && <ShotgunWeddingCard leagueId={leagueId} markSeen onChanged={refresh} />}
       {tab === 'trades' && (
         <TradeCenter leagueId={leagueId} myRoster={myRoster} teams={team.waiver_order} initialPartner={tradeSeed}
           rosters={rosters} poolBySlug={poolBySlug} tradeReview={team.trade_review}

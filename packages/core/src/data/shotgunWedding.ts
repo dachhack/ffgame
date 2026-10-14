@@ -2,6 +2,7 @@
 // docs/shotgun-wedding.md. The card on the web (ShotgunWeddingCard) and on
 // the phone read these, so a wedding never says one thing in the browser and
 // another in the app.
+import { storeGet, storeSet } from '../platform';
 
 /** 0454's house rules: who may call a wedding off, and when it is due. */
 export type VetoRule = 'winner' | 'loser' | 'none';
@@ -94,4 +95,42 @@ export function weddingStatusShort(w: Wedding, nowMs: number = Date.now()): stri
   if (Date.parse(w.deadline) <= nowMs) return 'Deadline passed. It goes through on the next sweep.';
   const vetoTeam = w.veto_rule === 'none' ? null : teamOf(w, w.veto ?? null);
   return vetoTeam ? `Goes through ${at}. ${vetoTeam} can call it off.` : `Goes through ${at}. Nobody can call it off.`;
+}
+
+// ── 🎉 THE CONGRATULATIONS BANNER (v0.707.5) ────────────────────────────────
+// Founder: "after your wedding goes through, let's have a banner squeeze in
+// under the league name and settings row with a congratulatory message. click
+// the banner takes you to trades where you see the results of your wedding.
+// Banner goes away once clicked or you visit the trades section."
+//
+// "Seen" is this device's memory (platform storage: MMKV on the phone,
+// localStorage on the web), one key per wedding. A wedding only ever shows
+// while shotgun_state still returns it — the latest week's — so the keys are
+// never consulted for long.
+const seenKey = (id: string) => `drip.wedding-seen.${id}`;
+const seenListeners = new Set<() => void>();
+export const weddingSeen = (id: string): boolean => storeGet(seenKey(id)) === '1';
+export function markWeddingsSeen(ids: string[]): void {
+  let changed = false;
+  for (const id of ids) if (!weddingSeen(id)) { storeSet(seenKey(id), '1'); changed = true; }
+  if (changed) for (const fn of seenListeners) fn();
+}
+/** Re-read when a wedding is marked seen anywhere on this device. Returns the unsubscribe. */
+export function onWeddingSeen(fn: () => void): () => void { seenListeners.add(fn); return () => { seenListeners.delete(fn); }; }
+
+/** Went through: the original trade, or the vows both sides agreed. */
+export const weddingWentThrough = (w: Wedding): boolean => w.status === 'married' || w.status === 'renegotiated';
+/** PURE: the wedding the banner is for — yours, gone through, not yet seen here. */
+export function weddingNews(ws: Wedding[], seen: (id: string) => boolean = weddingSeen): Wedding | null {
+  return ws.find((w) => w.my_seat != null && weddingWentThrough(w) && !seen(w.id)) ?? null;
+}
+/** The ids the Trades tab marks seen on a visit: every one of yours that went through. */
+export const weddingNewsIds = (ws: Wedding[]): string[] => ws.filter((w) => w.my_seat != null && weddingWentThrough(w)).map((w) => w.id);
+/** PURE: the banner's words. */
+export function weddingCongrats(w: Wedding): { title: string; sub: string } {
+  const [mine, other] = w.my_seat === w.home.roster ? [w.home.team, w.away.team] : [w.away.team, w.home.team];
+  return {
+    title: `💍 Congratulations, ${mine} & ${other} — just married!`,
+    sub: w.status === 'renegotiated' ? 'Your own vows went through · see the trade in TRADES →' : 'The trade went through · see the results in TRADES →',
+  };
 }

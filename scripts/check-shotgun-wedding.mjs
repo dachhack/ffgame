@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { weddingPlan, weddingCandidates } from '../packages/core/src/engine/shotgunWedding.ts';
 import { leagueSlotDefs, optimalLineup } from '../packages/core/src/engine/classic.ts';
-import { weddingStatusLine, weddingDeadlineLabel, VETO_RULES, DEADLINE_RULES } from '../packages/core/src/data/shotgunWedding.ts';
+import { weddingStatusLine, weddingDeadlineLabel, VETO_RULES, DEADLINE_RULES, weddingNews, weddingNewsIds, weddingCongrats, markWeddingsSeen, weddingSeen } from '../packages/core/src/data/shotgunWedding.ts';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -123,6 +123,24 @@ const after = (roster, gone, got) => roster.filter((p) => !gone.includes(p.id)).
   const sql54 = readFileSync(new URL('../supabase/migrations/0454_shotgun_wedding_house_rules.sql', import.meta.url), 'utf8');
   ok('0454 accepts exactly those', /v not in \('winner', 'loser', 'none'\)/.test(sql54) && /d not in \('tue20', 'wed20', 'thu12'\)/.test(sql54));
   ok('0454 clamps the deadline to an hour before the next kickoff', /dl := next_kick - interval '1 hour'/.test(sql54));
+}
+
+// ── 🎉 the congratulations banner (v0.707.5) ──
+{
+  const side = (roster, team) => ({ roster, team, score: null, gives: [] });
+  const wed = (id, status, my_seat) => ({ id, week: 6, status, deadline: '', note: null, home: side(1, 'Bank Roll'), away: side(2, 'Super Crisp'),
+    winner: 1, veto: 1, veto_rule: 'winner', counter: null, my_seat, can_decline: false, can_counter: false, can_accept: false, rosters: null });
+  const none = () => false;
+  ok('banner: your wedding that went through is news', weddingNews([wed('a', 'married', 2)], none)?.id === 'a');
+  ok('banner: new vows that went through count too', weddingNews([wed('b', 'renegotiated', 1)], none)?.id === 'b');
+  ok('banner: pending, called off, failed or annulled is not', weddingNews(['pending', 'declined', 'failed', 'annulled'].map((st, i) => wed(`x${i}`, st, 1)), none) === null);
+  ok('banner: someone else\'s wedding is not', weddingNews([wed('c', 'married', null)], none) === null);
+  ok('banner: once seen it is gone', weddingNews([wed('d', 'married', 1)], (id) => id === 'd') === null);
+  ok('banner: names both teams, yours first, and no "you"', weddingCongrats(wed('e', 'married', 2)).title === '💍 Congratulations, Super Crisp & Bank Roll — just married!'
+    && !/\byou\b/i.test(weddingCongrats(wed('e', 'married', 2)).title), weddingCongrats(wed('e', 'married', 2)));
+  ok('banner: a Trades visit marks only yours that went through', weddingNewsIds([wed('f', 'married', 1), wed('g', 'pending', 1), wed('h', 'married', null)]).join() === 'f');
+  markWeddingsSeen(['f']);
+  ok('banner: marking seen sticks (platform storage)', weddingSeen('f') && !weddingSeen('g'));
 }
 
 if (fails) { console.log(`\n${fails} SHOTGUN WEDDING ASSERTION(S) FAILED`); process.exit(1); }
