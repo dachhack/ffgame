@@ -1,0 +1,8 @@
+{
+  "mode": "seat-wire",
+  "week": 6,
+  "season": "2026",
+  "league": "5ae08e35-c852-42a6-b944-69779cb012d0",
+  "seat": 4,
+  "why": "Founder: 'Team 4 doesn't have a legal team, but it looks like the AI is not making moves to get it legal.' The read-only probe (058) confirmed the seat is AI-controlled with agent waivers on, and the roster is illegal: Baker Mayfield sits on IR as D (the league's IR takes IR/O) with the active roster full at 21/21, so every add and claim is refused; no move since Oct 14. The hourly sweep's IR housekeeping should bring him back and cut the cheapest body (core legalizeIrDrop picks Keaton Mitchell on today's projections) but has not. One pass of that sweep for seat 4, planning week 6, with its log: it either makes the roster legal or names the refusal."
+}
