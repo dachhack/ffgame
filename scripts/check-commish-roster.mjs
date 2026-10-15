@@ -26,7 +26,23 @@ ok('web: the panels are injected per destination', dash.includes('eligible: <Lea
 ok('web: ELIGIBLE PLAYERS carries copies and the top-up; ROSTERS & WIRE the tools', admin.includes("{tab === 'eligible' && l.provider === 'native' && <><CopiesPanel leagueId={l.league_id} /><TopUpPoolPanel leagueId={l.league_id} /></>}") && admin.includes("{tab === 'rosters' && l.provider === 'native' && <NativeRosterTools leagueId={l.league_id} />}"));
 ok('web: size under construction, limits under manager rules', admin.includes('<RosterRulesEditor leagueId={l.league_id} part="size" />') && admin.includes('<RosterRulesEditor leagueId={l.league_id} part="caps" />'));
 ok('web: team rules, taxi, IR and OUT are manager rules', dash.includes("{sport === 'nfl' && view === 'rules' && mode !== null && <SeatRulesPanel") && dash.includes("{view === 'rules' && shape.ir > 0") && dash.includes("{view === 'rules' && shape.taxi > 0"));
-ok('web: copies left the draft room', !read('src/screens/NativeLeague.tsx').includes('setLeagueCopies('));
+ok('web: copies left the draft room (no 1–4 chips there)', !read('src/screens/NativeLeague.tsx').includes('setLeagueCopies(leagueId, n)'));
+
+// ── the setup flow asks what locks at the draft (v0.714.1) ──────────────────
+// Founder: "Basically anything that can't be reversed after the draft needs to be in the setup flow."
+const SC = await import('../packages/core/src/data/setupChoices.ts');
+ok('setup: rookies only is max 0 years, no rookies min 1, all clears', JSON.stringify(SC.tenureFilter('rookies')) === JSON.stringify({ min_exp: null, max_exp: 0 }) && SC.tenureFilter('vets')?.min_exp === 1 && SC.tenureFilter('all') === null);
+ok('setup: copies refused with salaries, an auction, a format, college; offered otherwise',
+  !!SC.copiesBlocked({ auction: false, contract: true, format: 'standard', college: false }) && !!SC.copiesBlocked({ auction: true, contract: false, format: 'standard', college: false })
+  && !!SC.copiesBlocked({ auction: false, contract: false, format: 'guillotine', college: false }) && !!SC.copiesBlocked({ auction: false, contract: false, format: 'standard', college: true })
+  && SC.copiesBlocked({ auction: false, contract: false, format: 'standard', college: false }) === null);
+ok('setup: the old defaults stand (15 classic, 12 drip) and are on the menu', SC.defaultRosterSize(true) === 15 && SC.defaultRosterSize(false) === 12 && SC.SETUP_ROSTER_SIZES.includes(15) && SC.SETUP_ROSTER_SIZES.includes(12));
+for (const [f, rounds] of [['apps/mobile/src/screens/Recruit.tsx', 'rosterSize ?? defaultRosterSize'], ['src/screens/NativeLeague.tsx', 'rosterSize ?? defaultRosterSize']]) {
+  const src = read(f);
+  ok(`${f}: asks roster size, the pool, copies and how it's won`, src.includes(rounds) && src.includes("label=\"WHO'S IN THE POOL\"") && src.includes('label="COPIES OF EVERY PLAYER"') && src.includes("label=\"HOW IT'S WON\""));
+  ok(`${f}: applies them after create, the pool filter BEFORE the seed`, src.indexOf('setLeaguePoolFilter(r.league_id!, tf)') > 0 && src.indexOf('setLeaguePoolFilter(r.league_id!, tf)') < src.lastIndexOf('await seedLeaguePool(r.league_id') && src.includes('setLeagueCopies(r.league_id!, copies)') && src.includes('setLeagueGolf(r.league_id!, true)') && src.includes("setLeagueBullseye(r.league_id!, winStyle === 'bullseye_slots' ? 'slots' : 'total')"));
+}
+ok('phone: the wizard has a ROSTER & PLAYERS step before the draft', /roster: 'ROSTER & PLAYERS'/.test(read('apps/mobile/src/screens/Recruit.tsx')) && /\.\.\.\(!isSport \? \(\['roster'\] as Step\[\]\) : \[\]\), 'draft', 'review'\]/.test(read('apps/mobile/src/screens/Recruit.tsx')));
 
 if (fails) { console.log(`\n${fails} COMMISH-ROSTER ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL COMMISH-ROSTER ASSERTIONS PASSED');

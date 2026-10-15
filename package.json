@@ -89,7 +89,7 @@
     "check:devroom": "tsx scripts/check-dev-room.mjs",
     "check:seatrules": "tsx scripts/check-seat-rules.mjs",
     "check:dfsbullseye": "tsx scripts/check-dfs-bullseye.mjs",
-    "check:commishroster": "node scripts/check-commish-roster.mjs",
+    "check:commishroster": "tsx scripts/check-commish-roster.mjs",
     "check:themes": "tsx scripts/check-themes.mjs",
     "check:helmets": "tsx scripts/check-helmets.mjs",
     "check:publicapi": "node scripts/check-public-api.mjs",

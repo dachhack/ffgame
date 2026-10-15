@@ -20,12 +20,14 @@ import {
   type BoardPreview, type LeagueIdentity,
   postLeagueListing, redeemCommish, nativeJoin, inviteSeats, claimPlatformSeat, type InviteSeat, createNativeLeague, seedLeaguePool, type LeagueContinuity, isDynastyContinuity, contractRosterDepth,
   setLeagueFormat, type LeagueFormat, setupLeagueCollege, setLeagueDevyOpen,
+  setLeaguePoolFilter, setLeagueCopies, setLeagueGolf, setLeagueBullseye,
   nativeGenerateSchedule, myFeatures, isAdmin, leagueTypeLine, type AdminLeague, type BoardListing,
   myEnrollments, type Enrollment, bullseyeLeagueLine, contestPitch, isWeeklyKind, prizesWord } from '@drip/core/data/liveApi';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
 } from '@drip/core/data/leagueBlueprint';
 import { scheduleWeeksFor } from '@drip/core/data/league';
+import { tenureFilter, copiesBlocked, SETUP_ROSTER_SIZES, defaultRosterSize, WIN_STYLES, SETUP_INFO, type PoolTenure, type WinStyle } from '@drip/core/data/setupChoices';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
 import { inviteMessage } from '@drip/core/data/invite';
@@ -81,10 +83,10 @@ const NODE_SUB: Record<Node, string> = {
 };
 
 /** The create branch's steps, in the order the old form asked them. */
-type Step = 'copy' | 'game' | 'weekly' | 'season' | 'format' | 'name' | 'devy' | 'draft' | 'review';
+type Step = 'copy' | 'game' | 'weekly' | 'season' | 'format' | 'name' | 'devy' | 'roster' | 'draft' | 'review';
 const STEP_TITLE: Record<Step, string> = {
   copy: 'COPY SETTINGS', game: 'WHICH GAME', weekly: 'WEEKLY DRAFT', season: 'NEXT SEASON', format: 'FORMAT',
-  name: 'NAME & SIZE', devy: 'COLLEGE', draft: 'THE DRAFT', review: 'REVIEW',
+  name: 'NAME & SIZE', devy: 'COLLEGE', roster: 'ROSTER & PLAYERS', draft: 'THE DRAFT', review: 'REVIEW',
 };
 
 /** One row of the root menu — a destination, not a control. */
@@ -243,6 +245,13 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
     : continuity === 'keeper' ? 'KEEPER ' : '';
   // FORMAT (0221/0222): how the season is WON.
   const [format, setFormat] = useState<LeagueFormat>('standard');
+  // ROSTER & PLAYERS (v0.714.1, founder: "anything that can't be reversed
+  // after the draft needs to be in the setup flow"): roster size, who's in
+  // the pool, copies, and how a classic league is won — each locks at the draft.
+  const [rosterSize, setRosterSize] = useState<number | null>(null);   // null = the game's default
+  const [poolTenure, setPoolTenure] = useState<PoolTenure>('all');
+  const [copies, setCopies] = useState(1);
+  const [winStyle, setWinStyle] = useState<WinStyle>('points');
   // GUILLOTINE BRINGS A CROWD (founder: "Guillotine should default to 18
   // teams"). One team falls per completed week, so the format wants a field
   // deep enough to survive the season — and with 0245's 17 weeks, 18 teams is
@@ -533,7 +542,7 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
       // through to free street deals.
       const bp = copyBp;
       const rounds = bp ? bp.rounds
-        : contractType ? contractRosterDepth(teamCount, 200) : game === 'classic' ? 15 : 12;
+        : contractType ? contractRosterDepth(teamCount, 200) : rosterSize ?? defaultRosterSize(game === 'classic');
       const caps = bp ? bp.posCaps : game === 'classic' ? null : { QB: 3, RB: null, WR: null, TE: 3, K: 1, DEF: 1 };
       const contN = continuity === 'keeper' ? keepN : isDynastyContinuity(continuity) ? rookieN : null;
       const r = await createNativeLeague(nm, '2026', teamCount, rounds, secs, draftMode,
@@ -581,6 +590,23 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
           if (!or.ok) setCopyReport((cur) => [...(cur ?? []), `devy market opening — ${friendlyError(or.error ?? 'refused')}`]);
         }
       }
+      // ROSTER & PLAYERS (v0.714.1): the settings that lock at the draft. The
+      // pool filter goes BEFORE the seed — it bites when the pool is built.
+      // A refusal is reported, not fatal: the league is real, and each one is
+      // still settable from COMMISH until the draft.
+      const lockers: [string, () => Promise<{ ok: boolean; error?: string }>][] = [];
+      const tf = collegeNow ? null : tenureFilter(poolTenure);
+      if (tf) lockers.push(['who\u2019s in the pool', () => setLeaguePoolFilter(r.league_id!, tf)]);
+      if (copies > 1 && !copiesWhy) lockers.push(['copies of every player', () => setLeagueCopies(r.league_id!, copies)]);
+      if (game === 'classic' && winStyle === 'golf') lockers.push(['golf mode', () => setLeagueGolf(r.league_id!, true)]);
+      if (game === 'classic' && (winStyle === 'bullseye_slots' || winStyle === 'bullseye_total')) {
+        lockers.push(['bullseye', () => setLeagueBullseye(r.league_id!, winStyle === 'bullseye_slots' ? 'slots' : 'total')]);
+      }
+      if (lockers.length) setMakeNote('Setting the roster and players…');
+      for (const [what, run] of lockers) {
+        const x = await run().catch((e) => ({ ok: false, error: String(e) }));
+        if (!x.ok) setCopyReport((cur) => [...(cur ?? []), `${what} — ${friendlyError(x.error ?? 'refused')}`]);
+      }
       setMakeNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setMakeNote, collegeNow ? collegePoolOpts(collegeNow) : undefined));
       if (!pool.ok) { warn(); setErr(friendlyError(pool.error ?? 'league created, but the player pool failed — reseed it from the draft room')); return; }
@@ -615,6 +641,13 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
     } catch { /* sheet dismissed */ }
   };
 
+  // Copies need snake/linear, no salaries, head-to-head and no college players (0500).
+  const collegeOn = game === 'classic' && !isSport && collegeSetupActive(college)
+    && !collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType, redraft: isRedraft(continuity) });
+  const copiesWhy = copiesBlocked({ auction: draftMode === 'auction', contract: contractType, format, college: collegeOn });
+  const sizeNow = copyBp ? copyBp.rounds : rosterSize ?? defaultRosterSize(game === 'classic');
+  const winLabel = WIN_STYLES.find((w) => w.id === winStyle)?.label ?? 'MOST POINTS';
+
   // The step list is COMPUTED: no copy step when there is nothing to copy
   // from, so a first league is never asked a question with one answer.
   const STEPS: Step[] = game === 'weekly' && !isSport
@@ -622,7 +655,7 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
     ? [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'weekly']
     : [...(mine.length > 0 ? (['copy'] as Step[]) : []), 'game', 'season', 'format', 'name',
     // No devy step for a daily sport (0426): college players have no place in an NBA or NHL pool.
-    ...(game === 'classic' && !isSport ? (['devy'] as Step[]) : []), 'draft', 'review'];
+    ...(game === 'classic' && !isSport ? (['devy'] as Step[]) : []), ...(!isSport ? (['roster'] as Step[]) : []), 'draft', 'review'];
   const step: Step = STEPS[Math.min(stepIx, STEPS.length - 1)];
   // The two steps that can be WRONG rather than merely unfinished. Everything
   // else has a default that is a real answer, so NEXT is always allowed.
@@ -1063,6 +1096,52 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
                 </View>
               );
             })()}
+            {/* ROSTER & PLAYERS (v0.714.1): what locks at the draft, asked now. */}
+            {step === 'roster' && (
+              <View style={{ gap: 12 }}>
+                {!contractType && !copyBp && (
+                  <View style={{ gap: 6 }}>
+                    <LabelInfo label="ROSTER SIZE" title="Roster size" info={SETUP_INFO.size} />
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      {SETUP_ROSTER_SIZES.map((n) => (
+                        <Chip key={n} small label={String(n)} on={sizeNow === n} onPress={() => { tap(); setRosterSize(n); }} />
+                      ))}
+                    </View>
+                  </View>
+                )}
+                {(contractType || !!copyBp) && <Mono size={9} tone="faint">{`ROSTER SIZE ${sizeNow} · ${contractType ? 'set by the salary market' : 'copied'}`}</Mono>}
+                <View style={{ gap: 6 }}>
+                  <LabelInfo label="WHO'S IN THE POOL" title="Who's in the pool" info={SETUP_INFO.pool} />
+                  {collegeOn
+                    ? <Mono size={9} tone="faint">set by the college choices — fine-tune in ⚑ COMMISH → ELIGIBLE PLAYERS</Mono>
+                    : (
+                      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                        {([['all', 'ALL PLAYERS'], ['rookies', 'ROOKIES ONLY'], ['vets', 'NO ROOKIES']] as const).map(([id, label]) => (
+                          <Chip key={id} small label={label} on={poolTenure === id} onPress={() => { tap(); setPoolTenure(id); }} />
+                        ))}
+                      </View>
+                    )}
+                </View>
+                <View style={{ gap: 6 }}>
+                  <LabelInfo label="COPIES OF EVERY PLAYER" title="Copies of every player" info={SETUP_INFO.copies} />
+                  {copiesWhy
+                    ? <Mono size={9} tone="faint">{`one of each · ${copiesWhy}`}</Mono>
+                    : (
+                      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                        {[1, 2, 3, 4].map((n) => <Chip key={n} small label={String(n)} on={copies === n} onPress={() => { tap(); setCopies(n); }} />)}
+                      </View>
+                    )}
+                </View>
+                {game === 'classic' && (
+                  <View style={{ gap: 6 }}>
+                    <LabelInfo label="HOW IT'S WON" title="How it's won" info={SETUP_INFO.win} />
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      {WIN_STYLES.map((w) => <Chip key={w.id} small label={w.label} on={winStyle === w.id} onPress={() => { tap(); setWinStyle(w.id); }} />)}
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
             {step === 'draft' && (
               <View style={{ gap: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1091,6 +1170,9 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
                 <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
                   {draftMode === 'auction' ? 'AUCTION' : 'SNAKE'} draft · {pace === 'live' ? `${clockDraft || '90'}s a pick` : `${clockDraft || '12'}h a pick`}
                 </Mono>
+                <Mono size={10} tone="dim" style={{ lineHeight: 15 }}>
+                  {`${sizeNow} roster spots · ${collegeOn ? 'college pool' : poolTenure === 'rookies' ? 'rookies only' : poolTenure === 'vets' ? 'no rookies' : 'all players'}${copies > 1 && !copiesWhy ? ` · ${copies} copies of each` : ''}${game === 'classic' ? ` · ${winLabel.toLowerCase()}` : ''}`}
+                </Mono>
                 {game === 'classic' && (() => {
                   const blk = collegeSetupBlocked(college, { classic: true, auction: draftMode === 'auction', contract: contractType, redraft: isRedraft(continuity) });
                   return (
@@ -1106,8 +1188,8 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
                 )}
                 <LabelInfo label="WHAT ELSE YOU GET"
                   info={(game === 'classic'
-                    ? '15 roster spots per team. Set the starting lineup and scoring from COMMISH before the draft.'
-                    : '12 roster spots per team: 8 weekly starters, 4 bench. Roster size, position limits and the draft schedule are all adjustable before the draft.')
+                    ? 'Set the starting lineup and scoring from COMMISH — the lineup can change between weeks even after the draft.'
+                    : '8 weekly starters; the rest is bench. Position limits and the draft schedule are adjustable before the draft.')
                     + '\n\nYou take seat 1 as commissioner, and a 14-week schedule is generated automatically.'} />
               {/* The button NAMES the game it will create — the confirmation
                   lives in the moment of commitment, not in a dialog after. */}

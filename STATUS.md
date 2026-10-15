@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.714.1 — Start a league asks what locks at the draft
+
+> - Starting a league now asks the settings you can't change after the draft: roster size, who's in the player pool (all, rookies only, no rookies), copies of every player, and for classic leagues how it's won (most points, golf or Bullseye).
+
+Founder: "Basically anything that can't be reversed after the draft needs to
+be in the setup flow." Already asked: game mode, format, league size, draft
+type, college/devy, the clock. New core data/setupChoices (pure): the pool's
+tenure filter, why copies can't be offered (salaries, an auction, a format,
+college — set_league_copies' own rules), the roster sizes (defaults 15
+classic / 12 drip, as before), the win styles and their ⓘ text.
+
+Phone (Recruit): a ROSTER & PLAYERS step after NAME & SIZE / COLLEGE and
+before THE DRAFT (not for a daily sport or the weekly fast track); the
+review says what was chosen. Web (NativeLeague): the same four questions
+under the college block. Both apply them right after create — the pool
+filter before the pool is seeded, since it bites at the seed — and a refusal
+joins the copy report rather than stopping a league that already exists. A
+copied or salary league keeps its own roster size (shown, not asked); a
+college league's pool is the college choices'. Left in the draft room: the
+order, the lottery and the start time — the draft's own business.
+check:commishroster +6 (tsx now). JavaScript only; no iPhone build.
+
 ### v0.714.0 — Roster settings in three places; copies move to the commissioner's settings
 
 > - The commissioner's ROSTER page is now three: ROSTER CONSTRUCTION (starting spots, bench/taxi/IR sizes, roster size), ELIGIBLE PLAYERS (copies of every player, player filters, extra positions, college/devy, add new players) and MANAGER ROSTER RULES (position limits, team rules, taxi/IR/OUT eligibility).
