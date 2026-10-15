@@ -161,8 +161,9 @@ export interface WireOpts {
   /** LONG-TERM VALUE (v0.717.0) — a dynasty league's market value. Founder:
    *  "make sure waiver suggestions are not long-term dynasty value losses."
    *  When given, the bench is spent lowest-long-term-value first, and no claim
-   *  drops a player worth more on it than the one coming in. The worker's AI
-   *  seats don't pass it; the waiver-targets tool does in dynasty leagues. */
+   *  drops a player worth more on it than the one coming in. The waiver-
+   *  targets tool passes it in dynasty leagues, and since v0.719.0 so do the
+   *  worker's AI seats (server/src/seatWire.js, core dynastyMarket). */
   keepValueOf?: (p: SpotPlayer) => number;
 }
 

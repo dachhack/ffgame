@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.719.0 — AI teams keep the dynasty guard too
+
+> - In dynasty leagues, AI-run teams no longer drop a player worth more in dynasty value than the one they pick up off waivers, and they let go of their lowest-value bench players first.
+
+Founder: "Make the AI teams use the dynasty guard too." server/src/seatWire.js
+reads dyn_board once per sweep and, for a dynasty league, passes the market
+in the league's format to seatWirePlan as `keepValueOf` (v0.717.0's guard:
+the bench spent lowest-dynasty-value first, and no hole, upgrade or bench
+swap drops a player worth more on it than the add). New core
+data/dynastyMarket transcribes the three SQL rules the clients get through
+league_market: isDynastySettings (league_continuity / league_is_dynasty —
+an explicit continuity wins, else rookie rounds or the old flag),
+dynFormatOfSlots (_league_adp_format: more than one QB-eligible spot is
+superflex) and dynValues (dyn_board_is_fresh: a board over ten days old
+guards nothing). Redraft and keeper leagues are unchanged. check:seatwire
+extended. Worker + JavaScript; no iPhone build.
+
 ### v0.718.0 — Preview, a plain tools bar, and tool options
 
 > - The tools bar drops its emojis, HEROES & VILLAINS is now PREVIEW, and a new OPTIONS chip lets you pick which leagues each tool reads.

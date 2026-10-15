@@ -568,5 +568,39 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(spotCover(SL, [rook('r', 'RB')]).get('S3')?.join() === 'r', 'spotCover lists who may stand in each spot');
 }
 
+// ── THE DYNASTY GUARD (v0.719.0): the AI seats use it too ───────────────────
+{
+  const RB2 = [{ slot: 'S1', type: 'RB', pos: ['RB'] }, { slot: 'S2', type: 'RB', pos: ['RB'] }];
+  const proj = (p) => PROJ_2026.get(p.id) ?? 0;
+  const mine = [{ id: 'bijan-robinson', pos: 'RB' }, { id: 'jonathan-taylor', pos: 'RB' }, { id: 'young-stash', pos: 'RB' }];
+  const wire = [{ id: 'derrick-henry', pos: 'RB', onWaivers: false }];
+  const base = { faab: false, budget: 0, openSeats: 0, maxClaims: 2, rosValueOf: proj, healthyValueOf: proj };
+  const free = seatWirePlan(RB2, mine, wire, proj, base);
+  ok(free.some((c) => c.drop === 'young-stash'), 'dynasty guard: without it, a zero-projection stash goes for a real back');
+  const dyn = new Map([['young-stash', 7000], ['derrick-henry', 1500]]);
+  const guarded = seatWirePlan(RB2, mine, wire, proj, { ...base, keepValueOf: (p) => dyn.get(p.id) ?? 0 });
+  ok(!guarded.some((c) => c.drop === 'young-stash'), 'dynasty guard: no claim drops a player worth more on the dynasty market than the add');
+  const both = [...mine, { id: 'old-vet', pos: 'RB' }];
+  const dyn2 = new Map([['young-stash', 7000], ['old-vet', 100], ['derrick-henry', 1500]]);
+  const spent = seatWirePlan(RB2, both, wire, proj, { ...base, keepValueOf: (p) => dyn2.get(p.id) ?? 0 });
+  ok(spent.length > 0 && spent.every((c) => c.drop !== 'young-stash'), 'dynasty guard: the bench is spent lowest-dynasty-value first');
+
+  const { isDynastySettings, dynFormatOfSlots, dynValues } = await import('../packages/core/src/data/dynastyMarket.ts');
+  ok(isDynastySettings({ continuity: 'dynasty' }) && isDynastySettings({ continuity: 'contract_dynasty' }) && !isDynastySettings({ continuity: 'keeper', rookie_rounds: 3 })
+    && isDynastySettings({ rookie_rounds: 2 }) && isDynastySettings({ dynasty: true }) && !isDynastySettings({}) && !isDynastySettings(null),
+    'dynasty market: which leagues are dynasty mirrors league_continuity (an explicit continuity wins)');
+  ok(dynFormatOfSlots([{ slot: 'Q', pos: ['QB'] }, { slot: 'SF', pos: ['QB', 'RB', 'WR', 'TE'] }]) === 'sf' && dynFormatOfSlots([{ slot: 'Q', pos: ['QB'] }, ...RB2]) === '1qb',
+    'dynasty market: more than one QB-eligible spot reads the superflex market');
+  const now = Date.parse('2026-10-15T00:00:00Z');
+  const rows = [{ slug: 'a', v1qb: 100, vsf: 300, fetched_at: '2026-10-12T00:00:00Z' }, { slug: null, v1qb: 5, vsf: 5, fetched_at: '2026-10-12T00:00:00Z' }];
+  ok(dynValues(rows, 'sf', now).get('a') === 300 && dynValues(rows, '1qb', now).get('a') === 100 && dynValues(rows, '1qb', now).size === 1,
+    'dynasty market: values in the league\'s format, unresolved rows skipped');
+  ok(dynValues(rows, '1qb', now + 11 * 864e5).size === 0, 'dynasty market: a board over ten days old guards nothing');
+  const { readFileSync } = await import('node:fs');
+  const sw = readFileSync(new URL('../server/src/seatWire.js', import.meta.url), 'utf8');
+  ok(sw.includes("isDynastySettings(lg.settings_json) ? dynMarket(dynFormatOfSlots(slots))") && /momentumOf,\s*keepValueOf,/.test(sw),
+    'worker: the AI seats pass the dynasty market as keepValueOf in a dynasty league');
+}
+
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

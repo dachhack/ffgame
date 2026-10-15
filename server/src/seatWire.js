@@ -56,6 +56,7 @@ import { modeOfSettings } from './resolve.js';
 import { teamKickoffs } from './lock.js';
 import { seatAgentsFor } from './agents.js';
 import { normTeam } from '../../packages/core/src/data/teamCodes.ts';
+import { isDynastySettings, dynFormatOfSlots, dynValues } from '../../packages/core/src/data/dynastyMarket.ts';
 
 /** How many claims a seat may have OUTSTANDING — pending ones included, not
  *  just the ones filed this run.
@@ -145,6 +146,22 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
     return (p) => by.get(p.id) ?? 0;
   })();
 
+  // THE DYNASTY GUARD (v0.719.0). Founder: "Make the AI teams use the dynasty
+  // guard too." In a dynasty league the seat spends its bench lowest-dynasty-
+  // value first and never drops a player worth more on the market than the
+  // one it adds (seatWaivers' keepValueOf). The board (0335) is read once per
+  // sweep; a stale one (ten days) guards nothing, as league_market would.
+  let dynRows = [];
+  try {
+    const { data } = await db().from('dyn_board').select('slug,v1qb,vsf,fetched_at').not('slug', 'is', null);
+    dynRows = data ?? [];
+  } catch (e) { log('seat wire', 'dyn board', e.message); }
+  const dynByFmt = new Map();
+  const dynMarket = (fmt) => {
+    if (!dynByFmt.has(fmt)) dynByFmt.set(fmt, dynValues(dynRows, fmt, Date.now()));
+    return dynByFmt.get(fmt);
+  };
+
   let done = 0;
   const irTagsOf = new Map();
   const outTagsOf = new Map();   // 0307: the OUT shelf's list, per league
@@ -176,6 +193,10 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
 
       const slots = leagueSlotDefs(mode);
       const bestball = leagueBestball(mode);
+      // The market in this league's format (superflex when more than one spot
+      // takes a QB), only for a dynasty league and only when the board is fresh.
+      const dyn = isDynastySettings(lg.settings_json) ? dynMarket(dynFormatOfSlots(slots)) : null;
+      const keepValueOf = dyn?.size ? (p) => dyn.get(p.id) ?? 0 : undefined;
       // An all-best-ball league fills itself at scoring time from whoever is on
       // the roster, so there is no "hole" for the wire to answer.
       if (!slots.length || slots.every((d) => bestball.includes(d.slot))) continue;
@@ -518,6 +539,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
           healthyValueOf,
           market,
           momentumOf,
+          keepValueOf,
         });
         // What each claim weighed (v0.561.4): season values on both sides, so
         // a move nobody would make is explainable from the log.
