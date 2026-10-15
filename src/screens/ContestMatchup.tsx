@@ -172,9 +172,10 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const pen = lvr?.aim?.penalty != null && Math.abs(lvr.score) < 1e-9 ? lvr.aim.penalty : null;
     // HURT IN HIS GAME (v0.701.0): his zero took no penalty — the chip says why
     const hurtRow = lvr?.aim?.hurt === true;
-    // THE GAME LOG (v0.703.0): a locked card, not being aimed at, opens his card on the Game log tab
+    // THE GAME LOG (v0.703.0): a locked card, not being aimed at, opens his card on the Game log tab — any
+    // face-up card since v0.713.10 (founder: "in your matchup … we need the ability to see the game logs")
     const slug = r.slug;
-    const logOpen = slug && !onPick && locked(slug) ? () => openPlayerCard({ slug, name: p?.name ?? slug, pos: p?.pos ?? 'FLEX', team: p?.team ?? '', week, tab: 'log' }) : undefined;
+    const logOpen = slug && !onPick ? () => openPlayerCard({ slug, name: p?.name ?? slug, pos: p?.pos ?? 'FLEX', team: p?.team ?? '', week, tab: 'log' }) : undefined;
     if (r.slug) return <PlayerCard key={`${s}-${r.slot}-${r.slug}`} slug={r.slug} name={p?.name ?? r.slug} pos={p?.pos ?? 'FLEX'} team={p?.team ?? null} opp={!mine} idx={i} chip={pen != null ? `−${pen}` : hurtRow ? '🩹' : tbc ? String(tbc.target) : null} chipTone={pen != null ? 'warn' : 'gold'} onChip={() => { if (pen == null) setTbNote(hurtRow ? HURT_NOTE : TB_NOTE); }} onClick={onPick ?? logOpen} selected={hot} />;
     if (pl?.id === 'ghost') return <PlayerCard key={`${s}-${r.slot}-ghost`} slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} opp={!mine} idx={i} badge="👻" onClick={onPick} selected={hot} />;
     if (r.sealed) return <SealedCard key={`${s}-${r.slot}-sealed`} seed={`${m.id}|${s}|${r.slot}`} idx={i} tag={hot ? '▶ HERE' : false} onClick={onPick} />;

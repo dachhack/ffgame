@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.10 — Game logs from any weekly contest card
+
+> - In a weekly contest, tap a player card on My Team or in the add / swap list: choose Add, Replace or Swap in, or open his Game log.
+> - On the matchup, tap any face-up card for his game log, not only once his game has locked.
+
+Founder: "For weekly contests, in your matchup, my team and when looking at
+players to swap or add to your lineup we need the ability to see the game
+logs for players. Maybe tap the card and you get the action (select or
+replace) and the option to see the game log?" Phone (ContestSquad): a tap on
+a filled My Team card asks Replace / Game log (a locked one still opens the
+log straight away; an open spot still opens the picker); a tap on a card in
+the player list asks "Add to RB1" or "Swap in for {name}" / Game log, and a
+card that can't go in (locked, taken, over budget) is tappable now for its
+log, the reason as the subtitle. The phone's own alert, so it stands over
+the picker sheet. Web (ContestSquad): the same choice in a Sheet at z 70,
+above the pick sheet (60) and under the player card (90); its state sits
+above the early returns. Matchup, both apps: any face-up card opens his
+Game log (sealed cards have no player; aiming a play still takes the tap).
+check:dfsbullseye +5 (its 7 older failures are on main too; that check is
+not in check:parity). JavaScript only; no iPhone build.
+
 ### v0.713.9 — Weekly contests keep the opponent's projection sealed
 
 > - On the league list and the home-screen widget, a weekly contest league no longer shows your opponent's projected total or the win bar until every game of the week has kicked off. Their live points still show.

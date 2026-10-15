@@ -386,5 +386,16 @@ for (const f of ['src/screens/LiveOnboard.tsx', 'apps/mobile/src/screens/Leagues
   ok(`${f}: a WEEKLY filter`, read(f).includes('WEEKLY') && read(f).includes('isWeeklyKind('));
 }
 
+// v0.713.10, founder: "in your matchup, my team and when looking at players to swap or add to your lineup we need
+// the ability to see the game logs for players. Maybe tap the card and you get the action (select or replace) and
+// the option to see the game log?"
+{
+  const app = read('apps/mobile/src/screens/ContestSquad.tsx'), web = read('src/screens/ContestSquad.tsx');
+  ok('game log: the phone\'s My Team card asks Replace or Game log', /askCard\(p, `\$\{labels\[d\.slot\]\} · \$\{fmt\$\(p\.salary\)\}`, \{ label: 'Replace'/.test(app) && /\{ text: 'Game log', onPress: \(\) => logOf\(p\) \}/.test(app));
+  ok('game log: the phone\'s player list asks Add / Swap in, or Game log — even a card that can\'t go in', /Swap in for \$\{holder\.name\}/.test(app) && !/<Pressable key=\{p\.slug\} disabled=\{!ok\}/.test(app));
+  ok('game log: the web asks the same, in a sheet above the pick sheet', /act: \{ label: 'Replace', run: \(\) => openSheet\(d\.slot\) \}/.test(web) && /Swap in for \$\{holder\.name\}/.test(web) && /zIndex=\{70\}>/.test(web) && />GAME LOG</.test(web));
+  ok('game log: the web\'s choice keeps its hook above the early returns', web.indexOf('const [ask, setAsk]') < web.indexOf('if (!st) return'));
+  ok('game log: every face-up matchup card opens his log (not only a locked one)', /if \(r\.slug\) \{/.test(read('apps/mobile/src/screens/ContestMatchup.tsx')) && /const logOpen = slug && !onPick \? \(\) =>/.test(read('src/screens/ContestMatchup.tsx')));
+}
 if (fails) { console.log(`\n${fails} DFS-BULLSEYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DFS-BULLSEYE ASSERTIONS PASSED');
