@@ -8,11 +8,11 @@
 // wrapping; each opens its tool in a sheet. Counts are what wants an answer.
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupAlerts, lineupAlertCount, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, WIRE_KIND_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet } from '../app/ui';
 import { HeroesVillains } from './HeroesVillains';
 
-type Tool = 'heroes' | 'lineup' | 'trades';
+type Tool = 'heroes' | 'lineup' | 'wire' | 'trades';
 export interface ToolLeague { id: string; name: string; rosterId: number; native: boolean; contest: boolean }
 
 const chip = (on: boolean): React.CSSProperties => ({
@@ -30,6 +30,8 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
   const [open, setOpen] = useState<Tool | null>(null);
   const alerts = useMemo(() => lineupAlerts(snaps), [snaps]);
   const alertN = useMemo(() => lineupAlertCount(snaps), [snaps]);
+  const wire = useMemo(() => wireTargets(snaps), [snaps]);
+  const wireN = useMemo(() => wireTargetCount(snaps), [snaps]);
   const tradeLeagues = useMemo(() => leagues.filter((l) => l.native && !l.contest), [leagues]);
   const tradeKey = tradeLeagues.map((l) => `${l.id}:${l.rosterId}`).join('|');
   const [zone, setZone] = useState<TradeZoneItem[] | null>(null);
@@ -48,6 +50,7 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
         <button className="mono" style={chip(false)} onClick={onFields}>▦ ALL FIELDS</button>
         <button className="mono" style={chip(false)} onClick={() => setOpen('heroes')}>⚔ HEROES &amp; VILLAINS</button>
         <button className="mono" style={chip(alertN > 0)} onClick={() => setOpen('lineup')}>{`🧭 LINEUP${alertN ? ` · ${alertN}` : ''}`}</button>
+        {tradeLeagues.length > 0 && <button className="mono" style={chip(wireN > 0)} onClick={() => setOpen('wire')}>{`📈 WAIVER TARGETS${wireN ? ` · ${wireN}` : ''}`}</button>}
         {tradeLeagues.length > 0 && <button className="mono" style={chip(zoneN > 0)} onClick={() => setOpen('trades')}>{`🔁 TRADE ZONE${zoneN ? ` · ${zoneN}` : ''}`}</button>}
       </div>
 
@@ -73,6 +76,35 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
                 {a.fixes.map((f, i) => (
                   <span key={i} className="mono" style={mono(11.5, f.kind === 'injury' || f.kind === 'none' ? 'var(--warn)' : 'var(--dim)')}>
                     {`${f.kind === 'swap' ? '⇄' : f.kind === 'injury' ? '🩹' : f.kind === 'bye' ? '💤' : '•'} ${f.winLabel ? `${f.winLabel}: ` : ''}${f.text}`}
+                  </span>
+                ))}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
+      {open === 'wire' && (
+        <Sheet title="Waiver targets" subtitle="WHO ON THE WIRE HELPS THIS WEEK" onClose={() => setOpen(null)} max={560}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {wire.length === 0 && <div className="mono" style={mono(11)}>Nobody on the wire beats what you have.</div>}
+            {wire.map((l) => (
+              <button key={`${l.leagueId}:${l.rosterId}`} onClick={() => go(l.leagueId, l.rosterId)}
+                style={{ all: 'unset', cursor: 'pointer', display: 'grid', gap: 6, border: '1px solid var(--bd)', borderRadius: 8, padding: 10, background: 'var(--bg)' }}>
+                <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.leagueName}</span>
+                  <span className="mono" style={mono(10)}>{l.weekLabel}</span>
+                  <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>→</span>
+                </span>
+                {l.targets.map((w) => (
+                  <span key={w.add} style={{ display: 'grid', gap: 1 }}>
+                    <span style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {`+ ${w.addName}`} <span className="mono" style={mono(10)}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</span>
+                      </span>
+                      {w.gain > 0 && <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>{`+${w.gain.toFixed(1)}`}</span>}
+                    </span>
+                    <span className="mono" style={mono(11, 'var(--dim)')}>{`${WIRE_KIND_LABEL[w.kind]}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`}</span>
                   </span>
                 ))}
               </button>

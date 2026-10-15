@@ -691,7 +691,7 @@ function Enroll({ session, view, setView, commishCode, admin, onFields }: { sess
       for (const l of leagues) {
         if (dead) return;
         try {
-          const { snapshot } = await widgetSnapshot(l.id, session.user.id, fresh, { anyLeague: true, rosterId: l.rosterId });
+          const { snapshot } = await widgetSnapshot(l.id, session.user.id, fresh, { anyLeague: true, rosterId: l.rosterId, wire: true });
           if (!dead && snapshot && snapshot.leagueId === l.id && snapshot.rosterId === l.rosterId) setGlance((g) => ({ ...g, [seatKey(l.id, l.rosterId)]: snapshot }));
         } catch { /* keep what the card had */ }
       }

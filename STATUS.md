@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.716.0 — Waiver targets on the league tools bar
+
+> - The tools bar has 📈 WAIVER TARGETS: in each of your leagues, who on the wire would help this week's lineup, how many points he adds, and whom he'd replace (or that an open spot takes him). A player still in his waiver hold is marked as a claim.
+
+Founder: "Yes, start on waiver targets." widgetSnapshot takes `wire: true`
+(the leagues list on phone and web; the Android widget does not ask) and,
+for a classic native league that isn't a weekly contest, runs the AI seats'
+own planner on your seat while the league's scoring is installed: new
+leagueTools.wireTargetsOf builds the wire from league_pool less every seat's
+rows (copies respected, waived_until → a claim), values it like
+server/src/seatWire.js (this week with byes/Outs/play risk, a healthy read
+guarding drops, the season projection with IR at 0 deciding who may go, a
+free agent whose game kicked off worth 0 this week), then shortlistWire +
+seatWirePlan with no FAAB, open places from the slots plus the shape's
+bench, up to 3 targets. No momentum (the trending feed is a worker read).
+The pool read is cached 10 min. A final week plans nothing. Chip shows for
+native non-contest leagues; tap a league to open it. check:leaguetools
+extended. JavaScript only; no iPhone build.
+
 ### v0.715.0 — The league tools bar
 
 > - Your leagues page has a tools bar that scrolls sideways: ▦ ALL FIELDS, ⚔ HEROES & VILLAINS, 🧭 LINEUP (what to fix in every league) and 🔁 TRADE ZONE (offers waiting on you, players other teams want from you, your open offers, and the trade block).
