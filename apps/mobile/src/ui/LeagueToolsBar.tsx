@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, WIRE_KIND_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, WIRE_KIND_LABEL, trendLabel, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from './feedback';
 import { Chip, Mono } from './prims';
@@ -105,7 +105,7 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
                     {w.gain > 0 && <Mono size={10} tone="you" weight="700">{`+${w.gain.toFixed(1)}`}</Mono>}
                   </View>
                   <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10.5, lineHeight: 15, color: t.dim }}>
-                    {`${WIRE_KIND_LABEL[w.kind]}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`}
+                    {`${trendLabel(w.netAdds) ? `${trendLabel(w.netAdds)} · ` : ''}${WIRE_KIND_LABEL[w.kind]}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`}
                   </Text>
                 </View>
               ))}

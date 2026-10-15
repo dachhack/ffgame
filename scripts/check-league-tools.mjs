@@ -4,7 +4,7 @@
 // waiver targets, trade zone, etc." Pins the folds (lineup alerts, the trade
 // zone) and that both clients draw the bar. Run: npx tsx scripts/check-league-tools.mjs
 import { readFileSync } from 'node:fs';
-import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount } from '../packages/core/src/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel } from '../packages/core/src/data/leagueTools';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 let fails = 0;
 const ok = (name, cond, got) => { if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); } else console.log(`ok   ${name}`); };
@@ -52,10 +52,18 @@ const w2 = wireTargetsOf(wireIn({ copies: 2 }));
 ok('wire: with two copies a player held once is still on the wire', w2.some((t) => t.add === 'jahmyr-gibbs'), w2.map((t) => t.add));
 const w3 = wireTargetsOf(wireIn({ roster: [{ slug: 'bijan-robinson', full: 'Bijan Robinson', pos: 'RB', team: null }, { slug: 'jonathan-taylor', full: 'Jonathan Taylor', pos: 'RB', team: null }], pool: [prow('jonathan-taylor', 'Jonathan Taylor')], rosters: [{ roster_id: 3, slug: 'bijan-robinson', acquired: 'draft' }, { roster_id: 3, slug: 'jonathan-taylor', acquired: 'draft' }] }));
 ok('wire: my own players are never targets', w3.length === 0, w3);
+// MOMENTUM (v0.716.1): the AI seats' trendMomentum lifts a trending body.
+const TPOOL = [prow('kyren-williams', 'Kyren Williams'), prow('breece-hall', 'Breece Hall')];
+const tIn = (trend) => wireIn({ pool: TPOOL, rosters: [{ roster_id: 3, slug: 'bijan-robinson', acquired: 'draft' }], activeSeats: 2, max: 1, trend });
+const t0 = wireTargetsOf(tIn(null)), t1 = wireTargetsOf(tIn({ 'breece-hall': { a: 60000, d: 1000 } }));
+ok('momentum: a point apart, the trending back overtakes the flat one', t0[0]?.add === 'kyren-williams' && t1[0]?.add === 'breece-hall' && t1[0]?.netAdds === 59000, [t0[0], t1[0]]);
+ok('momentum: no trend, no tag', t0[0]?.netAdds == null);
+ok('momentum: the tag reads in words', trendLabel(59000) === '🔥 59k adds' && trendLabel(1234) === '🔥 1.2k adds' && trendLabel(-800) === '📉 800 drops' && trendLabel(null) === null && trendLabel(0) === null);
 const ws = (id, name, gain) => ({ leagueId: id, rosterId: 1, leagueName: name, weekLabel: 'WK 7', wire: gain == null ? [] : [{ add: 'x', addName: 'X', pos: 'RB', team: null, drop: null, dropName: null, gain, rosGain: 0, kind: 'hole', claim: false }] });
 const wt = wireTargets([ws('a', 'Alpha', 2), ws('b', 'Beta', 9), ws('c', 'Gamma', null), null]);
 ok('wire: leagues with targets only, biggest gain first; the count is every target', wt.map((l) => l.leagueId).join() === 'b,a' && wireTargetCount([ws('a', 'A', 2), ws('b', 'B', 1)]) === 2, wt.map((l) => l.leagueId));
 const feed = read('packages/core/src/data/widgetFeed.ts');
+ok('momentum: the glance hands the market\'s trend to the planner', feed.includes('m?.trend ?? null') && feed.includes('trend: wireTrend'));
 ok('wire: the glance plans it only when asked, never for a weekly contest', feed.includes('const wantWire = !!opts.wire && classic') && feed.includes("league.kind !== 'dfs' && league.kind !== 'bullseye'"));
 
 // ── both clients draw the bar ─────────────────────────────────────────────
@@ -66,6 +74,7 @@ ok('phone: the leagues page carries the bar, not the lone H&V card', phone.inclu
 ok('web: the leagues page carries the bar, not the lone H&V card', web.includes('<LeagueToolsBar snaps={Object.values(glance)} onFields={onFields}') && !web.includes('<HeroesVillains'));
 for (const [n, src] of [['phone', pbar], ['web', wbar]]) {
   ok(`${n}: fields, heroes & villains, lineup and trade zone on the bar`, src.includes('▦ ALL FIELDS') && src.includes('HEROES') && src.includes('🧭 LINEUP') && src.includes('🔁 TRADE ZONE') && src.includes('📈 WAIVER TARGETS'));
+  ok(`${n}: a waiver target row carries its trend tag`, src.includes('trendLabel(w.netAdds)'));
   ok(`${n}: heroes & villains opens bare in its sheet`, src.includes('<HeroesVillains snaps={snaps} bare />'));
 }
 ok('phone: the bar scrolls sideways', pbar.includes('<ScrollView horizontal'));

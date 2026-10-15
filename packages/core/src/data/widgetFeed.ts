@@ -975,7 +975,12 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
   // WAIVER TARGETS (v0.716.0): the wire is the whole pool less what is held.
   // Not for a weekly contest — it has no wire.
   const wantWire = !!opts.wire && classic && !!gm?.ok && league.kind !== 'dfs' && league.kind !== 'bullseye';
-  const wirePool = wantWire ? await cached(`wirepool:${league.id}`, 10 * MIN, fresh, () => leaguePool(league.id).catch(() => [] as LeaguePoolPlayer[])) : [];
+  const [wirePool, wireTrend] = wantWire ? await Promise.all([
+    cached(`wirepool:${league.id}`, 10 * MIN, fresh, () => leaguePool(league.id).catch(() => [] as LeaguePoolPlayer[])),
+    // THE WIRE'S MOMENTUM (v0.716.1): Sleeper's trending adds/drops, which
+    // the market hands back empty once the board is stale.
+    cached(`trend:${league.id}`, 60 * MIN, fresh, () => leagueMarket(league.id).then((m) => m?.trend ?? null).catch(() => null)),
+  ]) : [[] as LeaguePoolPlayer[], null];
   let wireExp: Record<string, number> = {};
   if (classic && gm?.ok) {
     const slots = leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null });
@@ -1016,7 +1021,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
         snapshot.wire = wireTargetsOf({
           slots: classicIn.slots, roster: classicIn.roster, pool: wirePool, rosters: spots ?? [], rosterId: league.rosterId,
           copies: Number(gm?.copies) || 1, injuries: injuries as Record<string, string>, week, slate, nowMs: Date.now(),
-          activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp,
+          activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp, trend: wireTrend,
         });
       } catch { snapshot.wire = []; }
     }

@@ -13,11 +13,12 @@
 //   • WAIVER TARGETS (v0.716.0) — the AI seats' own wire planner
 //     (seatWirePlan), run for YOUR seat: who on the wire would help this
 //     week's lineup, and whom he'd replace. Computed with each league's glance
-//     (widgetSnapshot's `wire`), under the league's own scoring.
+//     (widgetSnapshot's `wire`), under the league's own scoring — and, since
+//     v0.716.1, Sleeper's trending adds and drops, as the AI seats read them.
 // Pure folds + a loader; both clients draw them.
 import type { WidgetSnapshot, WidgetFix } from './widgetFeed';
 import { leagueTrades, tradeSignals, matchupTeams, leaguePoolNames, type TradeRow, type TradeSignalRow, type LeaguePoolPlayer, type NativeRosterRow } from './liveApi';
-import { seatWirePlan, shortlistWire, type WirePlayer, type WireClaim } from '../engine/seatWaivers';
+import { seatWirePlan, shortlistWire, trendMomentum, type WirePlayer, type WireClaim } from '../engine/seatWaivers';
 import { slateAwareProj, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
 import { projectedPoints } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
@@ -120,6 +121,9 @@ export interface WireTarget {
   kind: WireClaim['kind'];
   /** Inside his waiver hold: a claim, not an instant add. */
   claim: boolean;
+  /** THE WIRE'S MOMENTUM (v0.716.1): Sleeper's trending adds less drops for
+   *  him, when the board is fresh and he is moving; null when he isn't. */
+  netAdds?: number | null;
 }
 export const WIRE_KIND_LABEL: Record<WireClaim['kind'], string> = {
   hole: 'FILLS A HOLE', upgrade: 'UPGRADE', depth: 'DEPTH', bench: 'BETTER STASH',
@@ -147,6 +151,10 @@ export function wireTargetsOf(input: {
   /** Active seats (starters + bench), when the league says; null → every add needs a drop. */
   activeSeats: number | null;
   exp?: Record<string, number>;
+  /** Sleeper's trending adds/drops (league_market's `trend`, empty when stale).
+   *  Priced by trendMomentum exactly as the AI seats price it (v0.642.0): it
+   *  lifts a trending body's season lens, never makes a rostered man cheaper. */
+  trend?: Record<string, { a: number; d: number }> | null;
   max?: number;
 }): WireTarget[] {
   const { slots, roster, pool, rosters, rosterId, injuries, week, slate, nowMs } = input;
@@ -182,10 +190,12 @@ export function wireTargetsOf(input: {
   const valueOf = (p: SpotPlayer, d?: ClassicSlotDef) => (freeIds.has(p.id) && kicked(p) ? 0 : weekly(p, d));
   const healthyValueOf = slateAwareProj(week, slate, () => false);
   const rosValueOf = (p: SpotPlayer) => (injuries[p.id] === 'IR' ? 0 : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? null }));
-  const candidates = shortlistWire(available, rosValueOf, undefined, { slots, roster: mine });
+  const trend = input.trend ?? {};
+  const momentumOf = (p: SpotPlayer) => { const t = trend[p.id]; return t ? trendMomentum(t.a, t.d) : 0; };
+  const candidates = shortlistWire(available, (p) => rosValueOf(p) + momentumOf(p), undefined, { slots, roster: mine });
   const openSeats = input.activeSeats != null ? Math.max(0, input.activeSeats - roster.length) : 0;
   const plan = seatWirePlan(slots, mine, candidates, valueOf, {
-    faab: false, budget: 0, openSeats, maxClaims: input.max ?? WIRE_TARGETS_MAX, rosValueOf, healthyValueOf,
+    faab: false, budget: 0, openSeats, maxClaims: input.max ?? WIRE_TARGETS_MAX, rosValueOf, healthyValueOf, momentumOf,
   });
   const byId = new Map(available.map((p) => [p.id, p]));
   return plan.map((c) => {
@@ -194,6 +204,7 @@ export function wireTargetsOf(input: {
       add: c.add, addName: names.get(c.add) ?? c.add, pos: a?.pos ?? '', team: a?.team ?? null,
       drop: c.drop, dropName: c.drop ? names.get(c.drop) ?? c.drop : null,
       gain: Math.round(c.gain * 10) / 10, rosGain: Math.round(c.rosGain * 10) / 10, kind: c.kind, claim: c.onWaivers,
+      netAdds: trend[c.add] && momentumOf({ id: c.add, pos: '' }) !== 0 ? (Number(trend[c.add].a) || 0) - (Number(trend[c.add].d) || 0) : null,
     };
   });
 }
@@ -211,3 +222,11 @@ export function wireTargets(snaps: (WidgetSnapshot | null | undefined)[]): WireT
 }
 export const wireTargetCount = (snaps: (WidgetSnapshot | null | undefined)[]): number =>
   wireTargets(snaps).reduce((n, l) => n + l.targets.length, 0);
+
+/** "🔥 12.4k adds" / "📉 3.1k drops" — the trend in words, for a target row. */
+export function trendLabel(netAdds: number | null | undefined): string | null {
+  if (netAdds == null || !Number.isFinite(netAdds) || netAdds === 0) return null;
+  const n = Math.abs(netAdds);
+  const txt = n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n);
+  return netAdds > 0 ? `🔥 ${txt} adds` : `📉 ${txt} drops`;
+}

@@ -8,7 +8,7 @@
 // wrapping; each opens its tool in a sheet. Counts are what wants an answer.
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, WIRE_KIND_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, WIRE_KIND_LABEL, trendLabel, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet } from '../app/ui';
 import { HeroesVillains } from './HeroesVillains';
 
@@ -104,7 +104,7 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
                       </span>
                       {w.gain > 0 && <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>{`+${w.gain.toFixed(1)}`}</span>}
                     </span>
-                    <span className="mono" style={mono(11, 'var(--dim)')}>{`${WIRE_KIND_LABEL[w.kind]}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`}</span>
+                    <span className="mono" style={mono(11, 'var(--dim)')}>{`${trendLabel(w.netAdds) ? `${trendLabel(w.netAdds)} · ` : ''}${WIRE_KIND_LABEL[w.kind]}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`}</span>
                   </span>
                 ))}
               </button>

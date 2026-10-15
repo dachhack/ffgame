@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.716.1 — Waiver targets read the trend
+
+> - 📈 WAIVER TARGETS now weighs what the wire is doing: a player Sleeper managers are adding in bulk ranks ahead of a flat one with a similar projection, and his row shows it ("🔥 12k adds").
+
+Founder: "Let's add trending momentum to waiver targets." The glance reads
+league_market's `trend` (Sleeper's trending adds/drops, 0340; the RPC hands
+it back empty once the board is stale), cached an hour, and
+wireTargetsOf prices it with core's trendMomentum exactly as
+server/src/seatWire.js does for the AI seats (v0.642.0): shortlisted by
+season value + momentum and passed to seatWirePlan as `momentumOf`, so it
+lifts a candidate's season lens and never cheapens a drop. A target carries
+`netAdds` when his momentum is non-zero; trendLabel words it. Both tools
+bars print it on the row. check:leaguetools extended. JavaScript only; no
+iPhone build.
+
 ### v0.716.0 — Waiver targets on the league tools bar
 
 > - The tools bar has 📈 WAIVER TARGETS: in each of your leagues, who on the wire would help this week's lineup, how many points he adds, and whom he'd replace (or that an open spot takes him). A player still in his waiver hold is marked as a claim.
