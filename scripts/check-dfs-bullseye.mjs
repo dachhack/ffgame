@@ -53,9 +53,11 @@ const missing = scoreDfsBullseye({ home: short, away: squad }, fixed, slots, () 
 ok('slots: an empty slot is a zero too', missing.home === 8 * 20 - 10 && missing.away === 180, [missing.home, missing.away]);
 const total = dfsBullseyeConfigOf({ dfs_bullseye: true, bullseye: 'total' });
 const t1 = scoreDfsBullseye({ home: squad, away: squad }, fixed, total, () => 10);
-ok('total: landing on 90 with nine players is a bullseye at radius 90', t1.home === 180, t1.home);
+// v0.683.0 (founder: "why are there rings? It's just a target number and how far you are from it"): the
+// total variant's score IS the distance from the target, lowest winning, like golf — no longer a ring.
+ok('total: landing on 90 with nine players is dead on — 0 off', t1.home === 0, t1.home);
 const t2 = scoreDfsBullseye({ home: squad, away: squad }, fixed, total, () => 12);
-ok('total: 108 against 90 is 18 off', t2.home === 90 - 18, t2.home);
+ok('total: 108 against 90 is 18 off', t2.home === 18, t2.home);
 
 // ── the aimed auto-build ────────────────────────────────────────────────────
 const board = [];
@@ -98,7 +100,8 @@ ok('worker: modeOfSettings carries dfs_bullseye', /dfs_bullseye: s\?\.dfs_bullse
 ok('worker: scored under the league\'s catalog, RET spots as RET', /classicPoints\(player\(slug\), matchup\.week, catalog, contestScoreAs\(def\), slot\)/.test(resolve));
 ok('lock: no drip auto-lineup for a Bullseye contest', /settings_json\?\.dfs_bullseye === true\) continue/.test(read('server/src/lock.js')));
 const pods = read('server/src/pods.js');
-ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(playable, contest,/.test(pods));
+// v0.695.0: contest builds take cpuPool — `playable` (the ruled out dropped) re-priced the league's way.
+ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(cpuPool, contest,/.test(pods) && /const cpuPool = contest \? playable\.map/.test(pods));
 // v0.673.0: a leaderboard league takes the no-show block (its NO SQUAD BY LOCK
 // rule) and then leaves the loop — no AI seats to sub, no pairs to make.
 ok('pods: a leaderboard contest gets its no-shows, then leaves the seat loop', /noShowBuilds\(contest, mems \?\? \[\], haveSet, lockPassed\)/.test(pods) && /if \(boardLeague\) continue;/.test(pods) && !/if \(contest && contest\.format === 'board'\) continue;/.test(pods));
@@ -133,7 +136,8 @@ for (const f of ['src/screens/BullseyeLeague.tsx', 'apps/mobile/src/screens/Bull
 ok('web: the commish room is CommishDash, with the CONTEST panel', read('src/screens/BullseyeLeague.tsx').includes('<CommishDash focusId={leagueId}') && read('src/screens/CommishDash.tsx').includes('contest: <ContestCommishPanel'));
 ok('web: a contest league\'s map drops draft, waivers, playoffs, contracts and coin', /const navGroups: NavGroup<LeagueTab>\[\] = contest \? \[/.test(read('src/screens/AdminPage.tsx')));
 const tools = read('apps/mobile/src/screens/CommishTools.tsx');
-ok('phone: CommishTools takes `contest`, shows the CONTEST card and hides MODE', tools.includes("{ id: 'contest', label: '🏁 CONTEST', contestOnly: true }") && tools.includes("{ id: 'mode', label: 'MODE', notContest: true }") && tools.includes("section === 'contest' && <ContestCommishCard"));
+// The one CONTEST card became five contest-only sections (THE GAME, SEATS & ENTRIES, DRIP COIN, WEEKS & PLAYOFFS, DUES & PRIZES).
+ok('phone: CommishTools takes `contest`, shows the contest sections and hides MODE', tools.includes("{ id: 'contest', label: '🏁 THE GAME', contestOnly: true }") && tools.includes("{ id: 'contestseats', label: 'SEATS & ENTRIES', contestOnly: true }") && tools.includes("{ id: 'mode', label: 'MODE', notContest: true }") && tools.includes("section === 'contest' && <ContestCommishCard"));
 ok('phone: the commish room goes through CommishTools with the contest flag', app.includes('contest={isContestKind(open.kind)}'));
 
 // ── contest leagues (v0.664.0, 0466): one league type, three contests ────────
@@ -248,7 +252,12 @@ ok('build: every spot filled under the budget, the tenure rule kept, golf taking
   }
   for (const f of ['src/screens/BullseyeLeague.tsx', 'apps/mobile/src/screens/BullseyeLeague.tsx']) {
     const src = read(f);
-    ok(`${f}: golf starts with no cap and a minimum spend; NO CAP is on the menu`, src.includes("setBudget(0); setMinSpend(CONTEST_MIN_SPEND_DEFAULT)") && src.includes("'NO CAP'") && src.includes('MIN SPEND'));
+    // Creating: golf starts with no cap and a minimum spend; the budget field reads 0 as no cap.
+    ok(`${f}: golf starts with no cap and a minimum spend`, src.includes("setBudget(0); setMinSpend(CONTEST_MIN_SPEND_DEFAULT)") && src.includes("'no cap'") && src.includes('MIN SPEND'));
+  }
+  // …and NO CAP is on COMMISH's budget menu, where the budget lives once the league exists.
+  for (const f of ['src/screens/ContestCommish.tsx', 'apps/mobile/src/screens/ContestCommish.tsx']) {
+    ok(`${f}: NO CAP is on the commissioner's budget menu`, read(f).includes("'NO CAP'"));
   }
   for (const f of ['src/screens/ContestCommish.tsx', 'apps/mobile/src/screens/ContestCommish.tsx']) {
     ok(`${f}: the commissioner can set the floor and drop the cap`, read(f).includes('minSpend') && read(f).includes("'NO CAP'"));
@@ -324,7 +333,7 @@ const SP = await import('../packages/core/src/engine/salaryPricing.ts');
 ok('pricing: the replacement is the body after the 12-team starters', SP.STARTERS_12.RB === 24 && SP.STARTERS_12.WR === 36 && SP.TARGET_SHARE > 1);
 ok('pods: boards are priced by priceBoard and carry priced_proj', /priceBoard\(rows\)/.test(pods) && /priced_proj: row\.proj/.test(pods));
 ok('pods: the projection refreshes, the price does not', /export async function refreshBoardProj/.test(pods) && /salary: r\.salary, proj: next/.test(pods));
-ok('pods: CPU builds skip the ruled out and swap them before lock', /contestAutoBuild\(playable, contest,/.test(pods) && /\|sub\$\{e\.roster_id\}/.test(pods));
+ok('pods: CPU builds skip the ruled out and swap them before lock', /const playable = board\.filter\(\(r\) => !outs\.has\(r\.slug\)\)/.test(pods) && /contestAutoBuild\(cpuPool, contest,/.test(pods) && /\|sub\$\{e\.roster_id\}/.test(pods));
 // v0.679.2: a CPU squad built before the board carried a spot's position gets
 // the spot filled later; the board's missing-position check runs every tick.
 ok('pods: the CPU pass fills a spot it left empty, not only a ruled-out one', /const empty = contest\.slots\.filter\(\(d\) => !filled\.has\(d\.slot\)\)/.test(pods) && /if \(!hurt\.length && !empty\.length\) continue;/.test(pods) && /if \(contest\) \{\n      const aiSeats/.test(pods));
