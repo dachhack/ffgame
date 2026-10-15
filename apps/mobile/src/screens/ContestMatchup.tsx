@@ -173,8 +173,9 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     const el = cardInner(s, r, mine, i);
     if (!myTable || !arming || !armingDef) {
       // THE GAME LOG (v0.703.0, founder: "Single tap once the card locks, brings up the game log for that player"):
-      // a locked card opens his card on the Game log tab
-      if (r.slug && locked(r.slug)) {
+      // a locked card opens his card on the Game log tab — and since v0.713.10 any face-up card does
+      // (founder: "in your matchup … we need the ability to see the game logs for players"). A sealed card has no slug.
+      if (r.slug) {
         const p = bySlug.get(r.slug); const slug = r.slug;
         return (
           <Pressable key={`log-${s}-${r.slot}`} onPress={() => { tap(); openPlayerCard({ slug, name: p?.name ?? slug, pos: p?.pos ?? 'FLEX', team: p?.team ?? '', week, leagueId, tab: 'log' }); }}>

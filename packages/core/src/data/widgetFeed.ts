@@ -226,6 +226,18 @@ export interface WidgetLeague {
   /** The app_user_id sealed picks are written AS — the seat owner's, which
    *  differs from the session user on a co-managed seat. */
   pickUserId?: string;
+  /** league.kind (0466): 'dfs' / 'bullseye' is a weekly CONTEST league, whose
+   *  squads stay sealed until kickoff (v0.713.9). */
+  kind?: string;
+}
+
+/** A contest league's opponent is sealed until the week's LAST game kicks off
+ *  (v0.713.9). A week with no slate read is treated as sealed: no picture
+ *  beats a guessed one. Pure, for the check. */
+export function contestSealed(kind: string | null | undefined, slate: { kickoff?: string | null }[], nowMs: number): boolean {
+  if (kind !== 'dfs' && kind !== 'bullseye') return false;
+  if (!slate.length) return true;
+  return slate.some((g) => !g.kickoff || Date.parse(g.kickoff) > nowMs);
 }
 
 export function widgetLeagues(enr: Enrollment[]): WidgetLeague[] {
@@ -235,6 +247,7 @@ export function widgetLeagues(enr: Enrollment[]): WidgetLeague[] {
       id: e.league_id, name: e.league?.name ?? 'League', rosterId: e.sleeper_roster_id,
       gameMode: e.league?.game_mode === 'classic' ? 'classic' : 'drip',
       pickUserId: e.pick_user_id,
+      kind: e.league?.kind ?? undefined,
     }));
 }
 
@@ -356,6 +369,13 @@ export interface ClassicWidgetInput {
    *  resolver fields from its roster (classicLineup) — so do we. */
   theirPicks?: PickRow[] | null;
   theirRoster?: ClassicRosterPlayer[] | null;
+  /** A CONTEST LEAGUE BEFORE THE WEEK'S LAST KICKOFF (v0.713.9, founder:
+   *  "Weekly contests shouldn't show your opponents projections until all
+   *  games have kicked off"). Their squad is sealed until each player's game
+   *  starts, so any projection of it is a guess off their pool that reads as
+   *  a leak: no projected total, no win bar, no opponent starters. Their live
+   *  points (the server's, counting only what has kicked off) still show. */
+  oppSealed?: boolean;
   /** What a player is worth in a spot: the caller's slateAwareProj (bye → 0,
    *  ruled out → 0, the league's catalog, golf's expected score). */
   projOf: (p: SpotPlayer, d?: ClassicSlotDef) => number;
@@ -647,7 +667,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
         bye: !!p && slated && !!p.team && !windowForTeam(week, p.team),
       });
     });
-    const theirs = c.theirRoster?.length ? sideOf(c.theirPicks, c.theirRoster, mySide === 'home' ? 'away' : 'home') : null;
+    const theirs = c.theirRoster?.length && !c.oppSealed ? sideOf(c.theirPicks, c.theirRoster, mySide === 'home' ? 'away' : 'home') : null;
     if (theirs) them.score = theirs.total; else themLive = true;
     // HEROES & VILLAINS (v0.632.0): the opponent's starters, as the card has mine.
     for (const { d, p, live, proj, st } of theirs?.rows ?? []) {
@@ -973,6 +993,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     classicIn = {
       slots, bestball: leagueBestball(gm), picks: picks ?? [], roster: rosterOf(pool, league.rosterId),
       theirPicks, theirRoster: oppId != null ? rosterOf(oppPool, oppId) : null, projOf, golf: gm.golf === true,
+      oppSealed: contestSealed(league.kind, slate, Date.now()),
     };
   }
   try {

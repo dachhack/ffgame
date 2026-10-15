@@ -304,6 +304,20 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
     const d = slot === 'any' ? null : slots.find((x) => x.slot === slot);
     setTab(d && d.pos.length === 1 ? d.pos[0] : 'ALL');
   };
+  // THE GAME LOG FROM ANY CARD (v0.713.10, founder: "in your matchup, my team
+  // and when looking at players to swap or add to your lineup we need the
+  // ability to see the game logs for players. Maybe tap the card and you get
+  // the action (select or replace) and the option to see the game log?"). A
+  // tap asks: the card's own move, or his game log. The phone's own alert, so
+  // it stands over the picker sheet as well as the table.
+  const logOf = (p: { slug: string; name: string; pos: string; team: string | null }) =>
+    openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team ?? '', week, leagueId, tab: 'log' });
+  const askCard = (p: { slug: string; name: string; pos: string; team: string | null }, sub: string | undefined, act: { label: string; run: () => void } | null) =>
+    Alert.alert(p.name, sub, [
+      ...(act ? [{ text: act.label, onPress: act.run }] : []),
+      { text: 'Game log', onPress: () => logOf(p) },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
   const put = (slug: string, slot: string | null) => {
     if (!slot) return;
     if (ghosted(slot)) { warn(); setNote('that spot holds a ghost — take it back to put a player there'); setActive(null); return; }
@@ -509,7 +523,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       {playOn(d.slot) && <InfoChip label="⚡ UP" title={contestPlayById(playOn(d.slot)!.id)?.name ?? playOn(d.slot)!.id}>{playInfo(playOn(d.slot)!)}</InfoChip>}
                     </View>
                     <Pressable disabled={!canTap && !(p && isLocked)}
-                      onPress={() => { tap(); if (p && isLocked) openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team, week, leagueId, tab: 'log' }); else openSheet(d.slot); }}
+                      onPress={() => { tap(); if (p && isLocked) logOf(p); else if (p) askCard(p, `${labels[d.slot]} · ${fmt$(p.salary)}`, { label: 'Replace', run: () => openSheet(d.slot) }); else openSheet(d.slot); }}
                       onLongPress={p && canTap ? () => startDrag(d.slot) : undefined} delayLongPress={280}
                       onPressOut={() => { setTimeout(() => { if (dragRef.current === d.slot && !panning.current) cancelDrag(); }, 0); }}
                       style={{ borderRadius: 13, borderWidth: 2, borderColor: canLand ? (drag?.over === d.slot ? t.you : alpha(t.you, 55)) : changed ? t.you : 'transparent', padding: 1, opacity: isLocked && !lv ? 0.8 : 1 }}>
@@ -613,7 +627,14 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       const ok = fits && afford && !lock && !taken;
                       const land = slot ? labels[slot] : null;
                       return (
-                        <Pressable key={p.slug} disabled={!ok} onPress={() => { tap(); put(p.slug, slot); }} style={{ width: tableCardSize().w, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
+                        <Pressable key={p.slug} onPress={() => {
+                          tap();
+                          // Select (or swap in for whoever holds the spot) — or, for a card that can't go in, just his log.
+                          const holder = slot && picks[slot] && picks[slot] !== p.slug ? byPlayer.get(picks[slot]!) : null;
+                          const reason = lock ? 'His game has locked' : taken ? `Already in ${labels[taken]}` : why ?? (fits && !afford ? `Over budget by ${fmt$(over)}` : undefined);
+                          askCard(p, ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason,
+                            ok ? { label: holder ? `Swap in for ${holder.name}` : `Add${land ? ` to ${land}` : ''}`, run: () => put(p.slug, slot) } : null);
+                        }} style={{ width: tableCardSize().w, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
                           <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} mine locked={lock} foot={fmt$(p.salary)} />
                           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                             <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 75), textAlign: 'center', lineHeight: fs(10), maxWidth: tableCardSize().w }}>

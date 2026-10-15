@@ -31,6 +31,7 @@ import { contestPlaysFor, contestPlayAsPowerup, contestRedeal, contestPlayById, 
   type ContestConfig,
 } from '@drip/core/engine/contest';
 import { CardTableCss, Felt, PlayerCard, SealedCard } from '../app/cardTable';
+import { Sheet } from '../app/ui';
 import { openPlayerCard } from '../app/playerCard';
 import { ShopModal } from './LeagueOverview';
 import { InfoChip } from './adminUi';
@@ -225,6 +226,9 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
     document.addEventListener('contextmenu', stop);
     return () => { document.removeEventListener('touchmove', stop); document.removeEventListener('contextmenu', stop); };
   }, [drag]);
+  // The card's choice (v0.713.10) — its state sits above the early returns, with the other hooks.
+  type AskP = { slug: string; name: string; pos: string; team: string | null };
+  const [ask, setAsk] = useState<{ p: AskP; sub?: string; act: { label: string; run: () => void } | null } | null>(null);
   if (!st) return <div className="mono" style={{ padding: 24, ...small }}>Loading…</div>;
   if (!st.ok) return <div style={{ padding: 24 }}><div className="mono" style={{ color: 'var(--warn, #c66)', fontSize: 12 }}>{st.error}</div><button onClick={onBack} style={{ marginTop: 10 }}>← BACK</button></div>;
   if (!setup?.cfg || !setup.slots.length || !ctx) return <div style={{ padding: 24 }}><div className="mono" style={small}>This league has no spots to fill yet — its commissioner sets the roster.</div><button onClick={onBack}>← BACK</button></div>;
@@ -365,6 +369,11 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
     pressAt.current = null;
   };
   const dragPlayer = drag && picks[drag.slot] ? byPlayer.get(picks[drag.slot]!) : null;
+  // THE GAME LOG FROM ANY CARD (v0.713.10, founder: "in your matchup, my team
+  // and when looking at players to swap or add to your lineup we need the
+  // ability to see the game logs for players. Maybe tap the card and you get
+  // the action (select or replace) and the option to see the game log?").
+  const logOf = (p: AskP) => openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team ?? '', week, tab: 'log' });
   const put = (slug: string, slot: string | null) => {
     if (!slot) return;
     if (ghosted(slot)) { setNote('that spot holds a ghost — disarm it to put a player there'); setActive(null); return; }
@@ -551,7 +560,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                     onPointerDown={p && canTap ? onCardPointerDown(d.slot) : undefined} onPointerMove={onCardPointerMove} onPointerUp={onCardPointerUp} onPointerCancel={() => endDrag()}
                     onClickCapture={(e) => { if (swallowClick.current) { e.stopPropagation(); e.preventDefault(); } }}>
                     {p
-                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => openSheet(d.slot) : isLocked ? () => openPlayerCard({ slug: p.slug, name: p.name, pos: p.pos, team: p.team, week, tab: 'log' }) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
+                      ? <PlayerCard key={p.slug} slug={p.slug} name={p.name} pos={p.pos} team={p.team} flip idx={i} locked={isLocked} bank={lv ? lv.score : undefined} onClick={canTap ? () => setAsk({ p, sub: `${labels[d.slot]} · ${fmt$(p.salary)}`, act: { label: 'Replace', run: () => openSheet(d.slot) } }) : isLocked ? () => logOf(p) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />
                       : ghosted(d.slot)
                         ? <PlayerCard key="ghost" slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} flip idx={i} bank={lv ? lv.score : undefined} badge="👻" />
                         : <SealedCard key="open" seed={`${leagueId}|${d.slot}`} idx={i} tag={editable ? `＋ PICK ${labels[d.slot]}` : 'EMPTY'} onClick={canTap ? () => openSheet(d.slot) : undefined} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => setNote(TB_NOTE)} />}
@@ -621,6 +630,20 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
         </div>
       )}
 
+      {/* THE CARD'S CHOICE (v0.713.10): its move, or his game log — above the pick sheet, below the player card. */}
+      {ask && (
+        <Sheet title={ask.p.name} subtitle={ask.sub} onClose={() => setAsk(null)} max={360} zIndex={70}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {ask.act && (
+              <button className="mono" onClick={() => { const a = ask.act!; setAsk(null); a.run(); }}
+                style={{ fontSize: 12, fontWeight: 800, padding: '11px 12px', borderRadius: 8, cursor: 'pointer', color: 'var(--on-accent)', background: 'var(--you)', border: '1px solid var(--you)' }}>{ask.act.label.toUpperCase()}</button>
+            )}
+            <button className="mono" onClick={() => { const p = ask.p; setAsk(null); logOf(p); }}
+              style={{ fontSize: 12, fontWeight: 800, padding: '11px 12px', borderRadius: 8, cursor: 'pointer', color: 'var(--you)', background: 'transparent', border: '1px solid var(--you)' }}>GAME LOG</button>
+          </div>
+        </Sheet>
+      )}
+
       {/* THE PICK SHEET */}
       {active && (
         <div onClick={() => setActive(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 60, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -668,8 +691,14 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                     const ok = fits && afford && !lock && !taken;
                     const land = slot ? labels[slot] : null;
                     return (
-                      <div key={p.slug} onClick={() => { if (ok) put(p.slug, slot); }} title={`${p.name} · ${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}
-                        style={{ width: 104, display: 'grid', gap: 3, justifyItems: 'center', alignContent: 'start', opacity: ok ? 1 : 0.45, cursor: ok ? 'pointer' : 'not-allowed' }}>
+                      <div key={p.slug} onClick={() => {
+                        // Select (or swap in for whoever holds the spot) — or, for a card that can't go in, just his log.
+                        const holder = slot && picks[slot] && picks[slot] !== p.slug ? bySlug.get(picks[slot]!) : null;
+                        const reason = lock ? 'His game has locked' : taken ? `Already in ${labels[taken]}` : why ?? (fits && !afford ? `Over budget by ${fmt$(over)}` : undefined);
+                        setAsk({ p, sub: ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason,
+                          act: ok ? { label: holder ? `Swap in for ${holder.name}` : `Add${land ? ` to ${land}` : ''}`, run: () => put(p.slug, slot) } : null });
+                      }} title={`${p.name} · ${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}
+                        style={{ width: 104, display: 'grid', gap: 3, justifyItems: 'center', alignContent: 'start', opacity: ok ? 1 : 0.45, cursor: 'pointer' }}>
                         <PlayerCard slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} idx={Math.min(i, 12)} locked={lock} />
                         <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: ok ? 'var(--you)' : 'color-mix(in srgb, var(--text) 60%, transparent)' }}>{fmt$(p.salary)}<InjuryTag key={injTick} week={week} slug={p.slug} /></span>
                         <span className="mono" style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text) 70%, transparent)', textAlign: 'center', lineHeight: 1.3 }}>
