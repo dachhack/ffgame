@@ -22,6 +22,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.714.0 — Roster settings in three places; copies move to the commissioner's settings
+
+> - The commissioner's ROSTER page is now three: ROSTER CONSTRUCTION (starting spots, bench/taxi/IR sizes, roster size), ELIGIBLE PLAYERS (copies of every player, player filters, extra positions, college/devy, add new players) and MANAGER ROSTER RULES (position limits, team rules, taxi/IR/OUT eligibility).
+> - Copies of every player moved from the draft room to ELIGIBLE PLAYERS.
+> - The roster actions page (move, waive, cut) is now ROSTERS & WIRE.
+
+Founder: "That's a players option that should be in the commish settings
+under players … We have several roster features: Roster Construction,
+Eligible Players, Per Manager Roster Constraints, let's have those be
+separate areas in the commish settings." Same split on both hosts.
+
+Phone (CommishTools): GameModeCard's 'lineup' view is ROSTER CONSTRUCTION;
+new 'eligible' and 'rules' views take the devy mode, graduation conflicts,
+admin extra positions and player filters, and the team rules, taxi, IR and
+OUT eligibility respectively. New ui/RosterSettingsCards: CopiesCard
+(ELIGIBLE PLAYERS; locked once the draft starts, not with an auction or
+salaries) and RosterCapsCard — the position limits (MANAGER ROSTER RULES)
+and a drip league's roster size (ROSTER CONSTRUCTION), both out of the
+WAIVERS & TRADES sheet, where nobody looked. TopUpPoolCard moved from PLAYERS
+to ELIGIBLE PLAYERS; PLAYERS is ROSTERS & WIRE. The review overlay's "it
+freezes the moment the room opens" was wrong since 0377 (spots change
+between weeks after the draft) and says so now.
+
+Web (AdminPage + CommishDash): 🧩 ROSTER CONSTRUCTION / 🎟 ELIGIBLE PLAYERS /
+📏 MANAGER ROSTER RULES, LeagueSettings gaining the same two views;
+RosterRulesEditor split into part="size" (construction) and part="caps"
+(manager rules); new CopiesPanel + TopUpPoolPanel on ELIGIBLE PLAYERS; ROSTERS
+is ROSTERS & WIRE. The draft room on both hosts says "COPIES n · set in ⚑
+COMMISH → ELIGIBLE PLAYERS" when there are copies. New check:commishroster,
+in check:parity. JavaScript only; no iPhone build.
+
 ### v0.713.11 — Pushes name the player, never his id
 
 > - Waiver and vampire pushes now name the player ("Your claim WON — CJ Baxter is yours."), college players included, instead of an id like "C 4870609".

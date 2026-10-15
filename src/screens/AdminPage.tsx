@@ -50,7 +50,7 @@ import { WINDOWS, defaultMetric } from '@drip/core/data/metrics';
 import { NFL_CODES } from '@drip/core/data/kdst';
 import { slugMeta, stripSlugTag } from '@drip/core/data/slugMeta';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
-import { draftState, commishSetLeagueSize } from '@drip/core/data/liveApi';
+import { draftState, commishSetLeagueSize, setLeagueCopies } from '@drip/core/data/liveApi';
 import { getPremiumTier, adminSetPremiumTier, type PremiumTier, markFreeState, adminSetGlobalMarkFree, syncMarkFree, setMyMarkFree } from '@drip/core/data/liveApi';
 import { personalMarkFree } from '@drip/core/data/markFree';
 import { POWERUPS } from '@drip/core/data/powerups';
@@ -346,7 +346,7 @@ export function AdminPage({ onBack }: { onBack: () => void }) {
 // destinations rather than cards stacked below the card.
 export type LeagueTab =
   | 'overview' | 'waivers' | 'admin' | 'salary'
-  | 'mode' | 'lineup' | 'scoring'
+  | 'mode' | 'lineup' | 'eligible' | 'rosterrules' | 'scoring'
   | 'kit' | 'draft' | 'rosters' | 'playoffs' | 'dynasty' | 'ladder' | 'matchups' | 'members' | 'coin' | 'audit' | 'ready' | 'kdst'
   | 'activity' | 'buffs' | 'awards' | 'delete' | 'contest' | 'contestseats' | 'contestcoin' | 'contestweeks' | 'contestmoney' | 'contestboard';
 
@@ -354,7 +354,9 @@ export type LeagueTab =
 // roster size while the draft is still pending. ∞ = uncapped (stored null).
 const CAP_UNLIMITED = 11;
 const posShort = (p: string) => (p === 'DEF' ? 'D/ST' : p);
-function RosterRulesEditor({ leagueId }: { leagueId: string }) {
+function RosterRulesEditor({ leagueId, part }: { leagueId: string;
+  /** v0.714.0: the roster size is ROSTER CONSTRUCTION's, the position limits MANAGER ROSTER RULES'. */
+  part: 'size' | 'caps' }) {
   const [rounds, setRounds] = useState<number | null>(null);
   const [draftStatus, setDraftStatus] = useState('');
   const [caps, setCaps] = useState<Record<(typeof POS_CAP_KEYS)[number], number> | null>(null);
@@ -396,7 +398,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
     try {
       const posCaps = Object.fromEntries(POS_CAP_KEYS.map((k) =>
         [k, caps[k] >= CAP_UNLIMITED ? null : caps[k]])) as PosCaps;
-      const r = await setRosterRules(leagueId, pending && !derived ? rounds : null, posCaps);
+      const r = await setRosterRules(leagueId, part === 'size' && pending && !derived ? rounds : null, part === 'caps' ? posCaps : null);
       setMsg(r.ok ? '✓ saved — new limits apply immediately' : (r.error ?? 'save failed'));
     } catch (e) { setMsg(errMsg(e, 'save failed')); }
     finally { setSaving(false); }
@@ -405,7 +407,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        {derived ? (
+        {part !== 'size' ? null : derived ? (
           <div style={{ textAlign: 'center' }}>
             <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>ROSTER SIZE</div>
             <div className="grotesk" style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)', marginTop: 4 }} title="starters + bench + taxi + IR — set on the ROSTER tab's builder">{rounds}</div>
@@ -424,7 +426,7 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         )}
-        {POS_CAP_KEYS.map((k) => (
+        {part === 'caps' && POS_CAP_KEYS.map((k) => (
           <div key={k} style={{ textAlign: 'center' }}>
             <div className="mono" style={{ ...mono, fontSize: 10.5, letterSpacing: '0.1em', color: 'var(--dim)', fontWeight: 700 }}>{posShort(k)} MAX</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
@@ -434,10 +436,55 @@ function RosterRulesEditor({ leagueId }: { leagueId: string }) {
             </div>
           </div>
         ))}
-        <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : '✓ save rules'}</button>
+        {(part === 'caps' || (pending && !derived)) && <button onClick={save} disabled={saving} className="mono" style={btn(true)}>{saving ? 'saving…' : part === 'caps' ? '✓ save limits' : '✓ save size'}</button>}
       </div>
       <div className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
-        Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. {derived ? 'Roster size comes from the builder (starters + bench + taxi + IR) on the ROSTER tab — the DRAFT is that minus the IR spots, which are stashed into rather than drafted.' : `Roster size ${pending ? 'can change until the draft starts' : 'is locked once the draft starts'}.`} Rosters already over a lowered limit keep their players — the limit blocks new adds.
+        {part === 'caps'
+          ? 'Limits cap how many of a position a roster may hold (∞ = no limit, 0 bans it) — enforced at the draft, free agency, waivers, and auction bids; the AI drafts to them too. Rosters already over a lowered limit keep their players — the limit blocks new adds.'
+          : derived ? 'Roster size comes from the builder (starters + bench + taxi + IR) — the DRAFT is that minus the IR spots, which are stashed into rather than drafted.' : `Roster size ${pending ? 'can change until the draft starts' : 'is locked once the draft starts'}.`}
+      </div>
+      {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
+    </div>
+  );
+}
+
+// ── COPIES OF EVERY PLAYER (0500), in ELIGIBLE PLAYERS (v0.714.0) ───────────
+// Founder: "That's a players option that should be in the commish settings."
+// It lived in the draft room's setup. 1–4, each copy on a different team; set
+// before the draft and locked when it starts; not with an auction or salaries
+// (the server refuses devy, guillotine, vampire, a shotgun wedding by name).
+function CopiesPanel({ leagueId }: { leagueId: string }) {
+  const [st, setSt] = useState<{ copies: number; status: string; mode: string } | null>(null);
+  const [contracts, setContracts] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    draftState(leagueId).then((d) => { if (d && !d.error) setSt({ copies: d.copies ?? 1, status: d.status, mode: d.mode }); }).catch(() => {});
+    leagueContracts(leagueId).then((c) => setContracts(!!c.contracts)).catch(() => {});
+  }, [leagueId]);
+  if (!st) return null;
+  const locked = st.status !== 'pending';
+  const unavailable = contracts ? 'not with salaries' : st.mode === 'auction' ? 'not with an auction draft — switch it to snake or linear' : null;
+  const pick = async (n: number) => {
+    if (busy || n === st.copies) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await setLeagueCopies(leagueId, n);
+      if (r.ok) { setSt({ ...st, copies: n }); setMsg(n === 1 ? '✓ one copy of each player' : `✓ ${n} copies of each player`); }
+      else setMsg(r.error ?? 'failed');
+    } catch (e) { setMsg(errMsg(e, 'failed')); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <LabelInfo label="COPIES OF EVERY PLAYER" title="Copies of every player"
+        info="How many teams can roster the same player. At 2, two different teams can each draft or add him; a team never holds two of him. For big leagues where one pool runs thin. Set before the draft — it locks when the draft starts. Not offered with an auction, salaries, devy, guillotine, vampire or a shotgun wedding." />
+      <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center', flexWrap: 'wrap' }}>
+        {[1, 2, 3, 4].map((n) => (
+          <button key={n} onClick={() => void pick(n)} disabled={busy || locked || !!unavailable} className="mono" style={btn(st.copies === n)}>{n}</button>
+        ))}
+        {locked && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>🔒 locked — the draft has started</span>}
+        {!locked && unavailable && <span className="mono" style={{ ...mono, fontSize: 11.5, color: 'var(--faint)' }}>{unavailable}</span>}
       </div>
       {msg && <div className="mono" style={{ ...mono, fontSize: 12, color: msg.startsWith('✓') ? 'var(--you)' : 'var(--opp)', marginTop: 6 }}>{msg}</div>}
     </div>
@@ -1595,7 +1642,12 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         // ROSTER = the lineup builder AND the roster rules that bound it
         // (v0.213.1, founder's call) — one page for "what shape is a team".
         // Shows for the admin console too, where only the rules half exists.
-        ...(has('lineup') || native ? [{ id: 'lineup', label: '🧩 ROSTER' } as TabDef<LeagueTab>] : []),
+        // …split three ways (v0.714.0, founder: "Roster Construction, Eligible
+        // Players, Per Manager Roster Constraints, let's have those be separate
+        // areas in the commish settings").
+        ...(has('lineup') || native ? [{ id: 'lineup', label: '🧩 ROSTER CONSTRUCTION' } as TabDef<LeagueTab>] : []),
+        ...(has('eligible') || native ? [{ id: 'eligible', label: '🎟 ELIGIBLE PLAYERS' } as TabDef<LeagueTab>] : []),
+        ...(has('rosterrules') || native ? [{ id: 'rosterrules', label: '📏 MANAGER ROSTER RULES' } as TabDef<LeagueTab>] : []),
         ...(has('scoring') ? [{ id: 'scoring', label: '⚖ SCORING' } as TabDef<LeagueTab>] : []),
         ...(native ? [{ id: 'waivers', label: 'WAIVERS & TRADES' } as TabDef<LeagueTab>] : []),
         // 📜 SALARY (0217–0220): the contract rulebook. Native only — and the
@@ -1612,7 +1664,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         { id: 'ready', label: 'PICKS' },
         { id: 'matchups', label: 'MATCHUPS' },
         ...(native ? [
-          { id: 'rosters', label: 'ROSTERS' } as TabDef<LeagueTab>,
+          { id: 'rosters', label: 'ROSTERS & WIRE' } as TabDef<LeagueTab>,
           ...(nflOnly ? [{ id: 'playoffs', label: '🏆 PLAYOFFS' } as TabDef<LeagueTab>] : []),
           { id: 'dynasty', label: '🔁 NEXT SEASON' } as TabDef<LeagueTab>,
           ...(nflOnly ? [{ id: 'ladder', label: '🪜 LADDER' } as TabDef<LeagueTab>] : []),
@@ -1735,7 +1787,10 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       )}
 
       {/* commissioner roster tools + trade rulings (native leagues only) */}
-      {tab === 'rosters' && l.provider === 'native' && <><NativeRosterTools leagueId={l.league_id} /><TopUpPoolPanel leagueId={l.league_id} /></>}
+      {tab === 'rosters' && l.provider === 'native' && <NativeRosterTools leagueId={l.league_id} />}
+
+      {/* ELIGIBLE PLAYERS (v0.714.0): copies of every player and the pool's top-up, beside the filters above. */}
+      {tab === 'eligible' && l.provider === 'native' && <><CopiesPanel leagueId={l.league_id} /><TopUpPoolPanel leagueId={l.league_id} /></>}
 
       {/* the endgame: standings, bracket, champion (native leagues only) */}
       {tab === 'playoffs' && l.provider === 'native' && <PlayoffPanel leagueId={l.league_id} />}
@@ -1783,14 +1838,20 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
         </div>
       )}
 
-      {/* ROSTER RULES ride along under the lineup builder (v0.213.1) — the
-          builder says what the starting spots are, these say how big the
-          roster is and how it may change. Native leagues only; imported
-          rosters are governed on their own platform. */}
-      {tab === 'lineup' && l.provider === 'native' && (
+      {/* ROSTER SIZE under the construction (a drip league's only say in it;
+          a classic league's is the builder's sum) and the POSITION LIMITS under
+          the manager rules (v0.714.0). Native leagues only; imported rosters
+          are governed on their own platform. */}
+      {tab === 'lineup' && l.provider === 'native' && nflOnly && (
         <div style={{ marginTop: 14, borderTop: panels?.lineup ? '1px solid var(--bd)' : 'none', paddingTop: panels?.lineup ? 14 : 0 }}>
-          <div style={subhead}>ROSTER RULES</div>
-          {nflOnly ? <RosterRulesEditor leagueId={l.league_id} /> : <Muted text={`Position maximums are not built for a ${SPORTS[sport].league} league yet — the lineup above is the roster rule.`} />}
+          <div style={subhead}>ROSTER SIZE</div>
+          <RosterRulesEditor leagueId={l.league_id} part="size" />
+        </div>
+      )}
+      {tab === 'rosterrules' && l.provider === 'native' && (
+        <div style={{ marginTop: 14, borderTop: panels?.rosterrules ? '1px solid var(--bd)' : 'none', paddingTop: panels?.rosterrules ? 14 : 0 }}>
+          <div style={subhead}>POSITION LIMITS</div>
+          {nflOnly ? <RosterRulesEditor leagueId={l.league_id} part="caps" /> : <Muted text={`Position maximums are not built for a ${SPORTS[sport].league} league yet — the lineup is the roster rule.`} />}
         </div>
       )}
 

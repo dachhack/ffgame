@@ -41,7 +41,7 @@ import {
   myEnrollments, type Enrollment,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  setLeagueCopies, leaguePool, leaguePoolLive, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
+  leaguePool, leaguePoolLive, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, seatFullError, cancelWaiverClaim, processWaivers, friendlyError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
@@ -1114,18 +1114,10 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
               <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
             </div>
           )}
-          {/* ── COPIES (0500): 1–4 of every player, each on a different team ── */}
-          {!contractRoom && st.mode !== 'auction' && (
-            <>
-              <LabelInfo label="COPIES" title="Copies of every player" style={{ marginTop: 12 }}
-                info="How many teams can roster the same player. At 2, two different teams can each draft or add him; a team never holds two of him. Used for big leagues where one pool runs thin. Set before the draft — it locks when the draft starts. Not offered with an auction, salaries, devy, guillotine, vampire or a shotgun wedding." />
-              <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
-                {[1, 2, 3, 4].map((n) => (
-                  <Chip key={n} on={(st.copies ?? 1) === n}
-                    onClick={() => { if ((st.copies ?? 1) !== n) void run(() => setLeagueCopies(leagueId, n), n === 1 ? '✓ one copy of each player' : `✓ ${n} copies of each player`); }}>{n}</Chip>
-                ))}
-              </div>
-            </>
+          {/* COPIES (0500) moved to ⚑ COMMISH → ELIGIBLE PLAYERS (v0.714.0, founder: "That's a players option that
+              should be in the commish settings"). The room still says how many, when there is more than one. */}
+          {(st.copies ?? 1) > 1 && (
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 12 }}>{`COPIES ${st.copies} · each player on up to ${st.copies} teams · set in ⚑ COMMISH → ELIGIBLE PLAYERS`}</div>
           )}
           <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
