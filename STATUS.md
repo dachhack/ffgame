@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.724.0 — "my leagues" is always at the top
+
+> - The "my leagues" chip now sits at the top-left of the app wherever you are: inside a league, on the Admin, Recruit and Bullseye screens, and on the leagues list itself (where it refreshes your leagues). It stays put when the header slides away as you scroll.
+
+Founder: "Let's put the my leagues chip at the top of my leagues so no
+matter where you are in the interaction you can always go back to my
+leagues." The phone's chip showed only with a league open, and it lived in
+the FOLDING TOP (v0.356.0), so a scroll down took it away with the header.
+It is now drawn absolutely over the header's place for it (an invisible twin
+in the brand row holds that place and reports its box), outside the fold,
+for anyone signed in. Tap: in a league or any app screen, close it and go to
+the list; on the list, bump leaguesEpoch to re-read. Overlays and sheets
+still cover it, as they cover the header (each has its own close).
+check:leaguetools extended. JavaScript only; no iPhone build.
+
 ### v0.723.0 — Preview lists the 2x players; injury status in every tool
 
 > - Preview's HEROES and VILLAINS now list everyone in two or more of your matchups. If that's fewer than five, the list is topped up with the highest-projected players in one matchup, so you always see at least five.

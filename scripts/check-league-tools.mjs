@@ -198,6 +198,12 @@ ok('faces: the glance hands headshots to the targets and the trades', feedSrc.in
   }
   ok('injury: the glance hands designations to the sides and the trades', feedSrc.includes("injury: injuries?.[p.slug] ?? null") && feedSrc.includes('injuryOf: (slug) => tags[slug] ?? null'));
 }
+{
+  const app = read('apps/mobile/App.tsx');
+  const pin = app.indexOf('THE PINNED "my leagues" CHIP'), fold = app.indexOf('THE FOLDING TOP (v0.356.0)');
+  ok('phone: "my leagues" is pinned outside the folding header, for anyone signed in, everywhere', pin > 0 && pin < fold && app.includes("{!!session && chipBox && (") && app.includes("position: 'absolute', zIndex: 5, left: chipBox.x") && !app.includes("{open && (\n            <Pressable\n              // Resets the view too"));
+  ok('phone: on the list itself it re-reads your leagues; anywhere else it goes home', app.includes("if (!open && view === 'picks') setLeaguesEpoch((n) => n + 1); setOpen(null); setView('picks');"));
+}
 ok('phone: the header has no fields button (ALL FIELDS is on the bar)', !read('apps/mobile/App.tsx').includes('>▦ fields</Text>'));
 const lo = read('src/screens/LiveOnboard.tsx');
 ok('web: the leagues header has no fields chip (the bar has ALL FIELDS)', !lo.includes('▦ fields</button>'));
