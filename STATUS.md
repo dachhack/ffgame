@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.9 — Weekly contests keep the opponent's projection sealed
+
+> - On the league list and the home-screen widget, a weekly contest league no longer shows your opponent's projected total or the win bar until every game of the week has kicked off. Their live points still show.
+
+Founder, beside the phone's league list: "Weekly contests shouldn't show your
+opponents projections until all games have kicked off. I guess we could do
+projections for players in games that have kicked off and say x/x locked. But
+it's really kind of meaningless". The card's "Mud Dogs P 119.4" and the 56%
+bar weren't their squad: their picks are sealed until each kickoff, so the
+glance (core widgetFeed, classic path) filled an optimal lineup off their
+pool, which reads as a leak. WidgetLeague now carries league.kind; new
+contestSealed(kind, slate, now) holds a dfs / bullseye opponent sealed until
+the week's LAST kickoff (no slate read: sealed). Sealed: no opponent
+projection (themLive, so the card prints their live points and no P), no
+win bar, no opponent starters in Heroes & Villains. My own projection is
+unchanged. Same core for the phone's list, the web's list and the Android
+widget. No x/x locked line (the founder's call). check:widget +10.
+JavaScript only; no iPhone build.
+
 ### v0.713.8 — The whole game line on the classic board
 
 > - The classic board's kickoff reads "Sun 9:30a" / "Sun 1p", so "vs HOU · Sun 9:30a" fits without cutting off the time.

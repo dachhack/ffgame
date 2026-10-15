@@ -7,7 +7,7 @@
 // with no matchup row at all. The league-choice helpers that make the ▸ tap
 // cycle are pinned too, because a widget that outlives its league must fall
 // forward rather than draw a hole.
-import { summarize, widgetLeagues, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
+import { summarize, widgetLeagues, contestSealed, pickWidgetLeague, nextWidgetLeague, cacheGet, cacheSet, rememberSnapshot, recallSnapshot, recallLeagues, SWAP_MIN_GAIN, packRows, shownWidgetLeagues, widgetHiddenLeagues, setWidgetHiddenLeagues } from '../packages/core/src/data/widgetFeed';
 import { classicSlots } from '../packages/core/src/engine/classic';
 import { windowsForWeek, windowKickoffMs, LOCK_LEAD_MS, setRuntimeSlate } from '../packages/core/src/data/nflSlate';
 import { alertCount, alertsSummary, spotLabel, fieldGames, minesByTeam, nextDownFrom, lineupReport, lineupReportLine, projectedSheet, applyFieldsPick } from '../packages/core/src/data/widgetExtras';
@@ -407,6 +407,20 @@ const state = [
       classic: classic({ picks: [], roster: theirRoster, theirPicks: myPicks, theirRoster: roster }) }).winPct - (1 - pre.winPct)) < 1e-9);
   ok('classic card: at the final the win bar is the result', fin.winPct === 1, fin.winPct);
   ok('classic card: no opponent lineup, no win bar', noOpp.winPct === undefined, noOpp.winPct);
+  // v0.713.9, founder: "Weekly contests shouldn't show your opponents projections until all games have kicked off".
+  {
+    const sealed = summarize({ league: cl, week: WEEK, matchup: cmatch('live'), state: liveState, teams: cteams, injuries, nowMs: kick(0) + 30 * 60_000, classic: classic({ oppSealed: true }) });
+    ok('contest: a sealed opponent gets no projected total — their live points only, flagged', sealed.themLive === true && sealed.them.score === 0, sealed.them);
+    ok('contest: …no win bar', sealed.winPct === undefined, sealed.winPct);
+    ok('contest: …and no opponent starters on the card', (sealed.sides?.theirs ?? []).length === 0, sealed.sides?.theirs);
+    ok('contest: my own projection still shows', sealed.me.score === live.me.score, sealed.me.score);
+    const games = [{ kickoff: '2026-10-16T00:15:00Z' }, { kickoff: '2026-10-20T00:15:00Z' }];
+    ok('contest: sealed until the week\'s LAST kickoff', contestSealed('dfs', games, Date.parse('2026-10-19T12:00:00Z')) && contestSealed('bullseye', games, Date.parse('2026-10-16T01:00:00Z')));
+    ok('contest: open once every game has kicked', !contestSealed('dfs', games, Date.parse('2026-10-20T00:16:00Z')));
+    ok('contest: no slate read is sealed, not guessed', contestSealed('dfs', [], Date.now()));
+    ok('contest: a classic or drip league is never sealed here', !contestSealed(undefined, games, 0) && !contestSealed('redraft', games, 0));
+    ok('contest: the league list carries the kind', widgetLeagues([{ league_id: 'x', sleeper_roster_id: 1, league: { name: 'W', kind: 'dfs', game_mode: 'classic' } }])[0].kind === 'dfs');
+  }
   const faces = summarize({ league: cl, week: WEEK, matchup: cmatch(), state: [], teams: { 4: { team_name: 'Steelers', avatar: 'https://sleepercdn.com/avatars/s' }, 7: { team_name: 'Ravens', avatar: null } }, injuries, nowMs: kick(0), classic: classic() });
   // v0.503.0 — the lineup as cards: every starting spot, who is in it (or
   // projected to it, for a best-ball spot), his projection, his points once
