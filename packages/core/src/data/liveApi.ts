@@ -5139,6 +5139,12 @@ export async function leaguePoolExp(leagueId: string): Promise<Record<string, nu
   return out;
 }
 
+/** Names for a handful of a league's players (v0.715.0, the trade zone): slug → full name. */
+export async function leaguePoolNames(leagueId: string, slugs: string[]): Promise<Record<string, string>> {
+  if (!slugs.length) return {};
+  const { data } = await (await client()).from('league_pool').select('slug, full_name').eq('league_id', leagueId).in('slug', slugs);
+  return Object.fromEntries(((data ?? []) as { slug: string; full_name: string | null }[]).filter((r) => r.full_name).map((r) => [r.slug, r.full_name as string]));
+}
 export interface NativeRosterRow { roster_id: number; slug: string; acquired: string; spot?: 'active' | 'taxi' | 'ir' | 'out'; }
 export async function nativeRosters(leagueId: string): Promise<NativeRosterRow[]> {
   // Paged for the same reason as the pool: a 32-team league with deep benches

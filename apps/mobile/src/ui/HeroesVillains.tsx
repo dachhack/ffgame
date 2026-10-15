@@ -22,9 +22,12 @@ const fmtKick = (ms: number | null) => (ms == null ? 'TBD'
   : new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(new Date(ms)).replace(' ', '').replace(/(AM|PM)/, (m) => m[0].toLowerCase()));
 const num = (p: StakePlayer) => (p.status !== 'pre' && p.pts != null ? `${p.status === 'live' ? '● ' : ''}${p.pts.toFixed(1)}` : p.proj != null ? `P ${p.proj.toFixed(1)}` : '');
 
-export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
+export function HeroesVillains({ snaps, bare = false }: { snaps: WidgetSnapshot[];
+  /** BARE (v0.715.0): just the tabs and lists, always open — the league tools
+   *  bar opens it in a sheet that already says what it is. */
+  bare?: boolean }) {
   const t = useTheme();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(bare);
   const [tab, setTab] = useState<Tab>('heroes');
   const hv = useMemo(() => heroesVillains(snaps), [snaps]);
   if (hv.week == null || hv.leagues === 0 || (!hv.heroes.length && !hv.villains.length)) return null;
@@ -68,16 +71,7 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
     </View>
   );
 
-  return (
-    <Card style={{ gap: 8 }}>
-      <Pressable onPress={() => { tap(); setOpen((o) => !o); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: t.text }}>Heroes & villains <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.faint }}>{weekTitle(hv.week)}</Text></Text>
-          <Mono size={9.5} tone="faint">{summary}</Mono>
-        </View>
-        <Text style={{ fontFamily: MONO, fontSize: 14, color: t.dim }}>{open ? '▴' : '▾'}</Text>
-      </Pressable>
-      {open && (
+  const body = (
         <>
           <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
             <Chip label={`HEROES ${hv.heroes.length}`} on={tab === 'heroes'} onPress={() => setTab('heroes')} />
@@ -117,7 +111,18 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
             </View>
           )}
         </>
-      )}
+  );
+  if (bare) return <View style={{ gap: 8 }}><Mono size={9.5} tone="faint">{`${weekTitle(hv.week)} · ${summary}`}</Mono>{body}</View>;
+  return (
+    <Card style={{ gap: 8 }}>
+      <Pressable onPress={() => { tap(); setOpen((o) => !o); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: t.text }}>Heroes & villains <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.faint }}>{weekTitle(hv.week)}</Text></Text>
+          <Mono size={9.5} tone="faint">{summary}</Mono>
+        </View>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: t.dim }}>{open ? '▴' : '▾'}</Text>
+      </Pressable>
+      {open && body}
     </Card>
   );
 }
