@@ -823,7 +823,9 @@ async function main() {
         if (req.season) argv.push(String(req.season));
       } else if (req.mode === 'seat-wire') {
         // v0.665.1: one seat works the wire now — the hourly sweep for one league/seat.
-        argv.push('seat-wire', need('week'), `--league=${need('league')}`);
+        // v0.727.0: no league → the WHOLE hourly sweep, once, with its log.
+        argv.push('seat-wire', need('week'));
+        if (req.league) argv.push(`--league=${req.league}`);
         if (req.seat != null) argv.push(`--seat=${req.seat}`);
         if (req.season) argv.push(String(req.season));
       } else if (req.mode === 'shotgun-preview') {
@@ -1084,7 +1086,7 @@ async function main() {
       // ▶ ONE SEAT WORKS THE WIRE, NOW (v0.665.1). Founder: "have team 2 put
       //   in waivers for tonight to run tomorrow." The hourly sweep, for one
       //   league (and one seat), planning the given week:
-      //   node src/cli.js seat-wire <week> --league=<uuid> [--seat=<n>] [season]
+      //   node src/cli.js seat-wire <week> [--league=<uuid> [--seat=<n>]] [season]  (no league: the whole sweep)
       //   The slate is the week's stored one (nfl_slate), so byes and kickoffs
       //   read as the worker reads them. Writes only what the sweep writes.
       const { sweepSeatWire } = await import('./seatWire.js');
@@ -1094,11 +1096,13 @@ async function main() {
       const pos = args.filter((a) => !a.startsWith('--'));
       const week = Number(pos[0]);
       const season = pos[1] ?? config.season;
-      if (!league || !Number.isFinite(week)) { console.error('usage: seat-wire <week> --league=<uuid> [--seat=<n>] [season]'); process.exitCode = 1; break; }
+      // v0.727.0: --league is optional — without it this is the whole hourly
+      // sweep, every league, run once with its log in front of you.
+      if (!Number.isFinite(week)) { console.error('usage: seat-wire <week> [--league=<uuid> [--seat=<n>]] [season]'); process.exitCode = 1; break; }
       const { data: rows } = await db().from('nfl_slate').select('home,away,win,kickoff').eq('season', season).eq('week', week);
       const slate = (rows ?? []).map((g) => ({ home: g.home, away: g.away, win: g.win, kickoff: g.kickoff }));
-      const n = await sweepSeatWire(week, slate, (...a) => console.log(...a), { leagueId: league, rosterId: seatArg ? Number(seatArg) : null });
-      console.log(`seat-wire: week ${week}, league ${league}, seat ${seatArg || '*'} — ${n} transaction(s)`);
+      const n = await sweepSeatWire(week, slate, (...a) => console.log(...a), league ? { leagueId: league, rosterId: seatArg ? Number(seatArg) : null } : null);
+      console.log(`seat-wire: week ${week}, league ${league ?? 'ALL'}, seat ${league ? seatArg || '*' : '*'} — ${n} transaction(s)`);
       break;
     }
     case 'wire-audit': {

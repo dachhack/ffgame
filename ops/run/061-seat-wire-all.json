@@ -1,0 +1,6 @@
+{
+  "mode": "seat-wire",
+  "week": 6,
+  "season": "2026",
+  "why": "Founder: 'Team 4 doesn't have a legal team, but it looks like the AI is not making moves to get it legal.' Ops 060 showed the hourly AI seat wire stopped for EVERY league after Oct 11 (no AI claim anywhere until 059's one-seat pass), while one-seat passes work. v0.727.0 isolates each league and seat so one failure is logged and skipped instead of ending the sweep. One pass of the whole sweep — exactly what the hourly does — with its log, so the league that has been failing is named and every AI seat's backlog since Oct 11 is worked."
+}

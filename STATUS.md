@@ -22,6 +22,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.727.0 — The AI waiver run can't be stopped by one league
+
+> - AI-run teams had stopped making waiver moves in every league since Oct 11. One league's error was ending the hourly run for all of them; now each league runs on its own, so one problem can't freeze the rest.
+> - Kickoff League's Team 4 is legal again: Baker Mayfield (doubtful) came off IR and Keaton Mitchell was released to make room.
+
+Founder: "Team 4 doesn't have a legal team, but it looks like the AI is not
+making moves to get it legal." Confirmed against live data, not a code
+path: ops 058 (read only) found Team 4 AI-controlled, agent waivers on, and
+illegal — Mayfield on IR as D in a league whose IR takes IR/O, active roster
+21/21 — so every add and claim was refused; nothing since Oct 14. Ops 059,
+one pass of the seat wire for that seat, legalised it at once (cut Keaton
+Mitchell, activated Mayfield, claimed Hunter Henry and the IND defense), so
+the code works for the seat. Ops 060 (read only) then showed AI claims in
+EVERY league stop after Oct 11 — 4 to 41 a day before, none after — while
+the worker kept auto-slotting lineups. sweepSeatWire walked every league in
+one try/finally with no catch, so one league throwing ends the sweep for all
+of them, every hour. Each league and each seat now runs in its own try; a
+failure is logged ("seat wire league failed", league id, the stack's first
+lines) and the sweep goes on. The ops seat-wire errand takes no league for
+the whole sweep (cli seat-wire without --league); ops 061 runs it once so
+its log names the league that has been failing and every AI seat's backlog
+is worked. Which league threw, and why, is UNCONFIRMED until 061's log is
+read. check:seatwire extended. Worker only; no iPhone build.
+
 ### v0.726.0 — Roster status alerts; lineup suggestions with faces and injury tags
 
 > - New notification, "roster player status" (on by default, in notification settings): whenever anyone on your roster — bench, taxi and IR included — gets a new injury designation (questionable, doubtful, out, IR) or is cleared, you hear about it. A starter ruled out still comes as "starter ruled out", with the swap deadline, so one ruling is one alert.
