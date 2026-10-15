@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
+import { injuryTag } from '@drip/core/data/heroes';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { useTheme, MONO, alpha } from '../theme.native';
@@ -62,6 +63,9 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
   const offN = toolLeaguesOffCount(off, leagues.map((l) => l.id));
   const pick = (x: Tool) => { tap(); setOpen(x); };
   const leagueOf = (id: string) => leagues.find((l) => l.id === id);
+  // INJURY STATUS on every player the tools name (v0.723.0).
+  const inj = (tag: string | null | undefined) => (injuryTag(tag)
+    ? <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '800', color: t.warn }}>{` ${injuryTag(tag)}`}</Text> : null);
   // Which league's waiver targets or trade ideas are open (v0.722.0).
   const [shown, setShown] = useState<string | null>(null);
   const leagueRow = (k: string, avatar: string | null | undefined, name: string, count: string) => (
@@ -158,14 +162,14 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
                             <PlayerFace image={w.addImage} name={w.addName} tone={t.you} />
                             <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
                               <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>
-                                {w.addName} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</Text>
+                                {w.addName} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</Text>{inj(w.addInjury)}
                               </Text>
                               <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: t.dim }}>{wireTargetTag(w)}</Text>
                               {w.dropName && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
                                   <Mono size={9} tone="faint">for</Mono>
                                   <PlayerFace image={w.dropImage} name={w.dropName} size={18} tone={t.opp} />
-                                  <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: MONO, fontSize: 10, color: t.dim }}>{w.dropName}</Text>
+                                  <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: MONO, fontSize: 10, color: t.dim }}>{w.dropName}{inj(w.dropInjury)}</Text>
                                 </View>
                               )}
                             </View>
@@ -232,7 +236,7 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
                                 {ps.map((p) => (
                                   <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                     <PlayerFace image={p.image} name={p.name} size={28} tone={tone} />
-                                    <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>{p.name} <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint }}>{p.pos}</Text></Text>
+                                    <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>{p.name} <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint }}>{p.pos}</Text>{inj(p.injury)}</Text>
                                   </View>
                                 ))}
                               </View>

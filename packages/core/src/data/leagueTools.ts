@@ -135,6 +135,8 @@ export interface WireTarget {
   dynGain?: number | null;
   /** Headshots (v0.722.0): the add's and the drop's, when there is one. */
   addImage?: string | null; dropImage?: string | null;
+  /** Injury designations (v0.723.0): Q, D, O, IR … or null. */
+  addInjury?: string | null; dropInjury?: string | null;
 }
 export type WireLens = 'now' | 'rebuild';
 export const WIRE_KIND_LABEL: Record<WireClaim['kind'], string> = {
@@ -235,7 +237,11 @@ export function wireTargetsOf(input: {
   });
   const all = dynMap ? [...now, ...rebuildTargets({ slots, mine, available, names, dynOf, healthyValueOf, openSeats, max: input.max ?? WIRE_TARGETS_MAX })] : now;
   const img = input.imageOf;
-  return img ? all.map((w) => ({ ...w, addImage: img(w.add), dropImage: w.drop ? img(w.drop) : null })) : all;
+  return all.map((w) => ({
+    ...w,
+    ...(img ? { addImage: img(w.add), dropImage: w.drop ? img(w.drop) : null } : {}),
+    addInjury: injuries[w.add] ?? null, dropInjury: w.drop ? injuries[w.drop] ?? null : null,
+  }));
 }
 
 /** 🌱 REBUILD (v0.717.0): the best dynasty assets on the wire, each for the

@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
+import { injuryTag } from '@drip/core/data/heroes';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet, Crest } from '../app/ui';
@@ -72,6 +73,9 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
   const offN = toolLeaguesOffCount(off, leagues.map((l) => l.id));
   const go = (leagueId: string, rosterId: number) => { setOpen(null); onOpenLeague(leagueId, rosterId); };
   const leagueOf = (id: string) => leagues.find((l) => l.id === id);
+  // INJURY STATUS on every player the tools name (v0.723.0).
+  const inj = (tag: string | null | undefined) => (injuryTag(tag)
+    ? <span className="mono" style={{ fontSize: 10, fontWeight: 800, color: 'var(--warn)' }}>{` ${injuryTag(tag)}`}</span> : null);
   // Which league's waiver targets or trade ideas are open (v0.722.0).
   const [shown, setShown] = useState<string | null>(null);
   const leagueRow = (k: string, avatar: string | null | undefined, name: string, count: string) => (
@@ -161,13 +165,13 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
                             <button key={`${g.lens}:${w.add}`} onClick={() => go(l.leagueId, l.rosterId)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                               <Face image={w.addImage} name={w.addName} tone="var(--you)" />
                               <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.addName} <span className="mono" style={mono(10)}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</span></span>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.addName} <span className="mono" style={mono(10)}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</span>{inj(w.addInjury)}</span>
                                 <span className="mono" style={mono(10.5, 'var(--dim)')}>{wireTargetTag(w)}</span>
                                 {w.dropName && (
                                   <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
                                     <span className="mono" style={mono(9.5)}>for</span>
                                     <Face image={w.dropImage} name={w.dropName} size={18} tone="var(--opp)" />
-                                    <span className="mono" style={{ ...mono(10.5, 'var(--dim)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.dropName}</span>
+                                    <span className="mono" style={{ ...mono(10.5, 'var(--dim)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.dropName}{inj(w.dropInjury)}</span>
                                   </span>
                                 )}
                               </span>
@@ -235,7 +239,7 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
                                   {ps.map((p) => (
                                     <span key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                                       <Face image={p.image} name={p.name} size={28} tone={tone} />
-                                      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name} <span className="mono" style={mono(9.5)}>{p.pos}</span></span>
+                                      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name} <span className="mono" style={mono(9.5)}>{p.pos}</span>{inj(p.injury)}</span>
                                     </span>
                                   ))}
                                 </span>

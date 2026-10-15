@@ -4,7 +4,7 @@
 // waiver targets, trade zone, etc." Pins the folds (lineup alerts, the trade
 // zone) and that both clients draw the bar. Run: npx tsx scripts/check-league-tools.mjs
 import { readFileSync } from 'node:fs';
-import { gameFaces, gameCounts } from '../packages/core/src/data/heroes';
+import { gameFaces, gameCounts, previewList, injuryTag } from '../packages/core/src/data/heroes';
 import { tradeIdeasOf, positionStrength, contenders } from '../packages/core/src/data/tradeIdeas';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, parseToolLeagues, toolsForLeague } from '../packages/core/src/data/toolLeagues';
@@ -177,6 +177,27 @@ for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['w
 ok('waiver targets: no emojis in the labels', !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(Object.values(WIRE_LENS_LABEL).join('') + trendLabel(5000) + trendLabel(-5000) + wireTargetTag({ kind: 'hole', lens: 'now', netAdds: 3000, dropName: null, claim: true })));
 ok('waiver targets: the tag leaves the drop to the row (drawn with his face)', wireTargetTag({ kind: 'upgrade', lens: 'now', netAdds: null, dropName: 'X', claim: false }) === 'UPGRADE' && wireTargetTag({ kind: 'hole', lens: 'now', netAdds: null, dropName: null, claim: true }) === 'FILLS A HOLE · open spot · claim');
 ok('faces: the glance hands headshots to the targets and the trades', feedSrc.includes('imageOf = (slug: string) => headshot(slug) ?? espnHeadshot(') && (feedSrc.match(/ imageOf,/g) ?? []).length >= 2);
+// ── v0.723.0: the preview's list, and injury status everywhere ──
+{
+  const SP = (slug, count, proj) => ({ slug, name: slug, count, proj, pts: null, heroIn: [], villainIn: [] });
+  const many = [SP('a', 3, 5), SP('b', 2, 9), SP('c', 2, 1), SP('d', 2, 4), SP('e', 2, 3), SP('f', 2, 2), SP('g', 1, 30)];
+  ok('preview: everyone at 2x or more when there are five or more — no 1x', previewList(many).map((p) => p.slug).join() === 'a,b,c,d,e,f');
+  const few = [SP('a', 3, 5), SP('b', 2, 9), SP('x', 1, 4), SP('y', 1, 20), SP('z', 1, 12), SP('w', 1, 1)];
+  ok('preview: under five, topped up with the highest-projected 1x', previewList(few).map((p) => p.slug).join() === 'a,b,y,z,x', previewList(few).map((p) => p.slug));
+  ok('preview: only 1x — the five projected highest', previewList([SP('p', 1, 1), SP('q', 1, 8), SP('r', 1, 3), SP('s', 1, 9), SP('t', 1, 2), SP('u', 1, 7)]).map((p) => p.slug).join() === 's,q,u,r,t');
+  ok('injury: a designation prints, a healthy player prints nothing', injuryTag('q') === 'Q' && injuryTag('IR') === 'IR' && injuryTag(null) === null && injuryTag('') === null && injuryTag('Active') === null);
+  const wi = wireTargetsOf(wireIn({ injuries: { 'jonathan-taylor': 'Q' } }));
+  ok('injury: waiver targets carry the add\'s designation', wi.find((t) => t.add === 'jonathan-taylor')?.addInjury === 'Q' && wi.every((t) => 'addInjury' in t), wi);
+  for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['web', 'src/screens/LeagueToolsBar.tsx']]) {
+    const src = read(path);
+    ok(`${n}: injury status beside every player the tools name (targets, their drops, both sides of a trade)`, src.includes('inj(w.addInjury)') && src.includes('inj(w.dropInjury)') && src.includes('inj(p.injury)'));
+  }
+  for (const [n, path] of [['phone', 'apps/mobile/src/ui/HeroesVillains.tsx'], ['web', 'src/screens/HeroesVillains.tsx']]) {
+    const src = read(path);
+    ok(`${n} preview: heroes and villains via previewList, with injury status`, src.includes('previewList(hv.heroes)') && src.includes('previewList(hv.villains)') && src.includes('inj(p.injury)') && !src.includes('slice(0, 40)'));
+  }
+  ok('injury: the glance hands designations to the sides and the trades', feedSrc.includes("injury: injuries?.[p.slug] ?? null") && feedSrc.includes('injuryOf: (slug) => tags[slug] ?? null'));
+}
 ok('phone: the header has no fields button (ALL FIELDS is on the bar)', !read('apps/mobile/App.tsx').includes('>▦ fields</Text>'));
 const lo = read('src/screens/LiveOnboard.tsx');
 ok('web: the leagues header has no fields chip (the bar has ALL FIELDS)', !lo.includes('▦ fields</button>'));

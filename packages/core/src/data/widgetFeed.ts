@@ -222,6 +222,8 @@ export interface SidePlayer {
   proj: number | null;
   /** His headshot (v0.718.0), for the Preview's faces. */
   image?: string | null;
+  /** His injury designation (v0.723.0): Q, D, O, IR … or null. */
+  injury?: string | null;
 }
 
 /** A league the widget can show — the seats you hold, minus what a home
@@ -538,7 +540,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
       // slot rows name them once the window has locked.
       for (const r of (s?.slot_scores ?? []).filter((r) => r.side !== mySide && r.slug)) {
         const pl = theirPoolBySlug.get(r.slug as string);
-        theirSide.push({ slug: r.slug as string, name: pl ? shortName(pl.full) : (r.slug as string), pos: pl?.pos ?? null, team: pl?.team ?? null, win: winId, image: images?.[r.slug as string] ?? null,
+        theirSide.push({ slug: r.slug as string, name: pl ? shortName(pl.full) : (r.slug as string), pos: pl?.pos ?? null, team: pl?.team ?? null, win: winId, image: images?.[r.slug as string] ?? null, injury: injuries?.[r.slug as string] ?? null,
           status: w.phase === 'live' ? 'live' : w.phase === 'final' ? 'final' : 'pre', pts: w.phase === 'live' || w.phase === 'final' ? round1(Number(r.score) || 0) : null, proj: null });
       }
       if (w.phase === 'setup' || w.phase === 'locked') theirsSealed += Math.max(0, cap - theirRevealed);
@@ -685,7 +687,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
     // HEROES & VILLAINS (v0.632.0): the opponent's starters, as the card has mine.
     for (const { d, p, live, proj, st } of theirs?.rows ?? []) {
       if (!p) continue;
-      theirSide.push({ slug: p.slug, name: shortName(p.full), pos: p.pos, team: p.team, win: d.slot, image: images?.[p.slug] ?? null, status: st === 'done' ? 'final' : st, pts: st !== 'pre' ? round1(live) : null, proj: round1(proj) });
+      theirSide.push({ slug: p.slug, name: shortName(p.full), pos: p.pos, team: p.team, win: d.slot, image: images?.[p.slug] ?? null, injury: injuries?.[p.slug] ?? null, status: st === 'done' ? 'final' : st, pts: st !== 'pre' ? round1(live) : null, proj: round1(proj) });
     }
     left = { me: mineSide.left, them: theirs ? theirs.left : { waiting: 0, playing: 0, done: 0 } };
     // THE WIN BAR (v0.501.0). Founder: "win probability bar would be good."
@@ -767,7 +769,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
   const sides: WidgetSnapshot['sides'] = (assessable || projected) ? {
     mine: cards.filter((k) => k.slug).map((k) => ({
       slug: k.slug as string, name: k.name, pos: k.pos, team: k.team, win: k.win,
-      status: k.status === 'live' ? 'live' : k.status === 'final' ? 'final' : 'pre', pts: k.points, proj: k.proj ?? null, image: k.image ?? null,
+      status: k.status === 'live' ? 'live' : k.status === 'final' ? 'final' : 'pre', pts: k.points, proj: k.proj ?? null, image: k.image ?? null, injury: k.injury ?? null,
     })),
     theirs: theirSide, theirsSealed,
   } : undefined;
@@ -1061,7 +1063,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
           slots: classicIn.slots, rosters, me: league.rosterId, valueOf: season,
           names: (slug) => meta.get(slug)?.full_name ?? slug,
           teamName: (rid) => teamName.get(rid) || teams[rid]?.team_name || `Team ${rid}`,
-          standings: standings as StandingsRow[], dyn: wireMkt.dyn, imageOf,
+          standings: standings as StandingsRow[], dyn: wireMkt.dyn, imageOf, injuryOf: (slug) => tags[slug] ?? null,
         });
       } catch { snapshot.tradeIdeas = []; }
     }

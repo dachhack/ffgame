@@ -35,6 +35,8 @@ export interface StakePlayer {
   pts: number | null; proj: number | null;
   /** His headshot (v0.718.0), when any league's glance had one. */
   image?: string | null;
+  /** His injury designation (v0.723.0), when any league's glance had one. */
+  injury?: string | null;
   /** The game he plays in this week, as `AWAY@HOME`, or null (bye, unknown team). */
   game: string | null;
 }
@@ -87,7 +89,7 @@ export function heroesVillains(snaps: WidgetSnapshot[], week: number | null = he
   const used = snaps.filter((s) => s.sides && s.week === week && s.phase !== 'bye' && s.phase !== 'idle');
   const by = new Map<string, StakePlayer>();
   const take = (p: SidePlayer, side: 'hero' | 'villain', s: WidgetSnapshot) => {
-    const at = by.get(p.slug) ?? { slug: p.slug, name: p.name, pos: p.pos, team: p.team, heroIn: [], villainIn: [], count: 0, status: p.status, pts: p.pts, proj: p.proj, image: p.image ?? null, game: gameKey(week, p.team) };
+    const at = by.get(p.slug) ?? { slug: p.slug, name: p.name, pos: p.pos, team: p.team, heroIn: [], villainIn: [], count: 0, status: p.status, pts: p.pts, proj: p.proj, image: p.image ?? null, injury: p.injury ?? null, game: gameKey(week, p.team) };
     const lg: StakeLeague = { leagueId: s.leagueId, leagueName: s.leagueName, opponent: s.them?.name ?? 'Opponent' };
     const list = side === 'hero' ? at.heroIn : at.villainIn;
     if (!list.some((l) => l.leagueId === s.leagueId)) list.push(lg);
@@ -96,6 +98,7 @@ export function heroesVillains(snaps: WidgetSnapshot[], week: number | null = he
     if (at.pts == null && p.pts != null) at.pts = p.pts;
     if (at.proj == null && p.proj != null) at.proj = p.proj;
     if (!at.image && p.image) at.image = p.image;
+    if (!at.injury && p.injury) at.injury = p.injury;
     if (!at.team && p.team) { at.team = p.team; at.game = gameKey(week, p.team); }
     if (!at.pos && p.pos) at.pos = p.pos;
     if (rank[p.status] < rank[at.status]) at.status = p.status;
@@ -166,3 +169,24 @@ export const PREVIEW_INFO = 'HEROES — your starters across your matchups; ×N 
   + 'VILLAINS — starting against you; ×N is how many of your opponents start him. A sealed drip slot shows once its game kicks off.\n\n'
   + 'KEY GAMES — ranked by how many of your matchups each game touches. Tap one for its players.\n\n'
   + 'QUAD BOX — for each window with several games, the four screens to put up, with the two players who matter most on each side. Tap a game for all of them.';
+
+/** WHO THE PREVIEW LISTS (v0.723.0). Founder: "let's just list anyone with 2x
+ *  or greater. List at least five. If there are only 1x players, pick the
+ *  highest projected." Everyone in two or more of your matchups (the stake
+ *  order); when that is under `min`, topped up with the 1x players projected
+ *  highest. */
+export const PREVIEW_MIN = 5;
+export function previewList(players: StakePlayer[], min = PREVIEW_MIN): StakePlayer[] {
+  const multi = players.filter((p) => p.count >= 2);
+  if (multi.length >= min) return multi;
+  const ones = players.filter((p) => p.count < 2)
+    .sort((a, b) => (b.proj ?? b.pts ?? 0) - (a.proj ?? a.pts ?? 0) || a.name.localeCompare(b.name));
+  return [...multi, ...ones.slice(0, min - multi.length)];
+}
+
+/** An injury designation as the tools print it (v0.723.0): "Q", "D", "O",
+ *  "IR", … — null for a healthy player. */
+export const injuryTag = (tag: string | null | undefined): string | null => {
+  const t = (tag ?? '').trim().toUpperCase();
+  return t && t !== 'ACTIVE' && t !== 'HEALTHY' ? t : null;
+};
