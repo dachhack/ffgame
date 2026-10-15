@@ -6,13 +6,16 @@
 //
 // One row of chips under "Your leagues" that scrolls sideways rather than
 // wrapping; each opens its tool in a sheet. Counts are what wants an answer.
+// v0.718.0 (founder): no emojis on the bar, HEROES & VILLAINS is PREVIEW, and
+// OPTIONS picks the leagues each tool reads (core toolLeagues, per device).
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, TOOL_IDS, TOOL_LABEL, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet } from '../app/ui';
 import { HeroesVillains } from './HeroesVillains';
 
-type Tool = 'heroes' | 'lineup' | 'wire' | 'trades';
+type Tool = 'preview' | 'lineup' | 'wire' | 'trades' | 'options';
 export interface ToolLeague { id: string; name: string; rosterId: number; native: boolean; contest: boolean }
 
 const chip = (on: boolean): React.CSSProperties => ({
@@ -23,41 +26,69 @@ const mono = (size: number, color = 'var(--faint)'): React.CSSProperties => ({ f
 
 export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
   snaps: WidgetSnapshot[]; leagues: ToolLeague[];
-  /** ▦ ALL FIELDS — the leagues page's own fields board. */
+  /** ALL FIELDS — the leagues page's own fields board. */
   onFields: () => void;
   onOpenLeague: (leagueId: string, rosterId: number) => void;
 }) {
   const [open, setOpen] = useState<Tool | null>(null);
-  const alerts = useMemo(() => lineupAlerts(snaps), [snaps]);
-  const alertN = useMemo(() => lineupAlertCount(snaps), [snaps]);
-  const wire = useMemo(() => wireTargets(snaps), [snaps]);
-  const wireN = useMemo(() => wireTargetCount(snaps), [snaps]);
-  const tradeLeagues = useMemo(() => leagues.filter((l) => l.native && !l.contest), [leagues]);
+  const [off, setOff] = useState<ToolLeagueOff>(() => loadToolLeagues());
+  const flip = (tool: ToolId, id: string) => setOff((v) => { const n = toggleToolLeague(v, tool, id); saveToolLeagues(n); return n; });
+  const previewSnaps = useMemo(() => forTool(off, 'preview', snaps), [snaps, off]);
+  const lineupSnaps = useMemo(() => forTool(off, 'lineup', snaps), [snaps, off]);
+  const wireSnaps = useMemo(() => forTool(off, 'wire', snaps), [snaps, off]);
+  const alerts = useMemo(() => lineupAlerts(lineupSnaps), [lineupSnaps]);
+  const alertN = useMemo(() => lineupAlertCount(lineupSnaps), [lineupSnaps]);
+  const wire = useMemo(() => wireTargets(wireSnaps), [wireSnaps]);
+  const wireN = useMemo(() => wireTargetCount(wireSnaps), [wireSnaps]);
+  // Waiver targets and the trade zone are for native, non-contest leagues.
+  const nativeLeagues = useMemo(() => leagues.filter((l) => l.native && !l.contest), [leagues]);
+  const tradeLeagues = useMemo(() => nativeLeagues.filter((l) => toolHas(off, 'trades', l.id)), [nativeLeagues, off]);
   const tradeKey = tradeLeagues.map((l) => `${l.id}:${l.rosterId}`).join('|');
   const [zone, setZone] = useState<TradeZoneItem[] | null>(null);
   useEffect(() => {
     if (!tradeLeagues.length) { setZone([]); return; }
+    setZone(null);
     let dead = false;
     loadTradeZone(tradeLeagues).then((z) => { if (!dead) setZone(z); }).catch(() => { if (!dead) setZone([]); });
     return () => { dead = true; };
   }, [tradeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const zoneN = zone ? tradeZoneCount(zone) : 0;
+  const offN = toolLeaguesOffCount(off, leagues.map((l) => l.id));
   const go = (leagueId: string, rosterId: number) => { setOpen(null); onOpenLeague(leagueId, rosterId); };
 
   return (
     <>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 12 }}>
-        <button className="mono" style={chip(false)} onClick={onFields}>▦ ALL FIELDS</button>
-        <button className="mono" style={chip(false)} onClick={() => setOpen('heroes')}>⚔ HEROES &amp; VILLAINS</button>
-        <button className="mono" style={chip(alertN > 0)} onClick={() => setOpen('lineup')}>{`🧭 LINEUP${alertN ? ` · ${alertN}` : ''}`}</button>
-        {tradeLeagues.length > 0 && <button className="mono" style={chip(wireN > 0)} onClick={() => setOpen('wire')}>{`📈 WAIVER TARGETS${wireN ? ` · ${wireN}` : ''}`}</button>}
-        {tradeLeagues.length > 0 && <button className="mono" style={chip(zoneN > 0)} onClick={() => setOpen('trades')}>{`🔁 TRADE ZONE${zoneN ? ` · ${zoneN}` : ''}`}</button>}
+        <button className="mono" style={chip(false)} onClick={onFields}>ALL FIELDS</button>
+        <button className="mono" style={chip(false)} onClick={() => setOpen('preview')}>PREVIEW</button>
+        <button className="mono" style={chip(alertN > 0)} onClick={() => setOpen('lineup')}>{`LINEUP${alertN ? ` · ${alertN}` : ''}`}</button>
+        {nativeLeagues.length > 0 && <button className="mono" style={chip(wireN > 0)} onClick={() => setOpen('wire')}>{`WAIVER TARGETS${wireN ? ` · ${wireN}` : ''}`}</button>}
+        {nativeLeagues.length > 0 && <button className="mono" style={chip(zoneN > 0)} onClick={() => setOpen('trades')}>{`TRADE ZONE${zoneN ? ` · ${zoneN}` : ''}`}</button>}
+        <button className="mono" style={chip(false)} onClick={() => setOpen('options')}>{`OPTIONS${offN ? ` · ${offN} off` : ''}`}</button>
       </div>
 
-      {open === 'heroes' && (
-        <Sheet title="Heroes & villains" subtitle="WHO TO ROOT FOR, ACROSS YOUR LEAGUES" onClose={() => setOpen(null)} max={620}>
-          <HeroesVillains snaps={snaps} bare />
-          <div className="mono" style={{ ...mono(10), marginTop: 6 }}>Starters only — a sealed drip slot shows once its game kicks off.</div>
+      {open === 'preview' && (
+        <Sheet title="Preview" subtitle="WHO TO ROOT FOR, ACROSS YOUR LEAGUES" onClose={() => setOpen(null)} max={620}>
+          <HeroesVillains snaps={previewSnaps} />
+        </Sheet>
+      )}
+
+      {open === 'options' && (
+        <Sheet title="Tool options" subtitle="THE LEAGUES EACH TOOL READS" onClose={() => setOpen(null)} max={560}>
+          <div style={{ display: 'grid', gap: 14 }}>
+            {TOOL_IDS.map((tool) => {
+              const pool = tool === 'wire' || tool === 'trades' ? nativeLeagues : leagues;
+              if (!pool.length) return null;
+              return (
+                <div key={tool} style={{ display: 'grid', gap: 6 }}>
+                  <div className="mono" style={{ ...mono(9.5), fontWeight: 700, letterSpacing: '0.14em' }}>{TOOL_LABEL[tool]}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {pool.map((l) => <button key={l.id} className="mono" style={chip(toolHas(off, tool, l.id))} onClick={() => flip(tool, l.id)}>{l.name}</button>)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </Sheet>
       )}
 

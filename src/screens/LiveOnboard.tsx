@@ -221,10 +221,10 @@ export function LiveOnboard() {
         {session
           ? (view !== 'home'
             ? <button onClick={() => setView('home')} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>my leagues</button>
-            // ▦ FIELDS on the leagues page (v0.390.0, founder): every game
-            // this week, live drives, with no board to open first — the
-            // week comes from the slate (core fieldsWeekFrom).
-            : <button onClick={() => void openFields()} className="mono" title="Every game this week, as live fields" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--you)', background: 'color-mix(in srgb, var(--you) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--you) 35%, var(--bd))', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>▦ fields</button>)
+            // ▦ FIELDS left the header (v0.718.0, founder: "We don't need the
+            // fields chips on my leagues now that we have it in the tool
+            // bar") — ALL FIELDS on the tools bar opens the same board.
+            : null)
           : <button onClick={() => navigate({ name: 'demo' })} className="mono" style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '5px 8px', cursor: 'pointer' }}>demo</button>}
         {appUnderFields && appChips}
         </div>

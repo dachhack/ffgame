@@ -22,6 +22,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.718.0 — Preview, a plain tools bar, and tool options
+
+> - The tools bar drops its emojis, HEROES & VILLAINS is now PREVIEW, and a new OPTIONS chip lets you pick which leagues each tool reads.
+> - Preview shows player headshots. KEY GAMES lists each game with just how many of your players and theirs are in it — tap one to see them with faces. QUAD BOX shows the two players who matter most on your side and theirs — tap for everyone.
+> - The Preview tabs fit on one row, and the extra text lines are gone (the ⓘ explains each tab).
+> - On the website, the fields button left the My Leagues header — ALL FIELDS on the tools bar opens the same board.
+
+Founder: "We don't need the fields chips on my leagues now that we have it
+in the tool bar. Let's remove the emojis on the tool bar. Change Heroes and
+Villains to Preview. Let's get player images in heroes and villains. Let's
+get key games listed with just the number of players … you click to see the
+players with headshots. Let's squish the heroes/villains/key games/quad box
+on to one row so they don't wrap. We don't need the text line above. Quad
+box again don't list all the players, just the two most consequential on
+your team and on opposing team. Click to show all players. Let's have an
+options chip for the tools bar so you can pick the leagues you want to apply
+to each tool." SidePlayer/StakePlayer carry `image` (the glance's images map
+now covers the opponent's pool too). Core heroes: gameFaces (two a side, by
+the stake order), gameCounts, PREVIEW_INFO. New core toolLeagues: per-device
+(platform storage) leagues each tool LEAVES OUT, so a new league is in every
+tool; forTool / toggleToolLeague / toolLeaguesOffCount. HeroesVillains (both)
+is bare-only now. check:leaguetools extended. JavaScript only; no iPhone
+build.
+
 ### v0.717.0 — Dynasty waiver targets: win now and rebuild
 
 > - In dynasty leagues, 📈 WAIVER TARGETS splits into ⚡ WIN NOW (who helps this week and this season) and 🌱 REBUILD (the best dynasty assets on the wire, each for your bench player worth least on the dynasty market).
