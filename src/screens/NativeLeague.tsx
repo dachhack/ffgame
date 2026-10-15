@@ -26,6 +26,7 @@ import { tradeConfirm, expiryLine, reviewLine, type ConfirmLeg } from '@drip/cor
 import { ADP_AS_OF } from '@drip/core/data/adp2026';
 import { PROJ_AS_OF } from '@drip/core/data/proj2026';
 import { scheduleWeeksFor } from '@drip/core/data/league';
+import { tenureFilter, copiesBlocked, SETUP_ROSTER_SIZES, defaultRosterSize, WIN_STYLES, SETUP_INFO, type PoolTenure, type WinStyle } from '@drip/core/data/setupChoices';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { installSportMarketFor } from '@drip/core/sports/market';
 import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
@@ -41,7 +42,7 @@ import {
   myEnrollments, type Enrollment,
   startDraft, draftState, makeDraftPick, draftTick,
   POS_CAP_KEYS, type PosCaps,
-  setLeagueCopies, leaguePool, leaguePoolLive, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
+  leaguePool, leaguePoolLive, nativeRosters, nativeTeamState, adminUserNativeTeamState, addFreeAgent, setRosterSpot, swapRosterSpot,
   setDraftSetup, setDraftOrder, setDraftStart, setLotteryShares, runDraftLottery, type LotteryPick,
   submitWaiverClaim, seatFullError, cancelWaiverClaim, processWaivers, friendlyError,
   groupWaiverClaims, ungroupWaiverClaims, cancelWaiverGroup,
@@ -63,7 +64,7 @@ import {
   sportLeagueMarket, leagueMarket,
   keeperState, setKeepers, type KeeperState,
   pickAssets, type PickAssetRow, type LeagueContinuity, isDynastyContinuity,
-  setLeagueFormat, type LeagueFormat,
+  setLeagueFormat, type LeagueFormat, setLeaguePoolFilter, setLeagueCopies, setLeagueGolf, setLeagueBullseye,
   type DraftState, type DraftPickRow, type LeaguePoolPlayer, type NativeTeamState, type TradeRow, type TradeSignalRow, type GameModeInfo,
   leagueTxnLimits, type TxnLimits,
   leaguePoolCollege, type CollegePoolMeta,
@@ -326,6 +327,12 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
   // FORMAT (0221/0222): how the season is WON. Guillotine presets a $1000
   // FAAB market server-side; vampire gets its seat assigned in COMMISH.
   const [format, setFormat] = useState<LeagueFormat>('standard');
+  // ROSTER & PLAYERS (v0.714.1, founder: "anything that can't be reversed
+  // after the draft needs to be in the setup flow"): each of these locks at the draft.
+  const [rosterSize, setRosterSize] = useState<number | null>(null);   // null = the game's default
+  const [poolTenure, setPoolTenure] = useState<PoolTenure>('all');
+  const [copies, setCopies] = useState(1);
+  const [winStyle, setWinStyle] = useState<WinStyle>('points');
   // Guillotine brings a crowd — see the app's twin. 17 weeks (0245) makes 18
   // teams the number that reaches one survivor on the final week.
   const pickFormat = (f: LeagueFormat) => {
@@ -426,7 +433,11 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
   const sportStarters = Object.values(sportDef.defaultRoster).reduce((a, b) => a + b, 0);
   const rounds = isSport && kind === 'league' ? sportStarters + sportDef.benchDefault
     : copyBp && kind === 'league' ? copyBp.rounds
-    : contractType ? contractRosterDepth(teams, budget) : game === 'classic' ? 15 : 12;
+    : contractType ? contractRosterDepth(teams, budget) : kind === 'league' ? rosterSize ?? defaultRosterSize(game === 'classic') : game === 'classic' ? 15 : 12;
+  // Copies need snake/linear, no salaries, head-to-head and no college players (0500).
+  const collegeOn = kind === 'league' && game === 'classic' && !isSport && collegeSetupActive(college)
+    && !collegeSetupBlocked(college, { classic: true, auction: mode === 'auction', contract: contractType, redraft: isRedraft(continuity) });
+  const copiesWhy = copiesBlocked({ auction: mode === 'auction', contract: contractType, format, college: collegeOn });
   const caps: PosCaps | null = isSport && kind === 'league' ? null
     : copyBp && kind === 'league' ? copyBp.posCaps
     : game === 'classic'
@@ -523,6 +534,22 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
           const or = await setLeagueDevyOpen(r.league_id, 'now');
           if (!or.ok) copyReportPending = [...copyReportPending, `devy market opening — ${friendlyError(or.error ?? 'refused')}`];
         }
+      }
+      // ROSTER & PLAYERS (v0.714.1): the settings that lock at the draft. The
+      // pool filter goes BEFORE the seed — it bites when the pool is built. A
+      // refusal is reported with the copy's misses, not fatal.
+      const lockers: [string, () => Promise<{ ok: boolean; error?: string }>][] = [];
+      const tf = collegeNow ? null : tenureFilter(poolTenure);
+      if (tf) lockers.push(['who\u2019s in the pool', () => setLeaguePoolFilter(r.league_id!, tf)]);
+      if (copies > 1 && !copiesWhy) lockers.push(['copies of every player', () => setLeagueCopies(r.league_id!, copies)]);
+      if (chosenGame === 'classic' && winStyle === 'golf') lockers.push(['golf mode', () => setLeagueGolf(r.league_id!, true)]);
+      if (chosenGame === 'classic' && (winStyle === 'bullseye_slots' || winStyle === 'bullseye_total')) {
+        lockers.push(['bullseye', () => setLeagueBullseye(r.league_id!, winStyle === 'bullseye_slots' ? 'slots' : 'total')]);
+      }
+      if (lockers.length) setNote('Setting the roster and players…');
+      for (const [what, run] of lockers) {
+        const x = await run().catch((e) => ({ ok: false, error: String(e) }));
+        if (!x.ok) copyReportPending = [...copyReportPending, `${what} — ${friendlyError(x.error ?? 'refused')}`];
       }
       setNote('Building the 2026 player pool…');
       const pool = await seedLeaguePool(r.league_id, await buildDraftPool(setNote, collegeNow ? collegePoolOpts(collegeNow) : undefined));
@@ -879,6 +906,45 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
             </div>
           );
         })()}
+        {/* ROSTER & PLAYERS (v0.714.1): what locks at the draft, asked now. */}
+        {kind === 'league' && !isSport && !weekly && game !== null && (
+          <div style={{ marginTop: 16 }}>
+            {!contractType && !copyBp ? (<>
+              <LabelInfo label="ROSTER SIZE" title="Roster size" info={SETUP_INFO.size} />
+              <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+                {SETUP_ROSTER_SIZES.map((n) => <Chip key={n} on={rounds === n} onClick={() => setRosterSize(n)}>{n}</Chip>)}
+              </div>
+            </>) : <div className="mono" style={{ ...label }}>{`ROSTER SIZE ${rounds} · ${contractType ? 'set by the salary market' : 'copied'}`}</div>}
+            <div style={{ marginTop: 12 }}>
+              <LabelInfo label="WHO'S IN THE POOL" title="Who's in the pool" info={SETUP_INFO.pool} />
+              {collegeOn
+                ? <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6 }}>set by the college choices — fine-tune in ⚑ COMMISH → ELIGIBLE PLAYERS</div>
+                : (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+                    {([['all', 'ALL PLAYERS'], ['rookies', 'ROOKIES ONLY'], ['vets', 'NO ROOKIES']] as const).map(([id, l]) => <Chip key={id} on={poolTenure === id} onClick={() => setPoolTenure(id)}>{l}</Chip>)}
+                  </div>
+                )}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <LabelInfo label="COPIES OF EVERY PLAYER" title="Copies of every player" info={SETUP_INFO.copies} />
+              {copiesWhy
+                ? <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6 }}>{`one of each · ${copiesWhy}`}</div>
+                : (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+                    {[1, 2, 3, 4].map((n) => <Chip key={n} on={copies === n} onClick={() => setCopies(n)}>{n}</Chip>)}
+                  </div>
+                )}
+            </div>
+            {game === 'classic' && (
+              <div style={{ marginTop: 12 }}>
+                <LabelInfo label="HOW IT'S WON" title="How it's won" info={SETUP_INFO.win} />
+                <div style={{ display: 'flex', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
+                  {WIN_STYLES.map((w) => <Chip key={w.id} on={winStyle === w.id} onClick={() => setWinStyle(w.id)}>{w.label}</Chip>)}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {/* What the roster looks like is now a CONSEQUENCE of the game type,
             not a question — and every part of it is editable on the
             commissioner's ROSTER tab until the draft starts. Say what you're
@@ -890,7 +956,7 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
             ? 'The roster shape follows the game you pick above.'
             : game === 'classic' && kind === 'league'
               ? `${rounds} roster spots per team. You'll set the starting lineup — QB / RB / WR / TE / FLEX / K / D/ST, and any bench, taxi or IR spots — plus scoring on the league's ROSTER and SCORING tabs before the draft.`
-              : `${rounds} roster spots per team: everyone fields 8 weekly starters (the game's kickoff windows — any position), the other ${Math.max(0, rounds - 8)} are bench. Roster size, position limits and the overnight draft pause are all adjustable in league settings until the draft starts.`}
+              : `${rounds} roster spots per team: everyone fields 8 weekly starters (the game's kickoff windows — any position), the other ${Math.max(0, rounds - 8)} are bench. Position limits and the overnight draft pause are adjustable in league settings until the draft starts.`}
         </div>}
         {pace === 'slow' && (
           <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', marginTop: 10, lineHeight: 1.5 }}>
@@ -1114,18 +1180,10 @@ function DraftSetup({ leagueId, st, seats, onSaved, teamName }: {
               <Chip on={mode === 'auction'} onClick={() => setMode('auction')}>AUCTION</Chip>
             </div>
           )}
-          {/* ── COPIES (0500): 1–4 of every player, each on a different team ── */}
-          {!contractRoom && st.mode !== 'auction' && (
-            <>
-              <LabelInfo label="COPIES" title="Copies of every player" style={{ marginTop: 12 }}
-                info="How many teams can roster the same player. At 2, two different teams can each draft or add him; a team never holds two of him. Used for big leagues where one pool runs thin. Set before the draft — it locks when the draft starts. Not offered with an auction, salaries, devy, guillotine, vampire or a shotgun wedding." />
-              <div style={{ display: 'flex', gap: 6, marginTop: 7, alignItems: 'center' }}>
-                {[1, 2, 3, 4].map((n) => (
-                  <Chip key={n} on={(st.copies ?? 1) === n}
-                    onClick={() => { if ((st.copies ?? 1) !== n) void run(() => setLeagueCopies(leagueId, n), n === 1 ? '✓ one copy of each player' : `✓ ${n} copies of each player`); }}>{n}</Chip>
-                ))}
-              </div>
-            </>
+          {/* COPIES (0500) moved to ⚑ COMMISH → ELIGIBLE PLAYERS (v0.714.0, founder: "That's a players option that
+              should be in the commish settings"). The room still says how many, when there is more than one. */}
+          {(st.copies ?? 1) > 1 && (
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 12 }}>{`COPIES ${st.copies} · each player on up to ${st.copies} teams · set in ⚑ COMMISH → ELIGIBLE PLAYERS`}</div>
           )}
           <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>

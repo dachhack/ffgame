@@ -22,6 +22,59 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.714.1 — Start a league asks what locks at the draft
+
+> - Starting a league now asks the settings you can't change after the draft: roster size, who's in the player pool (all, rookies only, no rookies), copies of every player, and for classic leagues how it's won (most points, golf or Bullseye).
+
+Founder: "Basically anything that can't be reversed after the draft needs to
+be in the setup flow." Already asked: game mode, format, league size, draft
+type, college/devy, the clock. New core data/setupChoices (pure): the pool's
+tenure filter, why copies can't be offered (salaries, an auction, a format,
+college — set_league_copies' own rules), the roster sizes (defaults 15
+classic / 12 drip, as before), the win styles and their ⓘ text.
+
+Phone (Recruit): a ROSTER & PLAYERS step after NAME & SIZE / COLLEGE and
+before THE DRAFT (not for a daily sport or the weekly fast track); the
+review says what was chosen. Web (NativeLeague): the same four questions
+under the college block. Both apply them right after create — the pool
+filter before the pool is seeded, since it bites at the seed — and a refusal
+joins the copy report rather than stopping a league that already exists. A
+copied or salary league keeps its own roster size (shown, not asked); a
+college league's pool is the college choices'. Left in the draft room: the
+order, the lottery and the start time — the draft's own business.
+check:commishroster +6 (tsx now). JavaScript only; no iPhone build.
+
+### v0.714.0 — Roster settings in three places; copies move to the commissioner's settings
+
+> - The commissioner's ROSTER page is now three: ROSTER CONSTRUCTION (starting spots, bench/taxi/IR sizes, roster size), ELIGIBLE PLAYERS (copies of every player, player filters, extra positions, college/devy, add new players) and MANAGER ROSTER RULES (position limits, team rules, taxi/IR/OUT eligibility).
+> - Copies of every player moved from the draft room to ELIGIBLE PLAYERS.
+> - The roster actions page (move, waive, cut) is now ROSTERS & WIRE.
+
+Founder: "That's a players option that should be in the commish settings
+under players … We have several roster features: Roster Construction,
+Eligible Players, Per Manager Roster Constraints, let's have those be
+separate areas in the commish settings." Same split on both hosts.
+
+Phone (CommishTools): GameModeCard's 'lineup' view is ROSTER CONSTRUCTION;
+new 'eligible' and 'rules' views take the devy mode, graduation conflicts,
+admin extra positions and player filters, and the team rules, taxi, IR and
+OUT eligibility respectively. New ui/RosterSettingsCards: CopiesCard
+(ELIGIBLE PLAYERS; locked once the draft starts, not with an auction or
+salaries) and RosterCapsCard — the position limits (MANAGER ROSTER RULES)
+and a drip league's roster size (ROSTER CONSTRUCTION), both out of the
+WAIVERS & TRADES sheet, where nobody looked. TopUpPoolCard moved from PLAYERS
+to ELIGIBLE PLAYERS; PLAYERS is ROSTERS & WIRE. The review overlay's "it
+freezes the moment the room opens" was wrong since 0377 (spots change
+between weeks after the draft) and says so now.
+
+Web (AdminPage + CommishDash): 🧩 ROSTER CONSTRUCTION / 🎟 ELIGIBLE PLAYERS /
+📏 MANAGER ROSTER RULES, LeagueSettings gaining the same two views;
+RosterRulesEditor split into part="size" (construction) and part="caps"
+(manager rules); new CopiesPanel + TopUpPoolPanel on ELIGIBLE PLAYERS; ROSTERS
+is ROSTERS & WIRE. The draft room on both hosts says "COPIES n · set in ⚑
+COMMISH → ELIGIBLE PLAYERS" when there are copies. New check:commishroster,
+in check:parity. JavaScript only; no iPhone build.
+
 ### v0.713.11 — Pushes name the player, never his id
 
 > - Waiver and vampire pushes now name the player ("Your claim WON — CJ Baxter is yours."), college players included, instead of an id like "C 4870609".

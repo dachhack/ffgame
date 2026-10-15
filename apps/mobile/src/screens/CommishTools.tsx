@@ -76,6 +76,7 @@ import { Card, Chip, Display, LinkButton, Mono, Notice, PrimaryButton } from '..
 import { ShotgunWeddingCard } from '../ui/ShotgunWeddingCard';
 import { Overlay } from '../ui/Overlay';
 import { InfoChip, LabelInfo } from '../ui/InfoChip';
+import { CopiesCard, RosterCapsCard } from '../ui/RosterSettingsCards';
 import { LadderCommishCard } from '../ui/Ladder';
 import { SportLineup } from '../ui/SportLineup';
 import { SportSettings } from '../ui/SportSettings';
@@ -110,7 +111,13 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     { id: 'contestmoney', label: 'DUES & PRIZES', contestOnly: true },
     { id: 'contestboard', label: 'THE LEAGUE BOARD', contestOnly: true },
     { id: 'mode', label: 'MODE', notContest: true },
-    { id: 'lineup', label: 'ROSTER' },
+    // THE ROSTER, SPLIT THREE WAYS (v0.714.0, founder: "Roster Construction,
+    // Eligible Players, Per Manager Roster Constraints, let's have those be
+    // separate areas in the commish settings"): the spots and stashes; who
+    // exists in the pool (copies among them); what one team may hold.
+    { id: 'lineup', label: 'ROSTER CONSTRUCTION' },
+    { id: 'eligible', label: 'ELIGIBLE PLAYERS' },
+    { id: 'rosterrules', label: 'MANAGER ROSTER RULES' },
     { id: 'scoring', label: 'SCORING' },
     // the old SETTINGS overlay, folded into the map (v0.264.0) — each slice
     // is its own destination, mirroring the web console's sections
@@ -133,7 +140,9 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string; nativeOnl
     // not — the label promises score editing and says nothing about a report,
     // and a door nobody can name is a door nobody opens. It gets its own.
     { id: 'report', label: 'WEEKLY REPORT · REDRAW', nativeOnly: true },
-    { id: 'players', label: 'PLAYERS', nativeOnly: true },
+    // Moving, waiving and cutting players — the roster ACTIONS (renamed in
+    // v0.714.0 so it isn't mistaken for ELIGIBLE PLAYERS, the pool's rules).
+    { id: 'players', label: 'ROSTERS & WIRE', nativeOnly: true },
     { id: 'playoffs', label: 'PLAYOFFS', nativeOnly: true },
     { id: 'dynasty', label: 'NEXT SEASON', nativeOnly: true },
     // 0502: relegation — tiers of linked leagues, rolled over together
@@ -494,6 +503,15 @@ export function CommishTools({ leagueId, native, contest = false, rosterId, init
             {section === 'contestboard' && <ContestCommishCard leagueId={leagueId} part="board" />}
             {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
             {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" onDragActive={(a) => setSheetScroll(!a)} />}
+            {section === 'eligible' && <>
+              <GameModeCard leagueId={leagueId} view="eligible" />
+              {native && !contest && <CopiesCard leagueId={leagueId} />}
+              {native && <TopUpPoolCard leagueId={leagueId} />}
+            </>}
+            {section === 'rosterrules' && <>
+              <GameModeCard leagueId={leagueId} view="rules" />
+              {native && !contest && <RosterCapsCard leagueId={leagueId} part="caps" />}
+            </>}
             {section === 'scoring' && <GameModeCard leagueId={leagueId} view="scoring" />}
             {section === 'buffs' && <LiveBuffsCard leagueId={leagueId} />}
             {section === 'coin' && (
@@ -509,7 +527,7 @@ export function CommishTools({ leagueId, native, contest = false, rosterId, init
             {section === 'contracts' && native && <ContractRulesCard leagueId={leagueId} />}
             {section === 'format' && native && sport === 'nfl' && <FormatCard leagueId={leagueId} />}
             {section === 'format' && native && sport !== 'nfl' && <Card><Mono size={9.5} tone="faint" style={{ lineHeight: fs(13) }}>A {SPORTS[sport].league} league plays head-to-head. Points, categories or roto is a SCORING setting on the web console.</Mono></Card>}
-            {section === 'players' && native && <><TopUpPoolCard leagueId={leagueId} /><CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} /></>}
+            {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
             {section === 'ladder' && native && <LadderCommishCard leagueId={leagueId} />}
             {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
@@ -2019,7 +2037,9 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
 }
 
 function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
-  leagueId: string; view?: 'mode' | 'lineup' | 'scoring';
+  leagueId: string;
+  /** 'lineup' is ROSTER CONSTRUCTION; 'eligible' ELIGIBLE PLAYERS; 'rules' MANAGER ROSTER RULES (v0.714.0). */
+  view?: 'mode' | 'lineup' | 'eligible' | 'rules' | 'scoring';
   /** Reorder drag in progress — the hosting sheet freezes its scroll so the
    *  row follows the finger instead of the list following it (v0.267.0). */
   onDragActive?: (active: boolean) => void;
@@ -2529,27 +2549,29 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           season"); NEXT SEASON shows the consequences. */}
       <ContinuityRow leagueId={leagueId} />
       </>)}
-      {view === 'lineup' && mode !== 'classic' && mode !== null && (
+      {view === 'lineup' && mode !== 'classic' && mode !== null && (<>
         <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
-          A DRIP league has no lineup builder — everyone fields 8 weekly starters, any position. Roster size and position caps live on the web console's ROSTER tab.
+          A DRIP league has no lineup builder — everyone fields 8 weekly starters, any position.
         </Mono>
-      )}
+        <RosterCapsCard leagueId={leagueId} part="size" />
+      </>)}
       {view === 'scoring' && mode !== 'classic' && mode !== null && (
         <Mono size={8.5} tone="faint" style={{ lineHeight: fs(12) }}>
           DRIP scoring is the metric catalog — it has no per-stat values to tune here. Switch the league to CLASSIC under MODE for the full scoring editor.
         </Mono>
       )}
       {/* ⚖️ TEAM RULES (v0.659.0): any NFL league, either mode — drafts and waivers are both. */}
-      {view === 'lineup' && mode !== null && sport === 'nfl' && <SeatRulesCard leagueId={leagueId} />}
+      {view === 'rules' && mode !== null && sport === 'nfl' && <SeatRulesCard leagueId={leagueId} />}
       {view === 'lineup' && mode === 'classic' && sport !== 'nfl' && (
         <SportLineup leagueId={leagueId} sport={sport} gm={gmInfo} locked={drafted}
           onSaved={() => { leagueGameMode(leagueId).then((r) => { if (r.ok) { setGmInfo(r); setRounds(r.rounds ?? null); } }).catch(() => {}); }} />
       )}
-      {view === 'lineup' && mode === 'classic' && sport === 'nfl' && spots && (() => {
+      {(view === 'lineup' || view === 'eligible' || view === 'rules') && mode === 'classic' && sport === 'nfl' && spots && (() => {
         // starters + the three stashes: what the draft's rounds will be.
         const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out + shape.devy;
         return (
         <View>
+          {view === 'lineup' && (<>
           {/* Roster POSITION BUILDER (0163, the founder's sketch): a row per
               starting spot — its own eligible positions + best-ball flag. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -2700,7 +2722,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 {spots.length} starters · {shape.bench} bench{shape.taxi ? ` · ${shape.taxi} taxi` : ''}{shape.ir ? ` · ${shape.ir} IR` : ''} — {spots.length + shape.bench} draftable spots per team
               </Mono>
               <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
-                Positions the league can roster: {[...new Set(spots.flatMap((s) => s.pos))].join(', ')}. Everything here is editable until the draft starts; it freezes the moment the room opens.
+                Positions the league can roster: {[...new Set(spots.flatMap((s) => s.pos))].join(', ')}. After the draft the spots can still change between weeks (never leaving a team illegal), and each change is posted to league chat.
               </Mono>
               <View style={{ marginTop: 12, gap: 8 }}>
                 <PrimaryButton label={busy ? '…' : '✓ CONFIRM & SAVE'} disabled={busy}
@@ -2880,12 +2902,13 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
                 draft is what it FILLS — IR spots are the difference. */}
             <Mono size={8.5} weight="700" tone="you">ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir - shape.out}{shape.ir + shape.out > 0 ? ' (no IR/OUT)' : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} MAX` : ''}</Mono>
           </View>
-          {extraPos.includes('COLLEGE') && !collegeCal && <DevyModeCard leagueId={leagueId} />}
-          {extraPos.includes('COLLEGE') && <GraduationConflictsCard leagueId={leagueId} />}
+          </>)}
+          {view === 'eligible' && extraPos.includes('COLLEGE') && !collegeCal && <DevyModeCard leagueId={leagueId} />}
+          {view === 'eligible' && extraPos.includes('COLLEGE') && <GraduationConflictsCard leagueId={leagueId} />}
           {/* ── THE TAXI SQUAD'S RULES (0196) ────────────────────────────
               Who may ride it and when it shuts — and unlike the shape, these
               move at ANY time. */}
-          {shape.taxi > 0 && taxi && (
+          {view === 'rules' && shape.taxi > 0 && taxi && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
               <LabelInfo label="TAXI SQUAD"
                 info={'Who may ride the taxi squad, and when it shuts.\n\nA locked taxi refuses new arrivals; taking a player OFF is always allowed, and YOU can move players either way at any time.\n\nUnknown experience cannot prove it qualifies, so a tenure rule excludes it.'} />
@@ -2906,7 +2929,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────
               0164 hardcoded IR/Out, which is one league's answer. The
               vocabulary is the injury report's own and nothing else. */}
-          {shape.ir > 0 && irTags && (
+          {view === 'rules' && shape.ir > 0 && irTags && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
               <LabelInfo label="IR ELIGIBILITY"
                 info={'Which injury designations may be stashed on IR.\n\nA player with none of these — a healthy one included — cannot be put on IR by anyone, YOU included: this is a fact about the player, not a deadline.\n\nSomeone already stashed stays put when you narrow the list.'} />
@@ -2918,7 +2941,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             </View>
           )}
           {/* ── WHO MAY GO ON OUT (0307) — IR's week-to-week sibling ─────── */}
-          {shape.out > 0 && outTags && (
+          {view === 'rules' && shape.out > 0 && outTags && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
               <LabelInfo label="OUT ELIGIBILITY"
                 info={'Which injury designations may be stashed on the OUT shelf — the week-to-week sibling of IR (O/D by default).\n\nTwo shelves, two lists: a season-ending injury goes on IR, a week\u2019s absence on OUT. Most leagues that open OUT narrow IR to IR alone.'} />
@@ -2929,10 +2952,10 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               </View>
             </View>
           )}
-          <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
+          {view === 'lineup' && <Mono size={8} tone="faint" style={{ marginTop: 5, lineHeight: fs(12) }}>
             Any position combination per spot · BB fills itself · ✏️ carries the spot’s name, filters and ⛳ zero-fill (points it banks when empty or scoreless) · 🔎 limits who may fill the spot (teams / tenure / a flag — tenure filters need a pool re-seed) · you draft starters + bench + taxi, then stash · IR spots are extra room and are NOT drafted (you stash an injured player there) · IR needs a designation from the list above · stashed players can't start · after the draft the starting spots and every count can still change between weeks (never leaving a team illegal), and each change is posted to league chat.
-          </Mono>
-          {admin && (
+          </Mono>}
+          {view === 'eligible' && admin && (
             <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
               <Mono size={8.5} tone="faint" weight="700">⚡ ADMIN · EXTRA POSITIONS</Mono>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
@@ -2948,11 +2971,11 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
               </Mono>
             </View>
           )}
-          {extraPos.length > 0 && (
+          {view === 'eligible' && extraPos.length > 0 && (
             <Mono size={8} tone="you" style={{ marginTop: 4 }}>UNLOCKED: {extraPos.join(' · ')} — refresh the player pool (draft room) after changes.</Mono>
           )}
           {/* PLAYER FILTERS (0171): pool allow-list — teams + tenure window. */}
-          <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
+          {view === 'eligible' && <View style={{ marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 6, padding: 8 }}>
             <Mono size={8.5} tone="faint" weight="700">🔎 PLAYER FILTERS · who's allowed in the pool</Mono>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <TextInput value={fltTeams} onChangeText={setFltTeams} placeholder="teams (KC, SF…) — empty = all" placeholderTextColor={t.faint}
@@ -2992,7 +3015,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
             <Mono size={7.5} tone="faint" style={{ marginTop: 4, lineHeight: fs(11) }}>
               College rules limit which college players are seeded (NFL players unaffected) · Rookies only → max 0 · 8+ yr vets → min 8 · empty = clear · applies on pool (re)seed, pre-draft only.
             </Mono>
-          </View>
+          </View>}
         </View>
         );
       })()}

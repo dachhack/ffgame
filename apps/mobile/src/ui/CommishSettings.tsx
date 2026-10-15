@@ -15,9 +15,9 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   closeLeagueListing, friendlyError,
-  leagueListingState, postLeagueListing, rosterRules, setRosterRules, setTransactionRules, POS_CAP_KEYS,
+  leagueListingState, postLeagueListing, rosterRules, setTransactionRules,
   setPickTrading as setPickTradingRpc, pickAssets,
-  type PosCaps, type TradeReview, type WaiverMode, type FaMode,
+  type TradeReview, type WaiverMode, type FaMode,
 } from '@drip/core/data/liveApi';
 import { DAY_LABEL, DEFAULT_WAIVER_DAYS, WAIVER_MODE_HINT, WAIVER_MODE_LABEL,
   nextWaiverMode, waiverDaysOf, normalizeWaiverDays, effectiveGameHoldDow,
@@ -105,12 +105,6 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
   const [blurbDraft, setBlurbDraft] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Roster rules (0071): position caps any time; roster size pre-draft only.
-  const [caps, setCaps] = useState<PosCaps | null>(null);
-  const [capsInit, setCapsInit] = useState<PosCaps | null>(null);
-  const [rounds, setRounds] = useState<number | null>(null);
-  const [roundsInit, setRoundsInit] = useState<number | null>(null);
-  const [preDraft, setPreDraft] = useState(false);
 
   // ── THE WAIVER SHEET, READ AS THIS LEAGUE IS CONFIGURED (0338) ────────────
   // Founder: "looks like the three waiver selections can conflict with the
@@ -150,10 +144,6 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
       setClearMin(cur.clearMin); setDays(cur.days); setGameHold(cur.gameHold); setHoldDays(cur.holdDays); setFaStart(cur.faStart); setFaEnd(cur.faEnd); setFaMode(cur.faMode);
       setAgentWaivers(cur.agentWaivers);
       setMinBidDraft(String(cur.minBid)); setDeadline(cur.deadline); setDeadlinePassed(r.trade_deadline_passed === true);
-      const pc = r.pos_caps ?? ({} as PosCaps);
-      setCaps({ ...pc }); setCapsInit({ ...pc });
-      setRounds(r.rounds ?? null); setRoundsInit(r.rounds ?? null);
-      setPreDraft(r.draft_status === 'pending');
     }).catch((e) => setMsg(friendlyError(e)));
     leagueListingState(leagueId).then((r) => {
       if (r.ok) { setListed(!!r.listed); setBlurbDraft(r.blurb ?? ''); }
@@ -220,26 +210,6 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
     finally { setBusy(false); }
   };
 
-  // Cycle a position cap: ∞ → 0 → 1 … 8 → ∞. One tap per step beats a stepper
-  // pair for a value with nine states and no typing.
-  const cycleCap = (k: keyof PosCaps) => {
-    if (!caps) return;
-    const cur = caps[k] ?? null;
-    const next = cur === null ? 0 : cur >= 8 ? null : cur + 1;
-    setCaps({ ...caps, [k]: next });
-  };
-  const capsChanged = caps && capsInit && POS_CAP_KEYS.some((k) => (caps[k] ?? null) !== (capsInit[k] ?? null));
-  const roundsChanged = rounds !== roundsInit;
-  const saveRoster = async () => {
-    if (busy || !caps) return;
-    setBusy(true); setMsg(null);
-    try {
-      const r = await setRosterRules(leagueId, roundsChanged ? rounds : null, capsChanged ? caps : null);
-      if (r.ok) { commit(); setCapsInit({ ...caps }); setRoundsInit(rounds); setMsg('✓ roster rules saved'); onSaved(); }
-      else { warn(); setMsg(friendlyError(r.error ?? 'save failed')); }
-    } catch (e) { warn(); setMsg(friendlyError(e)); }
-    finally { setBusy(false); }
-  };
 
   const sec = (label: string) => <Mono size={9} tone="faint" track={0.12} style={{ marginTop: 14 }}>{label}</Mono>;
   const changed = init && (mode !== init.mode || (mode === 'faab' && budget !== init.budget) || review !== init.review
@@ -516,32 +486,9 @@ export function CommishSettings({ visible, leagueId, onClose, onSaved, view = 'w
             <PrimaryButton label={busy ? '…' : changed ? 'SAVE RULES' : 'SAVED'} disabled={busy || !changed} onPress={() => void save()} />
           </View>
 
-          {sec('ROSTER RULES')}
-          {preDraft && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-              <Mono size={9} tone="faint">ROSTER SIZE</Mono>
-              {/* Deeper sizes since 0192 (the cap is 99, not 25). */}
-              {[7, 9, 12, 14, 16, 20, 25, 30, 40].map((n) => (
-                <Chip key={n} label={String(n)} on={rounds === n} onPress={() => { tap(); setRounds(n); }} />
-              ))}
-            </View>
-          )}
-          {!preDraft && <Mono size={8.5} tone="faint" style={{ marginTop: 6 }}>Roster size is locked once the draft starts. Position limits stay adjustable.</Mono>}
-          {caps && (
-            <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-              {POS_CAP_KEYS.map((k) => (
-                <Chip key={k} label={`${k} ${caps[k] ?? '∞'}`} on={(caps[k] ?? null) !== null} onPress={() => { tap(); cycleCap(k); }} />
-              ))}
-            </View>
-          )}
-          <Mono size={8.5} tone="faint" style={{ marginTop: 6, lineHeight: fs(13) }}>
-            Tap a position to cycle its limit: ∞ → 0 → 1 … 8 → ∞. Enforced at the draft, free agency, waivers, and auction bids; rosters already over a lowered limit keep their players — the limit blocks new adds.
-          </Mono>
-          <View style={{ marginTop: 10 }}>
-            <PrimaryButton label={busy ? '…' : (capsChanged || roundsChanged) ? 'SAVE ROSTER RULES' : 'SAVED'}
-              disabled={busy || !(capsChanged || roundsChanged)} onPress={() => void saveRoster()} />
-          </View>
-
+          {/* ROSTER RULES moved out (v0.714.0): roster size is ROSTER
+              CONSTRUCTION's and the position limits MANAGER ROSTER RULES' —
+              RosterCapsCard, on the commissioner map. */}
           {/* DRIP COIN moved to its own card on the ⚑ COMMISH screen — the
               allowance and the bulk levers live next to the balances they move.
               PLAYOFFS and LEAGUE VISIBILITY (v0.264.0) are their own sheets

@@ -189,6 +189,8 @@ export function CommishDash({ onBack, focusId, defaultTab, onDeleted }: {
                 } : {}),
                 mode: <><LeagueIdentityPanel leagueId={l.league_id} name={l.name} avatar={l.avatar_url} reload={load} />{!isContestKind(l.kind) && <LeagueSettings leagueId={l.league_id} view="mode" />}</>,
                 lineup: <LeagueSettings leagueId={l.league_id} view="lineup" />,
+                eligible: <LeagueSettings leagueId={l.league_id} view="eligible" />,
+                rosterrules: <LeagueSettings leagueId={l.league_id} view="rules" />,
                 scoring: <LeagueSettings leagueId={l.league_id} view="scoring" />,
                 activity: <LastSeenPanel leagueId={l.league_id} />,
                 buffs: <LiveBuffsPanel leagueId={l.league_id} />,
@@ -562,7 +564,9 @@ function SeatRulesPanel({ leagueId }: { leagueId: string }) {
  *  save paths are unchanged; `view` just picks which section renders, so each
  *  one gets its own nav destination and its own screen. Only the active view
  *  mounts, so a visit loads the mode once and nothing else. */
-export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mode' | 'lineup' | 'scoring' }) {
+export function LeagueSettings({ leagueId, view }: { leagueId: string;
+  /** 'lineup' is ROSTER CONSTRUCTION; 'eligible' ELIGIBLE PLAYERS; 'rules' MANAGER ROSTER RULES (v0.714.0). */
+  view: 'mode' | 'lineup' | 'eligible' | 'rules' | 'scoring' }) {
   const [mode, setMode] = useState<'drip' | 'classic' | null>(null);
   const [ppr, setPpr] = useState(1);
   const [classicOk, setClassicOk] = useState(false);
@@ -1001,7 +1005,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       </>)}
       {/* A drip league has no classic lineup or scoring to set — say so rather
           than render an empty pane. */}
-      {view !== 'mode' && mode === 'drip' && (
+      {(view === 'lineup' || view === 'scoring') && mode === 'drip' && (
         <div className="mono" style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.6 }}>
           This is a DRIP league — {view === 'lineup' ? 'lineups are the drip windows' : 'scoring is the drip engine'}, so there's nothing to set here.
           Switch to CLASSIC under GAME MODE to shape a traditional {view === 'lineup' ? 'starting lineup' : 'scoring catalog'}.
@@ -1014,11 +1018,12 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
       {sport !== 'nfl' && view === 'scoring' && (
         <SportSettings leagueId={leagueId} sport={sport} initial={sportBlock} locked={false} />
       )}
-      {sport === 'nfl' && view === 'lineup' && mode === 'classic' && spots && (() => {
+      {sport === 'nfl' && (view === 'lineup' || view === 'eligible' || view === 'rules') && mode === 'classic' && spots && (() => {
         // starters + the three stashes: what the draft's rounds will be.
         const shapeTotal = spots.length + shape.bench + shape.taxi + shape.ir + shape.out + shape.devy;
         return (
         <div style={{ marginTop: 10 }}>
+          {view === 'lineup' && (<>
           {/* The roster POSITION BUILDER (0163, the founder's sketch): each row is
               one starting spot — its own eligible-position set, its own best-ball
               flag — plus ADD. Bench = draft rounds − starters (league creation). */}
@@ -1177,7 +1182,6 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
                   you stash into them in November, you don't draft into them. */}
               ROSTER = {rounds ?? shapeTotal} · DRAFT = {(rounds ?? shapeTotal) - shape.ir - shape.out} ROUNDS{shape.ir + shape.out > 0 ? ` (${[shape.ir > 0 ? 'IR' : '', shape.out > 0 ? 'OUT' : ''].filter(Boolean).join('/')} isn't drafted)` : ''}{shapeTotal >= MAX_ROUNDS ? ` · ${MAX_ROUNDS} IS THE MAX` : ''}
 
-            {extraPos.includes('COLLEGE') && !collegeCal && <DevyModeRow leagueId={leagueId} />}
             {/* SPOTS CANNOT OUTRUN THE DRAFT (v0.233.0). Adding starting spots
                 does not lengthen a draft that already has its rounds, so a
                 league can end up with more spots than players — 13 spots and a
@@ -1194,14 +1198,16 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
             You draft starters + bench + taxi, then stash. IR spots are extra room and are NOT drafted — you stash an injured player there in November, so they add to the roster without adding draft rounds. IR takes a real injury designation only; taxi and IR players can't be started. After the draft the starting spots and every count can still change between weeks — never leaving a team illegal — and each change is posted to league chat.
           </div>
-          {extraPos.includes('COLLEGE') && <GraduationConflictsPanel leagueId={leagueId} />}
+          </>)}
+          {view === 'eligible' && extraPos.includes('COLLEGE') && !collegeCal && <DevyModeRow leagueId={leagueId} />}
+          {view === 'eligible' && extraPos.includes('COLLEGE') && <GraduationConflictsPanel leagueId={leagueId} />}
 
           {/* ── WHO MAY GO ON IR (0198) ──────────────────────────────────────
               Founder: "only injured guys can be put on IR (commish chooses
               eligible tags)". 0164 hardcoded IR/Out, which is one league's
               answer — some run season-ending IR only, some let Doubtful ride.
               The vocabulary is the injury report's own and nothing else. */}
-          {shape.ir > 0 && irTags && (
+          {view === 'rules' && shape.ir > 0 && irTags && (
             <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>🏥 IR ELIGIBILITY · which designations may be stashed</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
@@ -1221,7 +1227,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               IR. Commish can pick the type of injury that qualifies for each."
               OUT is the week-to-week shelf; O/D by default. Most leagues that
               open it will narrow IR to IR alone above. */}
-          {shape.out > 0 && outTags && (
+          {view === 'rules' && shape.out > 0 && outTags && (
             <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>🩹 OUT ELIGIBILITY · which designations may be stashed on the OUT shelf</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
@@ -1241,7 +1247,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               taxi squad is those three facts and nothing else — and unlike the
               shape, these move at ANY time: a commissioner reopening the taxi
               in November is answering a November question. */}
-          {shape.taxi > 0 && taxi && (
+          {view === 'rules' && shape.taxi > 0 && taxi && (
             <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>🚕 TAXI SQUAD · who may ride it, and when it shuts</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
@@ -1262,7 +1268,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
               </div>
             </div>
           )}
-          {extraPos.length > 0 && (
+          {view === 'eligible' && extraPos.length > 0 && (
             <div className="mono" style={{ fontSize: 11, color: 'var(--you)', marginTop: 4 }}>
               UNLOCKED FOR THIS LEAGUE: {extraPos.join(' · ')} — after changing spots or filters, hit ↻ REFRESH PLAYER POOL (league page) so the draft pool matches.
             </div>
@@ -1270,7 +1276,7 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
           {/* PLAYER FILTERS (0171): who is ALLOWED in this league's pool — a team
               whitelist and/or a tenure window (0 = rookie). Applies when the pool
               is (re)seeded; locks at the draft like everything else. */}
-          <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
+          {view === 'eligible' && <div style={{ marginTop: 10, border: '1px solid var(--bd)', borderRadius: RADIUS, padding: '8px 10px' }}>
             <span className="mono" style={{ fontSize: 11, color: 'var(--faint)', fontWeight: 700 }}>🔎 PLAYER FILTERS · who's allowed in the pool</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <input value={fltTeams} onChange={(e) => setFltTeams(e.target.value)} placeholder="teams (e.g. KC, SF, BUF) — empty = all"
@@ -1289,11 +1295,11 @@ export function LeagueSettings({ leagueId, view }: { leagueId: string; view: 'mo
             <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5, lineHeight: 1.5 }}>
               Rookies only → max 0. Vets with 8+ years → min 8. One-team league → list the team. Players whose tenure Sleeper doesn't know are excluded while a tenure filter is set. Filters bite when the pool is (re)seeded — pre-draft only.
             </div>
-          </div>
+          </div>}
         </div>
         );
       })()}
-      {sport === 'nfl' && view === 'lineup' && mode !== null && <SeatRulesPanel leagueId={leagueId} />}
+      {sport === 'nfl' && view === 'rules' && mode !== null && <SeatRulesPanel leagueId={leagueId} />}
       {sport === 'nfl' && view === 'scoring' && (
         <div>
           <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--faint)' }}>
