@@ -10,8 +10,9 @@
 // OPTIONS picks the leagues each tool reads (core toolLeagues, per device).
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, TOOL_IDS, TOOL_LABEL, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet } from '../app/ui';
 import { HeroesVillains } from './HeroesVillains';
 
@@ -39,6 +40,7 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
   const alerts = useMemo(() => lineupAlerts(lineupSnaps), [lineupSnaps]);
   const alertN = useMemo(() => lineupAlertCount(lineupSnaps), [lineupSnaps]);
   const wire = useMemo(() => wireTargets(wireSnaps), [wireSnaps]);
+  const ideas = useMemo(() => tradeIdeaLeagues(forTool(off, 'trades', snaps)), [snaps, off]);
   const wireN = useMemo(() => wireTargetCount(wireSnaps), [wireSnaps]);
   // Waiver targets and the trade zone are for native, non-contest leagues.
   const nativeLeagues = useMemo(() => leagues.filter((l) => l.native && !l.contest), [leagues]);
@@ -150,10 +152,10 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
       )}
 
       {open === 'trades' && (
-        <Sheet title="Trade zone" subtitle="OFFERS, WANTS AND THE BLOCK, ACROSS YOUR LEAGUES" onClose={() => setOpen(null)} max={560}>
+        <Sheet title="Trade zone" subtitle="OFFERS, WANTS, THE BLOCK AND IDEAS" onClose={() => setOpen(null)} max={560}>
           <div style={{ display: 'grid', gap: 12 }}>
             {zone === null && <div className="mono" style={mono(11)}>Reading your leagues…</div>}
-            {zone !== null && zone.length === 0 && <div className="mono" style={mono(11)}>Quiet — no offers, wants or players on the block in your leagues.</div>}
+            {zone !== null && zone.length === 0 && !ideas.length && <div className="mono" style={mono(11)}>Quiet — no offers, wants or players on the block in your leagues.</div>}
             {zone !== null && TRADE_ZONE_ORDER.map((kind) => {
               const rows = zone.filter((z) => z.kind === kind);
               if (!rows.length) return null;
@@ -176,6 +178,23 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
                 </div>
               );
             })}
+            {ideas.length > 0 && <div style={{ display: 'grid', gap: 8 }}>
+              <div className="mono" style={{ ...mono(9.5, 'var(--you)'), fontWeight: 700, letterSpacing: '0.14em' }}>{`SUGGESTED · ${ideas.reduce((n, l) => n + l.ideas.length, 0)}`}</div>
+              {ideas.map((l) => l.ideas.map((x, i) => (
+                <button key={`${l.leagueId}-${i}`} onClick={() => go(l.leagueId, l.rosterId)}
+                  style={{ all: 'unset', cursor: 'pointer', display: 'grid', gap: 3, border: '1px solid var(--bd)', borderRadius: 8, padding: 9, background: 'var(--bg)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.partnerName} <span className="mono" style={mono(10)}>{l.leagueName}</span></span>
+                    <span className="mono" style={{ ...mono(9.5), fontWeight: 700, letterSpacing: '0.1em' }}>{TRADE_IDEA_LABEL[x.kind]}</span>
+                  </span>
+                  <span className="mono" style={mono(11.5, 'var(--text)')}>{`give ${x.give.map((p) => `${p.name} ${p.pos}`).join(', ')} · get ${x.get.map((p) => `${p.name} ${p.pos}`).join(', ')}`}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="mono" style={{ ...mono(10.5), flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.why}</span>
+                    <span className="mono" style={{ ...mono(10.5, 'var(--you)'), fontWeight: 700 }}>{tradeIdeaBadge(x)}</span>
+                  </span>
+                </button>
+              )))}
+            </div>}
           </div>
         </Sheet>
       )}
