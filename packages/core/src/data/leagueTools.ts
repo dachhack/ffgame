@@ -133,13 +133,17 @@ export interface WireTarget {
   /** His dynasty market value, and what the move adds to yours (REBUILD). */
   dyn?: number | null;
   dynGain?: number | null;
+  /** Headshots (v0.722.0): the add's and the drop's, when there is one. */
+  addImage?: string | null; dropImage?: string | null;
+  /** Injury designations (v0.723.0): Q, D, O, IR … or null. */
+  addInjury?: string | null; dropInjury?: string | null;
 }
 export type WireLens = 'now' | 'rebuild';
 export const WIRE_KIND_LABEL: Record<WireClaim['kind'], string> = {
   hole: 'FILLS A HOLE', upgrade: 'UPGRADE', depth: 'DEPTH', bench: 'BETTER STASH',
 };
 export const WIRE_TARGETS_MAX = 3;
-export const WIRE_LENS_LABEL: Record<WireLens, string> = { now: '⚡ WIN NOW', rebuild: '🌱 REBUILD' };
+export const WIRE_LENS_LABEL: Record<WireLens, string> = { now: 'WIN NOW', rebuild: 'REBUILD' };   // no emojis (v0.722.0)
 /** A rebuild move must add at least this much dynasty market value — the
  *  market's noise between two fringe bodies is a few hundred. */
 export const REBUILD_MIN_GAIN = 250;
@@ -173,6 +177,8 @@ export function wireTargetsOf(input: {
    *  resolved to its 1QB/superflex format). Given, no suggestion drops a
    *  player worth more on it than the add, and a REBUILD lens is planned too. */
   dyn?: Record<string, number> | null;
+  /** slug → headshot (v0.722.0). */
+  imageOf?: (slug: string) => string | null;
   max?: number;
 }): WireTarget[] {
   const { slots, roster, pool, rosters, rosterId, injuries, week, slate, nowMs } = input;
@@ -229,8 +235,13 @@ export function wireTargetsOf(input: {
       lens: 'now' as WireLens, dyn: dynMap ? dynOf({ id: c.add }) : null, dynGain: null,
     };
   });
-  if (!dynMap) return now;
-  return [...now, ...rebuildTargets({ slots, mine, available, names, dynOf, healthyValueOf, openSeats, max: input.max ?? WIRE_TARGETS_MAX })];
+  const all = dynMap ? [...now, ...rebuildTargets({ slots, mine, available, names, dynOf, healthyValueOf, openSeats, max: input.max ?? WIRE_TARGETS_MAX })] : now;
+  const img = input.imageOf;
+  return all.map((w) => ({
+    ...w,
+    ...(img ? { addImage: img(w.add), dropImage: w.drop ? img(w.drop) : null } : {}),
+    addInjury: injuries[w.add] ?? null, dropInjury: w.drop ? injuries[w.drop] ?? null : null,
+  }));
 }
 
 /** 🌱 REBUILD (v0.717.0): the best dynasty assets on the wire, each for the
@@ -290,12 +301,12 @@ export function wireTargets(snaps: (WidgetSnapshot | null | undefined)[]): WireT
 export const wireTargetCount = (snaps: (WidgetSnapshot | null | undefined)[]): number =>
   wireTargets(snaps).reduce((n, l) => n + l.targets.length, 0);
 
-/** "🔥 12.4k adds" / "📉 3.1k drops" — the trend in words, for a target row. */
+/** "12.4k adds" / "3.1k drops" — the trend in words, for a target row (no emojis since v0.722.0). */
 export function trendLabel(netAdds: number | null | undefined): string | null {
   if (netAdds == null || !Number.isFinite(netAdds) || netAdds === 0) return null;
   const n = Math.abs(netAdds);
   const txt = n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n);
-  return netAdds > 0 ? `🔥 ${txt} adds` : `📉 ${txt} drops`;
+  return netAdds > 0 ? `${txt} adds` : `${txt} drops`;
 }
 
 /** "4.3k" — a dynasty market number, short. */
@@ -335,4 +346,12 @@ export function tradeIdeaLeagues(snaps: (WidgetSnapshot | null | undefined)[]): 
 export function tradeIdeaBadge(t: TradeIdea): string {
   if (t.kind === 'rebuild') return `+${dynShort(t.dynGain)} DYN`;
   return `+${t.myGain.toFixed(1)} you · +${t.theirGain.toFixed(1)} them`;
+}
+
+/** A target's tag without the drop (v0.722.0) — the row draws the drop with
+ *  his face: "12k adds · UPGRADE · claim", "DYN 5.0k". */
+export function wireTargetTag(w: WireTarget): string {
+  const head = w.lens === 'rebuild' ? `DYN ${dynShort(w.dyn)}` : WIRE_KIND_LABEL[w.kind];
+  const tr = trendLabel(w.netAdds);
+  return `${tr ? `${tr} · ` : ''}${head}${w.dropName ? '' : ' · open spot'}${w.claim ? ' · claim' : ''}`;
 }

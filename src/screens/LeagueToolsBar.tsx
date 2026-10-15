@@ -11,19 +11,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
+import { injuryTag } from '@drip/core/data/heroes';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
-import { Sheet } from '../app/ui';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { Sheet, Crest } from '../app/ui';
+import { crestFor } from '@drip/core/data/crest';
 import { HeroesVillains } from './HeroesVillains';
 
 type Tool = 'preview' | 'lineup' | 'wire' | 'trades' | 'options';
-export interface ToolLeague { id: string; name: string; rosterId: number; native: boolean; contest: boolean }
+export interface ToolLeague { id: string; name: string; rosterId: number; native: boolean; contest: boolean; /** The league's avatar (v0.722.0). */ avatar?: string | null }
 
 const chip = (on: boolean): React.CSSProperties => ({
   flex: 'none', whiteSpace: 'nowrap', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', borderRadius: 999, padding: '5px 10px',
   color: on ? 'var(--on-accent)' : 'var(--dim)', background: on ? 'var(--you)' : 'var(--surface)', border: `1px solid ${on ? 'var(--you)' : 'var(--bd)'}`,
 });
 const mono = (size: number, color = 'var(--faint)'): React.CSSProperties => ({ fontSize: size, color, lineHeight: 1.5 });
+const box: React.CSSProperties = { border: '1px solid var(--bd)', borderRadius: 8, background: 'var(--bg)', overflow: 'hidden' };
+const initials = (name: string) => name.split(/\s+/).map((w) => w[0] ?? '').join('').slice(0, 2).toUpperCase();
+/** A player's face (v0.722.0): his headshot in a ring, else his initials. */
+function Face({ image, name, size = 30, tone }: { image?: string | null; name: string; size?: number; tone: string }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span style={{ flex: 'none', width: size, height: size, borderRadius: '50%', overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1.5px solid ${tone}`, background: `color-mix(in srgb, ${tone} 16%, transparent)` }}>
+      {image && !broken
+        ? <img src={image} alt="" width={size} height={size} onError={() => setBroken(true)} style={{ objectFit: 'cover', width: size, height: size }} />
+        : <span className="mono" style={{ fontSize: size * 0.34, fontWeight: 700, color: tone }}>{initials(name)}</span>}
+    </span>
+  );
+}
 
 export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
   snaps: WidgetSnapshot[]; leagues: ToolLeague[];
@@ -57,6 +72,20 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
   const zoneN = zone ? tradeZoneCount(zone) : 0;
   const offN = toolLeaguesOffCount(off, leagues.map((l) => l.id));
   const go = (leagueId: string, rosterId: number) => { setOpen(null); onOpenLeague(leagueId, rosterId); };
+  const leagueOf = (id: string) => leagues.find((l) => l.id === id);
+  // INJURY STATUS on every player the tools name (v0.723.0).
+  const inj = (tag: string | null | undefined) => (injuryTag(tag)
+    ? <span className="mono" style={{ fontSize: 10, fontWeight: 800, color: 'var(--warn)' }}>{` ${injuryTag(tag)}`}</span> : null);
+  // Which league's waiver targets or trade ideas are open (v0.722.0).
+  const [shown, setShown] = useState<string | null>(null);
+  const leagueRow = (k: string, avatar: string | null | undefined, name: string, count: string) => (
+    <button onClick={() => setShown((v) => (v === k ? null : k))} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: 10, width: 'calc(100% - 20px)' }}>
+      <Crest crest={crestFor({ leagueAvatar: avatar, leagueName: name })} size={32} radius={6} />
+      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>{count}</span>
+      <span className="mono" style={mono(12, 'var(--dim)')}>{shown === k ? '▴' : '▾'}</span>
+    </button>
+  );
 
   return (
     <>
@@ -121,32 +150,41 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
         <Sheet title="Waiver targets" subtitle="WHO ON THE WIRE HELPS THIS WEEK" onClose={() => setOpen(null)} max={560}>
           <div style={{ display: 'grid', gap: 10 }}>
             {wire.length === 0 && <div className="mono" style={mono(11)}>Nobody on the wire beats what you have.</div>}
-            {wire.map((l) => (
-              <button key={`${l.leagueId}:${l.rosterId}`} onClick={() => go(l.leagueId, l.rosterId)}
-                style={{ all: 'unset', cursor: 'pointer', display: 'grid', gap: 6, border: '1px solid var(--bd)', borderRadius: 8, padding: 10, background: 'var(--bg)' }}>
-                <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.leagueName}</span>
-                  <span className="mono" style={mono(10)}>{l.weekLabel}</span>
-                  <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>→</span>
-                </span>
-                {wireLensGroups(l.targets).map((g) => (
-                  <span key={g.lens ?? 'all'} style={{ display: 'grid', gap: 6 }}>
-                    {g.lens && <span className="mono" style={{ ...mono(9.5, g.lens === 'now' ? 'var(--you)' : 'var(--faint)'), fontWeight: 700, letterSpacing: '0.14em' }}>{WIRE_LENS_LABEL[g.lens]}</span>}
-                    {g.rows.map((w) => (
-                      <span key={`${g.lens}:${w.add}`} style={{ display: 'grid', gap: 1 }}>
-                        <span style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {`+ ${w.addName}`} <span className="mono" style={mono(10)}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</span>
-                          </span>
-                          {wireTargetBadge(w) && <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>{wireTargetBadge(w)}</span>}
-                        </span>
-                        <span className="mono" style={mono(11, 'var(--dim)')}>{wireTargetLine(w)}</span>
-                      </span>
-                    ))}
-                  </span>
-                ))}
-              </button>
-            ))}
+            {/* BY LEAGUE (v0.722.0): avatar and count; click for the targets with faces. */}
+            {wire.map((l) => {
+              const k = `wire:${l.leagueId}:${l.rosterId}`;
+              return (
+                <div key={k} style={box}>
+                  {leagueRow(k, leagueOf(l.leagueId)?.avatar, l.leagueName, `${l.targets.length} target${l.targets.length === 1 ? '' : 's'}`)}
+                  {shown === k && (
+                    <div style={{ display: 'grid', gap: 8, padding: '0 10px 10px' }}>
+                      {wireLensGroups(l.targets).map((g) => (
+                        <div key={g.lens ?? 'all'} style={{ display: 'grid', gap: 8 }}>
+                          {g.lens && <div className="mono" style={{ ...mono(9.5, g.lens === 'now' ? 'var(--you)' : 'var(--faint)'), fontWeight: 700, letterSpacing: '0.14em' }}>{WIRE_LENS_LABEL[g.lens]}</div>}
+                          {g.rows.map((w) => (
+                            <button key={`${g.lens}:${w.add}`} onClick={() => go(l.leagueId, l.rosterId)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Face image={w.addImage} name={w.addName} tone="var(--you)" />
+                              <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.addName} <span className="mono" style={mono(10)}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</span>{inj(w.addInjury)}</span>
+                                <span className="mono" style={mono(10.5, 'var(--dim)')}>{wireTargetTag(w)}</span>
+                                {w.dropName && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                                    <span className="mono" style={mono(9.5)}>for</span>
+                                    <Face image={w.dropImage} name={w.dropName} size={18} tone="var(--opp)" />
+                                    <span className="mono" style={{ ...mono(10.5, 'var(--dim)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.dropName}{inj(w.dropInjury)}</span>
+                                  </span>
+                                )}
+                              </span>
+                              {wireTargetBadge(w) && <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>{wireTargetBadge(w)}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Sheet>
       )}
@@ -179,21 +217,45 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
               );
             })}
             {ideas.length > 0 && <div style={{ display: 'grid', gap: 8 }}>
-              <div className="mono" style={{ ...mono(9.5, 'var(--you)'), fontWeight: 700, letterSpacing: '0.14em' }}>{`SUGGESTED · ${ideas.reduce((n, l) => n + l.ideas.length, 0)}`}</div>
-              {ideas.map((l) => l.ideas.map((x, i) => (
-                <button key={`${l.leagueId}-${i}`} onClick={() => go(l.leagueId, l.rosterId)}
-                  style={{ all: 'unset', cursor: 'pointer', display: 'grid', gap: 3, border: '1px solid var(--bd)', borderRadius: 8, padding: 9, background: 'var(--bg)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.partnerName} <span className="mono" style={mono(10)}>{l.leagueName}</span></span>
-                    <span className="mono" style={{ ...mono(9.5), fontWeight: 700, letterSpacing: '0.1em' }}>{TRADE_IDEA_LABEL[x.kind]}</span>
-                  </span>
-                  <span className="mono" style={mono(11.5, 'var(--text)')}>{`give ${x.give.map((p) => `${p.name} ${p.pos}`).join(', ')} · get ${x.get.map((p) => `${p.name} ${p.pos}`).join(', ')}`}</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span className="mono" style={{ ...mono(10.5), flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.why}</span>
-                    <span className="mono" style={{ ...mono(10.5, 'var(--you)'), fontWeight: 700 }}>{tradeIdeaBadge(x)}</span>
-                  </span>
-                </button>
-              )))}
+              <div className="mono" style={{ ...mono(9.5, 'var(--you)'), fontWeight: 700, letterSpacing: '0.14em' }}>SUGGESTED</div>
+              {/* BY LEAGUE (v0.722.0): avatar and count; click for the trades with faces. */}
+              {ideas.map((l) => {
+                const k = `trade:${l.leagueId}:${l.rosterId}`;
+                return (
+                  <div key={k} style={box}>
+                    {leagueRow(k, leagueOf(l.leagueId)?.avatar, l.leagueName, `${l.ideas.length} trade${l.ideas.length === 1 ? '' : 's'}`)}
+                    {shown === k && (
+                      <div style={{ display: 'grid', gap: 10, padding: '0 10px 10px' }}>
+                        {l.ideas.map((x, i) => (
+                          <button key={i} onClick={() => go(l.leagueId, l.rosterId)} style={{ all: 'unset', cursor: 'pointer', display: 'grid', gap: 6, borderTop: '1px solid var(--bd)', paddingTop: 8 }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.partnerName}</span>
+                              <span className="mono" style={{ ...mono(9.5), fontWeight: 700, letterSpacing: '0.1em' }}>{TRADE_IDEA_LABEL[x.kind]}</span>
+                            </span>
+                            <span style={{ display: 'flex', gap: 10 }}>
+                              {([['GIVE', x.give, 'var(--opp)'], ['GET', x.get, 'var(--you)']] as const).map(([lab, ps, tone]) => (
+                                <span key={lab} style={{ flex: 1, minWidth: 0, display: 'grid', gap: 4 }}>
+                                  <span className="mono" style={{ ...mono(9), fontWeight: 700, letterSpacing: '0.14em' }}>{lab}</span>
+                                  {ps.map((p) => (
+                                    <span key={p.slug} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                      <Face image={p.image} name={p.name} size={28} tone={tone} />
+                                      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name} <span className="mono" style={mono(9.5)}>{p.pos}</span>{inj(p.injury)}</span>
+                                    </span>
+                                  ))}
+                                </span>
+                              ))}
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span className="mono" style={{ ...mono(10.5), flex: 1, minWidth: 0 }}>{x.why}</span>
+                              <span className="mono" style={{ ...mono(10.5, 'var(--you)'), fontWeight: 700 }}>{tradeIdeaBadge(x)}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>}
           </div>
         </Sheet>

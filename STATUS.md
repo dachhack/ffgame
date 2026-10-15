@@ -22,6 +22,41 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.723.0 — Preview lists the 2x players; injury status in every tool
+
+> - Preview's HEROES and VILLAINS now list everyone in two or more of your matchups. If that's fewer than five, the list is topped up with the highest-projected players in one matchup, so you always see at least five.
+> - Every player the tools name shows his injury status (Q, D, O, IR) beside his name: Preview, waiver targets (and who they'd replace) and suggested trades.
+
+Founder: "Heroes and villains, let's just list anyone with 2x or greater.
+List at least five. If there are only 1x players, pick the highest
+projected. Add injury status to all players in the tools." Core heroes:
+previewList (count ≥ 2 in the stake order; under PREVIEW_MIN = 5, the 1x
+players by projection fill the rest) and injuryTag. The designation rides
+SidePlayer / StakePlayer `injury` (from the glance's injury sheet, both
+sides), WireTarget addInjury / dropInjury, and TradeIdeaPlayer `injury`
+(tradeIdeasOf's injuryOf). Both Preview and both tools bars print it in the
+warning colour after the name. check:leaguetools extended. JavaScript only;
+no iPhone build.
+
+### v0.722.0 — Waiver targets and suggested trades by league, with faces
+
+> - WAIVER TARGETS and the trade zone's SUGGESTED trades now list each league with its avatar and how many there are. Tap a league to see them, with player pictures: the player to add and the one he'd replace, or both sides of a trade.
+> - No more emojis in waiver targets: WIN NOW, REBUILD, and "12k adds".
+
+Founder: "For suggested trades, list the league with the league avatar and
+the number of suggestions. Click the listing to see the trade details with
+player pictures" … "Do the same for waiver targets. No emojis."
+WireTarget gains addImage/dropImage and TradeIdeaPlayer `image` (the glance's
+imageOf: the baked headshot, else the pool's ESPN id). ToolLeague gains
+`avatar` (league.avatar_url) from both leagues pages. Both bars draw a league
+row (crest, name, "3 targets" / "2 trades", ▾) that opens to the details:
+a target with his face, his tag (core wireTargetTag, the drop left to the
+row) and "for [face] the drop"; a trade with its partner, kind, GIVE / GET
+columns of faces, the why and the gain. WIRE_LENS_LABEL and trendLabel lose
+their emojis. The phone's league Crest moved to ui/LeagueCrest; new
+ui/PlayerFace. check:leaguetools extended. JavaScript only; no iPhone
+build.
+
 ### v0.721.0 — Tool options by league, with checkboxes
 
 > - OPTIONS on the tools bar now lists each league, with a checkbox for each tool it feeds (Preview, Lineup, Waiver targets, Trade zone).

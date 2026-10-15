@@ -7,7 +7,7 @@
 // wraps; what each tab is lives in its ⓘ.
 import { useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { heroesVillains, gameFaces, gameCounts, PREVIEW_INFO, type StakePlayer, type KeyGame } from '@drip/core/data/heroes';
+import { heroesVillains, gameFaces, gameCounts, previewList, injuryTag, PREVIEW_INFO, type StakePlayer, type KeyGame } from '@drip/core/data/heroes';
 import { InfoChip } from './adminUi';
 
 type Tab = 'heroes' | 'villains' | 'games' | 'quad';
@@ -26,10 +26,16 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
   const [tab, setTab] = useState<Tab>('heroes');
   const [shown, setShown] = useState<string | null>(null);
   const hv = useMemo(() => heroesVillains(snaps), [snaps]);
+  // v0.723.0: everyone at 2x or more, topped up to five with the best 1x.
+  const heroes = useMemo(() => previewList(hv.heroes), [hv]);
+  const villains = useMemo(() => previewList(hv.villains), [hv]);
   if (hv.week == null || hv.leagues === 0 || (!hv.heroes.length && !hv.villains.length)) {
     return <div className="mono" style={{ fontSize: 11, color: 'var(--faint)' }}>Nothing to preview yet — no lineups this week.</div>;
   }
 
+  // INJURY STATUS (v0.723.0): the designation, in the warning colour.
+  const inj = (tag: string | null | undefined) => (injuryTag(tag)
+    ? <span className="mono" style={{ fontSize: 10, fontWeight: 800, color: 'var(--warn)' }}>{` ${injuryTag(tag)}`}</span> : null);
   const face = (p: StakePlayer, side: 'hero' | 'villain', size = 30) => {
     const tone = side === 'hero' ? 'var(--you)' : 'var(--opp)';
     return (
@@ -49,7 +55,7 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
         {face(p, side)}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {p.name} <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 400 }}>{[p.pos, p.team].filter(Boolean).join(' · ')}</span>
+            {p.name} <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 400 }}>{[p.pos, p.team].filter(Boolean).join(' · ')}</span>{inj(p.injury)}
           </div>
           {leagues && (
             <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -102,7 +108,7 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
     const mini = (p: StakePlayer, side: 'hero' | 'villain') => (
       <span key={`${side}:${p.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '48%' }}>
         {face(p, side, 22)}
-        <span className="mono" style={{ fontSize: 10.5, color: side === 'hero' ? 'var(--you)' : 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${p.name}${p.count > 1 ? ` ×${p.count}` : ''}`}</span>
+        <span className="mono" style={{ fontSize: 10.5, color: side === 'hero' ? 'var(--you)' : 'var(--opp)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{`${p.name}${p.count > 1 ? ` ×${p.count}` : ''}`}{inj(p.injury)}</span>
       </span>
     );
     return (
@@ -120,8 +126,8 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
   };
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'heroes', label: `HEROES ${hv.heroes.length}` },
-    { id: 'villains', label: `VILLAINS ${hv.villains.length}` },
+    { id: 'heroes', label: `HEROES ${heroes.length}` },
+    { id: 'villains', label: `VILLAINS ${villains.length}` },
     { id: 'games', label: `KEY GAMES ${hv.games.length}` },
     { id: 'quad', label: 'QUAD BOX' },
   ];
@@ -131,11 +137,11 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
         {tabs.map((x) => <button key={x.id} className="mono" style={seg(tab === x.id)} onClick={() => { setTab(x.id); setShown(null); }}>{x.label}</button>)}
         <InfoChip title="Preview" info={PREVIEW_INFO} />
       </div>
-      {tab === 'heroes' && <div>{hv.heroes.slice(0, 40).map((p) => player(p, 'hero'))}</div>}
+      {tab === 'heroes' && <div>{heroes.map((p) => player(p, 'hero'))}</div>}
       {tab === 'villains' && (
         <div>
           {hv.villains.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)' }}>No villains revealed yet.</div>}
-          {hv.villains.slice(0, 40).map((p) => player(p, 'villain'))}
+          {villains.map((p) => player(p, 'villain'))}
           {hv.sealed > 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>{`${hv.sealed} sealed`}</div>}
         </div>
       )}

@@ -19,7 +19,7 @@
 import { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { heroesVillains, gameFaces, gameCounts, PREVIEW_INFO, type StakePlayer, type KeyGame } from '@drip/core/data/heroes';
+import { heroesVillains, gameFaces, gameCounts, previewList, injuryTag, PREVIEW_INFO, type StakePlayer, type KeyGame } from '@drip/core/data/heroes';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from './feedback';
 import { Mono } from './prims';
@@ -36,10 +36,16 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
   const [tab, setTab] = useState<Tab>('heroes');
   const [shown, setShown] = useState<string | null>(null);   // the game opened to its players
   const hv = useMemo(() => heroesVillains(snaps), [snaps]);
+  // v0.723.0: everyone at 2x or more, topped up to five with the best 1x.
+  const heroes = useMemo(() => previewList(hv.heroes), [hv]);
+  const villains = useMemo(() => previewList(hv.villains), [hv]);
   if (hv.week == null || hv.leagues === 0 || (!hv.heroes.length && !hv.villains.length)) {
     return <Mono size={10} tone="faint">Nothing to preview yet — no lineups this week.</Mono>;
   }
 
+  // INJURY STATUS (v0.723.0): the designation, in the warning colour.
+  const inj = (tag: string | null | undefined) => (injuryTag(tag)
+    ? <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '800', color: t.warn }}>{` ${injuryTag(tag)}`}</Text> : null);
   const face = (p: StakePlayer, side: 'hero' | 'villain', size = 30) => (
     <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: alpha(side === 'hero' ? t.you : t.opp, 16), alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: side === 'hero' ? t.you : t.opp }}>
       {p.image
@@ -54,7 +60,7 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
       <View key={`${side}:${p.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
         {face(p, side)}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: t.text }}>{p.name} <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.faint }}>{[p.pos, p.team].filter(Boolean).join(' · ')}</Text></Text>
+          <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '700', color: t.text }}>{p.name} <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.faint }}>{[p.pos, p.team].filter(Boolean).join(' · ')}</Text>{inj(p.injury)}</Text>
           {leagues && (
             <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>
               {inList.map((l) => (side === 'hero' ? l.leagueName : `${l.leagueName} (${l.opponent})`)).join(', ')}{other ? ` · also ${side === 'hero' ? 'a villain' : 'a hero'} in ${other}` : ''}
@@ -106,7 +112,7 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
     const mini = (p: StakePlayer, side: 'hero' | 'villain') => (
       <View key={`${side}:${p.slug}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '48%' }}>
         {face(p, side, 22)}
-        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10.5, color: side === 'hero' ? t.you : t.opp, flexShrink: 1 }}>{`${p.name}${p.count > 1 ? ` ×${p.count}` : ''}`}</Text>
+        <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10.5, color: side === 'hero' ? t.you : t.opp, flexShrink: 1 }}>{`${p.name}${p.count > 1 ? ` ×${p.count}` : ''}`}{inj(p.injury)}</Text>
       </View>
     );
     return (
@@ -124,8 +130,8 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
   };
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'heroes', label: `HEROES ${hv.heroes.length}` },
-    { id: 'villains', label: `VILLAINS ${hv.villains.length}` },
+    { id: 'heroes', label: `HEROES ${heroes.length}` },
+    { id: 'villains', label: `VILLAINS ${villains.length}` },
     { id: 'games', label: `KEY GAMES ${hv.games.length}` },
     { id: 'quad', label: 'QUAD BOX' },
   ];
@@ -144,11 +150,11 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
         })}
         <InfoChip title="Preview">{PREVIEW_INFO}</InfoChip>
       </View>
-      {tab === 'heroes' && <View>{hv.heroes.slice(0, 40).map((p) => player(p, 'hero'))}</View>}
+      {tab === 'heroes' && <View>{heroes.map((p) => player(p, 'hero'))}</View>}
       {tab === 'villains' && (
         <View>
           {hv.villains.length === 0 && <Mono size={10} tone="faint">No villains revealed yet.</Mono>}
-          {hv.villains.slice(0, 40).map((p) => player(p, 'villain'))}
+          {villains.map((p) => player(p, 'villain'))}
           {hv.sealed > 0 && <Mono size={9} tone="faint" style={{ marginTop: 6 }}>{`${hv.sealed} sealed`}</Mono>}
         </View>
       )}
