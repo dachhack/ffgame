@@ -21,6 +21,8 @@ export interface PushKind {
 export const PUSH_KINDS: PushKind[] = [
   { key: 'lineup', label: 'lineup locks soon', info: 'An empty spot an hour before it locks, and a weekly squad not built before kickoff.', defaultOn: true },
   { key: 'status', label: 'starter ruled out', info: 'A player in your lineup is ruled OUT, doubtful, on IR, or inactive at the 90-minute list — while there is still time to swap.', defaultOn: true },
+  // v0.726.0, founder: "player status changes for anyone on your roster".
+  { key: 'rosterstatus', label: 'roster player status', info: 'Anyone on your roster — bench, taxi and IR too — gets a new injury designation (questionable, doubtful, out, IR) or is cleared. A starter ruled out comes as “starter ruled out”, with the swap deadline.', defaultOn: true },
   { key: 'rosterqc', label: 'lineup check', info: 'The night before your first game: a starter on bye, an empty spot, or a starter ruled out. Only when something is wrong.', defaultOn: true },
   { key: 'timing', label: 'league deadlines', info: 'The evening before your waiver run, the trade deadline’s week, and contract lengths locking within a day.', defaultOn: true },
   { key: 'result', label: 'results & the sweat', info: 'Your final score each week, and the score and who is left to play before the week’s last game day.', defaultOn: true },

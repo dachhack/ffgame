@@ -221,6 +221,29 @@ ok('faces: the glance hands headshots to the targets and the trades', feedSrc.in
   ok('devy: a devy league groups its devy targets under DEVY', wireLensGroups(openSpots).map((g) => g.lens).join() === 'devy');
   ok('devy: the glance plans them only for leagues with devy spots, from devy_base_values in the league format', feedSrc.includes('const devySlots = Number(gm?.shape?.devy) || 0;') && feedSrc.includes('devyBaseValues({ sort: fmt, limit: 200, offset })') && feedSrc.includes("r.spot === 'devy'"));
 }
+// ── v0.726.0: roster status pushes; lineup rows with faces ───────────────
+{
+  const { injuryChanges } = await import('../server/src/poll/injuries.js');
+  const { rosterStatusRows } = await import('../server/src/push.js');
+  const { PUSH_KINDS, pushKindOn } = await import('../packages/core/src/data/pushKinds.ts');
+  const ch = injuryChanges(new Map([['a', 'Q'], ['b', 'O'], ['c', 'IR']]), [{ player_slug: 'a', status: 'O' }, { player_slug: 'b', status: 'o' }, { player_slug: 'd', status: 'Q' }], ['c', 'never-held'], 'T');
+  ok('status log: a new or different designation and a clear are changes; the same one is not', ch.map((c) => `${c.player_slug}:${c.from_status}>${c.to_status}`).join() === 'a:Q>O,d:null>Q,c:IR>null', ch);
+  const rows = rosterStatusRows(
+    [{ id: 1, player_slug: 'a', from_status: 'Q', to_status: 'O' }, { id: 2, player_slug: 'c', from_status: 'IR', to_status: null }, { id: 3, player_slug: 'd', from_status: null, to_status: 'Q' }],
+    [{ league_id: 'L', roster_id: 1, uid: 'u1', slug: 'a' }, { league_id: 'L', roster_id: 2, uid: 'u2', slug: 'a' }, { league_id: 'L', roster_id: 1, uid: 'u1', slug: 'c' }, { league_id: 'L', roster_id: 2, uid: 'u2', slug: 'd' }],
+    new Map([['L:a', 'Al Back'], ['L:c', 'Cy End'], ['L:d', 'Di Wide']]), new Map([['L', 'Turf']]), new Set(['L:2:a']));
+  ok('roster status: everyone holding him hears it — bench too', rows.some((r) => r.app_user_id === 'u1' && r.title === 'Al Back is OUT' && r.body === 'Was questionable. On your Turf roster.'));
+  ok('roster status: a starter newly OUT is left to the starter push', !rows.some((r) => r.app_user_id === 'u2' && r.title.startsWith('Al Back')));
+  ok('roster status: a clear pages too, and a new Q', rows.some((r) => r.title === 'Cy End is cleared — no injury designation' && r.body.startsWith('Was on IR.')) && rows.some((r) => r.title === 'Di Wide is questionable' && r.body === 'On your Turf roster.'));
+  ok('roster status: its own switch, on by default, deduped per change and roster', rows.every((r) => r.kind === 'rosterstatus' && /^rosterstatus:\d+:L:\d:u\d$/.test(r.dedupe_key)) && PUSH_KINDS.some((k) => k.key === 'rosterstatus') && pushKindOn({}, 'rosterstatus') === true);
+  const pushSrc = read('server/src/push.js'), pollSrc = read('server/src/poll/injuries.js');
+  ok('roster status: the sweep runs the detector; the poller logs changes only after a landed write and never on a first poll', pushSrc.includes("await detectRosterStatus().catch(") && pollSrc.includes('if (wrote && prior && prior.size > 0)') && read('supabase/migrations/0506_injury_changes.sql').includes('create table if not exists injury_change'));
+  ok('lineup fixes carry the players: out and in, with faces and injury tags', feedSrc.includes("kind: 'swap', text:") && feedSrc.includes('out: fp(p!, sv), in: fp(b.p, b.v)') && feedSrc.includes("injury: injuries?.[p.slug] ?? null, proj:") && feedSrc.includes('out: who'));
+  for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['web', 'src/screens/LeagueToolsBar.tsx']]) {
+    const src = read(path);
+    ok(`${n}: lineup rows show the players with faces and injury tags, labelled in words — no ⇄ 🩹 💤`, src.includes('fixPlayer(f.out') && src.includes('fixPlayer(f.in') && src.includes('FIX_KIND_LABEL[f.kind]') && !/[⇄🩹💤]/u.test(src));
+  }
+}
 ok('phone: the header has no fields button (ALL FIELDS is on the bar)', !read('apps/mobile/App.tsx').includes('>▦ fields</Text>'));
 const lo = read('src/screens/LiveOnboard.tsx');
 ok('web: the leagues header has no fields chip (the bar has ALL FIELDS)', !lo.includes('▦ fields</button>'));

@@ -404,3 +404,9 @@ export function devyTargetsOf(input: {
   }
   return out;
 }
+
+/** What a lineup fix is, in words (v0.726.0) — the LINEUP rows' label, in
+ *  place of the old ⇄ 🩹 💤 marks. */
+export const FIX_KIND_LABEL: Record<WidgetFix['kind'], string> = {
+  empty: 'EMPTY SPOT', none: 'NOBODY CAN FILL', metric: 'NO METRIC', injury: 'INJURED', bye: 'ON BYE', swap: 'BETTER OPTION',
+};

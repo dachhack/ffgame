@@ -22,6 +22,30 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.726.0 — Roster status alerts; lineup suggestions with faces and injury tags
+
+> - New notification, "roster player status" (on by default, in notification settings): whenever anyone on your roster — bench, taxi and IR included — gets a new injury designation (questionable, doubtful, out, IR) or is cleared, you hear about it. A starter ruled out still comes as "starter ruled out", with the swap deadline, so one ruling is one alert.
+> - LINEUP suggestions now show the players: the starter coming out and who to start instead, with headshots, injury status and projections, under a plain label (Injured, On bye, Better option, Empty spot).
+
+Founder: "Can we add to the notification suite player status changes for
+anyone on your roster? Let's get injury status into lineup suggestions and
+player head shots". injury_status holds only the current designation and
+the poller rewrites every row each pass, so nothing could say what changed.
+0506 adds injury_change; the poller reads the table before its write and,
+only after a write that landed and never on a first poll, logs each real
+change (injuryChanges: new or different designation, or a clear via the
+prune), trimming rows over two weeks. push.js detectRosterStatus reads the
+last scan window's changes, finds every native season roster holding the
+player (not mock, not a weekly contest), and enqueues rosterStatusRows —
+kind 'rosterstatus' (core PUSH_KINDS, default on), deduped per change and
+roster — skipping a starter newly O/D/IR, which the 'status' push covers.
+Imported (Sleeper) leagues keep no roster here; Sleeper alerts those.
+WidgetFix gains `out` / `in` FixPlayer (slug, name, image, injury, proj) on
+the classic empty / injury / bye / swap fixes and the drip injury / bye
+ones; both tools bars draw them as faces under FIX_KIND_LABEL. The widget
+still reads `text`. check:leaguetools extended. Worker + migration +
+JavaScript; no iPhone build.
+
 ### v0.725.0 — Devy waiver targets
 
 > - In leagues with devy spots, WAIVER TARGETS now has a DEVY section: the best college prospects on the wire by devy value, each for an open devy spot or in place of your devy player worth least.

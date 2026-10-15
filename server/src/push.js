@@ -836,6 +836,67 @@ async function detectSeasonStatus() {
   if (rows.length) log(`season status: ${rows.length} lineup${rows.length === 1 ? '' : 's'} told`);
   await enqueue(rows);
 }
+// ── ANYONE ON YOUR ROSTER: A STATUS CHANGE (v0.726.0) ───────────────────────
+// Founder: "Can we add to the notification suite player status changes for
+// anyone on your roster?" The poller logs each real change to injury_change
+// (0506): a new or different designation, or a clear. Every native season
+// roster holding the player hears it — bench, taxi and IR included. A STARTER
+// newly OUT / doubtful / IR is left to the 'status' push above, which says
+// the same thing with the swap deadline; one ruling, one ping.
+const STATUS_WORD = { Q: 'questionable', D: 'doubtful', O: 'OUT', IR: 'on IR', PUP: 'on the PUP list', SUS: 'suspended', NFI: 'on the NFI list' };
+const statusWord = (s) => (s == null ? 'cleared' : STATUS_WORD[String(s).toUpperCase()] ?? String(s).toUpperCase());
+/** PURE: one row per (change, roster holding the player). `holders`: [{ league_id, roster_id, uid, slug }];
+ *  `skip`: `${league}:${roster}:${slug}` keys the starter push already covers. */
+export function rosterStatusRows(changes, holders, names, leagueNames, skip = new Set()) {
+  const rows = [];
+  for (const c of changes) {
+    const to = c.to_status == null ? null : String(c.to_status).toUpperCase();
+    for (const h of holders) {
+      if (h.slug !== c.player_slug || !h.uid) continue;
+      if (to && ISSUE_STATUS.has(to) && skip.has(`${h.league_id}:${h.roster_id}:${h.slug}`)) continue;
+      const name = names.get(`${h.league_id}:${h.slug}`) ?? h.slug;
+      rows.push({
+        app_user_id: h.uid, kind: 'rosterstatus',
+        title: to == null ? `${name} is cleared — no injury designation` : `${name} is ${statusWord(to)}`,
+        body: `${c.from_status ? `Was ${statusWord(c.from_status)}. ` : ''}On your ${leagueNames.get(h.league_id) ?? 'league'} roster.`,
+        data: { league_id: h.league_id, open: 'league', roster_id: h.roster_id },
+        dedupe_key: `rosterstatus:${c.id}:${h.league_id}:${h.roster_id}:${h.uid}`,
+      });
+    }
+  }
+  return rows;
+}
+async function detectRosterStatus() {
+  const { data: changes } = await db().from('injury_change').select('id, player_slug, from_status, to_status, at').gt('at', sinceIso());
+  if (!changes?.length) return;
+  const slugs = [...new Set(changes.map((c) => c.player_slug))];
+  const held = [];
+  for (let i = 0; i < slugs.length; i += 200) {
+    const { data } = await db().from('native_roster').select('league_id, roster_id, slug').in('slug', slugs.slice(i, i + 200));
+    held.push(...(data ?? []));
+  }
+  if (!held.length) return;
+  const now = Date.now();
+  const wk = await upcomingWeek(now);
+  const season = wk?.season ?? String(new Date(now).getUTCFullYear());
+  const { data: leagues } = await db().from('league').select('id, name, kind, is_mock, season').in('id', [...new Set(held.map((h) => h.league_id))]);
+  const live = new Map((leagues ?? []).filter((l) => !l.is_mock && !WEEKLY_KINDS.has(l.kind) && String(l.season) === season).map((l) => [l.id, l.name ?? 'your league']));
+  const mine = held.filter((h) => live.has(h.league_id));
+  if (!mine.length) return;
+  const owners = await ownersFor(mine.map((h) => [h.league_id, h.roster_id]));
+  const holders = mine.map((h) => ({ ...h, uid: owners.get(`${h.league_id}:${h.roster_id}`) ?? null })).filter((h) => h.uid);
+  if (!holders.length) return;
+  const { data: lp } = await db().from('league_pool').select('league_id, slug, full_name').in('league_id', [...live.keys()]).in('slug', slugs);
+  const names = new Map((lp ?? []).map((r) => [`${r.league_id}:${r.slug}`, r.full_name]));
+  // The starters the 'status' push already pages for this week's game.
+  const skip = new Set();
+  if (wk && changes.some((c) => c.to_status && ISSUE_STATUS.has(String(c.to_status).toUpperCase()))) {
+    for (const seat of await seasonSeats(wk.season, wk.week)) for (const st of seat.starters) skip.add(`${seat.league_id}:${seat.roster_id}:${st.slug}`);
+  }
+  const rows = rosterStatusRows(changes, holders, names, live, skip);
+  if (rows.length) log(`roster status: ${rows.length} push${rows.length === 1 ? '' : 'es'}`);
+  await enqueue(rows);
+}
 // The lineup check reads every season lineup, so it runs every 5 minutes, not every sweep.
 let rosterQcAt = 0;
 async function detectRosterQc() {
@@ -1574,6 +1635,7 @@ export async function sweepPush() {
   await detectContestLock().catch((e) => log('contest lock detector error', e.message));
   await detectRuledOut().catch((e) => log('ruled-out detector error', e.message));
   await detectSeasonStatus().catch((e) => log('season status detector error', e.message));
+  await detectRosterStatus().catch((e) => log('roster status detector error', e.message));
   await detectRosterQc().catch((e) => log('lineup check detector error', e.message));
   await detectTimingAndResults().catch((e) => log('timing & results detector error', e.message));
   await detectBigPlays().catch((e) => log('big plays detector error', e.message));
