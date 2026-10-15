@@ -759,6 +759,19 @@ export function isPrimetime(kickoff: string | null | undefined): boolean {
 /** "Sat TBD" — a kickoff ESPN hasn't set (0385). Its placeholder time is
  *  midnight Eastern, so the day is read in Eastern: the reader's own zone
  *  would put a Saturday game on Friday evening out west. */
+/** A kickoff as the phone board's game line prints it: "Sun 9:30a",
+ *  "Sun 1p", "Thu 8:15p" (v0.713.8, founder: "seems like we have a bit of
+ *  space for the rest of the game schedule lines"). The locale's "Sun, 9:30
+ *  AM" ran the line out of cell at the time. In the device's own zone, like
+ *  the label it replaces; '' for an unreadable time. */
+export function compactKick(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+  const h = d.getHours(), m = d.getMinutes();
+  return `${day} ${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''}${h < 12 ? 'a' : 'p'}`;
+}
+
 export function tbdKickLabel(iso: string | null | undefined): string {
   const t = iso ? Date.parse(iso) : NaN;
   if (!Number.isFinite(t)) return 'TBD';

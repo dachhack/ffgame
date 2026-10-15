@@ -45,6 +45,17 @@ ok(/section === 'account' && <DeleteAccount/.test(src) && /deleteMyAccount\(type
   ok(/if \(cardSize === 'none'\) \{/.test(row) && /🔒 SEALED/.test(row) && /\+ PICK A METRIC/.test(row), 'No cards draws the setup board as plain rows');
   ok(/<LabelInfo label="CARD SIZE"/.test(src), 'the card size picker explains itself in an ⓘ, not a paragraph');
 }
+// v0.713.7, founder: "Let's try card size (and no cards) for weekly contest leagues as well".
+{
+  const cc = readFileSync(new URL('../apps/mobile/src/ui/ContestCards.tsx', import.meta.url), 'utf8');
+  ok(/export function tableCardSize\(\)/.test(cc) && /const size = loadCardSize\(\);/.test(cc), 'the contest table reads the same card size setting');
+  ok((cc.match(/if \(dims\.none\)/g) ?? []).length === 3 && /◈ SEALED/.test(cc), 'No cards: the face, the back and the flip all draw tiles');
+  ok((cc.match(/<Fit>/g) ?? []).length === 3, 'Small: the face and both backs draw scaled');
+  for (const f of ['ContestMatchup.tsx', 'ContestSquad.tsx']) {
+    const scr = readFileSync(new URL(`../apps/mobile/src/screens/${f}`, import.meta.url), 'utf8');
+    ok(/tableCardSize\(\)\.[wh]/.test(scr) && !/\bCARD_[WH]\b/.test(scr), `${f} lays out by the chosen card size`);
+  }
+}
 // v0.713.6, founder: "Let's have armed just say how many once they start to
 // wrap. Click to show which." (the drip board's ◈ ARMED strip, beside these
 // board settings).
@@ -52,6 +63,11 @@ ok(/section === 'account' && <DeleteAccount/.test(src) && /deleteMyAccount\(type
   const lp = readFileSync(new URL('../apps/mobile/src/screens/LivePicks.tsx', import.meta.url), 'utf8');
   ok(/const counted = armedW > 0 && armedNeed > armedW \+ 0\.5;/.test(lp) && /label=\{`⚡ \$\{armed\.length\} ▾`\}/.test(lp) && /visible=\{armedListOpen\}/.test(lp),
     'ARMED shows a count once its chips would wrap, and a tap lists them');
+}
+// v0.713.7, founder: "make the top all/commish/etc chip not wrap" (the web's league list).
+{
+  const lo = readFileSync(new URL('../src/screens/LiveOnboard.tsx', import.meta.url), 'utf8');
+  ok(/gap: 4, flexWrap: 'nowrap', overflowX: 'auto'/.test(lo) && (lo.match(/padding: '5px 7px'/g) ?? []).length === 4, 'the league list\'s ALL / COMMISH / … chips stay on one line');
 }
 // v0.502.0: the demo board left with the 2025 bake it replayed.
 ok(!src.includes('label="Demo board"'), 'the retired "Demo board" action is gone');

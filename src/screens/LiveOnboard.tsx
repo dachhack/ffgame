@@ -1276,7 +1276,8 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
     <button onClick={() => setFilter(id)} className="mono" style={{
       fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
       color: filter === id ? 'var(--on-accent)' : 'var(--dim)', background: filter === id ? 'var(--you)' : 'var(--surface)',
-      border: `1px solid ${filter === id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '5px 11px',
+      border: `1px solid ${filter === id ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 999, padding: '5px 7px',
+      flex: 'none', whiteSpace: 'nowrap',
     }}>{label} <span style={{ opacity: 0.6 }}>{n}</span></button>
   );
 
@@ -1325,7 +1326,11 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
           chips: the filter is what's conditional here, not the row, or the
           button would disappear for exactly the people most likely to be adding
           a second league. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+      {/* ONE LINE (v0.713.7, founder: "make the top all/commish/etc chip not
+          wrap"): the six chips ran ~15px over and the archive chip dropped to
+          a line of its own. Tighter padding fits them down to a 375pt phone;
+          narrower still, the row scrolls sideways rather than fold. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 14 }}>
         {(isCommish || weeklyCount > 0) && chip('all', 'ALL', total)}
         {isCommish && chip('commish', 'COMMISH', commishCount)}
         {weeklyCount > 0 && chip('weekly', 'WEEKLY', weeklyCount)}
@@ -1339,17 +1344,17 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
         <button onClick={onFind} aria-label="Find a league" title="Find a league — leagues looking for managers" className="mono" style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
           color: 'var(--you)', background: 'transparent',
-          border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
+          border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 7px', flex: 'none',
         }}>FIND</button>
         <button onClick={onAdd} aria-label="Add a league" title="Add a league — start one, import one, or take an invite code" className="mono" style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
           color: 'var(--you)', background: 'transparent',
-          border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 11px',
+          border: '1px dashed color-mix(in srgb, var(--you) 45%, var(--bd))', borderRadius: 999, padding: '5px 7px', flex: 'none',
         }}>ADD</button>
         {seats.length > 0 && (
           <button onClick={() => setArchOpen(true)} aria-label="Archived leagues" title="Archived leagues" className="mono" style={{
             fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer',
-            color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 9px',
+            color: 'var(--dim)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 999, padding: '5px 7px', flex: 'none', whiteSpace: 'nowrap',
           }}>🗂{archivedN > 0 ? ` ${archivedN}` : ''}</button>
         )}
       </div>
