@@ -20,6 +20,7 @@
 //     more in dynasty than the one coming in.
 // Pure folds + a loader; both clients draw them.
 import type { WidgetSnapshot, WidgetFix } from './widgetFeed';
+import type { TradeIdea } from './tradeIdeas';
 import { leagueTrades, tradeSignals, matchupTeams, leaguePoolNames, type TradeRow, type TradeSignalRow, type LeaguePoolPlayer, type NativeRosterRow } from './liveApi';
 import { seatWirePlan, shortlistWire, trendMomentum, uncoveredSpots, type WirePlayer, type WireClaim } from '../engine/seatWaivers';
 import { slateAwareProj, optimalLineup, slotAllows, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
@@ -320,4 +321,18 @@ export function wireLensGroups(targets: WireTarget[]): { lens: WireLens | null; 
   return (['now', 'rebuild'] as WireLens[])
     .map((lens) => ({ lens, rows: targets.filter((t) => (t.lens ?? 'now') === lens) }))
     .filter((g) => g.rows.length);
+}
+
+// ── SUGGESTED TRADES (v0.720.0) ───────────────────────────────────────────────
+export interface TradeIdeaLeague { leagueId: string; rosterId: number; leagueName: string; ideas: TradeIdea[] }
+/** Every league with a suggestion, in the order the leagues came. */
+export function tradeIdeaLeagues(snaps: (WidgetSnapshot | null | undefined)[]): TradeIdeaLeague[] {
+  const out: TradeIdeaLeague[] = [];
+  for (const s of snaps) if (s?.tradeIdeas?.length) out.push({ leagueId: s.leagueId, rosterId: s.rosterId, leagueName: s.leagueName, ideas: s.tradeIdeas });
+  return out;
+}
+/** "+2.4 / +1.1 pts a week" or "+1.8k dynasty" — an idea's headline number. */
+export function tradeIdeaBadge(t: TradeIdea): string {
+  if (t.kind === 'rebuild') return `+${dynShort(t.dynGain)} DYN`;
+  return `+${t.myGain.toFixed(1)} you · +${t.theirGain.toFixed(1)} them`;
 }

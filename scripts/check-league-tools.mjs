@@ -5,6 +5,8 @@
 // zone) and that both clients draw the bar. Run: npx tsx scripts/check-league-tools.mjs
 import { readFileSync } from 'node:fs';
 import { gameFaces, gameCounts } from '../packages/core/src/data/heroes';
+import { tradeIdeasOf, positionStrength, contenders } from '../packages/core/src/data/tradeIdeas';
+import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, parseToolLeagues } from '../packages/core/src/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel, wireLensGroups, wireTargetLine, wireTargetBadge } from '../packages/core/src/data/leagueTools';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -107,6 +109,44 @@ const kg = { key: 'A@B', heroes: [P('h1', 3, 10), P('h2', 2, 9), P('h3', 1, 8)],
 const gf = gameFaces(kg);
 ok('preview: a quad game shows the first two a side, the rest counted', gf.mine.map((p) => p.slug).join() === 'h1,h2' && gf.theirs.map((p) => p.slug).join() === 'v1,v2' && gf.more === 3, gf);
 ok('preview: a key game reads as counts', gameCounts(kg) === '3 yours · 4 theirs' && gameCounts({ heroes: [], villains: [] }) === 'nobody of yours');
+// ── suggested trades (v0.720.0) ──────────────────────────────────────────
+{
+  const SL = [{ slot: 'R1', type: 'RB', pos: ['RB'] }, { slot: 'R2', type: 'RB', pos: ['RB'] }, { slot: 'W1', type: 'WR', pos: ['WR'] }, { slot: 'W2', type: 'WR', pos: ['WR'] }];
+  const pl = (id, pos) => ({ id, pos });
+  const rosters = new Map([
+    [1, [pl('jahmyr-gibbs', 'RB'), pl('bijan-robinson', 'RB'), pl('jonathan-taylor', 'RB'), pl('nico-collins', 'WR'), pl('drake-london', 'WR')]],
+    [2, [pl('jerome-ford', 'RB'), pl('tyjae-spears', 'RB'), pl('jamarr-chase', 'WR'), pl('jaxon-smith-njigba', 'WR'), pl('justin-jefferson', 'WR')]],
+    [3, [pl('rico-dowdle', 'RB'), pl('breece-hall', 'RB'), pl('ceedee-lamb', 'WR'), pl('puka-nacua', 'WR')]],
+  ]);
+  const v = (p) => PROJ_2026.get(p.id) ?? 0;
+  const base = { slots: SL, rosters, me: 1, valueOf: v, names: (s) => s, teamName: (r) => `T${r}` };
+  const st = positionStrength(SL, rosters, v);
+  ok('trades: strength ranks each team by position', st.get(1).RB.rank === 1 && st.get(1).WR.rank === 3 && st.get(2).RB.rank === 3 && st.get(2).WR.rank === 1, [...st.entries()]);
+  const fit = tradeIdeasOf(base);
+  const f2 = fit.find((t) => t.partner === 2);
+  ok('trades: strong RBs and weak WRs meet weak RBs and strong WRs — your spare back for their receiver', f2?.kind === 'fit' && f2.give[0].pos === 'RB' && f2.get[0].pos === 'WR' && f2.give[0].slug === 'bijan-robinson', fit);
+  ok('trades: fair by construction — both lineups get better', fit.every((t) => t.myGain >= 1 && t.theirGain >= 0.5), fit.map((t) => [t.myGain, t.theirGain]));
+  ok('trades: never a fleece — what you get projects within the fair band of what you give', fit.every((t) => v({ id: t.get[0].slug }) <= v({ id: t.give[0].slug }) * 1.25 + 1), fit);
+  const dynFit = tradeIdeasOf({ ...base, dyn: { 'bijan-robinson': 11033, 'jamarr-chase': 2000, 'jaxon-smith-njigba': 2100, 'justin-jefferson': 2200 } });
+  ok('trades: in dynasty a lineup fix never bleeds long-term value (bijan for a far cheaper WR is out)', !dynFit.some((t) => t.give[0].slug === 'bijan-robinson'), dynFit);
+  ok('trades: no fit with a team strong where you are', !fit.some((t) => t.kind === 'fit' && t.partner === 3 && t.get[0].pos === 'RB'));
+  ok('trades: a redraft league suggests no dynasty moves', !fit.some((t) => t.kind !== 'fit'));
+  const standings = [{ roster_id: 1, wins: 1, losses: 5, pf: 500 }, { roster_id: 2, wins: 5, losses: 1, pf: 700 }, { roster_id: 3, wins: 3, losses: 3, pf: 600 }];
+  ok('trades: contenders are the top half of the table', [...contenders(standings)].sort().join() === '2,3');
+  const dyn = { 'jonathan-taylor': 6139, 'justin-jefferson': 6884, 'jahmyr-gibbs': 11106, 'bijan-robinson': 11033 };
+  const reb = tradeIdeasOf({ ...base, standings, dyn, max: 6 }).filter((t) => t.kind === 'rebuild');
+  ok('trades: out of the race in dynasty — a starter to a contender for future value he isn\'t starting', reb.some((t) => t.partner === 2 && t.get[0].slug === 'justin-jefferson' && t.dynGain >= 250 && t.theirGain >= 1), reb);
+  ok('trades: never rebuild with a team that is also out of it', reb.every((t) => contenders(standings).has(t.partner)));
+  const buy = tradeIdeasOf({ ...base, me: 2, standings: [{ roster_id: 1, wins: 1, losses: 5, pf: 500 }, { roster_id: 2, wins: 5, losses: 1, pf: 700 }, { roster_id: 3, wins: 4, losses: 2, pf: 600 }], dyn: { 'justin-jefferson': 6884, 'jonathan-taylor': 6139 }, max: 6 }).filter((t) => t.kind === 'buy');
+  ok('trades: in the race — buy a starter from a team that is out of it with future value you are not starting', buy.some((t) => t.partner === 1 && t.give[0].slug === 'justin-jefferson' && t.myGain >= 1), buy);
+  ok('trades: no rosters, no ideas', tradeIdeasOf({ ...base, me: 9 }).length === 0);
+}
+const feedSrc = read('packages/core/src/data/widgetFeed.ts');
+ok('trades: the glance suggests them with the waiver targets, valued for the season', feedSrc.includes('snapshot.tradeIdeas = tradeIdeasOf(') && feedSrc.includes("tags[p.id] === 'IR' ? 0 : projectedPoints"));
+for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['web', 'src/screens/LeagueToolsBar.tsx']]) {
+  const src = read(path);
+  ok(`${n}: the trade zone lists SUGGESTED trades from the leagues its options leave it`, src.includes('SUGGESTED · ') && src.includes('tradeIdeaLeagues(') && src.includes("'trades'"));
+}
 // ── tool options (v0.718.0) ──────────────────────────────────────────────
 let tl = toggleToolLeague({}, 'wire', 'L1');
 ok('options: a league switched off leaves only that tool', !toolHas(tl, 'wire', 'L1') && toolHas(tl, 'lineup', 'L1') && toolHas(tl, 'wire', 'L2'));

@@ -22,6 +22,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.720.0 — Suggested trades in the trade zone
+
+> - TRADE ZONE now suggests trades in each of your leagues. It reads every team's strengths and weaknesses by position: if your receivers are weak and your backs are strong, it finds a team with the opposite problem and suggests a swap that makes both lineups better.
+> - In dynasty leagues it also suggests moves for your timeline: out of the race, trade a starter to a contender for younger value they aren't starting; in the race, the reverse with a team that's out of it.
+
+Founder: "Let's get suggested trades in the trades chip. Look for team
+strengths and weaknesses across leagues to suggest fair trades that
+strengthen the player's team while taking players from other teams where
+they can afford to lose them … Or make trades that increase long-term
+dynasty value if your team is not contending with teams who are contenders
+that would help the other team win now." New core data/tradeIdeas
+(pure): positionStrength (each team's seated points per position + half the
+next man, ranked), contenders (top half by wins, then PF), tradeIdeasOf —
+FIT one-for-ones across positions where your rank beats theirs at what you
+give and theirs beats yours at what you get, kept only when BOTH best
+lineups gain (≥1 / ≥0.5 pts a week; fair by construction, and "can afford
+to lose him" is the small dent in their lineup); REBUILD (dynasty, out of
+the race: your starter → a contender's lineup gains ≥1, their unstarted
+player adds 250..max(500, half your player's) dynasty value) and BUY (the
+mirror). FAIR, NOT A FLEECE: the player you get projects at most 1.25× + 1 of the one you give, and in dynasty a FIT moves at most max(750, 25% of the dearer player) of market value. Best per partner, up to 3 per league (~15–40 ms a 12-team league). Computed in the glance with
+the waiver targets (league scoring installed; season value, IR at 0; names
+from the pool, teams from standings); the trade zone sheet lists them under
+SUGGESTED, filtered by OPTIONS. check:leaguetools extended. JavaScript only;
+no iPhone build.
+
 ### v0.719.0 — AI teams keep the dynasty guard too
 
 > - In dynasty leagues, AI-run teams no longer drop a player worth more in dynasty value than the one they pick up off waivers, and they let go of their lowest-value bench players first.

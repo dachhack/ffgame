@@ -43,6 +43,8 @@ import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
 import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, isDynastyContinuity, type LeaguePoolPlayer } from './liveApi';
 import { wireTargetsOf, type WireTarget } from './leagueTools';
+import { tradeIdeasOf, type TradeIdea } from './tradeIdeas';
+import { projectedPoints } from '../engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring, leagueScoring, scoringLeague, parseScoring } from '../engine/leagueScoring';
 import { platform } from '../platform';
 import type { WindowId } from '../types';
@@ -142,6 +144,8 @@ export interface SideLeft { waiting: number; playing: number; done?: number }
 export interface WidgetSnapshot {
   /** WAIVER TARGETS (v0.716.0), when the read asked for them (`opts.wire`). */
   wire?: WireTarget[];
+  /** SUGGESTED TRADES (v0.720.0), read with the waiver targets. */
+  tradeIdeas?: TradeIdea[];
   leagueId: string;
   leagueName: string;
   rosterId: number;
@@ -1035,6 +1039,28 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
           activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp, trend: wireMkt.trend, dyn: wireMkt.dyn,
         });
       } catch { snapshot.wire = []; }
+      // SUGGESTED TRADES (v0.720.0): every seat's active players, valued for
+      // the season under the league's scoring (still installed here).
+      try {
+        const meta = new Map(wirePool.map((p) => [p.slug, p]));
+        const tags = injuries as Record<string, string>;
+        const rosters = new Map<number, SpotPlayer[]>();
+        for (const r of spots ?? []) {
+          if (r.spot && r.spot !== 'active') continue;
+          const m = meta.get(r.slug);
+          if (!m) continue;
+          if (!rosters.has(r.roster_id)) rosters.set(r.roster_id, []);
+          rosters.get(r.roster_id)!.push({ id: r.slug, pos: m.pos, team: m.team || null, sleeperId: m.sleeper_id ?? (ids as Record<string, string>)[r.slug] ?? null });
+        }
+        const season = (p: SpotPlayer) => (tags[p.id] === 'IR' ? 0 : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? null }));
+        const teamName = new Map((standings as StandingsRow[]).map((s) => [s.roster_id, s.team]));
+        snapshot.tradeIdeas = tradeIdeasOf({
+          slots: classicIn.slots, rosters, me: league.rosterId, valueOf: season,
+          names: (slug) => meta.get(slug)?.full_name ?? slug,
+          teamName: (rid) => teamName.get(rid) || teams[rid]?.team_name || `Team ${rid}`,
+          standings: standings as StandingsRow[], dyn: wireMkt.dyn,
+        });
+      } catch { snapshot.tradeIdeas = []; }
     }
     rememberSnapshot({ leagues, snapshot });
     return { leagues, snapshot };

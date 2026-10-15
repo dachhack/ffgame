@@ -10,8 +10,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, TOOL_IDS, TOOL_LABEL, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from './feedback';
 import { Chip, Mono } from './prims';
@@ -39,6 +40,8 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
   const alerts = useMemo(() => lineupAlerts(lineupSnaps), [lineupSnaps]);
   const alertN = useMemo(() => lineupAlertCount(lineupSnaps), [lineupSnaps]);
   const wire = useMemo(() => wireTargets(wireSnaps), [wireSnaps]);
+  const tradeSnaps = useMemo(() => snapsFor('trades'), [snaps, off]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ideas = useMemo(() => tradeIdeaLeagues(tradeSnaps), [tradeSnaps]);
   const wireN = useMemo(() => wireTargetCount(wireSnaps), [wireSnaps]);
   // Waiver targets and the trade zone are for native, non-contest leagues.
   const nativeLeagues = useMemo(() => leagues.filter((l) => l.native && !l.contest), [leagues]);
@@ -147,10 +150,10 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
         </ScrollView>
       </Overlay>
 
-      <Overlay visible={open === 'trades'} title="Trade zone" subtitle="OFFERS, WANTS AND THE BLOCK, ACROSS YOUR LEAGUES" onClose={() => setOpen(null)}>
+      <Overlay visible={open === 'trades'} title="Trade zone" subtitle="OFFERS, WANTS, THE BLOCK AND IDEAS" onClose={() => setOpen(null)}>
         <ScrollView contentContainerStyle={{ padding: 12, gap: 12 }}>
           {zone === null && <Mono size={10} tone="faint">Reading your leagues…</Mono>}
-          {zone !== null && zone.length === 0 && <Mono size={10} tone="faint">Quiet — no offers, wants or players on the block in your leagues.</Mono>}
+          {zone !== null && zone.length === 0 && !ideas.length && <Mono size={10} tone="faint">Quiet — no offers, wants or players on the block in your leagues.</Mono>}
           {zone !== null && TRADE_ZONE_ORDER.map((kind) => {
             const rows = zone.filter((z) => z.kind === kind);
             if (!rows.length) return null;
@@ -172,6 +175,25 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
               </View>
             );
           })}
+          {ideas.length > 0 && <View style={{ gap: 8 }}>
+            <Mono size={8.5} weight="700" track={0.14} tone="you">{`SUGGESTED · ${ideas.reduce((n, l) => n + l.ideas.length, 0)}`}</Mono>
+            {ideas.map((l) => l.ideas.map((x, i) => (
+              <Pressable key={`${l.leagueId}-${i}`} onPress={() => { tap(); setOpen(null); onOpenLeague(l.leagueId, l.rosterId, 'home'); }}
+                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 9, gap: 3, backgroundColor: t.bg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>{x.partnerName} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{l.leagueName}</Text></Text>
+                  <Mono size={8.5} weight="700" track={0.1} tone="faint">{TRADE_IDEA_LABEL[x.kind]}</Mono>
+                </View>
+                <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: 16, color: t.text }}>
+                  {`give ${x.give.map((p) => `${p.name} ${p.pos}`).join(', ')} · get ${x.get.map((p) => `${p.name} ${p.pos}`).join(', ')}`}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: t.faint }}>{x.why}</Text>
+                  <Mono size={9.5} tone="you" weight="700">{tradeIdeaBadge(x)}</Mono>
+                </View>
+              </Pressable>
+            )))}
+          </View>}
         </ScrollView>
       </Overlay>
     </View>
