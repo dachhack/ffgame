@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
-import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, TOOL_IDS, TOOL_LABEL, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
+import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from './feedback';
@@ -80,20 +80,27 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
         </ScrollView>
       </Overlay>
 
-      <Overlay visible={open === 'options'} title="Tool options" subtitle="THE LEAGUES EACH TOOL READS" onClose={() => setOpen(null)}>
-        <ScrollView contentContainerStyle={{ padding: 12, gap: 14 }}>
-          {TOOL_IDS.map((tool) => {
-            const pool = tool === 'wire' || tool === 'trades' ? nativeLeagues : leagues;
-            if (!pool.length) return null;
-            return (
-              <View key={tool} style={{ gap: 6 }}>
-                <Mono size={8.5} weight="700" track={0.14} tone="faint">{TOOL_LABEL[tool]}</Mono>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  {pool.map((l) => <Chip key={l.id} small label={l.name} on={toolHas(off, tool, l.id)} onPress={() => flip(tool, l.id)} />)}
-                </View>
-              </View>
-            );
-          })}
+      {/* OPTIONS (v0.721.0, founder: "League then setting for each tool as a
+          list with check boxes"): each league, then a box per tool it feeds. */}
+      <Overlay visible={open === 'options'} title="Tool options" subtitle="WHICH TOOLS EACH LEAGUE FEEDS" onClose={() => setOpen(null)}>
+        <ScrollView contentContainerStyle={{ padding: 12, gap: 6 }}>
+          {leagues.map((l) => (
+            <View key={l.id} style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, paddingBottom: 4, gap: 4 }}>
+              <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{l.name}</Text>
+              {toolsForLeague(l).map((tool) => {
+                const on = toolHas(off, tool, l.id);
+                return (
+                  <Pressable key={tool} onPress={() => flip(tool, l.id)} hitSlop={4} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 }}>
+                    <View style={{ width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: on ? t.you : t.dim, backgroundColor: on ? t.you : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                      {on && <Text style={{ fontSize: 13, fontWeight: '800', color: t.bg, lineHeight: 15 }}>✓</Text>}
+                    </View>
+                    <Text style={{ fontSize: 13.5, color: on ? t.text : t.dim }}>{TOOL_NAME[tool]}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
         </ScrollView>
       </Overlay>
 

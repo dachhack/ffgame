@@ -407,16 +407,10 @@ export function App() {
               <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>my leagues</Text>
             </Pressable>
           )}
-          {/* ▦ FIELDS on the leagues page (v0.390.0, founder: "put fields on
-              the upper left at the top of the my leagues page"): the same
-              slot the exit chip takes inside a league — every game this
-              week, live drives, with no board to open first. */}
-          {!open && !!session && (
-            <Pressable onPress={() => setFieldsOpen(true)} hitSlop={8}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4, flexShrink: 1 }}>
-              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>▦ fields</Text>
-            </Pressable>
-          )}
+          {/* ▦ FIELDS left the header (v0.721.0, founder: "We don't need the
+              fields chips on my leagues now that we have it in the tool
+              bar") — ALL FIELDS on the tools bar opens the same board, and
+              the widget's dripfantasy://fields link still opens it here. */}
 
           <View style={{ flex: 1 }} />
 

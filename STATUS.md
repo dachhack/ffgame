@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.721.0 — Tool options by league, with checkboxes
+
+> - OPTIONS on the tools bar now lists each league, with a checkbox for each tool it feeds (Preview, Lineup, Waiver targets, Trade zone).
+> - The ▦ fields button is gone from the top of the app's leagues page too — ALL FIELDS on the tools bar opens the same board.
+
+Founder: "Let's do the listing the other way. League then setting for each
+tool as a list with check boxes" (on a screenshot of v0.718.0's per-tool
+chip grid, which also showed the phone header's ▦ fields button that
+v0.718.0 missed — it lived in apps/mobile/App.tsx, not the leagues screen).
+Core toolLeagues gains toolsForLeague (native non-contest leagues feed all
+four tools; contest and imported leagues, Preview and Lineup) and
+TOOL_NAME. Both bars draw the sheet league-first: name, then a checkbox row
+per tool (phone: a drawn box with accessibilityRole checkbox; web: a real
+input). The phone's fields state stays for the widget's
+dripfantasy://fields deep link. check:leaguetools extended. JavaScript
+only; no iPhone build.
+
 ### v0.720.0 — Suggested trades in the trade zone
 
 > - TRADE ZONE now suggests trades in each of your leagues. It reads every team's strengths and weaknesses by position: if your receivers are weak and your backs are strong, it finds a team with the opposite problem and suggests a swap that makes both lineups better.
