@@ -14,7 +14,7 @@ import {
 import { verdictOf, unreadBadge, sideLabel, scoreLabel, recordLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, seatKey, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
-import { HeroesVillains } from '../ui/HeroesVillains';
+import { LeagueToolsBar } from '../ui/LeagueToolsBar';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from '../ui/feedback';
 import { Card, Chip, ChipStrip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
@@ -213,9 +213,22 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
 
       {/* cross-league chat inbox (0154 polish): every league with unread chat,
           one tap from anywhere to the conversation it belongs to. */}
-      {/* HEROES & VILLAINS (v0.632.0): who to root for this week, across
-          every league, off the glance snapshots already read below. */}
-      <HeroesVillains snaps={Object.values(glance)} />
+      {/* THE LEAGUE TOOLS BAR (v0.715.0, founder: "a scrollable bar of tools
+          for players: all fields, heroes and villains, line up suggestions and
+          alerts, waiver targets, trade zone"). Heroes & villains (v0.632.0)
+          is one of its tools now. */}
+      {(rows ?? []).some((e) => !e.archived && !e.league?.is_mock) && (
+        <LeagueToolsBar snaps={Object.values(glance)}
+          leagues={(rows ?? []).filter((e) => !e.archived && !e.league?.is_mock && e.sleeper_roster_id != null).map((e) => ({
+            id: e.league_id, name: e.league?.name ?? 'League', rosterId: e.sleeper_roster_id as number,
+            native: e.league?.provider === 'native', contest: isContestKind(e.league?.kind),
+          }))}
+          onOpenLeague={(leagueId, rosterId, landing) => {
+            const e = (rows ?? []).find((x) => x.league_id === leagueId && x.sleeper_roster_id === rosterId) ?? (rows ?? []).find((x) => x.league_id === leagueId);
+            if (!e) return;
+            onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, landing, e.league?.kind);
+          }} />
+      )}
 
       <InboxStrip rows={rows.filter((e) => !e.league?.is_mock && !e.archived)} slate={slate}
         onOpenChat={(e) => onOpen(e.league_id, e.sleeper_roster_id, e.league?.name ?? 'League', e.league?.provider === 'native', commishIds.has(e.league_id), e.pick_user_id, 'chat', e.league?.kind)} />

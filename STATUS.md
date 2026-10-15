@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.715.0 — The league tools bar
+
+> - Your leagues page has a tools bar that scrolls sideways: ▦ ALL FIELDS, ⚔ HEROES & VILLAINS, 🧭 LINEUP (what to fix in every league) and 🔁 TRADE ZONE (offers waiting on you, players other teams want from you, your open offers, and the trade block).
+> - A count on a chip is what wants your attention; tap a row to jump into that league.
+
+Founder: "Right now the league tools bar is just heroes and villains. I'd
+like it to be a scrollable bar of tools for players: all fields, heroes and
+villains, line up suggestions and alerts, waiver targets, trade zone, etc."
+New core data/leagueTools: lineupAlerts (each league glance's own fixes —
+empty spot, injured or bye starter, a better man on the bench, a drip slot
+with no metric — worst league first, a final week skipped) and the trade
+zone (tradeZoneOf / sortTradeZone / loadTradeZone: pending two-team offers
+to and from you, 'want' signals on your players, 'block' signals elsewhere;
+names from a new liveApi.leaguePoolNames, teams from matchupTeams; native
+non-contest leagues; a league that fails to read is left out). Phone
+ui/LeagueToolsBar and web screens/LeagueToolsBar: a horizontal chip row,
+each tool in a sheet; HeroesVillains (both) gains `bare` for the sheet. The
+web's ▦ ALL FIELDS opens the page's own fields board (passed down through
+Enroll). WAIVER TARGETS is next: it runs the seat-wire planner on your own
+roster, a heavier read. check:leaguetools (new, in check:parity).
+JavaScript only; no iPhone build.
+
 ### v0.714.1 — Start a league asks what locks at the draft
 
 > - Starting a league now asks the settings you can't change after the draft: roster size, who's in the player pool (all, rookies only, no rookies), copies of every player, and for classic leagues how it's won (most points, golf or Bullseye).

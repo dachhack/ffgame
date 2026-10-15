@@ -16,8 +16,10 @@ const pill = (on: boolean): React.CSSProperties => ({
   color: on ? 'var(--you)' : 'var(--dim)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer',
 });
 
-export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
-  const [open, setOpen] = useState(false);
+export function HeroesVillains({ snaps, bare = false }: { snaps: WidgetSnapshot[];
+  /** BARE (v0.715.0): just the tabs and lists, always open — the league tools bar's sheet. */
+  bare?: boolean }) {
+  const [open, setOpen] = useState(bare);
   const [tab, setTab] = useState<Tab>('heroes');
   const hv = useMemo(() => heroesVillains(snaps), [snaps]);
   if (hv.week == null || hv.leagues === 0 || (!hv.heroes.length && !hv.villains.length)) return null;
@@ -60,16 +62,7 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
     </div>
   );
 
-  return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '10px 12px', display: 'grid', gap: 8, marginBottom: 12 }}>
-      <button onClick={() => setOpen((o) => !o)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Heroes & villains <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 400 }}>{weekTitle(hv.week)}</span></div>
-          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{summary}</div>
-        </div>
-        <span className="mono" style={{ fontSize: 14, color: 'var(--dim)' }}>{open ? '▴' : '▾'}</span>
-      </button>
-      {open && (
+  const body = (
         <>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             <button className="mono" style={pill(tab === 'heroes')} onClick={() => setTab('heroes')}>HEROES {hv.heroes.length}</button>
@@ -109,7 +102,18 @@ export function HeroesVillains({ snaps }: { snaps: WidgetSnapshot[] }) {
             </div>
           )}
         </>
-      )}
+  );
+  if (bare) return <div style={{ display: 'grid', gap: 8 }}><div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{`${weekTitle(hv.week)} · ${summary}`}</div>{body}</div>;
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 10, padding: '10px 12px', display: 'grid', gap: 8, marginBottom: 12 }}>
+      <button onClick={() => setOpen((o) => !o)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Heroes & villains <span className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 400 }}>{weekTitle(hv.week)}</span></div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>{summary}</div>
+        </div>
+        <span className="mono" style={{ fontSize: 14, color: 'var(--dim)' }}>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && body}
     </div>
   );
 }

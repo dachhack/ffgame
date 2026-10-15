@@ -21,7 +21,7 @@ import {
 import { verdictOf, unreadBadge, recordLabel, scoreLabel } from '@drip/core/data/leagueSlate';
 import { widgetLeagues, widgetSnapshot, recallSnapshot, seatKey, type WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { lineupReport, lineupReportLine, cardWinBar } from '@drip/core/data/widgetExtras';
-import { HeroesVillains } from './HeroesVillains';
+import { LeagueToolsBar } from './LeagueToolsBar';
 import { track, identify, Ev } from '@drip/core/analytics';
 import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
@@ -256,7 +256,7 @@ export function LiveOnboard() {
             : recovery ? <SetPassword onDone={() => setRecovery(false)} />
             : !session ? <AuthForm />
             : claiming ? <Muted text="Setting up your league…" />
-            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} admin={admin} />}
+            : <Enroll session={session} view={view} setView={setView} commishCode={pendingCommish} admin={admin} onFields={() => void openFields()} />}
         </div>
       </main>
     </div>
@@ -611,7 +611,9 @@ function SetPassword({ onDone }: { onDone: () => void }) {
 // Per-league matchup snapshot for the home cards: the next matchup + both teams' identity.
 interface MatchupCard { matchup: LiveMatchup; teams: Record<number, TeamInfo>; }
 
-function Enroll({ session, view, setView, commishCode, admin }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean }) {
+function Enroll({ session, view, setView, commishCode, admin, onFields }: { session: Session; view: OnboardView; setView: (v: OnboardView) => void; commishCode?: string | null; admin?: boolean;
+  /** ▦ ALL FIELDS for the league tools bar (v0.715.0) — the page owns the board. */
+  onFields: () => void }) {
   // Super-admin support mode: every read below resolves against this user
   // instead of the signed-in one, and the write CTAs are hidden.
   const { viewAs, route, navigate, loadSimLeague } = useStore();
@@ -1160,6 +1162,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
   return (
     <>
     <LeagueHome
+      onFields={onFields}
       enrollments={enrollments}
       commishLeagues={commishLeagues}
       cards={cards}
@@ -1222,7 +1225,7 @@ function Enroll({ session, view, setView, commishCode, admin }: { session: Sessi
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate, glance }: {
+function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate, glance, onFields }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onManage: (leagueId: string) => void;
@@ -1237,6 +1240,8 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
   slate: Record<string, LeagueSlateRow>;
   /** league_id → the league's widget picture (v0.510.0): projected finals, or the drip lineup. */
   glance: Record<string, WidgetSnapshot>;
+  /** ▦ ALL FIELDS on the tools bar (v0.715.0): the page's own fields board. */
+  onFields: () => void;
 }) {
   const [filter, setFilter] = useState<'all' | 'commish' | 'weekly'>('all');
   // 🗂 THE ARCHIVE (0239 on the phone; the web since v0.707.3, founder: "a
@@ -1390,9 +1395,21 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
           </div>
         </div>
       )}
-      {/* HEROES & VILLAINS (v0.632.0): who to root for this week, across
-          every league, off the glance snapshots the cards already read. */}
-      {total > 0 && <HeroesVillains snaps={Object.values(glance)} />}
+      {/* THE LEAGUE TOOLS BAR (v0.715.0, founder: "a scrollable bar of tools
+          for players: all fields, heroes and villains, line up suggestions and
+          alerts, waiver targets, trade zone"). Heroes & villains (v0.632.0)
+          is one of its tools now. */}
+      {total > 0 && (
+        <LeagueToolsBar snaps={Object.values(glance)} onFields={onFields}
+          leagues={seats.filter((e) => !e.archived && !e.league?.is_mock && e.sleeper_roster_id != null).map((e) => ({
+            id: e.league_id, name: e.league?.name ?? 'League', rosterId: e.sleeper_roster_id as number,
+            native: e.league?.provider === 'native', contest: isContestKind(e.league?.kind),
+          }))}
+          onOpenLeague={(leagueId, rosterId) => {
+            const e = seats.find((x) => x.league_id === leagueId && x.sleeper_roster_id === rosterId) ?? seats.find((x) => x.league_id === leagueId);
+            if (e) onOpen(e);
+          }} />
+      )}
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       {/* .lg-grid (styles.css): on a desktop every box is one size, its lines unwrapped (v0.707.6). */}
       <div className="lg-grid">
