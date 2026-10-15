@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/ai-wire-activity.sql",
+  "why": "059's one-seat pass legalised Kickoff League's Team 4 at once, so the seat-wire code works for that seat; its last claim before that was Oct 10. Has the hourly sweep stopped for every league (one league's error aborting the whole sweep) or only for this seat? Read only: AI claims and adds per day since Oct 1, and each AI league's last claim."
+}
