@@ -151,6 +151,24 @@ async function leagueNames(ids) {
   return new Map((data ?? []).map((l) => [l.id, l.name]));
 }
 
+/** PLAYERS BY NAME, NOT SLUG (v0.713.11, founder, holding up a push: "Looks
+ *  like a player id in my notification" — "Your claim WON — C 4870609 is
+ *  yours."). A college player's slug is c-<espn id>, and capitalising it
+ *  printed the id; an NFL slug loses its apostrophes and suffixes the same
+ *  way. The league's own pool carries every player's full_name (college
+ *  included), so read it. `${league_id}:${slug}` → name; a miss falls back to
+ *  slugToName, which never prints a college id. */
+async function poolNames(pairs) {
+  const out = new Map();
+  const want = pairs.filter(([lid, slug]) => lid && slug);
+  if (!want.length) return out;
+  const { data } = await db().from('league_pool').select('league_id, slug, full_name')
+    .in('league_id', [...new Set(want.map(([lid]) => lid))])
+    .in('slug', [...new Set(want.map(([, slug]) => slug))]);
+  for (const r of data ?? []) if (r.full_name) out.set(`${r.league_id}:${r.slug}`, r.full_name);
+  return out;
+}
+
 // ── detectors ───────────────────────────────────────────────────────────────
 
 async function detectChat() {
@@ -425,14 +443,15 @@ async function detectWaivers() {
   if (!claims?.length) return;
   const owners = await ownersFor(claims.map((c) => [c.league_id, c.roster_id]));
   const names = await leagueNames([...new Set(claims.map((c) => c.league_id))]);
-  const pretty = (slug) => slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  const players = await poolNames(claims.map((c) => [c.league_id, c.add_slug]));
+  const pretty = (lid, slug) => players.get(`${lid}:${slug}`) ?? slugToName(slug);
   await enqueue(claims.flatMap((c) => {
     const uid = owners.get(`${c.league_id}:${c.roster_id}`);
     if (!uid) return [];
     return [{
       app_user_id: uid, kind: 'waivers',
       title: `Waivers · ${names.get(c.league_id) ?? 'your league'}`,
-      body: c.status === 'won' ? `Your claim WON — ${pretty(c.add_slug)} is yours.` : `Your claim for ${pretty(c.add_slug)} lost.`,
+      body: c.status === 'won' ? `Your claim WON — ${pretty(c.league_id, c.add_slug)} is yours.` : `Your claim for ${pretty(c.league_id, c.add_slug)} lost.`,
       data: { league_id: c.league_id, open: 'team' },
       dedupe_key: `waiver:${c.id}:${c.status}`,
     }];
@@ -1112,8 +1131,10 @@ async function squadSeats(season, week) {
     starters: (Array.isArray(r.starters_json) ? r.starters_json : []).map((e) => ({ slug: e.player_slug ?? e.slug, name: e.full ?? e.name ?? null, team: e.team ?? null })).filter((st) => st.slug),
   })).filter((x) => x.uid && x.starters.length);
 }
-/** PURE: a readable name from a slug when no lineup carried one — "aaron-rodgers" → "Aaron Rodgers", "kc-dst" → "KC Defense". */
+/** PURE: a readable name from a slug when no lineup carried one — "aaron-rodgers" → "Aaron Rodgers", "kc-dst" → "KC Defense".
+ *  A college slug (c-<espn id>) is an id, not a name: never print it (v0.713.11). */
 export function slugToName(slug) {
+  if (/^c-\d+$/.test(String(slug))) return 'a college player';
   const m = /^([a-z]{2,3})-(dst|def)$/.exec(String(slug));
   if (m) return `${m[1].toUpperCase()} Defense`;
   return String(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
@@ -1378,7 +1399,8 @@ async function detectBitten() {
       .select('sleeper_roster_id, team_name').eq('league_id', lid);
     for (const m of data ?? []) teams.set(`${lid}:${m.sleeper_roster_id}`, m.team_name);
   }
-  const pretty = (slug) => slug.split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+  const players = await poolNames(bites.flatMap((b) => [[b.league_id, b.take_slug], [b.league_id, b.give_slug]]));
+  const pretty = (lid, slug) => players.get(`${lid}:${slug}`) ?? slugToName(slug);
   await enqueue(bites.flatMap((b) => {
     const uid = owners.get(`${b.league_id}:${b.victim}`);
     if (!uid) return [];
@@ -1386,7 +1408,7 @@ async function detectBitten() {
     return [{
       app_user_id: uid, kind: 'format',
       title: `🩸 Bitten · ${names.get(b.league_id) ?? 'your league'}`,
-      body: `${vamp} beat you in week ${b.week} and took ${pretty(b.take_slug)}. ${pretty(b.give_slug)} came back the other way.`,
+      body: `${vamp} beat you in week ${b.week} and took ${pretty(b.league_id, b.take_slug)}. ${pretty(b.league_id, b.give_slug)} came back the other way.`,
       data: { league_id: b.league_id, open: 'team' },
       dedupe_key: `bitten:${b.id}`,
     }];

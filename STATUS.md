@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.11 — Pushes name the player, never his id
+
+> - Waiver and vampire pushes now name the player ("Your claim WON — CJ Baxter is yours."), college players included, instead of an id like "C 4870609".
+
+Founder, holding up a push: "Looks like a player id in my notification" —
+"Waivers · Devy Test 1: Your claim WON — C 4870609 is yours." The waiver
+push (and the vampire 🩸 Bitten push) built the name by capitalising the
+slug; a college player's slug is c-<espn id> (c-4870609 is CJ Baxter, UK RB),
+and an NFL slug loses apostrophes and suffixes the same way. New poolNames()
+reads full_name from the league's own pool (where the app gets college
+names too); a miss falls back to slugToName, which now says "a college
+player" rather than print an id. server/test/push-names.mjs. Worker change;
+no iPhone build.
+
 ### v0.713.10 — Game logs from any weekly contest card
 
 > - In a weekly contest, tap a player card on My Team or in the add / swap list: choose Add, Replace or Swap in, or open his Game log.
