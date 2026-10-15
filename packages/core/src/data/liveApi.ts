@@ -5575,6 +5575,10 @@ export interface LadderState {
   history?: { season: string; direction: 'up' | 'down'; from_tier: number; to_tier: number; team: string | null; left_behind: string[] }[];
 }
 export const leagueLadderState = (leagueId: string) => rpc<LadderState>('league_ladder_state', { p_league_id: leagueId });
+/** TIERS INSIDE ONE LEAGUE (0507, v0.728.0): in-season promotion and relegation. */
+export const leagueTiers = (leagueId: string) => rpc<import('./leagueTiers').LeagueTiersState>('league_tiers', { p_league_id: leagueId });
+export const setLeagueTiers = (leagueId: string, on: boolean, period = 4, movers = 2, order: string[] | null = null) =>
+  rpc<{ ok: boolean; error?: string; start?: number }>('set_league_tiers', { p_league_id: leagueId, p_on: on, p_period: period, p_movers: movers, p_order: order });
 export const myLadderCandidates = () =>
   rpc<{ league_id: string; name: string; season: string; teams: number; ladder_id: string | null }[]>('my_ladder_candidates', {});
 export const createLeagueLadder = (name: string, leagueIds: string[], method: LadderMethod, movers: number, rosterMode: LadderRosterMode) =>
