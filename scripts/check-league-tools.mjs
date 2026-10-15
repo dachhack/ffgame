@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { gameFaces, gameCounts } from '../packages/core/src/data/heroes';
 import { tradeIdeasOf, positionStrength, contenders } from '../packages/core/src/data/tradeIdeas';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
-import { toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, parseToolLeagues } from '../packages/core/src/data/toolLeagues';
+import { toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, parseToolLeagues, toolsForLeague } from '../packages/core/src/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel, wireLensGroups, wireTargetLine, wireTargetBadge } from '../packages/core/src/data/leagueTools';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 let fails = 0;
@@ -163,6 +163,12 @@ for (const [n, path] of [['phone', 'apps/mobile/src/ui/HeroesVillains.tsx'], ['w
   ok(`${n} preview: one tab row that never wraps, the explanations in its ⓘ`, src.includes('PREVIEW_INFO') && !src.includes("flexWrap: 'wrap'") && !src.includes('Ranked by how many'));
   ok(`${n} preview: no summary line above the tabs`, !src.includes('summary'));
 }
+ok('options: a native league feeds all four tools; a contest or imported one, preview and lineup', toolsForLeague({ native: true, contest: false }).join() === 'preview,lineup,wire,trades' && toolsForLeague({ native: true, contest: true }).join() === 'preview,lineup' && toolsForLeague({ native: false, contest: false }).join() === 'preview,lineup');
+for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['web', 'src/screens/LeagueToolsBar.tsx']]) {
+  const src = read(path);
+  ok(`${n}: options list each league, then a checkbox per tool`, src.includes('leagues.map((l) =>') && src.includes('toolsForLeague(l).map((tool)') && (src.includes('accessibilityRole="checkbox"') || src.includes('type="checkbox"')));
+}
+ok('phone: the header has no fields button (ALL FIELDS is on the bar)', !read('apps/mobile/App.tsx').includes('>▦ fields</Text>'));
 const lo = read('src/screens/LiveOnboard.tsx');
 ok('web: the leagues header has no fields chip (the bar has ALL FIELDS)', !lo.includes('▦ fields</button>'));
 

@@ -40,3 +40,10 @@ export const forTool = <T extends { leagueId: string }>(v: ToolLeagueOff, tool: 
  *  chip's count. `ids`: the leagues you're in now (one you left doesn't count). */
 export const toolLeaguesOffCount = (v: ToolLeagueOff, ids?: string[]): number =>
   TOOL_IDS.reduce((n, t) => n + (v[t] ?? []).filter((id) => !ids || ids.includes(id)).length, 0);
+
+/** The tools a league can feed (v0.721.0): every league previews and gets
+ *  lineup alerts; waiver targets and the trade zone are for native leagues
+ *  that aren't weekly contests. Options lists a league, then these. */
+export const toolsForLeague = (l: { native: boolean; contest: boolean }): ToolId[] =>
+  l.native && !l.contest ? TOOL_IDS : ['preview', 'lineup'];
+export const TOOL_NAME: Record<ToolId, string> = { preview: 'Preview', lineup: 'Lineup', wire: 'Waiver targets', trades: 'Trade zone' };

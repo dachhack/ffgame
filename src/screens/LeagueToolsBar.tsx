@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
-import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, TOOL_IDS, TOOL_LABEL, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
+import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet } from '../app/ui';
 import { HeroesVillains } from './HeroesVillains';
@@ -75,21 +75,21 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
         </Sheet>
       )}
 
+      {/* OPTIONS (v0.721.0): each league, then a box per tool it feeds. */}
       {open === 'options' && (
-        <Sheet title="Tool options" subtitle="THE LEAGUES EACH TOOL READS" onClose={() => setOpen(null)} max={560}>
-          <div style={{ display: 'grid', gap: 14 }}>
-            {TOOL_IDS.map((tool) => {
-              const pool = tool === 'wire' || tool === 'trades' ? nativeLeagues : leagues;
-              if (!pool.length) return null;
-              return (
-                <div key={tool} style={{ display: 'grid', gap: 6 }}>
-                  <div className="mono" style={{ ...mono(9.5), fontWeight: 700, letterSpacing: '0.14em' }}>{TOOL_LABEL[tool]}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {pool.map((l) => <button key={l.id} className="mono" style={chip(toolHas(off, tool, l.id))} onClick={() => flip(tool, l.id)}>{l.name}</button>)}
-                  </div>
-                </div>
-              );
-            })}
+        <Sheet title="Tool options" subtitle="WHICH TOOLS EACH LEAGUE FEEDS" onClose={() => setOpen(null)} max={560}>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {leagues.map((l) => (
+              <div key={l.id} style={{ borderTop: '1px solid var(--bd)', padding: '8px 0 4px', display: 'grid', gap: 2 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</div>
+                {toolsForLeague(l).map((tool) => (
+                  <label key={tool} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', cursor: 'pointer', fontSize: 13.5, color: toolHas(off, tool, l.id) ? 'var(--text)' : 'var(--dim)' }}>
+                    <input type="checkbox" checked={toolHas(off, tool, l.id)} onChange={() => flip(tool, l.id)} style={{ width: 18, height: 18, accentColor: 'var(--you)', margin: 0 }} />
+                    {TOOL_NAME[tool]}
+                  </label>
+                ))}
+              </div>
+            ))}
           </div>
         </Sheet>
       )}
