@@ -9,11 +9,11 @@
 // v0.718.0 (founder): no emojis on the bar, HEROES & VILLAINS is PREVIEW, and
 // OPTIONS picks the leagues each tool reads (core toolLeagues, per device).
 import { useEffect, useMemo, useState } from 'react';
-import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import type { WidgetSnapshot, FixPlayer } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
 import { injuryTag } from '@drip/core/data/heroes';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, FIX_KIND_LABEL, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet, Crest } from '../app/ui';
 import { crestFor } from '@drip/core/data/crest';
 import { HeroesVillains } from './HeroesVillains';
@@ -73,6 +73,15 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
   const offN = toolLeaguesOffCount(off, leagues.map((l) => l.id));
   const go = (leagueId: string, rosterId: number) => { setOpen(null); onOpenLeague(leagueId, rosterId); };
   const leagueOf = (id: string) => leagues.find((l) => l.id === id);
+  // A lineup fix's player (v0.726.0): face, name, injury tag, projection.
+  const fixPlayer = (p: FixPlayer, tone: string) => (
+    <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <Face image={p.image} name={p.name} size={24} tone={tone} />
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {p.name}{inj(p.injury)}{p.proj != null ? <span className="mono" style={{ ...mono(10), fontWeight: 400 }}>{` ${p.proj.toFixed(1)}`}</span> : null}
+      </span>
+    </span>
+  );
   // INJURY STATUS on every player the tools name (v0.723.0).
   const inj = (tag: string | null | undefined) => (injuryTag(tag)
     ? <span className="mono" style={{ fontSize: 10, fontWeight: 800, color: 'var(--warn)' }}>{` ${injuryTag(tag)}`}</span> : null);
@@ -135,9 +144,18 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
                   <span className="mono" style={mono(10)}>{a.weekLabel}</span>
                   <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>→</span>
                 </span>
+                {/* v0.726.0: each fix as its players, faces and injury tags, under a plain label. */}
                 {a.fixes.map((f, i) => (
-                  <span key={i} className="mono" style={mono(11.5, f.kind === 'injury' || f.kind === 'none' ? 'var(--warn)' : 'var(--dim)')}>
-                    {`${f.kind === 'swap' ? '⇄' : f.kind === 'injury' ? '🩹' : f.kind === 'bye' ? '💤' : '•'} ${f.winLabel ? `${f.winLabel}: ` : ''}${f.text}`}
+                  <span key={i} style={{ display: 'grid', gap: 4, paddingTop: 6, borderTop: '1px solid var(--bd)' }}>
+                    <span className="mono" style={{ ...mono(9.5, f.kind === 'injury' || f.kind === 'none' ? 'var(--warn)' : 'var(--faint)'), fontWeight: 700, letterSpacing: '0.12em' }}>{`${f.winLabel ? `${f.winLabel} · ` : ''}${FIX_KIND_LABEL[f.kind]}`}</span>
+                    {f.out || f.in ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        {f.out && fixPlayer(f.out, 'var(--opp)')}
+                        {f.out && f.in && <span className="mono" style={mono(12)}>→</span>}
+                        {f.in && fixPlayer(f.in, 'var(--you)')}
+                        {f.out && !f.in && <span className="mono" style={mono(10.5)}>nobody on the bench fits</span>}
+                      </span>
+                    ) : <span className="mono" style={mono(11.5, 'var(--dim)')}>{f.text}</span>}
                   </span>
                 ))}
               </button>

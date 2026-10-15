@@ -41,8 +41,9 @@ import { winProbability } from '../engine/matchupBoard';
 import { setLeagueProjScoring, clearLeagueProjScoring, setLiveProjRate, clearLiveProjRate, liveProjRateMap, leagueCatalogOf } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
-import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, isDynastyContinuity, type LeaguePoolPlayer } from './liveApi';
-import { wireTargetsOf, type WireTarget } from './leagueTools';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, isDynastyContinuity, devyBaseValues, type LeaguePoolPlayer } from './liveApi';
+import { wireTargetsOf, devyTargetsOf, isCollegeSlug, type WireTarget } from './leagueTools';
+import { dynFormatOfSlots } from './dynastyMarket';
 import { tradeIdeasOf, type TradeIdea } from './tradeIdeas';
 import { projectedPoints } from '../engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring, leagueScoring, scoringLeague, parseScoring } from '../engine/leagueScoring';
@@ -76,7 +77,13 @@ export interface WidgetFix {
   /** `none` (v0.500.0): an empty drip slot nobody on the roster can fill. */
   kind: 'empty' | 'none' | 'metric' | 'injury' | 'bye' | 'swap';
   text: string;
+  /** THE PLAYERS (v0.726.0): the starter coming out and the man to start
+   *  instead, with faces and injury tags, for the LINEUP tool's rows. The
+   *  widget keeps reading `text`. */
+  out?: FixPlayer | null;
+  in?: FixPlayer | null;
 }
+export interface FixPlayer { slug: string; name: string; image: string | null; injury: string | null; proj?: number | null }
 
 /** ONE CARD ON THE HOME SCREEN (v0.433.9) — a drip seat's pick in one slot
  *  of one window, as the widget draws it: the headshot, the name, the metric,
@@ -565,8 +572,9 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
         const pl = poolBySlug.get(p.player_slug as string);
         const name = pl ? shortName(pl.full) : (p.player_slug as string);
         const tag = injuries?.[p.player_slug as string];
-        if (tag && (tag === 'O' || tag === 'IR' || tag === 'D')) fixes.push({ win: winId, winLabel: w.label, kind: 'injury', text: `${name} is ${INJURY_WORD[tag] ?? tag}` });
-        if (pl && slateHasGames && pl.team && !windowForTeam(week, pl.team)) fixes.push({ win: winId, winLabel: w.label, kind: 'bye', text: `${name} is on BYE` });
+        const who: FixPlayer = { slug: p.player_slug as string, name, image: images?.[p.player_slug as string] ?? null, injury: tag ?? null };
+        if (tag && (tag === 'O' || tag === 'IR' || tag === 'D')) fixes.push({ win: winId, winLabel: w.label, kind: 'injury', text: `${name} is ${INJURY_WORD[tag] ?? tag}`, out: who });
+        if (pl && slateHasGames && pl.team && !windowForTeam(week, pl.team)) fixes.push({ win: winId, winLabel: w.label, kind: 'bye', text: `${name} is on BYE`, out: who });
       }
     }
     left = { me: meLeft, them: themLeft };
@@ -720,6 +728,8 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
     const word = (tag: string) => INJURY_WORD[tag] ?? tag;
     const one = (n: number) => (Number.isInteger(n) ? `${n}.0` : String(n));
     const startText = (b: { p: ClassicRosterPlayer; v: number } | null) => (b ? ` · start ${shortName(b.p.full)} ${one(round1(b.v))}` : '');
+    // v0.726.0: the players themselves, for the LINEUP tool's faces.
+    const fp = (p: ClassicRosterPlayer, v?: number): FixPlayer => ({ slug: p.slug, name: shortName(p.full), image: images?.[p.slug] ?? null, injury: injuries?.[p.slug] ?? null, proj: v != null ? round1(v) : null });
     // IN THE FOUNDER'S ORDER, as three passes over the spots: the EMPTY spots
     // take the best bench men first, then the spots whose starter cannot play
     // (out, on bye), and only then the upgrades — so the best back on the
@@ -731,7 +741,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
       if (p) continue;
       const b = bestFor(d);
       if (b) used.add(b.p.slug);
-      found.push({ win: d.slot, winLabel: label, kind: 'empty', text: b ? `empty${startText(b)}` : 'empty' });
+      found.push({ win: d.slot, winLabel: label, kind: 'empty', text: b ? `empty${startText(b)}` : 'empty', in: b ? fp(b.p, b.v) : null });
     }
     const movable = rows.filter((r) => r.p && stateOf(r.p.team) === 'pre');   // on the field or done: locked in
     const cannot = new Set<string>();
@@ -740,10 +750,10 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
       const bye = slateHasGames && !!p!.team && !windowForTeam(week, p!.team);
       if (tag && (tag === 'O' || tag === 'IR' || tag === 'D')) {
         const b = bestFor(d); if (b) used.add(b.p.slug); cannot.add(d.slot);
-        found.push({ win: d.slot, winLabel: label, kind: 'injury', text: `${shortName(p!.full)} is ${word(tag)}${startText(b)}` });
+        found.push({ win: d.slot, winLabel: label, kind: 'injury', text: `${shortName(p!.full)} is ${word(tag)}${startText(b)}`, out: fp(p!), in: b ? fp(b.p, b.v) : null });
       } else if (bye) {
         const b = bestFor(d); if (b) used.add(b.p.slug); cannot.add(d.slot);
-        found.push({ win: d.slot, winLabel: label, kind: 'bye', text: `${shortName(p!.full)} is on BYE${startText(b)}` });
+        found.push({ win: d.slot, winLabel: label, kind: 'bye', text: `${shortName(p!.full)} is on BYE${startText(b)}`, out: fp(p!), in: b ? fp(b.p, b.v) : null });
       }
     }
     for (const { d, label, p } of movable) {
@@ -752,7 +762,7 @@ export function summarize(input: SummarizeInput): WidgetSnapshot {
       const sv = c.projOf(spot(p!), d);
       if (b && gainOver(b.v, sv) >= SWAP_MIN_GAIN) {
         used.add(b.p.slug);
-        found.push({ win: d.slot, winLabel: label, kind: 'swap', text: `${shortName(b.p.full)} ${one(round1(b.v))} over ${shortName(p!.full)} ${one(round1(sv))}` });
+        found.push({ win: d.slot, winLabel: label, kind: 'swap', text: `${shortName(b.p.full)} ${one(round1(b.v))} over ${shortName(p!.full)} ${one(round1(sv))}`, out: fp(p!, sv), in: fp(b.p, b.v) });
       }
     }
     // Printed in spot order, whatever pass found them.
@@ -1044,6 +1054,37 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
           activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp, trend: wireMkt.trend, dyn: wireMkt.dyn, imageOf,
         });
       } catch { snapshot.wire = []; }
+      // DEVY TARGETS (v0.725.0): a league with devy spots also gets the wire's
+      // college prospects by devy value — for an open devy spot, or in place
+      // of the devy player worth least.
+      const devySlots = Number(gm?.shape?.devy) || 0;
+      if (devySlots > 0) {
+        try {
+          const fmt = dynFormatOfSlots(classicIn.slots);
+          const vals = await cached(`devyvals:${fmt}`, 24 * 60 * MIN, fresh, async () => {
+            const out: Record<string, number> = {};
+            for (const offset of [0, 200]) {
+              const pg = await devyBaseValues({ sort: fmt, limit: 200, offset }).catch(() => null);
+              for (const r of pg?.rows ?? []) out[`c-${r.espn_id}`] = Number(fmt === 'sf' ? r.value_sf ?? r.value_1qb : r.value_1qb) || 0;
+              if ((pg?.rows?.length ?? 0) < 200) break;
+            }
+            return out;
+          });
+          const held = new Set((spots ?? []).map((r) => r.slug));
+          const meta = new Map(wirePool.map((p) => [p.slug, p]));
+          const nowMs = Date.now();
+          const devy = devyTargetsOf({
+            devySlots,
+            mine: (spots ?? []).filter((r) => r.roster_id === league.rosterId && r.spot === 'devy')
+              .map((r) => ({ slug: r.slug, name: meta.get(r.slug)?.full_name ?? r.slug, pos: meta.get(r.slug)?.pos ?? '' })),
+            available: wirePool.filter((p) => isCollegeSlug(p.slug) && !held.has(p.slug))
+              .map((p) => ({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team || null, held: !!p.waived_until && Date.parse(p.waived_until) > nowMs })),
+            valueOf: (slug) => vals[slug] ?? null,
+            imageOf,
+          });
+          if (devy.length) snapshot.wire = [...(snapshot.wire ?? []), ...devy];
+        } catch { /* the NFL targets stand without it */ }
+      }
       // SUGGESTED TRADES (v0.720.0): every seat's active players, valued for
       // the season under the league's scoring (still installed here).
       try {

@@ -84,6 +84,24 @@ async function sleeperInjuries(playerIndex, now = Date.now(), ttlMs = SLEEPER_TT
  *  `sleeperTtlMs` (v0.561.2): how stale Sleeper's cached directory may be —
  *  the worker passes its game-day clock (10 min) so a Sleeper-only Out lands
  *  before kickoff; unset keeps SLEEPER_TTL_MS (6h). */
+/** PURE (v0.726.0): the real changes between what the table held and what
+ *  this poll wrote and cleared. A new or different designation, or a player
+ *  no source designates any more (to null). Statuses compare upper-cased. */
+export function injuryChanges(prior, written, cleared, at) {
+  const up = (x) => (x == null ? null : String(x).toUpperCase());
+  const out = [];
+  for (const r of written) {
+    const was = up(prior.get(r.player_slug));
+    const now = up(r.status);
+    if (was !== now) out.push({ player_slug: r.player_slug, from_status: was, to_status: now, at });
+  }
+  for (const slug of cleared) {
+    const was = up(prior.get(slug));
+    if (was != null) out.push({ player_slug: slug, from_status: was, to_status: null, at });
+  }
+  return out;
+}
+
 export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
   const feed = await fetchInjuries();
   // ID-FIRST (0200) — same contract as the play poller: the report's athlete id
@@ -119,6 +137,15 @@ export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
   // objects and never looked at the error.
   const clean = records.filter((r) => typeof r.player_slug === 'string' && r.player_slug.length > 0);
   const malformed = records.length - clean.length;
+  // WHAT WAS THERE (v0.726.0), read before the write so the change log can
+  // say what moved. NFL rows only — the college and sport polls own theirs.
+  // A failed read logs nothing rather than calling every row new.
+  let prior = null;
+  try {
+    const rows = await allRows((from, to) => db().from('injury_status')
+      .select('player_slug,status').order('player_slug').range(from, to));
+    prior = new Map(rows.filter((r) => !r.player_slug.startsWith('c-') && !/^(nba|wnba|nhl|mlb|epl|mls)-\d+$/.test(r.player_slug)).map((r) => [r.player_slug, r.status]));
+  } catch (err) { console.log('[injuries] prior read failed:', err.message); }
   let wrote = false;
   if (clean.length) {
     const { error } = await db().from('injury_status').upsert(clean, { onConflict: 'player_slug' });
@@ -134,6 +161,7 @@ export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
   // data. The prune now needs the write confirmed, every record well-formed,
   // a whole ESPN report, and a Sleeper snapshot in hand.
   let pruned = 0;
+  const clearedSlugs = [];
   const espnEntries = (feed?.injuries ?? []).reduce((n, t) => n + (t?.injuries?.length ?? 0), 0);
   const canPrune = wrote && malformed === 0 && sleeper != null && espnEntries >= PRUNE_FLOOR;
   if (canPrune) {
@@ -162,11 +190,24 @@ export async function pollInjuries(playerIndex, { sleeperTtlMs } = {}) {
     for (let i = 0; i < gone.length; i += 200) {
       const chunk = gone.slice(i, i + 200);
       const { error } = await db().from('injury_status').delete().in('player_slug', chunk);
-      if (!error) pruned += chunk.length;
+      if (!error) { pruned += chunk.length; clearedSlugs.push(...chunk); }
     }
   }
+  // THE CHANGE LOG (0506). Only on the back of a write that landed, and never
+  // on a first poll (an empty table would make every designation "new").
+  let changed = 0;
+  if (wrote && prior && prior.size > 0) {
+    const changes = injuryChanges(prior, clean, clearedSlugs, now);
+    for (let i = 0; i < changes.length; i += 500) {
+      const { error } = await db().from('injury_change').insert(changes.slice(i, i + 500));
+      if (error) { console.log('[injuries] change log failed:', error.message); break; }
+      changed += Math.min(500, changes.length - i);
+    }
+    // Two weeks is plenty for a push sweep that reads minutes.
+    await db().from('injury_change').delete().lt('at', new Date(Date.now() - 14 * 864e5).toISOString()).then(() => {}, () => {});
+  }
   return {
-    feedTimestamp: feed?.timestamp, count: clean.length, pruned, malformed,
+    feedTimestamp: feed?.timestamp, count: clean.length, pruned, malformed, changed,
     espn: Object.keys(espn).length, sleeper: sleeper?.size ?? null, prunedSkipped: !canPrune,
   };
 }

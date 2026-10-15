@@ -203,6 +203,8 @@ export function App() {
   // bar's duck below. Every room change brings the chrome home.
   const chromeDrv = useScrollChromeDriver();
   const [topH, setTopH] = useState(0);
+  // Where the header keeps the "my leagues" chip's place (v0.724.0).
+  const [chipBox, setChipBox] = useState<{ x: number; y: number; h: number } | null>(null);
   // Deep links out of 👥 Teams & rosters (v0.356.3, founder: "allow you to
   // message that member or initiate a trade"): a one-shot DM target for the
   // chat room and a one-shot trade partner for MY TEAM. Each clears when its
@@ -368,6 +370,24 @@ export function App() {
 
     return (
       <View style={{ flex: 1 }}>
+        {/* THE PINNED "my leagues" CHIP (v0.724.0): drawn over the header's
+            place for it and NOT inside the folding top, so it stays at the
+            top-left when the header slides away. Everywhere you're signed in:
+            in a league or any app screen it goes home; on the list itself it
+            re-reads your leagues. */}
+        {!!session && chipBox && (
+          <Pressable
+            // Resets the view too, so the button lands where its label says.
+            // Closing only the league would leave you sitting in Admin with
+            // no league open — "my leagues" that doesn't show your leagues.
+            onPress={() => { tap(); if (!open && view === 'picks') setLeaguesEpoch((n) => n + 1); setOpen(null); setView('picks'); }}
+            hitSlop={8}
+            accessibilityRole="button" accessibilityLabel="My leagues"
+            style={{ position: 'absolute', zIndex: 5, left: chipBox.x, top: chipBox.y, height: chipBox.h, justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 9, backgroundColor: theme.bg }}
+          >
+            <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>my leagues</Text>
+          </Pressable>
+        )}
         {/* THE FOLDING TOP (v0.356.0): brand bar + league title slide away
             together as a league screen scrolls down, and return on any
             scroll up — the negative marginBottom pulls the content up in
@@ -395,17 +415,16 @@ export function App() {
               the left without the arrow") — the wordmark sits absolutely
               centered on the screen (pointerEvents off so it never eats a
               tap), with the exit chip on the left and the gear on the right. */}
-          {open && (
-            <Pressable
-              // Resets the view too, so the button lands where its label says.
-              // Closing only the league would leave you sitting in Admin with
-              // no league open — "my leagues" that doesn't show your leagues.
-              onPress={() => { setOpen(null); setView('picks'); }}
-              hitSlop={8}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.you, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4, flexShrink: 1 }}
-            >
-              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: theme.you }}>my leagues</Text>
-            </Pressable>
+          {/* MY LEAGUES, ALWAYS (v0.724.0, founder: "put the my leagues chip at
+              the top … so no matter where you are in the interaction you can
+              always go back to my leagues"). The real chip floats above this
+              row (below), pinned so the fold never takes it; this invisible
+              twin only holds its place in the row. */}
+          {!!session && (
+            <View pointerEvents="none" style={{ opacity: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4 }}
+              onLayout={(e) => setChipBox({ x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height })}>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10 }}>my leagues</Text>
+            </View>
           )}
           {/* ▦ FIELDS left the header (v0.721.0, founder: "We don't need the
               fields chips on my leagues now that we have it in the tool

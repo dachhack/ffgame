@@ -9,11 +9,11 @@
 // OPTIONS picks the leagues each tool reads (core toolLeagues, per device).
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
+import type { WidgetSnapshot, FixPlayer } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
 import { injuryTag } from '@drip/core/data/heroes';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, FIX_KIND_LABEL, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from './feedback';
 import { Chip, Mono } from './prims';
@@ -63,6 +63,15 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
   const offN = toolLeaguesOffCount(off, leagues.map((l) => l.id));
   const pick = (x: Tool) => { tap(); setOpen(x); };
   const leagueOf = (id: string) => leagues.find((l) => l.id === id);
+  // A lineup fix's player (v0.726.0): face, name, injury tag, projection.
+  const fixPlayer = (p: FixPlayer, tone: string) => (
+    <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <PlayerFace image={p.image} name={p.name} size={24} tone={tone} />
+      <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>
+        {p.name}{inj(p.injury)}{p.proj != null ? <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint, fontWeight: '400' }}>{` ${p.proj.toFixed(1)}`}</Text> : null}
+      </Text>
+    </View>
+  );
   // INJURY STATUS on every player the tools name (v0.723.0).
   const inj = (tag: string | null | undefined) => (injuryTag(tag)
     ? <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '800', color: t.warn }}>{` ${injuryTag(tag)}`}</Text> : null);
@@ -131,10 +140,21 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
                 <Mono size={9} tone="faint">{a.weekLabel}</Mono>
                 <Mono size={10} tone="you" weight="700">→</Mono>
               </View>
+              {/* v0.726.0: each fix as its players — the starter coming out and
+                  the man to start instead, faces and injury tags — under a
+                  plain label in place of the old emoji marks. */}
               {a.fixes.map((f, i) => (
-                <Text key={i} style={{ fontFamily: MONO, fontSize: 11, lineHeight: 16, color: f.kind === 'injury' || f.kind === 'none' ? t.warn : t.dim }}>
-                  {`${f.kind === 'swap' ? '⇄' : f.kind === 'injury' ? '🩹' : f.kind === 'bye' ? '💤' : '•'} ${f.winLabel ? `${f.winLabel}: ` : ''}${f.text}`}
-                </Text>
+                <View key={i} style={{ gap: 4, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd }}>
+                  <Mono size={8.5} weight="700" track={0.12} tone={f.kind === 'injury' || f.kind === 'none' ? 'warn' : 'faint'}>{`${f.winLabel ? `${f.winLabel} · ` : ''}${FIX_KIND_LABEL[f.kind]}`}</Mono>
+                  {f.out || f.in ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {f.out && fixPlayer(f.out, t.opp)}
+                      {f.out && f.in && <Mono size={11} tone="faint">→</Mono>}
+                      {f.in && fixPlayer(f.in, t.you)}
+                      {f.out && !f.in && <Mono size={9.5} tone="faint">nobody on the bench fits</Mono>}
+                    </View>
+                  ) : <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: 16, color: t.dim }}>{f.text}</Text>}
+                </View>
               ))}
             </Pressable>
           ))}
