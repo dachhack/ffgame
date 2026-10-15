@@ -5,8 +5,7 @@
 // membership, which is arbitrary the moment you're in more than one league, and
 // it gave you no way to reach the others.
 import { useCallback, useEffect, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { crestInitial } from '@drip/core/data/crest';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   myEnrollments, claimMyRosters, commishOverview, friendlyError, myWaitlist, setLeagueArchived,
   leagueDetailLine, leagueTypeLine, leagueLandingRoom, myLeagueSlate, isWeeklyKind,
@@ -20,41 +19,10 @@ import { tap } from '../ui/feedback';
 import { Card, Chip, ChipStrip, Display, LinkButton, Mono, PrimaryButton } from '../ui/prims';
 import { Overlay } from '../ui/Overlay';
 import { BrandLoading } from '../ui/BrandLoading';
+import { Crest } from '../ui/LeagueCrest';
 import { weekTitle } from '@drip/core/data/nflSlate';
 
-/** A league or team crest.
- *
- *  The URL was already being fetched by `myEnrollments` and thrown away here —
- *  the row rendered as text only while the art sat in the response. Commissioners
- *  pick these, and `importLeague` fills a random first-party tile when Sleeper
- *  has none, so most rows have one.
- *
- *  The fallback is an initial rather than an empty square: a blank tile in a
- *  list of pictures reads as an image that failed to load. It also covers the
- *  case a URL is present but 404s, since `onError` swaps to it. */
-function Crest({ url, name, size }: { url?: string | null; name?: string | null; size: number }) {
-  const t = useTheme();
-  const [failed, setFailed] = useState(false);
-  const radius = Math.max(3, Math.round(size * 0.19));
-  const show = url && !failed;
-  return (
-    <View
-      style={{
-        width: size, height: size, borderRadius: radius, overflow: 'hidden', flexShrink: 0,
-        backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd,
-        alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      {show ? (
-        <Image source={{ uri: url }} onError={() => setFailed(true)} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-      ) : (
-        <Text style={{ fontFamily: MONO, fontSize: Math.round(size * 0.42), fontWeight: '700', color: t.faint }}>
-          {crestInitial(name)}
-        </Text>
-      )}
-    </View>
-  );
-}
+// Crest moved to ui/LeagueCrest (v0.722.0) so the tools bar can draw it too.
 
 export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
   userId: string;
@@ -221,7 +189,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
         <LeagueToolsBar snaps={Object.values(glance)}
           leagues={(rows ?? []).filter((e) => !e.archived && !e.league?.is_mock && e.sleeper_roster_id != null).map((e) => ({
             id: e.league_id, name: e.league?.name ?? 'League', rosterId: e.sleeper_roster_id as number,
-            native: e.league?.provider === 'native', contest: isContestKind(e.league?.kind),
+            native: e.league?.provider === 'native', contest: isContestKind(e.league?.kind), avatar: e.league?.avatar_url ?? null,
           }))}
           onOpenLeague={(leagueId, rosterId, landing) => {
             const e = (rows ?? []).find((x) => x.league_id === leagueId && x.sleeper_roster_id === rosterId) ?? (rows ?? []).find((x) => x.league_id === leagueId);

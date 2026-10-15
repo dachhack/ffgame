@@ -27,7 +27,7 @@
 import { optimalLineup, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
 
 export type TradeIdeaKind = 'fit' | 'rebuild' | 'buy';
-export interface TradeIdeaPlayer { slug: string; name: string; pos: string }
+export interface TradeIdeaPlayer { slug: string; name: string; pos: string; /** Headshot (v0.722.0). */ image?: string | null }
 export interface TradeIdea {
   kind: TradeIdeaKind;
   partner: number; partnerName: string;
@@ -104,6 +104,8 @@ export function tradeIdeasOf(input: {
   valueOf: (p: SpotPlayer, d?: ClassicSlotDef) => number;
   names: (slug: string) => string;
   teamName: (rosterId: number) => string;
+  /** slug → headshot (v0.722.0). */
+  imageOf?: (slug: string) => string | null;
   standings?: { roster_id: number; wins: number; losses: number; ties?: number; pf: number }[];
   /** Dynasty league: its market (league format). Absent → FIT only. */
   dyn?: Record<string, number> | null;
@@ -122,7 +124,7 @@ export function tradeIdeasOf(input: {
   for (const [rid, r] of rosters) base.set(rid, lineupPoints(slots, r, valueOf));
   const swapGain = (rid: number, out: SpotPlayer, inn: SpotPlayer) =>
     lineupPoints(slots, rosters.get(rid)!.filter((p) => p.id !== out.id).concat(inn), valueOf) - base.get(rid)!;
-  const tp = (p: SpotPlayer): TradeIdeaPlayer => ({ slug: p.id, name: input.names(p.id), pos: p.pos });
+  const tp = (p: SpotPlayer): TradeIdeaPlayer => ({ slug: p.id, name: input.names(p.id), pos: p.pos, image: input.imageOf?.(p.id) ?? null });
   const ideas: TradeIdea[] = [];
 
   // ── FIT: strong-for-weak, both lineups better ──

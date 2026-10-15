@@ -1403,7 +1403,7 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
         <LeagueToolsBar snaps={Object.values(glance)} onFields={onFields}
           leagues={seats.filter((e) => !e.archived && !e.league?.is_mock && e.sleeper_roster_id != null).map((e) => ({
             id: e.league_id, name: e.league?.name ?? 'League', rosterId: e.sleeper_roster_id as number,
-            native: e.league?.provider === 'native', contest: isContestKind(e.league?.kind),
+            native: e.league?.provider === 'native', contest: isContestKind(e.league?.kind), avatar: e.league?.avatar_url ?? null,
           }))}
           onOpenLeague={(leagueId, rosterId) => {
             const e = seats.find((x) => x.league_id === leagueId && x.sleeper_roster_id === rosterId) ?? seats.find((x) => x.league_id === leagueId);

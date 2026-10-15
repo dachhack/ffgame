@@ -12,16 +12,18 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
 import { TRADE_IDEA_LABEL } from '@drip/core/data/tradeIdeas';
 import { loadToolLeagues, saveToolLeagues, toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, toolsForLeague, TOOL_NAME, type ToolId, type ToolLeagueOff } from '@drip/core/data/toolLeagues';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, tradeIdeaLeagues, tradeIdeaBadge, wireLensGroups, wireTargetTag, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from './feedback';
 import { Chip, Mono } from './prims';
 import { Overlay } from './Overlay';
 import { AllFieldsSheet } from './AllFieldsSheet';
 import { HeroesVillains } from './HeroesVillains';
+import { Crest } from './LeagueCrest';
+import { PlayerFace } from './PlayerFace';
 
 type Tool = 'fields' | 'preview' | 'lineup' | 'wire' | 'trades' | 'options';
-export interface ToolLeague { id: string; name: string; rosterId: number; native: boolean; contest: boolean }
+export interface ToolLeague { id: string; name: string; rosterId: number; native: boolean; contest: boolean; /** The league's avatar (v0.722.0). */ avatar?: string | null }
 
 export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
   snaps: WidgetSnapshot[];
@@ -60,6 +62,16 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
   const offN = toolLeaguesOffCount(off, leagues.map((l) => l.id));
   const pick = (x: Tool) => { tap(); setOpen(x); };
   const leagueOf = (id: string) => leagues.find((l) => l.id === id);
+  // Which league's waiver targets or trade ideas are open (v0.722.0).
+  const [shown, setShown] = useState<string | null>(null);
+  const leagueRow = (k: string, avatar: string | null | undefined, name: string, count: string) => (
+    <Pressable onPress={() => { tap(); setShown((v) => (v === k ? null : k)); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10 }}>
+      <Crest url={avatar} name={name} size={32} />
+      <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: '700', color: t.text }}>{name}</Text>
+      <Mono size={10} tone="you" weight="700">{count}</Mono>
+      <Text style={{ fontFamily: MONO, fontSize: 12, color: t.dim }}>{shown === k ? '▴' : '▾'}</Text>
+    </Pressable>
+  );
 
   return (
     <View>
@@ -128,32 +140,45 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
       <Overlay visible={open === 'wire'} title="Waiver targets" subtitle="WHO ON THE WIRE HELPS THIS WEEK" onClose={() => setOpen(null)}>
         <ScrollView contentContainerStyle={{ padding: 12, gap: 10 }}>
           {wire.length === 0 && <Mono size={10} tone="faint">Nobody on the wire beats what you have.</Mono>}
-          {wire.map((l) => (
-            <Pressable key={`${l.leagueId}:${l.rosterId}`} onPress={() => { tap(); setOpen(null); onOpenLeague(l.leagueId, l.rosterId, 'home'); }}
-              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 10, gap: 6, backgroundColor: t.bg }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: '700', color: t.text }}>{l.leagueName}</Text>
-                <Mono size={9} tone="faint">{l.weekLabel}</Mono>
-                <Mono size={10} tone="you" weight="700">→</Mono>
-              </View>
-              {wireLensGroups(l.targets).map((g) => (
-                <View key={g.lens ?? 'all'} style={{ gap: 6 }}>
-                  {g.lens && <Mono size={8.5} weight="700" track={0.14} tone={g.lens === 'now' ? 'you' : 'faint'}>{WIRE_LENS_LABEL[g.lens]}</Mono>}
-                  {g.rows.map((w) => (
-                    <View key={`${g.lens}:${w.add}`} style={{ gap: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>
-                          {`+ ${w.addName}`} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</Text>
-                        </Text>
-                        {wireTargetBadge(w) && <Mono size={10} tone="you" weight="700">{wireTargetBadge(w)}</Mono>}
+          {/* BY LEAGUE (v0.722.0, founder): the league's avatar and how many,
+              then tap for the targets with their faces. */}
+          {wire.map((l) => {
+            const k = `wire:${l.leagueId}:${l.rosterId}`;
+            const lg = leagueOf(l.leagueId);
+            return (
+              <View key={k} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, backgroundColor: t.bg, overflow: 'hidden' }}>
+                {leagueRow(k, lg?.avatar, l.leagueName, `${l.targets.length} target${l.targets.length === 1 ? '' : 's'}`)}
+                {shown === k && (
+                  <View style={{ paddingHorizontal: 10, paddingBottom: 10, gap: 8 }}>
+                    {wireLensGroups(l.targets).map((g) => (
+                      <View key={g.lens ?? 'all'} style={{ gap: 8 }}>
+                        {g.lens && <Mono size={8.5} weight="700" track={0.14} tone={g.lens === 'now' ? 'you' : 'faint'}>{WIRE_LENS_LABEL[g.lens]}</Mono>}
+                        {g.rows.map((w) => (
+                          <Pressable key={`${g.lens}:${w.add}`} onPress={() => { tap(); setOpen(null); onOpenLeague(l.leagueId, l.rosterId, 'home'); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <PlayerFace image={w.addImage} name={w.addName} tone={t.you} />
+                            <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+                              <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: t.text }}>
+                                {w.addName} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</Text>
+                              </Text>
+                              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10, color: t.dim }}>{wireTargetTag(w)}</Text>
+                              {w.dropName && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                                  <Mono size={9} tone="faint">for</Mono>
+                                  <PlayerFace image={w.dropImage} name={w.dropName} size={18} tone={t.opp} />
+                                  <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: MONO, fontSize: 10, color: t.dim }}>{w.dropName}</Text>
+                                </View>
+                              )}
+                            </View>
+                            {wireTargetBadge(w) && <Mono size={10} tone="you" weight="700">{wireTargetBadge(w)}</Mono>}
+                          </Pressable>
+                        ))}
                       </View>
-                      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10.5, lineHeight: 15, color: t.dim }}>{wireTargetLine(w)}</Text>
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </Pressable>
-          ))}
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
         </ScrollView>
       </Overlay>
 
@@ -183,23 +208,47 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
             );
           })}
           {ideas.length > 0 && <View style={{ gap: 8 }}>
-            <Mono size={8.5} weight="700" track={0.14} tone="you">{`SUGGESTED · ${ideas.reduce((n, l) => n + l.ideas.length, 0)}`}</Mono>
-            {ideas.map((l) => l.ideas.map((x, i) => (
-              <Pressable key={`${l.leagueId}-${i}`} onPress={() => { tap(); setOpen(null); onOpenLeague(l.leagueId, l.rosterId, 'home'); }}
-                style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, padding: 9, gap: 3, backgroundColor: t.bg }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>{x.partnerName} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{l.leagueName}</Text></Text>
-                  <Mono size={8.5} weight="700" track={0.1} tone="faint">{TRADE_IDEA_LABEL[x.kind]}</Mono>
+            <Mono size={8.5} weight="700" track={0.14} tone="you">SUGGESTED</Mono>
+            {/* BY LEAGUE (v0.722.0): avatar and count; tap for the trades with faces. */}
+            {ideas.map((l) => {
+              const k = `trade:${l.leagueId}:${l.rosterId}`;
+              const lg = leagueOf(l.leagueId);
+              return (
+                <View key={k} style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 8, backgroundColor: t.bg, overflow: 'hidden' }}>
+                  {leagueRow(k, lg?.avatar, l.leagueName, `${l.ideas.length} trade${l.ideas.length === 1 ? '' : 's'}`)}
+                  {shown === k && (
+                    <View style={{ paddingHorizontal: 10, paddingBottom: 10, gap: 10 }}>
+                      {l.ideas.map((x, i) => (
+                        <Pressable key={i} onPress={() => { tap(); setOpen(null); onOpenLeague(l.leagueId, l.rosterId, 'home'); }}
+                          style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 8, gap: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>{x.partnerName}</Text>
+                            <Mono size={8.5} weight="700" track={0.1} tone="faint">{TRADE_IDEA_LABEL[x.kind]}</Mono>
+                          </View>
+                          <View style={{ flexDirection: 'row', gap: 10 }}>
+                            {([['GIVE', x.give, t.opp], ['GET', x.get, t.you]] as const).map(([lab, ps, tone]) => (
+                              <View key={lab} style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                                <Mono size={8} weight="700" track={0.14} tone="faint">{lab}</Mono>
+                                {ps.map((p) => (
+                                  <View key={p.slug} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <PlayerFace image={p.image} name={p.name} size={28} tone={tone} />
+                                    <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>{p.name} <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint }}>{p.pos}</Text></Text>
+                                  </View>
+                                ))}
+                              </View>
+                            ))}
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text numberOfLines={2} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: t.faint }}>{x.why}</Text>
+                            <Mono size={9.5} tone="you" weight="700">{tradeIdeaBadge(x)}</Mono>
+                          </View>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
                 </View>
-                <Text style={{ fontFamily: MONO, fontSize: 11, lineHeight: 16, color: t.text }}>
-                  {`give ${x.give.map((p) => `${p.name} ${p.pos}`).join(', ')} · get ${x.get.map((p) => `${p.name} ${p.pos}`).join(', ')}`}
-                </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text numberOfLines={1} style={{ flex: 1, fontFamily: MONO, fontSize: 10, color: t.faint }}>{x.why}</Text>
-                  <Mono size={9.5} tone="you" weight="700">{tradeIdeaBadge(x)}</Mono>
-                </View>
-              </Pressable>
-            )))}
+              );
+            })}
           </View>}
         </ScrollView>
       </Overlay>

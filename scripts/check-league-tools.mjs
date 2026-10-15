@@ -8,7 +8,7 @@ import { gameFaces, gameCounts } from '../packages/core/src/data/heroes';
 import { tradeIdeasOf, positionStrength, contenders } from '../packages/core/src/data/tradeIdeas';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026';
 import { toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, parseToolLeagues, toolsForLeague } from '../packages/core/src/data/toolLeagues';
-import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel, wireLensGroups, wireTargetLine, wireTargetBadge } from '../packages/core/src/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel, wireLensGroups, wireTargetLine, wireTargetBadge, wireTargetTag, WIRE_LENS_LABEL } from '../packages/core/src/data/leagueTools';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 let fails = 0;
 const ok = (name, cond, got) => { if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); } else console.log(`ok   ${name}`); };
@@ -62,7 +62,7 @@ const tIn = (trend) => wireIn({ pool: TPOOL, rosters: [{ roster_id: 3, slug: 'bi
 const t0 = wireTargetsOf(tIn(null)), t1 = wireTargetsOf(tIn({ 'breece-hall': { a: 60000, d: 1000 } }));
 ok('momentum: a point apart, the trending back overtakes the flat one', t0[0]?.add === 'kyren-williams' && t1[0]?.add === 'breece-hall' && t1[0]?.netAdds === 59000, [t0[0], t1[0]]);
 ok('momentum: no trend, no tag', t0[0]?.netAdds == null);
-ok('momentum: the tag reads in words', trendLabel(59000) === '🔥 59k adds' && trendLabel(1234) === '🔥 1.2k adds' && trendLabel(-800) === '📉 800 drops' && trendLabel(null) === null && trendLabel(0) === null);
+ok('momentum: the tag reads in words', trendLabel(59000) === '59k adds' && trendLabel(1234) === '1.2k adds' && trendLabel(-800) === '800 drops' && trendLabel(null) === null && trendLabel(0) === null);
 // DYNASTY (v0.717.0): win now, rebuild, and never a dynasty loss.
 const me3 = (bench) => [{ slug: 'bijan-robinson', full: 'Bijan Robinson', pos: 'RB', team: null }, { slug: 'jonathan-taylor', full: 'Jonathan Taylor', pos: 'RB', team: null }, bench];
 const dIn = (bench, pool, dyn) => wireIn({ roster: me3(bench), pool, rosters: me3(bench).map((p) => ({ roster_id: 3, slug: p.slug, acquired: 'draft' })), activeSeats: 3, dyn });
@@ -97,7 +97,7 @@ ok('web: the leagues page carries the bar, not the lone H&V card', web.includes(
 for (const [n, src] of [['phone', pbar], ['web', wbar]]) {
   ok(`${n}: fields, preview, lineup, waiver targets, trade zone and options on the bar — no emojis`, src.includes('ALL FIELDS') && src.includes('PREVIEW') && src.includes('`LINEUP${') && src.includes('`WAIVER TARGETS${') && src.includes('`TRADE ZONE${') && src.includes('`OPTIONS${') && !/[▦⚔🧭📈🔁]/u.test(src));
   ok(`${n}: each tool reads only the leagues OPTIONS leaves it`, src.includes("forTool(off, 'preview', snaps)") || src.includes("snapsFor('preview')"));
-  ok(`${n}: a waiver target row is worded by core, grouped by lens`, src.includes('wireTargetLine(w)') && src.includes('wireTargetBadge(w)') && src.includes('wireLensGroups(l.targets)'));
+  ok(`${n}: a waiver target row is worded by core, grouped by lens`, src.includes('wireTargetTag(w)') && src.includes('wireTargetBadge(w)') && src.includes('wireLensGroups(l.targets)'));
   ok(`${n}: the preview opens on the leagues its options leave it`, src.includes('<HeroesVillains snaps={previewSnaps} />'));
 }
 ok('phone: the bar scrolls sideways', pbar.includes('<ScrollView horizontal'));
@@ -145,7 +145,7 @@ const feedSrc = read('packages/core/src/data/widgetFeed.ts');
 ok('trades: the glance suggests them with the waiver targets, valued for the season', feedSrc.includes('snapshot.tradeIdeas = tradeIdeasOf(') && feedSrc.includes("tags[p.id] === 'IR' ? 0 : projectedPoints"));
 for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['web', 'src/screens/LeagueToolsBar.tsx']]) {
   const src = read(path);
-  ok(`${n}: the trade zone lists SUGGESTED trades from the leagues its options leave it`, src.includes('SUGGESTED · ') && src.includes('tradeIdeaLeagues(') && src.includes("'trades'"));
+  ok(`${n}: the trade zone lists SUGGESTED trades from the leagues its options leave it`, src.includes('SUGGESTED') && src.includes('tradeIdeaLeagues(') && src.includes("'trades'"));
 }
 // ── tool options (v0.718.0) ──────────────────────────────────────────────
 let tl = toggleToolLeague({}, 'wire', 'L1');
@@ -168,6 +168,15 @@ for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['w
   const src = read(path);
   ok(`${n}: options list each league, then a checkbox per tool`, src.includes('leagues.map((l) =>') && src.includes('toolsForLeague(l).map((tool)') && (src.includes('accessibilityRole="checkbox"') || src.includes('type="checkbox"')));
 }
+for (const [n, path] of [['phone', 'apps/mobile/src/ui/LeagueToolsBar.tsx'], ['web', 'src/screens/LeagueToolsBar.tsx']]) {
+  const src = read(path);
+  ok(`${n}: waiver targets and suggested trades list each league with its avatar and a count, details with faces on a tap`,
+    src.includes("leagueRow(k, leagueOf(l.leagueId)?.avatar") || src.includes('leagueRow(k, lg?.avatar'));
+  ok(`${n}: faces on the targets, their drops and both sides of a trade`, /Face image=\{w\.addImage\}/.test(src) && /Face image=\{w\.dropImage\}/.test(src) && /Face image=\{p\.image\}/.test(src));
+}
+ok('waiver targets: no emojis in the labels', !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(Object.values(WIRE_LENS_LABEL).join('') + trendLabel(5000) + trendLabel(-5000) + wireTargetTag({ kind: 'hole', lens: 'now', netAdds: 3000, dropName: null, claim: true })));
+ok('waiver targets: the tag leaves the drop to the row (drawn with his face)', wireTargetTag({ kind: 'upgrade', lens: 'now', netAdds: null, dropName: 'X', claim: false }) === 'UPGRADE' && wireTargetTag({ kind: 'hole', lens: 'now', netAdds: null, dropName: null, claim: true }) === 'FILLS A HOLE · open spot · claim');
+ok('faces: the glance hands headshots to the targets and the trades', feedSrc.includes('imageOf = (slug: string) => headshot(slug) ?? espnHeadshot(') && (feedSrc.match(/ imageOf,/g) ?? []).length >= 2);
 ok('phone: the header has no fields button (ALL FIELDS is on the bar)', !read('apps/mobile/App.tsx').includes('>▦ fields</Text>'));
 const lo = read('src/screens/LiveOnboard.tsx');
 ok('web: the leagues header has no fields chip (the bar has ALL FIELDS)', !lo.includes('▦ fields</button>'));

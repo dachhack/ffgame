@@ -1032,11 +1032,14 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, theirPool: drip ? oppPool : undefined, injuries, images, classic: classicIn, weekScheduled, standings, phantoms });
     if (wantWire && classicIn && snapshot.phase !== 'final') {
       const bench = Number(gm?.shape?.bench);
+      // FACES (v0.722.0): the baked headshot, else the pool's ESPN id.
+      const espnOf = new Map(wirePool.map((p) => [p.slug, p.espn_id ?? null]));
+      const imageOf = (slug: string) => headshot(slug) ?? espnHeadshot(espnOf.get(slug) ?? undefined);
       try {
         snapshot.wire = wireTargetsOf({
           slots: classicIn.slots, roster: classicIn.roster, pool: wirePool, rosters: spots ?? [], rosterId: league.rosterId,
           copies: Number(gm?.copies) || 1, injuries: injuries as Record<string, string>, week, slate, nowMs: Date.now(),
-          activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp, trend: wireMkt.trend, dyn: wireMkt.dyn,
+          activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp, trend: wireMkt.trend, dyn: wireMkt.dyn, imageOf,
         });
       } catch { snapshot.wire = []; }
       // SUGGESTED TRADES (v0.720.0): every seat's active players, valued for
@@ -1058,7 +1061,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
           slots: classicIn.slots, rosters, me: league.rosterId, valueOf: season,
           names: (slug) => meta.get(slug)?.full_name ?? slug,
           teamName: (rid) => teamName.get(rid) || teams[rid]?.team_name || `Team ${rid}`,
-          standings: standings as StandingsRow[], dyn: wireMkt.dyn,
+          standings: standings as StandingsRow[], dyn: wireMkt.dyn, imageOf,
         });
       } catch { snapshot.tradeIdeas = []; }
     }
