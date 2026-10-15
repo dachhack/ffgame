@@ -138,12 +138,12 @@ export interface WireTarget {
   /** Injury designations (v0.723.0): Q, D, O, IR … or null. */
   addInjury?: string | null; dropInjury?: string | null;
 }
-export type WireLens = 'now' | 'rebuild';
+export type WireLens = 'now' | 'rebuild' | 'devy';
 export const WIRE_KIND_LABEL: Record<WireClaim['kind'], string> = {
   hole: 'FILLS A HOLE', upgrade: 'UPGRADE', depth: 'DEPTH', bench: 'BETTER STASH',
 };
 export const WIRE_TARGETS_MAX = 3;
-export const WIRE_LENS_LABEL: Record<WireLens, string> = { now: 'WIN NOW', rebuild: 'REBUILD' };   // no emojis (v0.722.0)
+export const WIRE_LENS_LABEL: Record<WireLens, string> = { now: 'WIN NOW', rebuild: 'REBUILD', devy: 'DEVY' };   // no emojis (v0.722.0)
 /** A rebuild move must add at least this much dynasty market value — the
  *  market's noise between two fringe bodies is a few hundred. */
 export const REBUILD_MIN_GAIN = 250;
@@ -316,20 +316,25 @@ export const dynShort = (n: number | null | undefined): string => {
 };
 
 /** One target's detail line and its badge, worded once for both clients. */
+const lensHead = (w: WireTarget): string =>
+  w.lens === 'rebuild' ? `DYN ${dynShort(w.dyn)}` : w.lens === 'devy' ? `DEVY ${(w.dyn ?? 0).toFixed(1)}` : WIRE_KIND_LABEL[w.kind];
 export function wireTargetLine(w: WireTarget): string {
-  const head = w.lens === 'rebuild' ? `DYN ${dynShort(w.dyn)}` : WIRE_KIND_LABEL[w.kind];
+  const head = lensHead(w);
   const tr = trendLabel(w.netAdds);
   return `${tr ? `${tr} · ` : ''}${head}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`;
 }
 export const wireTargetBadge = (w: WireTarget): string | null =>
-  w.lens === 'rebuild' ? (w.dynGain ? `+${dynShort(w.dynGain)} DYN` : null) : (w.gain > 0 ? `+${w.gain.toFixed(1)}` : null);
+  w.lens === 'rebuild' ? (w.dynGain ? `+${dynShort(w.dynGain)} DYN` : null)
+    : w.lens === 'devy' ? (w.dynGain ? `+${w.dynGain.toFixed(1)} DEVY` : null)
+      : (w.gain > 0 ? `+${w.gain.toFixed(1)}` : null);
 
-/** A league's targets by lens. A league with no dynasty read is one group
- *  with no header (`lens` null); a dynasty league shows WIN NOW then REBUILD. */
+/** A league's targets by lens. A league with only this week's lens is one
+ *  group with no header (`lens` null); a dynasty or devy league shows WIN NOW,
+ *  then REBUILD, then DEVY. */
 export function wireLensGroups(targets: WireTarget[]): { lens: WireLens | null; rows: WireTarget[] }[] {
-  const dynasty = targets.some((t) => t.lens === 'rebuild' || t.dyn != null);
-  if (!dynasty) return [{ lens: null, rows: targets }];
-  return (['now', 'rebuild'] as WireLens[])
+  const lensed = targets.some((t) => (t.lens && t.lens !== 'now') || t.dyn != null);
+  if (!lensed) return [{ lens: null, rows: targets }];
+  return (['now', 'rebuild', 'devy'] as WireLens[])
     .map((lens) => ({ lens, rows: targets.filter((t) => (t.lens ?? 'now') === lens) }))
     .filter((g) => g.rows.length);
 }
@@ -351,7 +356,51 @@ export function tradeIdeaBadge(t: TradeIdea): string {
 /** A target's tag without the drop (v0.722.0) — the row draws the drop with
  *  his face: "12k adds · UPGRADE · claim", "DYN 5.0k". */
 export function wireTargetTag(w: WireTarget): string {
-  const head = w.lens === 'rebuild' ? `DYN ${dynShort(w.dyn)}` : WIRE_KIND_LABEL[w.kind];
+  const head = lensHead(w);
   const tr = trendLabel(w.netAdds);
   return `${tr ? `${tr} · ` : ''}${head}${w.dropName ? '' : ' · open spot'}${w.claim ? ' · claim' : ''}`;
+}
+
+// ── DEVY TARGETS (v0.725.0) ───────────────────────────────────────────────────
+// Founder: "Any way we can get waiver targets for devy leagues". A league with
+// DEVY SPOTS (0366) holds college players there — they never start, so the
+// lineup planner never sees them. This lens is the wire's college prospects by
+// their devy value (devy_base_values, 0417: StatHead's board on the 1–12 share
+// curve, in the league's 1QB/superflex format), each for an OPEN devy spot or
+// in place of your devy player worth least. A swap must add DEVY_MIN_GAIN.
+export const DEVY_MIN_GAIN = 1;
+export const isCollegeSlug = (slug: string): boolean => /^c-\d+$/.test(slug);
+export function devyTargetsOf(input: {
+  /** The league's devy spots (roster_shape.devy). */
+  devySlots: number;
+  /** My players in devy spots. */
+  mine: { slug: string; name: string; pos: string }[];
+  /** College players on the wire. */
+  available: { slug: string; name: string; pos: string; team: string | null; held: boolean }[];
+  valueOf: (slug: string) => number | null;
+  imageOf?: (slug: string) => string | null;
+  max?: number;
+}): WireTarget[] {
+  if (input.devySlots <= 0) return [];
+  const v = (slug: string) => Number(input.valueOf(slug)) || 0;
+  let open = Math.max(0, input.devySlots - input.mine.length);
+  const stash = input.mine.slice().sort((a, b) => v(a.slug) - v(b.slug) || a.slug.localeCompare(b.slug));
+  const pool = input.available.filter((p) => v(p.slug) > 0).sort((a, b) => v(b.slug) - v(a.slug) || a.slug.localeCompare(b.slug));
+  const out: WireTarget[] = [];
+  for (const p of pool) {
+    if (out.length >= (input.max ?? WIRE_TARGETS_MAX)) break;
+    const drop = open > 0 ? null : stash[0] ?? null;
+    if (open <= 0 && !drop) break;
+    const gain = v(p.slug) - (drop ? v(drop.slug) : 0);
+    if (drop && gain < DEVY_MIN_GAIN) break;   // the pool is sorted: nobody later clears it either
+    out.push({
+      add: p.slug, addName: p.name, pos: p.pos, team: p.team, drop: drop?.slug ?? null, dropName: drop?.name ?? null,
+      gain: 0, rosGain: 0, kind: drop ? 'bench' : 'depth', claim: p.held, netAdds: null,
+      lens: 'devy', dyn: v(p.slug), dynGain: Math.round(gain * 100) / 100,
+      addImage: input.imageOf?.(p.slug) ?? null, dropImage: drop ? input.imageOf?.(drop.slug) ?? null : null,
+    });
+    if (drop) { stash.shift(); stash.push({ slug: p.slug, name: p.name, pos: p.pos }); stash.sort((a, b) => v(a.slug) - v(b.slug) || a.slug.localeCompare(b.slug)); }
+    else open--;
+  }
+  return out;
 }

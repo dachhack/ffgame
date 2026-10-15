@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.725.0 — Devy waiver targets
+
+> - In leagues with devy spots, WAIVER TARGETS now has a DEVY section: the best college prospects on the wire by devy value, each for an open devy spot or in place of your devy player worth least.
+
+Founder: "Any way we can get waiver targets for devy leagues". College
+players sit only in devy spots (0366) and never start, so the lineup
+planner never suggested one. New core devyTargetsOf: the wire's college
+players (c-<espn_id>, not held by any seat) sorted by devy value
+(devy_base_values, 0417 — StatHead's board on the 1–12 share curve, in the
+league's 1QB/superflex format via dynFormatOfSlots), filling open devy spots
+first, then each replacing the cheapest stash when it adds at least
+DEVY_MIN_GAIN (1.0); a held prospect is a claim. The glance reads the top
+400 values once a day (cached per format) and only for leagues whose shape
+has devy spots. Targets carry lens 'devy'; WIRE_LENS_LABEL gains DEVY; the
+row reads "DEVY 11.2" with "+9.2 DEVY". NativeRosterRow's spot type gains
+'devy' (the database has had it since 0366). Devy SHARES leagues have no
+devy spots — prospects there trade on the market — so they get none.
+check:leaguetools extended. JavaScript only; no iPhone build.
+
 ### v0.724.0 — "my leagues" is always at the top
 
 > - The "my leagues" chip now sits at the top-left of the app wherever you are: inside a league, on the Admin, Recruit and Bullseye screens, and on the leagues list itself (where it refreshes your leagues). It stays put when the header slides away as you scroll.

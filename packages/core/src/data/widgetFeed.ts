@@ -41,8 +41,9 @@ import { winProbability } from '../engine/matchupBoard';
 import { setLeagueProjScoring, clearLeagueProjScoring, setLiveProjRate, clearLiveProjRate, liveProjRateMap, leagueCatalogOf } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
-import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, isDynastyContinuity, type LeaguePoolPlayer } from './liveApi';
-import { wireTargetsOf, type WireTarget } from './leagueTools';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, isDynastyContinuity, devyBaseValues, type LeaguePoolPlayer } from './liveApi';
+import { wireTargetsOf, devyTargetsOf, isCollegeSlug, type WireTarget } from './leagueTools';
+import { dynFormatOfSlots } from './dynastyMarket';
 import { tradeIdeasOf, type TradeIdea } from './tradeIdeas';
 import { projectedPoints } from '../engine/projScoring';
 import { setLeagueScoring, clearLeagueScoring, leagueScoring, scoringLeague, parseScoring } from '../engine/leagueScoring';
@@ -1044,6 +1045,37 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
           activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp, trend: wireMkt.trend, dyn: wireMkt.dyn, imageOf,
         });
       } catch { snapshot.wire = []; }
+      // DEVY TARGETS (v0.725.0): a league with devy spots also gets the wire's
+      // college prospects by devy value — for an open devy spot, or in place
+      // of the devy player worth least.
+      const devySlots = Number(gm?.shape?.devy) || 0;
+      if (devySlots > 0) {
+        try {
+          const fmt = dynFormatOfSlots(classicIn.slots);
+          const vals = await cached(`devyvals:${fmt}`, 24 * 60 * MIN, fresh, async () => {
+            const out: Record<string, number> = {};
+            for (const offset of [0, 200]) {
+              const pg = await devyBaseValues({ sort: fmt, limit: 200, offset }).catch(() => null);
+              for (const r of pg?.rows ?? []) out[`c-${r.espn_id}`] = Number(fmt === 'sf' ? r.value_sf ?? r.value_1qb : r.value_1qb) || 0;
+              if ((pg?.rows?.length ?? 0) < 200) break;
+            }
+            return out;
+          });
+          const held = new Set((spots ?? []).map((r) => r.slug));
+          const meta = new Map(wirePool.map((p) => [p.slug, p]));
+          const nowMs = Date.now();
+          const devy = devyTargetsOf({
+            devySlots,
+            mine: (spots ?? []).filter((r) => r.roster_id === league.rosterId && r.spot === 'devy')
+              .map((r) => ({ slug: r.slug, name: meta.get(r.slug)?.full_name ?? r.slug, pos: meta.get(r.slug)?.pos ?? '' })),
+            available: wirePool.filter((p) => isCollegeSlug(p.slug) && !held.has(p.slug))
+              .map((p) => ({ slug: p.slug, name: p.full_name, pos: p.pos, team: p.team || null, held: !!p.waived_until && Date.parse(p.waived_until) > nowMs })),
+            valueOf: (slug) => vals[slug] ?? null,
+            imageOf,
+          });
+          if (devy.length) snapshot.wire = [...(snapshot.wire ?? []), ...devy];
+        } catch { /* the NFL targets stand without it */ }
+      }
       // SUGGESTED TRADES (v0.720.0): every seat's active players, valued for
       // the season under the league's scoring (still installed here).
       try {
