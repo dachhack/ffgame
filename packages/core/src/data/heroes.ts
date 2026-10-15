@@ -33,6 +33,8 @@ export interface StakePlayer {
   count: number;
   status: 'pre' | 'live' | 'final';
   pts: number | null; proj: number | null;
+  /** His headshot (v0.718.0), when any league's glance had one. */
+  image?: string | null;
   /** The game he plays in this week, as `AWAY@HOME`, or null (bye, unknown team). */
   game: string | null;
 }
@@ -85,7 +87,7 @@ export function heroesVillains(snaps: WidgetSnapshot[], week: number | null = he
   const used = snaps.filter((s) => s.sides && s.week === week && s.phase !== 'bye' && s.phase !== 'idle');
   const by = new Map<string, StakePlayer>();
   const take = (p: SidePlayer, side: 'hero' | 'villain', s: WidgetSnapshot) => {
-    const at = by.get(p.slug) ?? { slug: p.slug, name: p.name, pos: p.pos, team: p.team, heroIn: [], villainIn: [], count: 0, status: p.status, pts: p.pts, proj: p.proj, game: gameKey(week, p.team) };
+    const at = by.get(p.slug) ?? { slug: p.slug, name: p.name, pos: p.pos, team: p.team, heroIn: [], villainIn: [], count: 0, status: p.status, pts: p.pts, proj: p.proj, image: p.image ?? null, game: gameKey(week, p.team) };
     const lg: StakeLeague = { leagueId: s.leagueId, leagueName: s.leagueName, opponent: s.them?.name ?? 'Opponent' };
     const list = side === 'hero' ? at.heroIn : at.villainIn;
     if (!list.some((l) => l.leagueId === s.leagueId)) list.push(lg);
@@ -93,6 +95,7 @@ export function heroesVillains(snaps: WidgetSnapshot[], week: number | null = he
     // and position from whichever league knew them.
     if (at.pts == null && p.pts != null) at.pts = p.pts;
     if (at.proj == null && p.proj != null) at.proj = p.proj;
+    if (!at.image && p.image) at.image = p.image;
     if (!at.team && p.team) { at.team = p.team; at.game = gameKey(week, p.team); }
     if (!at.pos && p.pos) at.pos = p.pos;
     if (rank[p.status] < rank[at.status]) at.status = p.status;
@@ -144,3 +147,22 @@ export function heroesVillains(snaps: WidgetSnapshot[], week: number | null = he
   }
   return { week, heroes, villains, conflicted, games: keyGames, quads, sealed, leagues: used.length };
 }
+
+// ── THE PREVIEW (v0.718.0) ────────────────────────────────────────────────────
+// Founder: "Change Heroes and Villains to Preview … key games listed with just
+// the number of players … quad box … just the two most consequential on your
+// team and on opposing team. Click to show all players."
+/** A game's two most consequential players a side (the stake order: most of
+ *  your matchups first, then the projection), and how many more there are. */
+export function gameFaces(g: KeyGame, n = 2): { mine: StakePlayer[]; theirs: StakePlayer[]; more: number } {
+  const mine = g.heroes.slice(0, n), theirs = g.villains.slice(0, n);
+  return { mine, theirs, more: g.heroes.length + g.villains.length - mine.length - theirs.length };
+}
+/** "3 yours · 2 theirs" — a key game's players as counts. */
+export const gameCounts = (g: KeyGame): string =>
+  [g.heroes.length ? `${g.heroes.length} yours` : '', g.villains.length ? `${g.villains.length} theirs` : ''].filter(Boolean).join(' · ') || 'nobody of yours';
+/** What each Preview tab is — the ⓘ beside the tab row, never a line under it. */
+export const PREVIEW_INFO = 'HEROES — your starters across your matchups; ×N is how many of your matchups he starts in.\n\n'
+  + 'VILLAINS — starting against you; ×N is how many of your opponents start him. A sealed drip slot shows once its game kicks off.\n\n'
+  + 'KEY GAMES — ranked by how many of your matchups each game touches. Tap one for its players.\n\n'
+  + 'QUAD BOX — for each window with several games, the four screens to put up, with the two players who matter most on each side. Tap a game for all of them.';

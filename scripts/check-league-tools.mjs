@@ -4,6 +4,8 @@
 // waiver targets, trade zone, etc." Pins the folds (lineup alerts, the trade
 // zone) and that both clients draw the bar. Run: npx tsx scripts/check-league-tools.mjs
 import { readFileSync } from 'node:fs';
+import { gameFaces, gameCounts } from '../packages/core/src/data/heroes';
+import { toggleToolLeague, toolHas, forTool, toolLeaguesOffCount, parseToolLeagues } from '../packages/core/src/data/toolLeagues';
 import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel, wireLensGroups, wireTargetLine, wireTargetBadge } from '../packages/core/src/data/leagueTools';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 let fails = 0;
@@ -91,12 +93,38 @@ ok('both: the leagues list asks the glance for waiver targets', phone.includes('
 ok('phone: the leagues page carries the bar, not the lone H&V card', phone.includes('<LeagueToolsBar snaps={Object.values(glance)}') && !phone.includes('<HeroesVillains'));
 ok('web: the leagues page carries the bar, not the lone H&V card', web.includes('<LeagueToolsBar snaps={Object.values(glance)} onFields={onFields}') && !web.includes('<HeroesVillains'));
 for (const [n, src] of [['phone', pbar], ['web', wbar]]) {
-  ok(`${n}: fields, heroes & villains, lineup and trade zone on the bar`, src.includes('▦ ALL FIELDS') && src.includes('HEROES') && src.includes('🧭 LINEUP') && src.includes('🔁 TRADE ZONE') && src.includes('📈 WAIVER TARGETS'));
+  ok(`${n}: fields, preview, lineup, waiver targets, trade zone and options on the bar — no emojis`, src.includes('ALL FIELDS') && src.includes('PREVIEW') && src.includes('`LINEUP${') && src.includes('`WAIVER TARGETS${') && src.includes('`TRADE ZONE${') && src.includes('`OPTIONS${') && !/[▦⚔🧭📈🔁]/u.test(src));
+  ok(`${n}: each tool reads only the leagues OPTIONS leaves it`, src.includes("forTool(off, 'preview', snaps)") || src.includes("snapsFor('preview')"));
   ok(`${n}: a waiver target row is worded by core, grouped by lens`, src.includes('wireTargetLine(w)') && src.includes('wireTargetBadge(w)') && src.includes('wireLensGroups(l.targets)'));
-  ok(`${n}: heroes & villains opens bare in its sheet`, src.includes('<HeroesVillains snaps={snaps} bare />'));
+  ok(`${n}: the preview opens on the leagues its options leave it`, src.includes('<HeroesVillains snaps={previewSnaps} />'));
 }
 ok('phone: the bar scrolls sideways', pbar.includes('<ScrollView horizontal'));
 ok('web: the bar scrolls sideways, never wraps', wbar.includes("flexWrap: 'nowrap', overflowX: 'auto'"));
+
+// ── the preview (v0.718.0) ───────────────────────────────────────────────
+const P = (slug, count, proj) => ({ slug, name: slug, count, proj, heroIn: [], villainIn: [] });
+const kg = { key: 'A@B', heroes: [P('h1', 3, 10), P('h2', 2, 9), P('h3', 1, 8)], villains: [P('v1', 2, 7), P('v2', 1, 6), P('v3', 1, 5), P('v4', 1, 4)] };
+const gf = gameFaces(kg);
+ok('preview: a quad game shows the first two a side, the rest counted', gf.mine.map((p) => p.slug).join() === 'h1,h2' && gf.theirs.map((p) => p.slug).join() === 'v1,v2' && gf.more === 3, gf);
+ok('preview: a key game reads as counts', gameCounts(kg) === '3 yours · 4 theirs' && gameCounts({ heroes: [], villains: [] }) === 'nobody of yours');
+// ── tool options (v0.718.0) ──────────────────────────────────────────────
+let tl = toggleToolLeague({}, 'wire', 'L1');
+ok('options: a league switched off leaves only that tool', !toolHas(tl, 'wire', 'L1') && toolHas(tl, 'lineup', 'L1') && toolHas(tl, 'wire', 'L2'));
+ok('options: a tool reads only its leagues', forTool(tl, 'wire', [{ leagueId: 'L1' }, { leagueId: 'L2' }]).map((x) => x.leagueId).join() === 'L2');
+tl = toggleToolLeague(tl, 'wire', 'L1');
+ok('options: switched back on', toolHas(tl, 'wire', 'L1'));
+ok('options: the count is what is off in leagues you are in', toolLeaguesOffCount({ wire: ['L1', 'gone'], trades: ['L1'] }, ['L1']) === 2);
+ok('options: a stored value that is junk reads as nothing off', JSON.stringify(parseToolLeagues('nope')) === '{}' && JSON.stringify(parseToolLeagues('{"wire":["a",3],"x":["b"]}')) === '{"wire":["a"]}');
+for (const [n, path] of [['phone', 'apps/mobile/src/ui/HeroesVillains.tsx'], ['web', 'src/screens/HeroesVillains.tsx']]) {
+  const src = read(path);
+  ok(`${n} preview: faces on every player row`, src.includes('p.image') && src.includes('face(p, side)'));
+  ok(`${n} preview: key games as counts, players on a tap`, src.includes('yours`') && src.includes('theirs`') && src.includes('{open && all(g)}'));
+  ok(`${n} preview: the quad box shows two a side (gameFaces), all on a tap`, src.includes('gameFaces(g)') && src.includes('open ? all(g)'));
+  ok(`${n} preview: one tab row that never wraps, the explanations in its ⓘ`, src.includes('PREVIEW_INFO') && !src.includes("flexWrap: 'wrap'") && !src.includes('Ranked by how many'));
+  ok(`${n} preview: no summary line above the tabs`, !src.includes('summary'));
+}
+const lo = read('src/screens/LiveOnboard.tsx');
+ok('web: the leagues header has no fields chip (the bar has ALL FIELDS)', !lo.includes('▦ fields</button>'));
 
 if (fails) { console.log(`\n${fails} LEAGUE-TOOLS ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL LEAGUE-TOOLS ASSERTIONS PASSED');
