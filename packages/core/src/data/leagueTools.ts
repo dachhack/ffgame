@@ -15,11 +15,14 @@
 //     week's lineup, and whom he'd replace. Computed with each league's glance
 //     (widgetSnapshot's `wire`), under the league's own scoring — and, since
 //     v0.716.1, Sleeper's trending adds and drops, as the AI seats read them.
+//     DYNASTY (v0.717.0): two lenses — ⚡ WIN NOW (this week and season) and
+//     🌱 REBUILD (the dynasty market) — and neither ever drops a player worth
+//     more in dynasty than the one coming in.
 // Pure folds + a loader; both clients draw them.
 import type { WidgetSnapshot, WidgetFix } from './widgetFeed';
 import { leagueTrades, tradeSignals, matchupTeams, leaguePoolNames, type TradeRow, type TradeSignalRow, type LeaguePoolPlayer, type NativeRosterRow } from './liveApi';
-import { seatWirePlan, shortlistWire, trendMomentum, type WirePlayer, type WireClaim } from '../engine/seatWaivers';
-import { slateAwareProj, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
+import { seatWirePlan, shortlistWire, trendMomentum, uncoveredSpots, type WirePlayer, type WireClaim } from '../engine/seatWaivers';
+import { slateAwareProj, optimalLineup, slotAllows, type ClassicSlotDef, type SpotPlayer } from '../engine/classic';
 import { projectedPoints } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { normTeam } from './teamCodes';
@@ -124,11 +127,21 @@ export interface WireTarget {
   /** THE WIRE'S MOMENTUM (v0.716.1): Sleeper's trending adds less drops for
    *  him, when the board is fresh and he is moving; null when he isn't. */
   netAdds?: number | null;
+  /** DYNASTY (v0.717.0): which lens found him — absent reads as 'now'. */
+  lens?: WireLens;
+  /** His dynasty market value, and what the move adds to yours (REBUILD). */
+  dyn?: number | null;
+  dynGain?: number | null;
 }
+export type WireLens = 'now' | 'rebuild';
 export const WIRE_KIND_LABEL: Record<WireClaim['kind'], string> = {
   hole: 'FILLS A HOLE', upgrade: 'UPGRADE', depth: 'DEPTH', bench: 'BETTER STASH',
 };
 export const WIRE_TARGETS_MAX = 3;
+export const WIRE_LENS_LABEL: Record<WireLens, string> = { now: '⚡ WIN NOW', rebuild: '🌱 REBUILD' };
+/** A rebuild move must add at least this much dynasty market value — the
+ *  market's noise between two fringe bodies is a few hundred. */
+export const REBUILD_MIN_GAIN = 250;
 
 /** The wire for one seat, the way the AI seats read it (server/src/seatWire.js):
  *  this week's value (byes, Outs and play risk priced), a healthy read that
@@ -155,6 +168,10 @@ export function wireTargetsOf(input: {
    *  Priced by trendMomentum exactly as the AI seats price it (v0.642.0): it
    *  lifts a trending body's season lens, never makes a rostered man cheaper. */
   trend?: Record<string, { a: number; d: number }> | null;
+  /** DYNASTY (v0.717.0): the league's dynasty market (league_market's `dyn`,
+   *  resolved to its 1QB/superflex format). Given, no suggestion drops a
+   *  player worth more on it than the add, and a REBUILD lens is planned too. */
+  dyn?: Record<string, number> | null;
   max?: number;
 }): WireTarget[] {
   const { slots, roster, pool, rosters, rosterId, injuries, week, slate, nowMs } = input;
@@ -194,19 +211,68 @@ export function wireTargetsOf(input: {
   const momentumOf = (p: SpotPlayer) => { const t = trend[p.id]; return t ? trendMomentum(t.a, t.d) : 0; };
   const candidates = shortlistWire(available, (p) => rosValueOf(p) + momentumOf(p), undefined, { slots, roster: mine });
   const openSeats = input.activeSeats != null ? Math.max(0, input.activeSeats - roster.length) : 0;
+  const dynMap = input.dyn && Object.keys(input.dyn).length ? input.dyn : null;
+  const dynOf = (p: { id: string }) => Number(dynMap?.[p.id]) || 0;
   const plan = seatWirePlan(slots, mine, candidates, valueOf, {
     faab: false, budget: 0, openSeats, maxClaims: input.max ?? WIRE_TARGETS_MAX, rosValueOf, healthyValueOf, momentumOf,
+    keepValueOf: dynMap ? dynOf : undefined,
   });
   const byId = new Map(available.map((p) => [p.id, p]));
-  return plan.map((c) => {
+  const now: WireTarget[] = plan.map((c) => {
     const a = byId.get(c.add);
     return {
       add: c.add, addName: names.get(c.add) ?? c.add, pos: a?.pos ?? '', team: a?.team ?? null,
       drop: c.drop, dropName: c.drop ? names.get(c.drop) ?? c.drop : null,
       gain: Math.round(c.gain * 10) / 10, rosGain: Math.round(c.rosGain * 10) / 10, kind: c.kind, claim: c.onWaivers,
       netAdds: trend[c.add] && momentumOf({ id: c.add, pos: '' }) !== 0 ? (Number(trend[c.add].a) || 0) - (Number(trend[c.add].d) || 0) : null,
+      lens: 'now' as WireLens, dyn: dynMap ? dynOf({ id: c.add }) : null, dynGain: null,
     };
   });
+  if (!dynMap) return now;
+  return [...now, ...rebuildTargets({ slots, mine, available, names, dynOf, healthyValueOf, openSeats, max: input.max ?? WIRE_TARGETS_MAX })];
+}
+
+/** 🌱 REBUILD (v0.717.0): the best dynasty assets on the wire, each for the
+ *  bench body worth least on the dynasty market. Never a starter this week
+ *  (healthy read), never the only body for a spot, and never a move that
+ *  adds under REBUILD_MIN_GAIN — so never a dynasty loss. A position no
+ *  spot accepts is no asset here. */
+function rebuildTargets(o: {
+  slots: ClassicSlotDef[]; mine: SpotPlayer[]; available: WirePlayer[]; names: Map<string, string>;
+  dynOf: (p: { id: string }) => number; healthyValueOf: (p: SpotPlayer, d?: ClassicSlotDef) => number;
+  openSeats: number; max: number;
+}): WireTarget[] {
+  const { slots, dynOf } = o;
+  let have = [...o.mine];
+  let seats = o.openSeats;
+  const out: WireTarget[] = [];
+  const pool = o.available
+    .filter((p) => dynOf(p) > 0 && slots.some((d) => slotAllows(d, p)))
+    .sort((a, b) => dynOf(b) - dynOf(a) || a.id.localeCompare(b.id));
+  for (const cand of pool) {
+    if (out.length >= o.max) break;
+    let drop: SpotPlayer | null = null;
+    if (seats <= 0) {
+      const starting = new Set(optimalLineup(slots, have, o.healthyValueOf).spots.flatMap((r) => (r.player ? [r.player.id] : [])));
+      const gaps = uncoveredSpots(slots, have).length;
+      drop = have
+        .filter((p) => !starting.has(p.id) && uncoveredSpots(slots, have.filter((q) => q.id !== p.id)).length <= gaps)
+        .sort((a, b) => dynOf(a) - dynOf(b) || a.id.localeCompare(b.id))[0] ?? null;
+      if (!drop) break;
+    }
+    const gain = dynOf(cand) - (drop ? dynOf(drop) : 0);
+    if (gain < REBUILD_MIN_GAIN) continue;
+    out.push({
+      add: cand.id, addName: o.names.get(cand.id) ?? cand.id, pos: cand.pos, team: cand.team ?? null,
+      drop: drop?.id ?? null, dropName: drop ? o.names.get(drop.id) ?? drop.id : null,
+      gain: 0, rosGain: 0, kind: drop ? 'bench' : 'depth', claim: cand.held ?? cand.onWaivers, netAdds: null,
+      lens: 'rebuild', dyn: dynOf(cand), dynGain: gain,
+    });
+    if (drop) have = have.filter((p) => p.id !== drop!.id);
+    else seats--;
+    have = have.concat(cand);
+  }
+  return out;
 }
 
 export interface WireTargetLeague { leagueId: string; rosterId: number; leagueName: string; weekLabel: string; targets: WireTarget[] }
@@ -217,7 +283,7 @@ export function wireTargets(snaps: (WidgetSnapshot | null | undefined)[]): WireT
     if (!s?.wire?.length) continue;
     out.push({ leagueId: s.leagueId, rosterId: s.rosterId, leagueName: s.leagueName, weekLabel: s.weekLabel, targets: s.wire });
   }
-  const top = (l: WireTargetLeague) => Math.max(...l.targets.map((t) => t.gain));
+  const top = (l: WireTargetLeague) => Math.max(0, ...l.targets.map((t) => t.gain));
   return out.sort((a, b) => top(b) - top(a) || a.leagueName.localeCompare(b.leagueName));
 }
 export const wireTargetCount = (snaps: (WidgetSnapshot | null | undefined)[]): number =>
@@ -229,4 +295,29 @@ export function trendLabel(netAdds: number | null | undefined): string | null {
   const n = Math.abs(netAdds);
   const txt = n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n);
   return netAdds > 0 ? `🔥 ${txt} adds` : `📉 ${txt} drops`;
+}
+
+/** "4.3k" — a dynasty market number, short. */
+export const dynShort = (n: number | null | undefined): string => {
+  const v = Math.round(Number(n) || 0);
+  return Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v);
+};
+
+/** One target's detail line and its badge, worded once for both clients. */
+export function wireTargetLine(w: WireTarget): string {
+  const head = w.lens === 'rebuild' ? `DYN ${dynShort(w.dyn)}` : WIRE_KIND_LABEL[w.kind];
+  const tr = trendLabel(w.netAdds);
+  return `${tr ? `${tr} · ` : ''}${head}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`;
+}
+export const wireTargetBadge = (w: WireTarget): string | null =>
+  w.lens === 'rebuild' ? (w.dynGain ? `+${dynShort(w.dynGain)} DYN` : null) : (w.gain > 0 ? `+${w.gain.toFixed(1)}` : null);
+
+/** A league's targets by lens. A league with no dynasty read is one group
+ *  with no header (`lens` null); a dynasty league shows WIN NOW then REBUILD. */
+export function wireLensGroups(targets: WireTarget[]): { lens: WireLens | null; rows: WireTarget[] }[] {
+  const dynasty = targets.some((t) => t.lens === 'rebuild' || t.dyn != null);
+  if (!dynasty) return [{ lens: null, rows: targets }];
+  return (['now', 'rebuild'] as WireLens[])
+    .map((lens) => ({ lens, rows: targets.filter((t) => (t.lens ?? 'now') === lens) }))
+    .filter((g) => g.rows.length);
 }

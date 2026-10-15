@@ -4,7 +4,7 @@
 // waiver targets, trade zone, etc." Pins the folds (lineup alerts, the trade
 // zone) and that both clients draw the bar. Run: npx tsx scripts/check-league-tools.mjs
 import { readFileSync } from 'node:fs';
-import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel } from '../packages/core/src/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount, trendLabel, wireLensGroups, wireTargetLine, wireTargetBadge } from '../packages/core/src/data/leagueTools';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 let fails = 0;
 const ok = (name, cond, got) => { if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); } else console.log(`ok   ${name}`); };
@@ -59,11 +59,29 @@ const t0 = wireTargetsOf(tIn(null)), t1 = wireTargetsOf(tIn({ 'breece-hall': { a
 ok('momentum: a point apart, the trending back overtakes the flat one', t0[0]?.add === 'kyren-williams' && t1[0]?.add === 'breece-hall' && t1[0]?.netAdds === 59000, [t0[0], t1[0]]);
 ok('momentum: no trend, no tag', t0[0]?.netAdds == null);
 ok('momentum: the tag reads in words', trendLabel(59000) === '🔥 59k adds' && trendLabel(1234) === '🔥 1.2k adds' && trendLabel(-800) === '📉 800 drops' && trendLabel(null) === null && trendLabel(0) === null);
+// DYNASTY (v0.717.0): win now, rebuild, and never a dynasty loss.
+const me3 = (bench) => [{ slug: 'bijan-robinson', full: 'Bijan Robinson', pos: 'RB', team: null }, { slug: 'jonathan-taylor', full: 'Jonathan Taylor', pos: 'RB', team: null }, bench];
+const dIn = (bench, pool, dyn) => wireIn({ roster: me3(bench), pool, rosters: me3(bench).map((p) => ({ roster_id: 3, slug: p.slug, acquired: 'draft' })), activeSeats: 3, dyn });
+const stash = { slug: 'young-stash', full: 'Young Stash', pos: 'RB', team: null };
+const d0 = wireTargetsOf(dIn(stash, [prow('derrick-henry', 'Derrick Henry')], null));
+const d1 = wireTargetsOf(dIn(stash, [prow('derrick-henry', 'Derrick Henry')], { 'young-stash': 7000, 'derrick-henry': 1500 }));
+ok('dynasty: redraft-style, a zero-projection bench body goes for a real back', d0.some((t) => t.drop === 'young-stash'), d0);
+ok('dynasty: no suggestion drops a player worth more on the dynasty market', !d1.some((t) => t.drop === 'young-stash'), d1);
+const henry = { slug: 'derrick-henry', full: 'Derrick Henry', pos: 'RB', team: null };
+const d2 = wireTargetsOf(dIn(henry, [prow('young-a', 'Young A'), prow('young-b', 'Young B')], { 'derrick-henry': 1500, 'young-a': 5000, 'young-b': 1600, 'bijan-robinson': 11000, 'jonathan-taylor': 6100 }));
+const reb = d2.filter((t) => t.lens === 'rebuild');
+ok('rebuild: the best dynasty asset for the bench body worth least, never a starter', reb[0]?.add === 'young-a' && reb[0]?.drop === 'derrick-henry' && reb[0]?.dynGain === 3500, d2);
+ok('rebuild: a move under the market\'s noise is no move', !reb.some((t) => t.add === 'young-b'), reb);
+ok('win now: still never drops the season\'s better player for a stash', !d2.some((t) => (t.lens ?? 'now') === 'now' && t.drop === 'derrick-henry' && t.add === 'young-a'), d2);
+const groups = wireLensGroups(d2);
+ok('lenses: a dynasty league groups WIN NOW before REBUILD; a redraft one has no header', groups.map((g) => g.lens).join() === (d2.some((t) => t.lens === 'now') ? 'now,rebuild' : 'rebuild') && wireLensGroups(w1)[0].lens === null, groups.map((g) => g.lens));
+ok('lenses: a rebuild row reads in dynasty value', wireTargetLine(reb[0]).startsWith('DYN 5.0k · drop Derrick Henry') && wireTargetBadge(reb[0]) === '+3.5k DYN', [wireTargetLine(reb[0]), wireTargetBadge(reb[0])]);
 const ws = (id, name, gain) => ({ leagueId: id, rosterId: 1, leagueName: name, weekLabel: 'WK 7', wire: gain == null ? [] : [{ add: 'x', addName: 'X', pos: 'RB', team: null, drop: null, dropName: null, gain, rosGain: 0, kind: 'hole', claim: false }] });
 const wt = wireTargets([ws('a', 'Alpha', 2), ws('b', 'Beta', 9), ws('c', 'Gamma', null), null]);
 ok('wire: leagues with targets only, biggest gain first; the count is every target', wt.map((l) => l.leagueId).join() === 'b,a' && wireTargetCount([ws('a', 'A', 2), ws('b', 'B', 1)]) === 2, wt.map((l) => l.leagueId));
 const feed = read('packages/core/src/data/widgetFeed.ts');
-ok('momentum: the glance hands the market\'s trend to the planner', feed.includes('m?.trend ?? null') && feed.includes('trend: wireTrend'));
+ok('momentum: the glance hands the market\'s trend to the planner', feed.includes('trend: m?.trend ?? null') && feed.includes('trend: wireMkt.trend'));
+ok('dynasty: the glance reads the market\'s dyn for a dynasty league only', feed.includes('dyn: league.dynasty ? m?.dyn ?? null : null') && feed.includes('isDynastyContinuity(e.league?.continuity)'));
 ok('wire: the glance plans it only when asked, never for a weekly contest', feed.includes('const wantWire = !!opts.wire && classic') && feed.includes("league.kind !== 'dfs' && league.kind !== 'bullseye'"));
 
 // ── both clients draw the bar ─────────────────────────────────────────────
@@ -74,7 +92,7 @@ ok('phone: the leagues page carries the bar, not the lone H&V card', phone.inclu
 ok('web: the leagues page carries the bar, not the lone H&V card', web.includes('<LeagueToolsBar snaps={Object.values(glance)} onFields={onFields}') && !web.includes('<HeroesVillains'));
 for (const [n, src] of [['phone', pbar], ['web', wbar]]) {
   ok(`${n}: fields, heroes & villains, lineup and trade zone on the bar`, src.includes('▦ ALL FIELDS') && src.includes('HEROES') && src.includes('🧭 LINEUP') && src.includes('🔁 TRADE ZONE') && src.includes('📈 WAIVER TARGETS'));
-  ok(`${n}: a waiver target row carries its trend tag`, src.includes('trendLabel(w.netAdds)'));
+  ok(`${n}: a waiver target row is worded by core, grouped by lens`, src.includes('wireTargetLine(w)') && src.includes('wireTargetBadge(w)') && src.includes('wireLensGroups(l.targets)'));
   ok(`${n}: heroes & villains opens bare in its sheet`, src.includes('<HeroesVillains snaps={snaps} bare />'));
 }
 ok('phone: the bar scrolls sideways', pbar.includes('<ScrollView horizontal'));

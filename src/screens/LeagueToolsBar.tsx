@@ -8,7 +8,7 @@
 // wrapping; each opens its tool in a sheet. Counts are what wants an answer.
 import { useEffect, useMemo, useState } from 'react';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, WIRE_KIND_LABEL, trendLabel, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { Sheet } from '../app/ui';
 import { HeroesVillains } from './HeroesVillains';
 
@@ -96,15 +96,20 @@ export function LeagueToolsBar({ snaps, leagues, onFields, onOpenLeague }: {
                   <span className="mono" style={mono(10)}>{l.weekLabel}</span>
                   <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>→</span>
                 </span>
-                {l.targets.map((w) => (
-                  <span key={w.add} style={{ display: 'grid', gap: 1 }}>
-                    <span style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {`+ ${w.addName}`} <span className="mono" style={mono(10)}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</span>
+                {wireLensGroups(l.targets).map((g) => (
+                  <span key={g.lens ?? 'all'} style={{ display: 'grid', gap: 6 }}>
+                    {g.lens && <span className="mono" style={{ ...mono(9.5, g.lens === 'now' ? 'var(--you)' : 'var(--faint)'), fontWeight: 700, letterSpacing: '0.14em' }}>{WIRE_LENS_LABEL[g.lens]}</span>}
+                    {g.rows.map((w) => (
+                      <span key={`${g.lens}:${w.add}`} style={{ display: 'grid', gap: 1 }}>
+                        <span style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {`+ ${w.addName}`} <span className="mono" style={mono(10)}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</span>
+                          </span>
+                          {wireTargetBadge(w) && <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>{wireTargetBadge(w)}</span>}
+                        </span>
+                        <span className="mono" style={mono(11, 'var(--dim)')}>{wireTargetLine(w)}</span>
                       </span>
-                      {w.gain > 0 && <span className="mono" style={{ ...mono(11, 'var(--you)'), fontWeight: 700 }}>{`+${w.gain.toFixed(1)}`}</span>}
-                    </span>
-                    <span className="mono" style={mono(11, 'var(--dim)')}>{`${trendLabel(w.netAdds) ? `${trendLabel(w.netAdds)} · ` : ''}${WIRE_KIND_LABEL[w.kind]}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`}</span>
+                    ))}
                   </span>
                 ))}
               </button>

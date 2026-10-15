@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { WidgetSnapshot } from '@drip/core/data/widgetFeed';
-import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, WIRE_KIND_LABEL, trendLabel, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, wireTargets, wireTargetCount, wireLensGroups, wireTargetLine, wireTargetBadge, WIRE_LENS_LABEL, loadTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, TRADE_ZONE_TITLE, type TradeZoneItem } from '@drip/core/data/leagueTools';
 import { useTheme, MONO, alpha } from '../theme.native';
 import { tap } from './feedback';
 import { Chip, Mono } from './prims';
@@ -96,17 +96,20 @@ export function LeagueToolsBar({ snaps, leagues, onOpenLeague }: {
                 <Mono size={9} tone="faint">{l.weekLabel}</Mono>
                 <Mono size={10} tone="you" weight="700">→</Mono>
               </View>
-              {l.targets.map((w) => (
-                <View key={w.add} style={{ gap: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>
-                      {`+ ${w.addName}`} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</Text>
-                    </Text>
-                    {w.gain > 0 && <Mono size={10} tone="you" weight="700">{`+${w.gain.toFixed(1)}`}</Mono>}
-                  </View>
-                  <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10.5, lineHeight: 15, color: t.dim }}>
-                    {`${trendLabel(w.netAdds) ? `${trendLabel(w.netAdds)} · ` : ''}${WIRE_KIND_LABEL[w.kind]}${w.dropName ? ` · drop ${w.dropName}` : ' · open spot'}${w.claim ? ' · claim' : ''}`}
-                  </Text>
+              {wireLensGroups(l.targets).map((g) => (
+                <View key={g.lens ?? 'all'} style={{ gap: 6 }}>
+                  {g.lens && <Mono size={8.5} weight="700" track={0.14} tone={g.lens === 'now' ? 'you' : 'faint'}>{WIRE_LENS_LABEL[g.lens]}</Mono>}
+                  {g.rows.map((w) => (
+                    <View key={`${g.lens}:${w.add}`} style={{ gap: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, fontWeight: '700', color: t.text }}>
+                          {`+ ${w.addName}`} <Text style={{ fontFamily: MONO, fontSize: 10, color: t.faint }}>{`${w.pos}${w.team ? ` · ${w.team}` : ''}`}</Text>
+                        </Text>
+                        {wireTargetBadge(w) && <Mono size={10} tone="you" weight="700">{wireTargetBadge(w)}</Mono>}
+                      </View>
+                      <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: 10.5, lineHeight: 15, color: t.dim }}>{wireTargetLine(w)}</Text>
+                    </View>
+                  ))}
                 </View>
               ))}
             </Pressable>
