@@ -22,6 +22,42 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.717.0 — Dynasty waiver targets: win now and rebuild
+
+> - In dynasty leagues, 📈 WAIVER TARGETS splits into ⚡ WIN NOW (who helps this week and this season) and 🌱 REBUILD (the best dynasty assets on the wire, each for your bench player worth least on the dynasty market).
+> - No waiver suggestion in a dynasty league ever has you drop a player worth more in dynasty value than the one you'd add.
+
+Founder: "for dynasty leagues, make win now waiver suggestions and rebuild
+suggestions, also make sure waiver suggestions are not long-term dynasty
+value losses." WidgetLeague gains `dynasty` (league.dynasty or a dynasty
+continuity); the glance's market read (now `wiremkt:`, an hour) carries
+league_market's `dyn` — resolved to the league's 1QB/superflex format — for
+those leagues. Engine: WireOpts.keepValueOf (optional; the worker's AI seats
+don't pass it) sorts the bench lowest-long-term-value first and refuses any
+claim (upgrade, hole or bench swap) whose drop is worth more on it than the
+add. leagueTools: WIN NOW is the existing planner with keepValueOf = dyn;
+REBUILD (rebuildTargets) walks the wire by dyn, drops the lowest-dyn body
+who wouldn't start healthy and isn't a spot's only cover, needs
+REBUILD_MIN_GAIN (250) of dyn, up to 3. Targets carry `lens`, `dyn`,
+`dynGain`; wireLensGroups / wireTargetLine / wireTargetBadge word the rows
+once for both bars. check:leaguetools extended. JavaScript only; no iPhone
+build.
+
+### v0.716.1 — Waiver targets read the trend
+
+> - 📈 WAIVER TARGETS now weighs what the wire is doing: a player Sleeper managers are adding in bulk ranks ahead of a flat one with a similar projection, and his row shows it ("🔥 12k adds").
+
+Founder: "Let's add trending momentum to waiver targets." The glance reads
+league_market's `trend` (Sleeper's trending adds/drops, 0340; the RPC hands
+it back empty once the board is stale), cached an hour, and
+wireTargetsOf prices it with core's trendMomentum exactly as
+server/src/seatWire.js does for the AI seats (v0.642.0): shortlisted by
+season value + momentum and passed to seatWirePlan as `momentumOf`, so it
+lifts a candidate's season lens and never cheapens a drop. A target carries
+`netAdds` when his momentum is non-zero; trendLabel words it. Both tools
+bars print it on the row. check:leaguetools extended. JavaScript only; no
+iPhone build.
+
 ### v0.716.0 — Waiver targets on the league tools bar
 
 > - The tools bar has 📈 WAIVER TARGETS: in each of your leagues, who on the wire would help this week's lineup, how many points he adds, and whom he'd replace (or that an open spot takes him). A player still in his waiver hold is marked as a claim.

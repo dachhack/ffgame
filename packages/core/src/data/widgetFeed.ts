@@ -41,7 +41,7 @@ import { winProbability } from '../engine/matchupBoard';
 import { setLeagueProjScoring, clearLeagueProjScoring, setLiveProjRate, clearLiveProjRate, liveProjRateMap, leagueCatalogOf } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
-import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, type LeaguePoolPlayer } from './liveApi';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, isDynastyContinuity, type LeaguePoolPlayer } from './liveApi';
 import { wireTargetsOf, type WireTarget } from './leagueTools';
 import { setLeagueScoring, clearLeagueScoring, leagueScoring, scoringLeague, parseScoring } from '../engine/leagueScoring';
 import { platform } from '../platform';
@@ -232,6 +232,9 @@ export interface WidgetLeague {
   /** league.kind (0466): 'dfs' / 'bullseye' is a weekly CONTEST league, whose
    *  squads stay sealed until kickoff (v0.713.9). */
   kind?: string;
+  /** A dynasty league (v0.717.0): waiver targets plan a REBUILD lens too and
+   *  never suggest a dynasty-value loss. */
+  dynasty?: boolean;
 }
 
 /** A contest league's opponent is sealed until the week's LAST game kicks off
@@ -251,6 +254,7 @@ export function widgetLeagues(enr: Enrollment[]): WidgetLeague[] {
       gameMode: e.league?.game_mode === 'classic' ? 'classic' : 'drip',
       pickUserId: e.pick_user_id,
       kind: e.league?.kind ?? undefined,
+      dynasty: e.league?.dynasty === true || isDynastyContinuity(e.league?.continuity),
     }));
 }
 
@@ -975,7 +979,15 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
   // WAIVER TARGETS (v0.716.0): the wire is the whole pool less what is held.
   // Not for a weekly contest — it has no wire.
   const wantWire = !!opts.wire && classic && !!gm?.ok && league.kind !== 'dfs' && league.kind !== 'bullseye';
-  const wirePool = wantWire ? await cached(`wirepool:${league.id}`, 10 * MIN, fresh, () => leaguePool(league.id).catch(() => [] as LeaguePoolPlayer[])) : [];
+  const [wirePool, wireMkt] = wantWire ? await Promise.all([
+    cached(`wirepool:${league.id}`, 10 * MIN, fresh, () => leaguePool(league.id).catch(() => [] as LeaguePoolPlayer[])),
+    // THE WIRE'S MOMENTUM (v0.716.1): Sleeper's trending adds/drops, which
+    // the market hands back empty once the board is stale — and, in a
+    // dynasty league (v0.717.0), its dynasty market in the league's format.
+    cached(`wiremkt:${league.id}`, 60 * MIN, fresh, () => leagueMarket(league.id)
+      .then((m) => ({ trend: m?.trend ?? null, dyn: league.dynasty ? m?.dyn ?? null : null }))
+      .catch(() => ({ trend: null, dyn: null }))),
+  ]) : [[] as LeaguePoolPlayer[], { trend: null, dyn: null }];
   let wireExp: Record<string, number> = {};
   if (classic && gm?.ok) {
     const slots = leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null });
@@ -1016,7 +1028,7 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
         snapshot.wire = wireTargetsOf({
           slots: classicIn.slots, roster: classicIn.roster, pool: wirePool, rosters: spots ?? [], rosterId: league.rosterId,
           copies: Number(gm?.copies) || 1, injuries: injuries as Record<string, string>, week, slate, nowMs: Date.now(),
-          activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp,
+          activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp, trend: wireMkt.trend, dyn: wireMkt.dyn,
         });
       } catch { snapshot.wire = []; }
     }

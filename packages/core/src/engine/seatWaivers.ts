@@ -158,6 +158,12 @@ export interface WireOpts {
    *  drops for him. Added to a candidate's season lens (rosGain, the depth
    *  pick, the bench stash's hold value); never to a drop's. */
   momentumOf?: (p: SpotPlayer) => number;
+  /** LONG-TERM VALUE (v0.717.0) — a dynasty league's market value. Founder:
+   *  "make sure waiver suggestions are not long-term dynasty value losses."
+   *  When given, the bench is spent lowest-long-term-value first, and no claim
+   *  drops a player worth more on it than the one coming in. The worker's AI
+   *  seats don't pass it; the waiver-targets tool does in dynasty leagues. */
+  keepValueOf?: (p: SpotPlayer) => number;
 }
 
 /** Points per week an upgrade must add before it is worth transacting for.
@@ -462,7 +468,11 @@ export function seatWirePlan(
     // empties that spot every week until the wire happens to answer it.
     const droppable = have
       .filter((p) => !starting.has(p.id) && !used.has(p.id) && !soleCover(slots, have, p))
-      .sort((a, b) => (holdOf(a) - holdOf(b)) || (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
+      .sort((a, b) => (opts.keepValueOf ? opts.keepValueOf(a) - opts.keepValueOf(b) : 0)
+        || (holdOf(a) - holdOf(b)) || (rosOf(a) - rosOf(b)) || String(a.id).localeCompare(String(b.id)));
+    // A DYNASTY LOSS is never a pickup (v0.717.0).
+    const keepLoss = (drop: SpotPlayer | null, cand: SpotPlayer): boolean =>
+      !!drop && !!opts.keepValueOf && opts.keepValueOf(drop) > opts.keepValueOf(cand);
     // THE SPOTS NOBODY COVERS (v0.665.1): a hole no projection can see,
     // because the matcher has nobody to seat there at any value.
     const uncovered = uncoveredSpots(slots, have);
@@ -502,6 +512,7 @@ export function seatWirePlan(
         // …and whatever the wire looks like, never a clearly better player
         // for a clearly worse one (v0.561.4, DROP_FLOOR_GAP).
         if (drop && opts.rosValueOf && realLoss(drop, cand)) continue;
+        if (keepLoss(drop, cand)) continue;
         const next = have.filter((p) => !drop || p.id !== drop.id).concat(cand);
         const gain = lineupValue(slots, next, valueOf) - base;
         // THE SEASON COUNTS TOO (v0.428.0). A chopped star on his bye adds
@@ -588,6 +599,7 @@ export function seatWirePlan(
         // One backup at a one-spot position is cover; a second is a hoard.
         if (benchUse(slots, cand.pos) < 1 && droppable.some((p) => p.pos === cand.pos && p.id !== drop.id)) continue;
         if (realLoss(drop, cand)) continue;   // the floor (v0.561.4)
+        if (keepLoss(drop, cand)) continue;
         const benchGain = holdValue(cand, cand.id) + momentum(cand) - holdValue(drop, cand.id);
         if (benchGain < BENCH_MIN_GAIN) continue;
         if (best && !(benchGain > best.rosGain + 1e-9)) continue;
