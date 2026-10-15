@@ -34,7 +34,7 @@ import { leagueCatalogOf } from '@drip/core/engine/projScoring';
 import { projectedRing, tiebreakDistance } from '@drip/core/engine/dfsBullseye';
 import { ringLabel } from '@drip/core/engine/bullseye';
 import { useTheme, MONO, fs, alpha, fsTight } from '../theme.native';
-import { FeltTable, CardBack, CardFace, FlipCard, CARD_W, CARD_H } from '../ui/ContestCards';
+import { FeltTable, CardBack, CardFace, FlipCard, tableCardSize } from '../ui/ContestCards';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { tap, commit, warn } from '../ui/feedback';
@@ -499,7 +499,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                   ? <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} mine locked={isLocked} points={lv ? lv.score : null} foot={fmt$(p.salary)} chip={myTb?.slot === d.slot ? String(myTb.target) : null} onChip={() => Alert.alert('Tie-breaker', TB_NOTE)} />
                   : ghost ? <CardFace slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} mine points={lv ? lv.score : null} foot="$0" badge="👻" /> : <View />;
                 return (
-                  <View key={d.slot} ref={(r) => { cardRefs.current[d.slot] = r; }} style={{ width: CARD_W + 6, alignItems: 'center', gap: 3, opacity: drag?.slot === d.slot ? 0.35 : 1 }}>
+                  <View key={d.slot} ref={(r) => { cardRefs.current[d.slot] = r; }} style={{ width: tableCardSize().w + 6, alignItems: 'center', gap: 3, opacity: drag?.slot === d.slot ? 0.35 : 1 }}>
                     {/* THE PLAY CHIP rides the label row, above the card (v0.696.6, founder: "Don't even do the power up icon in
                         my team. Put the chip at the top of the card."); tap it for the play's details. */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 16 }}>
@@ -521,7 +521,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       )}
                     </Pressable>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-                      <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(8), color: dim, textAlign: 'center', lineHeight: fs(11), minHeight: fs(22), maxWidth: CARD_W + 6 }}>
+                      <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(8), color: dim, textAlign: 'center', lineHeight: fs(11), minHeight: fs(22), maxWidth: tableCardSize().w + 6 }}>
                         {p
                           ? (lv ? <>{lv.score.toFixed(1)}{lv.play && lv.raw != null && Math.abs(lv.raw - lv.score) > 1e-9 ? <Text style={{ textDecorationLine: 'line-through', opacity: 0.7 }}>{` ${lv.raw.toFixed(1)}`}</Text> : null}{lv.aim ? ` · ${ringLabel(lv.aim.dist, radius)} +${lv.aim.ring}` : ''}</> : `proj ${projWord(p)}${bull && !isTotal && target != null ? ` · aims ${projectedRing(p.proj, target, radius).toFixed(1)}` : ` · ${valueOf(p).toFixed(2)}/$1k`}`)
                           : ghost ? `a phantom · ${GHOST_POINTS} flat, no salary` : hint}
@@ -545,7 +545,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
               </View>
             )}
             {drag && dragPlayer && (
-              <View pointerEvents="none" style={{ position: 'absolute', zIndex: 6, left: drag.x - feltAt.current.x - CARD_W / 2, top: drag.y - feltAt.current.y - CARD_H / 2, transform: [{ scale: 1.08 }, { rotateZ: '-3deg' }], shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 }}>
+              <View pointerEvents="none" style={{ position: 'absolute', zIndex: 6, left: drag.x - feltAt.current.x - tableCardSize().w / 2, top: drag.y - feltAt.current.y - tableCardSize().h / 2, transform: [{ scale: 1.08 }, { rotateZ: '-3deg' }], shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 }}>
                 <CardFace slug={dragPlayer.slug} name={dragPlayer.name} pos={dragPlayer.pos} team={dragPlayer.team} mine foot={fmt$(dragPlayer.salary)} />
               </View>
             )}
@@ -613,10 +613,10 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                       const ok = fits && afford && !lock && !taken;
                       const land = slot ? labels[slot] : null;
                       return (
-                        <Pressable key={p.slug} disabled={!ok} onPress={() => { tap(); put(p.slug, slot); }} style={{ width: CARD_W, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
+                        <Pressable key={p.slug} disabled={!ok} onPress={() => { tap(); put(p.slug, slot); }} style={{ width: tableCardSize().w, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
                           <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} mine locked={lock} foot={fmt$(p.salary)} />
                           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 75), textAlign: 'center', lineHeight: fs(10), maxWidth: CARD_W }}>
+                            <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 75), textAlign: 'center', lineHeight: fs(10), maxWidth: tableCardSize().w }}>
                               {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? (fits && !afford ? `over budget by ${fmt$(over)}` : `proj ${projWord(p)} · ${value.toFixed(2)}/$1k${bull && !isTotal && dist != null ? ` · ${dist.toFixed(1)} off` : ''}`)}
                             </Text>
                             <InjuryTag key={injTick} week={week} slug={p.slug} />

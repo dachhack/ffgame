@@ -21,7 +21,7 @@ import { AllFieldsSheet } from '../ui/AllFieldsSheet';
 import { openPlayerCard } from '../ui/PlayerCardSheet';
 import { InfoChip } from '../ui/InfoChip';
 import { PowerupHand, HAND_TAB_H, type HandCard } from '../ui/PowerupHand';
-import { CardBack, CardFace, EmptyCard, FeltTable, FlipCard, CARD_H } from '../ui/ContestCards';
+import { CardBack, CardFace, EmptyCard, FeltTable, FlipCard, tableCardSize } from '../ui/ContestCards';
 
 type Row = { slot: string; slug: string | null; sealed: boolean };
 function squadRows(entry: unknown, slots: { slot: string }[]): Row[] {
@@ -337,7 +337,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
           {slots.map((d, i) => {
             const lr = L.rows[i], rr = R.rows[i];
             return (
-              <View key={d.slot} style={{ flexDirection: 'row', alignItems: 'center', minHeight: CARD_H }}>
+              <View key={d.slot} style={{ flexDirection: 'row', alignItems: 'center', minHeight: tableCardSize().h }}>
                 {cardOf(left, lr, L.mine, i)}
                 {numbersOf(left, lr, L.mine, 'left')}
                 {!solo && numbersOf(right, rr, R.mine, 'right')}

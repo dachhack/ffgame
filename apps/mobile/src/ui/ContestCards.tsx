@@ -11,12 +11,41 @@ import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native
 import { headshot, teamLogo } from '@drip/core/data/media';
 import { isGhostSlug } from '@drip/core/data/ghostCard';
 import { useTheme, MONO, fs, mix, alpha, fsTight } from '../theme.native';
-import { useCardSkin, CARD_BACKS, SKIN_FELT } from './cards';
+import { useCardSkin, CARD_BACKS, SKIN_FELT, loadCardSize } from './cards';
 import { playerHelmetFace } from './HelmetFace';
 import { HELMET_CARD_NUMBER_SCALE } from '@drip/core/data/helmets';
 
 export const CARD_W = 96;
 export const CARD_H = 138;
+
+/** THE CARD SIZE SETTING ON THE CONTEST TABLE (v0.713.7, founder: "Let's try
+ *  card size (and no cards) for weekly contest leagues as well"). The same ⚙ →
+ *  Cards → Card size the drip setup board reads. Medium is the table's own
+ *  card (96 × 138); Small is the drip board's 0.82; No cards is a short tile
+ *  (helmet or photo, name, team, points) the same width as Medium, so the
+ *  matchup rows and the squad grid keep their shape. Read per render, like the
+ *  deck: Settings sits above the screens, so a change re-renders them. */
+export function tableCardSize(): { w: number; h: number; k: number; none: boolean } {
+  const size = loadCardSize();
+  if (size === 'none') return { w: CARD_W, h: 50, k: 1, none: true };
+  if (size === 'small') return { w: Math.round(CARD_W * 0.82), h: Math.round(CARD_H * 0.82), k: 0.82, none: false };
+  return { w: CARD_W, h: CARD_H, k: 1, none: false };
+}
+
+/** A full-size card drawn at the setting's scale: the box is the scaled size,
+ *  the card inside keeps its own 96 × 138 layout and is scaled about its
+ *  centre, so every label shrinks with it rather than crowding. */
+function Fit({ children }: { children: React.ReactElement }) {
+  const d = tableCardSize();
+  if (d.k === 1) return children;
+  return (
+    <View style={{ width: d.w, height: d.h }}>
+      <View style={{ position: 'absolute', width: CARD_W, height: CARD_H, left: (d.w - CARD_W) / 2, top: (d.h - CARD_H) / 2, transform: [{ scale: d.k }] }}>
+        {children}
+      </View>
+    </View>
+  );
+}
 const GOLD = '#E9B959';
 const FELT_DARK = '#083A27';
 const STOCK = '#F7F0DC';
@@ -64,15 +93,28 @@ export function CardBack({ seed, chip, onChip }: { seed: string;
   // deck with no bundled art (emerald) is the vector lattice below.
   const skin = useCardSkin();
   const art = CARD_BACKS[skin];
-  if (art) {
+  const dims = tableCardSize();
+  // NO CARDS (v0.713.7): a sealed tile on the deck's felt.
+  if (dims.none) {
     return (
-      <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: SKIN_FELT[skin], borderWidth: 2, borderColor: '#000', overflow: 'hidden', transform: [{ rotateZ: `${lean}deg` }] }}>
-        <Image source={art} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+      <View style={{ width: dims.w, height: dims.h, borderRadius: 8, backgroundColor: SKIN_FELT[skin], borderWidth: 1.5, borderColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', color: GOLD, letterSpacing: 0.8 }}>◈ SEALED</Text>
         <BackChip chip={chip} onChip={onChip} />
       </View>
     );
   }
+  if (art) {
+    return (
+      <Fit>
+      <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: SKIN_FELT[skin], borderWidth: 2, borderColor: '#000', overflow: 'hidden', transform: [{ rotateZ: `${lean}deg` }] }}>
+        <Image source={art} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        <BackChip chip={chip} onChip={onChip} />
+      </View>
+      </Fit>
+    );
+  }
   return (
+    <Fit>
     <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: '#0F6B47', borderWidth: 2, borderColor: '#000', overflow: 'hidden', transform: [{ rotateZ: `${lean}deg` }], alignItems: 'center', justifyContent: 'center' }}>
       <View pointerEvents="none" style={{ position: 'absolute', top: 5, left: 5, right: 5, bottom: 5, borderRadius: 7, borderWidth: 1.5, borderColor: GOLD, opacity: 0.8 }} />
       <View pointerEvents="none" style={{ position: 'absolute', top: 9, left: 9, right: 9, bottom: 9, borderRadius: 5, borderWidth: 0.7, borderColor: GOLD, opacity: 0.45 }} />
@@ -87,6 +129,7 @@ export function CardBack({ seed, chip, onChip }: { seed: string;
         <Text style={{ color: GOLD, fontSize: 22, fontWeight: '800' }}>◈</Text>
       </View>
     </View>
+    </Fit>
   );
 }
 
@@ -102,7 +145,32 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked, fo
   const uri = headshot(slug) ?? teamLogo(team ?? null, { slug });
   const suit = SUIT[pos.toUpperCase()] ?? '#555';
   const trim = mine ? GOLD : '#C8323E';
+  const dims = tableCardSize();
+  const chipEl = chip != null
+    ? <Pressable hitSlop={8} onPress={onChip} style={{ backgroundColor: chipTone === 'warn' ? '#8E2430' : '#2A2010', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 }}><Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', color: chipTone === 'warn' ? '#fff' : '#FFD86B' }}>{chip}</Text></Pressable>
+    : null;
+  // NO CARDS (v0.713.7): one short tile — the picture, the name, team and points.
+  if (dims.none) {
+    return (
+      <View style={{ width: dims.w, height: dims.h, borderRadius: 8, backgroundColor: STOCK, borderWidth: 1.5, borderColor: trim, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4 }}>
+        <View style={{ width: 30, height: 30, borderRadius: 4, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8E0C8' }}>
+          {isGhostSlug(slug)
+            ? <Text style={{ fontSize: 18 }}>👻</Text>
+            : playerHelmetFace(slug, 30, team, !mine) ?? (uri
+              ? <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode={headshot(slug) ? 'cover' : 'contain'} />
+              : <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '800', color: suit }}>{pos === 'DEF' ? 'DST' : pos}</Text>)}
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={{ fontSize: fs(8.5), fontWeight: '700', color: INK }}>{`${badge ? `${badge} ` : ''}${name.split(/\s+/).slice(-1)[0] ?? name}`}</Text>
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(7.5), color: suit, fontWeight: '700' }}>{`${pos === 'DEF' ? 'DST' : pos}${team ? ` ${team}` : ''}`}</Text>
+          <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '800', color: trim === GOLD ? '#8A6A12' : trim }}>{points != null ? points.toFixed(1) : foot ?? ''}{locked ? ' 🔒' : ''}</Text>
+        </View>
+        {chipEl ? <View style={{ position: 'absolute', top: -6, right: -4 }}>{chipEl}</View> : null}
+      </View>
+    );
+  }
   return (
+    <Fit>
     <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, backgroundColor: STOCK, borderWidth: 2, borderColor: '#000', overflow: 'hidden', padding: 5 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
@@ -131,6 +199,7 @@ export function CardFace({ slug, name, pos, team, slot, points, mine, locked, fo
       </View>
       <View pointerEvents="none" style={{ position: 'absolute', top: 1, left: 1, right: 1, bottom: 1, borderRadius: 8, borderWidth: 1, borderColor: trim, opacity: 0.7 }} />
     </View>
+    </Fit>
   );
 }
 
@@ -152,8 +221,11 @@ export function FlipCard({ flipped, idx = 0, back, face }: { flipped: boolean; i
   }, [flipped, idx, v]);
   const backRot = v.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
   const faceRot = v.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
+  const dims = tableCardSize();
+  // No cards: no turn to watch — the tile is whichever side is up.
+  if (dims.none) return <View style={{ width: dims.w, height: dims.h }}>{flipped ? face : back}</View>;
   return (
-    <View style={{ width: CARD_W, height: CARD_H }}>
+    <View style={{ width: dims.w, height: dims.h }}>
       <Animated.View style={[StyleSheet.absoluteFill, { backfaceVisibility: 'hidden', transform: [{ perspective: 700 }, { rotateY: backRot }] }]}>{back}</Animated.View>
       <Animated.View style={[StyleSheet.absoluteFill, { backfaceVisibility: 'hidden', transform: [{ perspective: 700 }, { rotateY: faceRot }] }]}>{face}</Animated.View>
     </View>
@@ -166,8 +238,9 @@ export function EmptyCard({ label, chip, chipTone = 'warn', onChip }: { label: s
    *  tie-breaker's number on the spot before a pick, a tap explaining it. */ chip?: string; chipTone?: 'gold' | 'warn'; onChip?: () => void }) {
   const t = useTheme();
   const warn = !!chip && chipTone === 'warn';
+  const dims = tableCardSize();
   return (
-    <View style={{ width: CARD_W, height: CARD_H, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: warn ? alpha(t.warn, 60) : alpha(t.text, 30), alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: dims.w, height: dims.h, borderRadius: dims.none ? 8 : 10, borderWidth: 1, borderStyle: 'dashed', borderColor: warn ? alpha(t.warn, 60) : alpha(t.text, 30), alignItems: 'center', justifyContent: 'center' }}>
       {!!chip && (warn
         ? <Text style={{ position: 'absolute', top: 6, right: 6, fontFamily: MONO, fontSize: fs(9), fontWeight: '800', color: t.warn }}>{chip}</Text>
         : <BackChip chip={chip} onChip={onChip} />)}

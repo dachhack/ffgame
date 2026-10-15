@@ -173,7 +173,7 @@ export function SettingsModal({ visible, theme, skin, cardSize, version, isAdmin
               <View style={{ gap: 18 }}>
                 <View style={{ gap: 8 }}>
                   <LabelInfo label="CARD SIZE" title="Card size"
-                    info="How the setup board draws your picks. Small fits a whole window on screen; Medium is easier to read and to hit. No cards draws each spot as a plain row: your player, his metric, and the opponent's sealed spot." />
+                    info="How the drip setup board and the weekly contest table draw your picks. Small fits more on screen; Medium is easier to read and to hit. No cards draws each spot as a plain row or tile: the player, his team and his numbers, with the other side's sealed." />
                   <View style={{ flexDirection: 'row', gap: 7 }}>
                     {CARD_SIZES.map((o) => {
                       const on = cardSize === o.id;

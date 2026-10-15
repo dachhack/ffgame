@@ -56,7 +56,8 @@ export const CARD_ASPECT = 0.714;
  *  pt size, so a 122pt card still holding a 60pt portrait and a 13pt name reads
  *  as a cramped big card rather than a small one.
  *
- *  Applies to the SETUP board only. The revealed cards in a live duel are the
+ *  Applies to the SETUP board and (v0.713.7) the weekly contest table
+ *  (ContestCards' tableCardSize). The revealed cards in a live duel are the
  *  thing you are watching, and shrinking those to fit more of a board you have
  *  finished editing is the wrong trade — so only SetupRow opts in. */
 //

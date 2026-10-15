@@ -22,6 +22,28 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.7 — Card size and No cards on the weekly contest table
+
+> - Settings → Cards → Card size now applies to weekly contest leagues too: Medium is the table's usual card, Small is a bit smaller, and No cards draws each spot as a short tile.
+> - On the website's league list, the ALL / COMMISH / WEEKLY / FIND / ADD chips stay on one line.
+
+Founder: "Looking great. Let's try card size (and no cards) for weekly contest
+leagues as well". ContestCards' new tableCardSize() reads loadCardSize():
+Medium is the table's own 96 × 138 card; Small is 0.82× (the drip board's
+factor), drawn by scaling the full card about its centre inside a box of the
+scaled size, so every label shrinks with it; No cards is a 96 × 50 tile
+(helmet or photo, last name, POS TEAM, points or price, 🔒 when set, the
+chip at its corner), the back a "◈ SEALED" tile on the deck's felt, and no
+flip animation. ContestMatchup's rows and ContestSquad's grid, drag card and
+pool list size by it. The settings ⓘ names both boards.
+
+Founder, on the mobile web: "make the top all/commish/etc chip not wrap".
+LiveOnboard's control row ran ~15px over, so the archive chip took a line of
+its own. Chip padding 11 → 7px and gap 6 → 4 fit all six on one line down to
+a 375pt phone (measured in Chromium at 382, 358 and 343px); the row is
+nowrap with sideways scroll as the fallback. check:settingsmenu +6.
+JavaScript only; no iPhone build.
+
 ### v0.713.6 — No cards on the setup board; Large is gone; ARMED counts when it would wrap
 
 > - Settings → Cards → Card size: No cards, Small or Medium. No cards draws the setup board as plain rows. Large is gone; a phone set to Large now shows Medium.
