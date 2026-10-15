@@ -173,7 +173,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
       for (const l of leagues) {
         if (dead) return;
         try {
-          const { snapshot } = await widgetSnapshot(l.id, userId, glanceTick > 0, { anyLeague: true, rosterId: l.rosterId });
+          const { snapshot } = await widgetSnapshot(l.id, userId, glanceTick > 0, { anyLeague: true, rosterId: l.rosterId, wire: true });
           if (!dead && snapshot && snapshot.leagueId === l.id && snapshot.rosterId === l.rosterId) setGlance((g) => ({ ...g, [seatKey(l.id, l.rosterId)]: snapshot }));
         } catch { /* keep what the card had */ }
       }

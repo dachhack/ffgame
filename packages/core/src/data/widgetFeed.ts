@@ -41,7 +41,8 @@ import { winProbability } from '../engine/matchupBoard';
 import { setLeagueProjScoring, clearLeagueProjScoring, setLiveProjRate, clearLiveProjRate, liveProjRateMap, leagueCatalogOf } from '../engine/projScoring';
 import { playRisk } from '../engine/golfFloor';
 import { setSlugSleeperIds } from './slugMeta';
-import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet } from './liveApi';
+import { getRevealedPicks, leagueGameMode, leaguePoolIds, leaguePoolExp, nativeRosters, weekMatchups, leaguePool, leagueMarket, leagueScoringGet, type LeaguePoolPlayer } from './liveApi';
+import { wireTargetsOf, type WireTarget } from './leagueTools';
 import { setLeagueScoring, clearLeagueScoring, leagueScoring, scoringLeague, parseScoring } from '../engine/leagueScoring';
 import { platform } from '../platform';
 import type { WindowId } from '../types';
@@ -139,6 +140,8 @@ export interface WidgetCard {
 export interface SideLeft { waiting: number; playing: number; done?: number }
 
 export interface WidgetSnapshot {
+  /** WAIVER TARGETS (v0.716.0), when the read asked for them (`opts.wire`). */
+  wire?: WireTarget[];
   leagueId: string;
   leagueName: string;
   rosterId: number;
@@ -865,7 +868,10 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
    *  the app's league list shows every league, whatever the widget picks. */
   opts: { anyLeague?: boolean;
     /** v0.635.2: which of my seats in `wantLeagueId`, when I hold several. */
-    rosterId?: number | null } = {}): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
+    rosterId?: number | null;
+    /** v0.716.0: also plan my seat's WAIVER TARGETS (the league tools bar).
+     *  The leagues list asks; the Android widget does not. */
+    wire?: boolean } = {}): Promise<{ leagues: WidgetLeague[]; snapshot: WidgetSnapshot | null }> {
   const all = await allWidgetLeagues(fresh);
   const leagues = opts.anyLeague ? all : shownWidgetLeagues(all);
   const league = pickWidgetLeague(leagues, wantLeagueId, opts.rosterId);
@@ -966,10 +972,16 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
     if (rate && Object.keys(rate).length) { setLiveProjRate(rate); rateIn = true; }
     if (rules) { setLeagueScoring(parseScoring(rules), league.id); rulesIn = true; }
   }
+  // WAIVER TARGETS (v0.716.0): the wire is the whole pool less what is held.
+  // Not for a weekly contest — it has no wire.
+  const wantWire = !!opts.wire && classic && !!gm?.ok && league.kind !== 'dfs' && league.kind !== 'bullseye';
+  const wirePool = wantWire ? await cached(`wirepool:${league.id}`, 10 * MIN, fresh, () => leaguePool(league.id).catch(() => [] as LeaguePoolPlayer[])) : [];
+  let wireExp: Record<string, number> = {};
   if (classic && gm?.ok) {
     const slots = leagueSlotDefs({ roster: gm.roster ?? null, slots: gm.slots ?? null });
     const tenure = (gm.slots ?? []).some((x) => x.min_exp != null || x.max_exp != null);
     const exp = tenure ? await cached(`exp:${league.id}`, 60 * MIN, fresh, () => leaguePoolExp(league.id).catch(() => ({}))) : {};
+    wireExp = exp as Record<string, number>;
     const stashed = new Set((spots ?? []).filter((r) => r.spot && r.spot !== 'active').map((r) => `${r.roster_id}:${r.slug}`));
     const rosterOf = (rows: PoolPlayer[], rosterId: number): ClassicRosterPlayer[] => rows
       .filter((p) => !stashed.has(`${rosterId}:${p.slug}`))
@@ -998,6 +1010,16 @@ export async function widgetSnapshot(wantLeagueId?: string | null, userId?: stri
   }
   try {
     const snapshot = summarize({ league, week, matchup, state, teams, nowMs: Date.now(), picks: drip ? picks : undefined, pool, theirPool: drip ? oppPool : undefined, injuries, images, classic: classicIn, weekScheduled, standings, phantoms });
+    if (wantWire && classicIn && snapshot.phase !== 'final') {
+      const bench = Number(gm?.shape?.bench);
+      try {
+        snapshot.wire = wireTargetsOf({
+          slots: classicIn.slots, roster: classicIn.roster, pool: wirePool, rosters: spots ?? [], rosterId: league.rosterId,
+          copies: Number(gm?.copies) || 1, injuries: injuries as Record<string, string>, week, slate, nowMs: Date.now(),
+          activeSeats: gm?.shape && Number.isFinite(bench) ? classicIn.slots.length + bench : null, exp: wireExp,
+        });
+      } catch { snapshot.wire = []; }
+    }
     rememberSnapshot({ leagues, snapshot });
     return { leagues, snapshot };
   } finally {

@@ -4,7 +4,7 @@
 // waiver targets, trade zone, etc." Pins the folds (lineup alerts, the trade
 // zone) and that both clients draw the bar. Run: npx tsx scripts/check-league-tools.mjs
 import { readFileSync } from 'node:fs';
-import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER } from '../packages/core/src/data/leagueTools';
+import { lineupAlerts, lineupAlertCount, tradeZoneOf, sortTradeZone, tradeZoneCount, TRADE_ZONE_ORDER, wireTargetsOf, wireTargets, wireTargetCount } from '../packages/core/src/data/leagueTools';
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 let fails = 0;
 const ok = (name, cond, got) => { if (!cond) { fails++; console.log(`FAIL ${name}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); } else console.log(`ok   ${name}`); };
@@ -34,13 +34,38 @@ const sorted = sortTradeZone(z);
 ok('zone: waiting on you first, then wants, then yours, then the block', sorted.map((i) => i.kind).join() === TRADE_ZONE_ORDER.filter((k) => z.some((i) => i.kind === k)).join(), sorted.map((i) => i.kind));
 ok('zone: the count is what wants an answer (offers in + wants)', tradeZoneCount(z) === 2);
 
+// ── waiver targets (v0.716.0) ─────────────────────────────────────────────
+const WSLOTS = [{ slot: 'S1', type: 'RB', pos: ['RB'] }, { slot: 'S2', type: 'RB', pos: ['RB'] }];
+const NOW = Date.parse('2026-10-15T12:00:00Z');
+const prow = (slug, full, waived = null) => ({ slug, full_name: full, pos: 'RB', team: '', rank: 1, waived_until: waived });
+const wireIn = (over = {}) => ({
+  slots: WSLOTS, roster: [{ slug: 'bijan-robinson', full: 'Bijan Robinson', pos: 'RB', team: null }],
+  pool: [prow('jahmyr-gibbs', 'Jahmyr Gibbs'), prow('jonathan-taylor', 'Jonathan Taylor'), prow('christian-mccaffrey', 'Christian McCaffrey', '2026-10-17T00:00:00Z'), prow('bijan-robinson', 'Bijan Robinson')],
+  rosters: [{ roster_id: 3, slug: 'bijan-robinson', acquired: 'draft', spot: 'active' }, { roster_id: 5, slug: 'jahmyr-gibbs', acquired: 'draft', spot: 'active' }],
+  rosterId: 3, copies: 1, injuries: {}, week: 7, slate: [], nowMs: NOW, activeSeats: 4, ...over,
+});
+const w1 = wireTargetsOf(wireIn());
+ok('wire: an empty spot is filled into the open place, and a rostered player is off the wire', w1[0]?.kind === 'hole' && w1[0]?.drop === null && !w1.some((t) => t.add === 'jahmyr-gibbs' || t.add === 'bijan-robinson'), w1);
+const cmc = w1.find((t) => t.add === 'christian-mccaffrey');
+ok('wire: a player inside his hold is a claim, an open one an add, and names resolve', cmc?.claim === true && w1.find((t) => t.add === 'jonathan-taylor')?.claim === false && cmc?.addName === 'Christian McCaffrey', w1);
+const w2 = wireTargetsOf(wireIn({ copies: 2 }));
+ok('wire: with two copies a player held once is still on the wire', w2.some((t) => t.add === 'jahmyr-gibbs'), w2.map((t) => t.add));
+const w3 = wireTargetsOf(wireIn({ roster: [{ slug: 'bijan-robinson', full: 'Bijan Robinson', pos: 'RB', team: null }, { slug: 'jonathan-taylor', full: 'Jonathan Taylor', pos: 'RB', team: null }], pool: [prow('jonathan-taylor', 'Jonathan Taylor')], rosters: [{ roster_id: 3, slug: 'bijan-robinson', acquired: 'draft' }, { roster_id: 3, slug: 'jonathan-taylor', acquired: 'draft' }] }));
+ok('wire: my own players are never targets', w3.length === 0, w3);
+const ws = (id, name, gain) => ({ leagueId: id, rosterId: 1, leagueName: name, weekLabel: 'WK 7', wire: gain == null ? [] : [{ add: 'x', addName: 'X', pos: 'RB', team: null, drop: null, dropName: null, gain, rosGain: 0, kind: 'hole', claim: false }] });
+const wt = wireTargets([ws('a', 'Alpha', 2), ws('b', 'Beta', 9), ws('c', 'Gamma', null), null]);
+ok('wire: leagues with targets only, biggest gain first; the count is every target', wt.map((l) => l.leagueId).join() === 'b,a' && wireTargetCount([ws('a', 'A', 2), ws('b', 'B', 1)]) === 2, wt.map((l) => l.leagueId));
+const feed = read('packages/core/src/data/widgetFeed.ts');
+ok('wire: the glance plans it only when asked, never for a weekly contest', feed.includes('const wantWire = !!opts.wire && classic') && feed.includes("league.kind !== 'dfs' && league.kind !== 'bullseye'"));
+
 // ── both clients draw the bar ─────────────────────────────────────────────
 const phone = read('apps/mobile/src/screens/Leagues.tsx'), web = read('src/screens/LiveOnboard.tsx');
 const pbar = read('apps/mobile/src/ui/LeagueToolsBar.tsx'), wbar = read('src/screens/LeagueToolsBar.tsx');
+ok('both: the leagues list asks the glance for waiver targets', phone.includes('rosterId: l.rosterId, wire: true }') && web.includes('rosterId: l.rosterId, wire: true }'));
 ok('phone: the leagues page carries the bar, not the lone H&V card', phone.includes('<LeagueToolsBar snaps={Object.values(glance)}') && !phone.includes('<HeroesVillains'));
 ok('web: the leagues page carries the bar, not the lone H&V card', web.includes('<LeagueToolsBar snaps={Object.values(glance)} onFields={onFields}') && !web.includes('<HeroesVillains'));
 for (const [n, src] of [['phone', pbar], ['web', wbar]]) {
-  ok(`${n}: fields, heroes & villains, lineup and trade zone on the bar`, src.includes('▦ ALL FIELDS') && src.includes('HEROES') && src.includes('🧭 LINEUP') && src.includes('🔁 TRADE ZONE'));
+  ok(`${n}: fields, heroes & villains, lineup and trade zone on the bar`, src.includes('▦ ALL FIELDS') && src.includes('HEROES') && src.includes('🧭 LINEUP') && src.includes('🔁 TRADE ZONE') && src.includes('📈 WAIVER TARGETS'));
   ok(`${n}: heroes & villains opens bare in its sheet`, src.includes('<HeroesVillains snaps={snaps} bare />'));
 }
 ok('phone: the bar scrolls sideways', pbar.includes('<ScrollView horizontal'));
