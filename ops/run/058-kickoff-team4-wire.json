@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/kickoff-team4-wire.sql",
+  "why": "Kickoff League: Team 4's week-6 lineup shows the K spot empty and the AI seat wire has not filled it. Which gate stops it — seat control, agent waivers, a pending claim, a position cap, or the roster's legality? Read only, seats and players only."
+}
