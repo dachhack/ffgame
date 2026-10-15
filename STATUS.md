@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.713.8 — The whole game line on the classic board
+
+> - The classic board's kickoff reads "Sun 9:30a" / "Sun 1p", so "vs HOU · Sun 9:30a" fits without cutting off the time.
+
+Founder, beside the phone board: "seems like we have a bit of space for the
+rest of the game schedule lines. Can we do some tweaking?" The game line was
+"vs HOU · Sun, 9:30 AM" and ellipsized at the time ("Sun, 9:3…"). Core's
+new compactKick: no comma, a/p, no ":00" on the hour, the device's zone as
+before; the dome / night marks take one space, not two. Measured: "vs HOU ·
+Sun 9:30a" is narrower than what used to show before the ellipsis. Phone
+board rows, the Team tab's lineup and the lineup chip's next kickoff all use
+it. check:board +4. JavaScript only; no iPhone build.
+
 ### v0.713.7 — Card size and No cards on the weekly contest table
 
 > - Settings → Cards → Card size now applies to weekly contest leagues too: Medium is the table's usual card, Small is a bit smaller, and No cards draws each spot as a short tile.

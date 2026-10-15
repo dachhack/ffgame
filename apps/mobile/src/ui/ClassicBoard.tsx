@@ -13,7 +13,7 @@ import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { setLeagueBullseye, clearLeagueBullseye, setBullseyeRoster, bullseyeConfigOf, dealBullseyeCard, cardsFromRows, ringLabel, type BullseyeConfig, type BullseyeCard } from '@drip/core/engine/bullseye';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, compactKick, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { playRisk } from '@drip/core/engine/golfFloor';
@@ -365,7 +365,7 @@ function gameLineOf(e: BoardEntry): string {
 /** The game-line markers, as text so they cost no layout: 🏟 roofed, ☾ night. */
 function roofMark(e: BoardEntry): string {
   const roofed = e.roof && e.roof !== 'open';
-  return `${roofed ? '  \u{1F3DF}' : ''}${e.primetime ? '  \u263E' : ''}`;
+  return `${roofed ? ' \u{1F3DF}' : ''}${e.primetime ? ' \u263E' : ''}`;
 }
 
 /** The figure on a row: points once the ball is live, the projection before it.
@@ -393,11 +393,8 @@ const prettySlug = (slug: string): string => {
   return shortName(stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' '));
 };
 const r1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
-/** "Sun 1:00 PM" — the row's game line, in the reader's own timezone. */
-const fmtKick = (iso: string): string => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-};
+/** "Sun 9:30a", "Sun 1p" — core's compactKick (v0.713.8): the game line fits whole. */
+const fmtKick = compactKick;
 /** "Q2 8:41" — the play log's clock column, now core's one formatter
  *  (fmtQuarterClock, v0.368.0) so the row clocks and the log can't drift. */
 const fmtQClock = fmtQuarterClock;

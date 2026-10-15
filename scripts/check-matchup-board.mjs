@@ -8,7 +8,7 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, WHOLE_POOL_MIN } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, WHOLE_POOL_MIN, compactKick } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 import { slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides } from '../packages/core/src/data/slugMeta';
 let fails = 0;
@@ -423,5 +423,15 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
     projectEntry(E({ live: 6, proj: 12, state: 'live' })) === 12 && projectEntry(E({ live: 20, proj: 12, state: 'live' })) === 20);
 }
 
+// v0.713.8, founder: "seems like we have a bit of space for the rest of the game
+// schedule lines". The phone board's kickoff, short enough for the whole line.
+// Built from local times, so the check holds in any zone the machine is in.
+{
+  const at = (d, h, m) => new Date(2026, 9, d, h, m).toISOString();
+  ok('kick: "Sun 9:30a" (no comma, a/p)', compactKick(at(18, 9, 30)) === 'Sun 9:30a', compactKick(at(18, 9, 30)));
+  ok('kick: on the hour drops ":00" — "Sun 1p"', compactKick(at(18, 13, 0)) === 'Sun 1p', compactKick(at(18, 13, 0)));
+  ok('kick: noon is 12p, a Thursday night 8:15p', compactKick(at(18, 12, 0)) === 'Sun 12p' && compactKick(at(15, 20, 15)) === 'Thu 8:15p');
+  ok('kick: an unreadable time is blank', compactKick('nope') === '');
+}
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);
