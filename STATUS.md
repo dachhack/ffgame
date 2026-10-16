@@ -22,6 +22,102 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.5 — The field and its box go edge to edge on the phone
+
+> - On the phone, every live field and the box around it now span the whole screen, and the field's near corners run just off the edges, like Sleeper's.
+
+Founder: "expand the field and the box it is in so the bottom corners just
+get clipped by the screen like sleeper." Phone `FieldView` bleeds by default
+now (all fields lists, the board's game sheet, Live Picks, the game view):
+an unshifted holder measures its window x, the card is moved back to the
+screen's left edge at the screen's width (top and bottom rules, no side
+border or radius, overflow hidden), and the drawing inside runs
+`BLEED_OVER` (now 6%) past each side, so the screen clips its near corners.
+`bleed={false}` keeps the inset card. Web unchanged.
+
+### v0.730.4 — Timeout dots on the live scoreboard
+
+> - The live game screen's scoreboard now shows each team's timeouts left as dots under its name, like Sleeper's: lit for each one left, hollow for each one used.
+
+Founder: "We need dots to represent time outs left on the live score board."
+The feed has no timeout count, but every timeout is a stoppage row ("Timeout
+#1 by DEN at 12:51."). Core `timeoutsLeft` (data/gameView) derives it: three
+a half, two in overtime, minus each one called since the half began. The
+caller comes from the text (ESPN's code, or the club spelled out), not the
+row's team, which is the side with the ball. Halftime shows the second
+half's three; a finished game and a feed without the live header (baked
+replays) show no dots. Both game views (web GameView in src/app/FieldView,
+phone ui/GameView) draw them in `teamMarkColor`: the club colour that reads
+on the theme (Seattle's green on dark, navy on light). check:gameview covers it.
+
+### v0.730.3 — The server keeps other squads' power-ups face down too
+
+> - Your opponent's power-ups are now hidden by the server itself until their cards flip, not just by the app.
+
+Founder: "yes, hide them on the server too." Migration 0508: new
+`_contest_visible_plays` filters another squad's contest_play rows by the
+same moments the apps use (v0.730.2): a spot play when that spot's player
+has kicked off (or the viewer's Spy shows it), a team play when any of its
+spots has turned, a Spy/Jinx aimed across the table when the player it hit
+has kicked off, the phantom from the first kickoff. `contest_matchup`
+(re-created from 0491) sends home_plays/away_plays through it;
+`contest_plays` filters another seat the same way (a seat's own, the
+commissioner's and an admin's reads stay open), and its `sealed` flag no
+longer tells whether anything was held back. Core `contestSpotPlayShown`
+takes the phantom's rule too, so its chip shows with its card. Scratch-DB
+probes: contest-plays cp6c–f and cf0–cf6 (new), every contest-* suite
+passes. (The full run stops earlier at graduation gr0 over 0506's
+`injury_change.player_slug` — unrelated, on main already.)
+
+### v0.730.2 — Other squads' power-ups stay hidden until their cards turn
+
+> - In a contest matchup, you no longer see that your opponent (or the squads in another matchup) played a power-up until the card it's on flips over. Their team power-ups show once their first card flips.
+> - A power-up your opponent aimed at one of your players shows when that player's game kicks off.
+
+Founder (Weekly Cointest, every card face down, "TEAM ⚡ UP" under both
+squads and "⚡ UP" on both RB1s): "Don't show that opponent or other teams
+have power ups applied until cards flip over." The matchup has carried the
+other side's plays since the week's first kickoff, and both builders drew
+them at once. Core `contestSpotPlayShown`, `contestSquadPlaysShown` and
+`contestGhostShown` (engine/contestPlays) now decide: your own plays always;
+another squad's spot play once that card is face up; its team plays once any
+of its cards is; a play aimed at your spot at your player's kickoff; another
+squad's phantom from the first kickoff (its spot shows a sealed back until
+then). Web and phone ContestMatchup both ask. UI only: the matchup payload
+still carries the plays from the first kickoff. check:playreveal.
+
+### v0.730.1 — The ball rises into the air
+
+> - On the live field, passes and kicks now arc up into the air above the field and come down on their spot, like Sleeper's. A made field goal drops between the uprights.
+
+Founder: "make the arcs rise into the air like Sleeper's." The flight was a
+quadratic on the grass leaning toward the far sideline. Core
+`projFlight` (engine/fieldPerspective) now draws the straight ground track
+from snap to landing, projected, lifted straight up the screen by a
+parabola whose apex scales with the on-screen distance (`flightApex`,
+10–44, never above the drawing). Both FieldViews use it; the carried
+phase stays on the grass. check:playpath covers landing, height ordering,
+clamps and bounds.
+
+### v0.730.0 — The field in perspective, with goal posts
+
+> - The live field now looks like Sleeper's: a wide field seen from the stands, with gold goal posts standing at each end.
+> - On the phone's game screen, the field runs to the edges of the screen and a little past.
+> - The ball carrier's photo now stands on the field as a pin over the spot, with the name under it.
+
+Founder (Sleeper's SEA@DEN game screen): "Let's mirror the sleeper field
+view. Stretched to the edges and a bit over. Draw the same goal posts."
+New core `engine/fieldPerspective` projects the flat 400×130 field (far
+sideline at 0.66× the near one, a pinhole ground plane so yard lines stay
+straight); both FieldViews (web src/app, phone ui/) draw its points instead
+of tilting the drawing with a 3D transform, which laid the headshot flat
+and could not stand anything up. Posts, the ball badge and the carrier pin
+stand upright at projected spots; a made field goal's arc climbs between
+the uprights. Phone `FieldView bleed` (GameView) measures its window x and
+widens the drawing to the screen + 5% each side, card chrome off. Also
+fixes the phone's carrier name plate, which was drawn at 0.6% opacity
+(`alpha` takes a percent). check:playpath covers the projection and wiring.
+Plain JavaScript; no iPhone build.
 ### v0.729.3 — AI teams make waiver moves again (the real cause)
 
 > - AI-run teams had stopped making waiver claims and pickups since Oct 11. The cause is found and fixed; they'll catch up within the hour.

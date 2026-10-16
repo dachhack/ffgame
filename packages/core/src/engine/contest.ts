@@ -11,7 +11,7 @@ import { applyBullseye, bullseyeConfigOf, dealBullseyeCard, type BullseyeCard, t
 import { leagueSlotDefs, slotAllows, slotDisplayName, slotFilterLabel, isRetSlot, type ClassicResult, type ClassicSlotDef, type ClassicSlotScore, type SlotSpec } from './classic';
 import { tiebreakDistance, type BoardPlayer } from './dfsBullseye';
 import { contestEventBonus, contestJinxValue, GHOST_POINTS, type ContestPlay, type ContestPlayId, type PlayEvent } from './contestPlays';
-export { CONTEST_PLAYS, contestPlayById, contestPlayCap, contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestRedeal, contestSpotPlay, contestSpotOpen, contestHandCard, aiContestPlays, type AiPlayPick, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId, type HandCardState } from './contestPlays';
+export { CONTEST_PLAYS, contestPlayById, contestPlayCap, contestPlaysFor, contestPlayTarget, contestPlayAsPowerup, contestRedeal, contestSpotPlay, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, aiContestPlays, type AiPlayPick, GHOST_POINTS, type ContestPlay, type ContestPlayDef, type ContestPlayId, type HandCardState } from './contestPlays';
 export { CONTEST_COIN_EVENTS, CONTEST_COIN_DEFAULTS, CONTEST_COIN_KEYS, contestCoinRules, contestCoinOverrides, coinEventApplies, coinRulesLine, type CoinEventDef, type CoinEventId, type ContestCoinRules } from './contestCoin';
 
 export type ContestKind = 'high' | 'golf' | 'bullseye';

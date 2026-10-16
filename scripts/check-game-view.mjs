@@ -4,7 +4,8 @@
 // header, drive line and play rows are readings off the play feed; both
 // hosts' Game views take them from here, pinned against real week-1 lines.
 // Run: npx tsx scripts/check-game-view.mjs
-import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible } from '../packages/core/src/data/gameView.ts';
+import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft } from '../packages/core/src/data/gameView.ts';
+import { teamMarkColor } from '../packages/core/src/data/teamColors.ts';
 import { namesFromSlugs, resolveGamebookPerson } from '../packages/core/src/engine/gameNames.ts';
 
 let fails = 0;
@@ -58,6 +59,27 @@ const P = (o) => ({ c: 0, drv: 3, tm: 'KC', dn: 1, dist: 10, yl: 80, yl2: 80, ty
   eq(ballCarrier({ ty: 'Rushing Touchdown', txt: J2 }), 'K.Walker', 'the 60-yard touchdown is Walker\'s');
   ok(!playNames(J1).includes('K.Tonga') && !playNames(J1).includes('H.Nourzad'), 'the linemen are not "on" the play');
   eq(stripEligible('(Shotgun) J.Dobbins up the middle to KC 39 for 4 yards (K.Tonga; G.Karlaftis).'), '(Shotgun) J.Dobbins up the middle to KC 39 for 4 yards (K.Tonga; G.Karlaftis).', 'a play without the clause is untouched — Tonga keeps his tackle');
+}
+
+// ── TIMEOUTS LEFT (v0.730.4): the live scoreboard's dots ─────────────────
+{
+  const live = { name: 'STATUS_IN_PROGRESS', period: 2, clock: '5:00' };
+  const g = (events, status = live, extra = {}) => timeoutsLeft({ away: 'SEA', home: 'DEN', plays: [{ c: 100 }], st: 'in', status, events, ...extra });
+  const to = (c, txt, tm) => ({ c, ty: 'Timeout', txt, ...(tm ? { tm } : {}) });
+  ok(JSON.stringify(g([])) === JSON.stringify({ away: 3, home: 3, of: 3 }), 'no timeouts called: three each');
+  const first = [to(500, 'Timeout #1 by DEN at 06:40.', 'SEA'), to(1200, 'Timeout #1 by SEA at 03:00.', 'SEA'), to(1500, 'Timeout #2 by Seattle at 00:30.')];
+  const r1 = g(first);
+  ok(r1.away === 1 && r1.home === 2, 'the text names who called it (DEN called one while SEA had the ball); "by Seattle" counts too');
+  ok(g([...first, { c: 1600, ty: 'Official Timeout', txt: 'Official Timeout' }]).away === 1, 'an official (TV) timeout is nobody\'s');
+  const r2 = g(first, { name: 'STATUS_IN_PROGRESS', period: 3, clock: '12:00' });
+  ok(r2.away === 3 && r2.home === 3, 'the second half starts with three again');
+  ok(g(first, { name: 'STATUS_HALFTIME', period: 2, detail: 'Halftime' }).home === 3, 'at halftime the dots show the second half\'s three');
+  ok(g([to(3700, 'Timeout #1 by SEA at 08:00.')], { name: 'STATUS_IN_PROGRESS', period: 5, clock: '8:00' }).away === 1 && g([], { name: 'STATUS_IN_PROGRESS', period: 5, clock: '9:00' }).of === 2, 'overtime: two each');
+  ok(g(first, null) === null, 'a feed without the live header (a baked replay) shows no dots');
+  ok(g(first, { name: 'STATUS_FINAL', period: 4 }) === null && g(first, live, { st: 'post' }) === null, 'a finished game shows no dots');
+  ok(g([to(100, 'Timeout #1 by LAR at 10:00.')], live, { home: 'LA' }).home === 2, 'ESPN\'s LAR is the Rams\' LA');
+  ok(teamMarkColor('SEA', '#0b1020') === '#69BE28' && teamMarkColor('DEN', '#0b1020') === '#FB4F14', 'dots read on a dark theme: Seattle green, Denver orange');
+  ok(teamMarkColor('SEA', '#ffffff') === '#002244', '…and on a light one, Seattle navy');
 }
 
 console.log(fails ? `\n${fails} GAME-VIEW PROBE(S) FAILED` : '\nALL GAME-VIEW PROBES PASSED');

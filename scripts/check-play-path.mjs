@@ -282,8 +282,49 @@ const run = (cur) => {
   for (const f of ['src/app/FieldView.tsx', 'apps/mobile/src/ui/FieldView.tsx']) {
     const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
     ok(`${f}: the incomplete target is drawn at the arc's end, not the spot`,
-      src.includes('carrier && !(incomplete && arc) &&') && src.includes('carrier && incomplete && arc && !over') && src.includes("Math.max(38, arc.x2)"));
+      src.includes('carrier && !(incomplete && arc) &&') && src.includes('carrier && incomplete && arc && playEnd && !over') && src.includes("Math.max(38, playEnd.x)"));
   }
+}
+
+// ── THE FIELD IN PERSPECTIVE (v0.730.0) ───────────────────────────────────
+// Founder: "mirror the sleeper field view … draw the same goal posts." Both
+// views project the flat field through core's fieldPerspective.
+{
+  const { fieldPt, fieldScale, fieldY, fieldXRange, goalPost, projPolyline, FIELD_W, FIELD_TOP, FIELD_BOT, FIELD_MID, FAR_SCALE, PROJ_H } =
+    await import('../packages/core/src/engine/fieldPerspective.ts');
+  const near = 1e-9;
+  ok('the near sideline draws full width', Math.abs(fieldScale(FIELD_BOT) - 1) < near);
+  ok('the far sideline draws at FAR_SCALE (Sleeper\'s ~2/3)', Math.abs(fieldScale(FIELD_TOP) - FAR_SCALE) < near);
+  ok('the field rises from near to far and stays in the drawing', fieldY(FIELD_BOT) > fieldY(FIELD_MID) && fieldY(FIELD_MID) > fieldY(FIELD_TOP) && fieldY(FIELD_TOP) > 0 && fieldY(FIELD_BOT) < PROJ_H);
+  // A yard line projects to a straight line (a ground plane through a pinhole).
+  const a = fieldPt(100, FIELD_TOP), m = fieldPt(100, FIELD_MID), b = fieldPt(100, FIELD_BOT);
+  const cross = (m.x - a.x) * (b.y - a.y) - (m.y - a.y) * (b.x - a.x);
+  ok('a yard line stays straight', Math.abs(cross) < 1e-6, { cross });
+  const [x0, x1] = fieldXRange(FIELD_MID);
+  ok('fieldXRange is the row\'s mapping of x = 0 and x = W', Math.abs(x0 - fieldPt(0, FIELD_MID).x) < near && Math.abs(x1 - fieldPt(FIELD_W, FIELD_MID).x) < near);
+  const L = goalPost(0), R = goalPost(FIELD_W);
+  ok('the posts mirror each other', Math.abs(L.base.x + R.base.x - FIELD_W) < 1e-6 && Math.abs(L.base.y - R.base.y) < near);
+  ok('a post stands up from the end line, inside the drawing', L.through.y < L.base.y && L.through.y > 0);
+  const lifted = projPolyline([[300, FIELD_MID], [FIELD_W, FIELD_MID]], (t) => t * t * (R.base.y - R.through.y));
+  ok('a made kick\'s lift ends between the uprights', Math.abs(lifted.end.x - R.through.x) < 1e-6 && Math.abs(lifted.end.y - R.through.y) < 1e-6);
+  // THE BALL IN THE AIR (v0.730.1): a flight rises off its ground track and
+  // lands back on its spot; the height scales with the distance, clamped.
+  const { projFlight, flightApex, FLIGHT_MIN, FLIGHT_MAX } = await import('../packages/core/src/engine/fieldPerspective.ts');
+  const lowest = (d) => Math.min(...d.match(/-?[\d.]+ (-?[\d.]+)/g).map((m) => Number(m.split(' ')[1])));
+  const punt = projFlight(100, FIELD_MID, 280, FIELD_MID), hop = projFlight(200, FIELD_MID, 215, FIELD_MID);
+  const ground = fieldPt(280, FIELD_MID);
+  ok('a flight lands on its ground spot', Math.abs(punt.end.x - ground.x) < 1e-6 && Math.abs(punt.end.y - ground.y) < 1e-6);
+  ok('a flight rises above the field toward the top of the screen', fieldY(FIELD_MID) - lowest(punt.d) > 30, { top: lowest(punt.d) });
+  ok('a punt flies higher than a checkdown', fieldY(FIELD_MID) - lowest(punt.d) > fieldY(FIELD_MID) - lowest(hop.d));
+  ok('apex is clamped both ways', flightApex(0) === FLIGHT_MIN && flightApex(1e6) === FLIGHT_MAX);
+  ok('the tallest flight stays inside the drawing', lowest(projFlight(0, FIELD_TOP, FIELD_W, FIELD_TOP).d) > 0);
+  for (const f of ['src/app/FieldView.tsx', 'apps/mobile/src/ui/FieldView.tsx']) {
+    const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(`${f}: draws through fieldPerspective, posts included, no 3D tilt`,
+      src.includes("from '@drip/core/engine/fieldPerspective'") && src.includes('goalPost(ex)') && src.includes('projFlight(arc.x1') && !/rotateX/.test(src));
+  }
+  const gv = readFileSync(new URL('../apps/mobile/src/ui/GameView.tsx', import.meta.url), 'utf8');
+  ok('the phone game view runs its field edge to edge (bleed)', /<FieldView[^>]*\bbleed\b/.test(gv));
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }
