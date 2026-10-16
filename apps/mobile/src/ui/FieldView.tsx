@@ -97,11 +97,14 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   const { width: winW } = useWindowDimensions();
   const holderRef = useRef<View>(null);
   const [holderX, setHolderX] = useState<number | null>(null);
-  const measureHolder = () => holderRef.current?.measureInWindow((x) => setHolderX(x));
+  const [holderR, setHolderR] = useState(0);   // the holder's gap to the screen's right edge
+  const measureHolder = () => holderRef.current?.measureInWindow((x, _y, w) => { setHolderX(x); setHolderR(Math.max(0, winW - x - w)); });
   const bleedW = bleed && holderX != null ? winW * (1 + 2 * BLEED_OVER) : null;
   // THE BOX GOES EDGE TO EDGE TOO (v0.730.5, founder: "expand the field and the box it is in so the bottom
   // corners just get clipped by the screen like sleeper"): the card is shifted back to the screen's left edge
-  // and made the screen's width; the field inside it is wider still.
+  // and made the screen's width; the field inside it is wider still. Its controls keep to the holder's own
+  // width (v0.730.6: the padding is the holder's x plus PAD), so a sheet that clips short of the screen's
+  // edge — the All fields sheet does, ~9pt in — never cuts the ↔ or the strip, only the field's corners.
   const PAD = 8;
   const { away, home, plays } = feed;
 
@@ -279,7 +282,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   return (
     <View ref={holderRef} onLayout={bleed ? measureHolder : undefined} style={{ opacity: bleed && holderX == null ? 0 : 1 }}>
     <View style={bleed
-      ? { marginTop: 5, marginLeft: -(holderX ?? 0), width: winW, backgroundColor: t.bg, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, paddingHorizontal: PAD, paddingVertical: 6, overflow: 'hidden' }
+      ? { marginTop: 5, marginLeft: -(holderX ?? 0), width: winW, backgroundColor: t.bg, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, paddingLeft: (holderX ?? 0) + PAD, paddingRight: holderR + PAD, paddingVertical: 6, overflow: 'hidden' }
       : { marginTop: 5, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, borderRadius: 4, paddingHorizontal: PAD, paddingVertical: 6 }}>
       {/* score + clock strip */}
       <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 5, paddingRight: 30 }}>
@@ -331,7 +334,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
           With `bleed` the drawing runs to the screen's edges and a little
           past, the way Sleeper's near corners sit off the screen. */}
       <View>
-      <View style={bleedW != null ? { width: bleedW, marginLeft: -PAD - winW * BLEED_OVER } : undefined}>
+      <View style={bleedW != null ? { width: bleedW, marginLeft: -(holderX ?? 0) - PAD - winW * BLEED_OVER } : undefined}>
       <Svg viewBox={`0 0 ${W} ${VH}`} width={bleedW ?? '100%'} height={bleedW != null ? (bleedW * VH) / W : undefined} style={bleedW != null ? undefined : { aspectRatio: W / VH }}>
         {/* turf, its ten-yard bands, end zones */}
         <Polygon points={fieldQuad(FX, TOP, FX + FW, BOT)} fill={mix(t.you, 5, t.surface)} stroke={alpha(t.dim, 45)} strokeWidth={1} />
