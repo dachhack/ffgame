@@ -110,6 +110,38 @@ export function projQuad(x1: number, y1: number, cx: number, cy: number, x2: num
   return projPolyline(pts, lift);
 }
 
+// ── THE BALL IN THE AIR (v0.730.1) ───────────────────────────────────────
+// Founder: "make the arcs rise into the air like Sleeper's." The flight used
+// to be a curve ON THE GRASS (a quadratic leaning toward the far sideline),
+// which in perspective reads as a ball rolling sideways. Now the ball's
+// GROUND track is the straight line from the snap to where it came down, and
+// the arc is height above that track, drawn straight up the screen: a throw
+// or a kick climbs off the field and comes back down onto its spot.
+//
+// Height scales with how far the ball went ON SCREEN, so a checkdown is a
+// short hop and a punt towers over the field, clamped so a short throw still
+// visibly leaves the ground and a long one stays inside the drawing.
+
+/** Apex height (screen units) for a flight that covers `dist` on screen. */
+export const FLIGHT_MIN = 10;
+export const FLIGHT_MAX = 44;
+export function flightApex(dist: number): number {
+  return Math.min(FLIGHT_MAX, Math.max(FLIGHT_MIN, (Number(dist) || 0) * 0.42));
+}
+
+/** A ball's flight from flat (x1, y1) to (x2, y2): the straight ground track,
+ *  projected, lifted by a parabola peaking at `flightApex` halfway. `extra`
+ *  adds more lift along the way (a made field goal ends at the crossbar). */
+export function projFlight(x1: number, y1: number, x2: number, y2: number, extra?: (t: number) => number): ProjPath {
+  const a = fieldPt(x1, y1), b = fieldPt(x2, y2);
+  // …and never above the top of the drawing, for a play along the far sideline.
+  const apex = Math.min(flightApex(Math.hypot(b.x - a.x, b.y - a.y)), Math.min(a.y, b.y) - 4);
+  const pts: Array<[number, number]> = [];
+  const N = 24;
+  for (let i = 0; i <= N; i++) { const t = i / N; pts.push([x1 + (x2 - x1) * t, y1 + (y2 - y1) * t]); }
+  return projPolyline(pts, (t) => 4 * t * (1 - t) * apex + (extra ? extra(t) : 0));
+}
+
 // ── THE GOAL POSTS ───────────────────────────────────────────────────────
 // Sleeper's: gold, standing on each end line halfway between the sidelines, a
 // short post up to the crossbar and two uprights above it, drawn upright

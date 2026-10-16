@@ -307,10 +307,21 @@ const run = (cur) => {
   ok('a post stands up from the end line, inside the drawing', L.through.y < L.base.y && L.through.y > 0);
   const lifted = projPolyline([[300, FIELD_MID], [FIELD_W, FIELD_MID]], (t) => t * t * (R.base.y - R.through.y));
   ok('a made kick\'s lift ends between the uprights', Math.abs(lifted.end.x - R.through.x) < 1e-6 && Math.abs(lifted.end.y - R.through.y) < 1e-6);
+  // THE BALL IN THE AIR (v0.730.1): a flight rises off its ground track and
+  // lands back on its spot; the height scales with the distance, clamped.
+  const { projFlight, flightApex, FLIGHT_MIN, FLIGHT_MAX } = await import('../packages/core/src/engine/fieldPerspective.ts');
+  const lowest = (d) => Math.min(...d.match(/-?[\d.]+ (-?[\d.]+)/g).map((m) => Number(m.split(' ')[1])));
+  const punt = projFlight(100, FIELD_MID, 280, FIELD_MID), hop = projFlight(200, FIELD_MID, 215, FIELD_MID);
+  const ground = fieldPt(280, FIELD_MID);
+  ok('a flight lands on its ground spot', Math.abs(punt.end.x - ground.x) < 1e-6 && Math.abs(punt.end.y - ground.y) < 1e-6);
+  ok('a flight rises above the field toward the top of the screen', fieldY(FIELD_MID) - lowest(punt.d) > 30, { top: lowest(punt.d) });
+  ok('a punt flies higher than a checkdown', fieldY(FIELD_MID) - lowest(punt.d) > fieldY(FIELD_MID) - lowest(hop.d));
+  ok('apex is clamped both ways', flightApex(0) === FLIGHT_MIN && flightApex(1e6) === FLIGHT_MAX);
+  ok('the tallest flight stays inside the drawing', lowest(projFlight(0, FIELD_TOP, FIELD_W, FIELD_TOP).d) > 0);
   for (const f of ['src/app/FieldView.tsx', 'apps/mobile/src/ui/FieldView.tsx']) {
     const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
     ok(`${f}: draws through fieldPerspective, posts included, no 3D tilt`,
-      src.includes("from '@drip/core/engine/fieldPerspective'") && src.includes('goalPost(ex)') && !/rotateX/.test(src));
+      src.includes("from '@drip/core/engine/fieldPerspective'") && src.includes('goalPost(ex)') && src.includes('projFlight(arc.x1') && !/rotateX/.test(src));
   }
   const gv = readFileSync(new URL('../apps/mobile/src/ui/GameView.tsx', import.meta.url), 'utf8');
   ok('the phone game view runs its field edge to edge (bleed)', /<FieldView[^>]*\bbleed\b/.test(gv));

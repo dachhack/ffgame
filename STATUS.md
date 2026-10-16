@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.1 — The ball rises into the air
+
+> - On the live field, passes and kicks now arc up into the air above the field and come down on their spot, like Sleeper's. A made field goal drops between the uprights.
+
+Founder: "make the arcs rise into the air like Sleeper's." The flight was a
+quadratic on the grass leaning toward the far sideline. Core
+`projFlight` (engine/fieldPerspective) now draws the straight ground track
+from snap to landing, projected, lifted straight up the screen by a
+parabola whose apex scales with the on-screen distance (`flightApex`,
+10–44, never above the drawing). Both FieldViews use it; the carried
+phase stays on the grass. check:playpath covers landing, height ordering,
+clamps and bounds.
+
 ### v0.730.0 — The field in perspective, with goal posts
 
 > - The live field now looks like Sleeper's: a wide field seen from the stands, with gold goal posts standing at each end.

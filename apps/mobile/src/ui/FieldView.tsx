@@ -30,10 +30,10 @@ import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { projectedBox, type ProjectedRow } from '@drip/core/engine/projectedBox';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { playPath, arcControlY, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
+import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
 import {
   FIELD_W, FIELD_EZ, FIELD_TOP, FIELD_BOT, PROJ_H, BLEED_OVER, POST_COLOR,
-  fieldPt, fieldY, fieldScale, fieldXRange, fieldQuad, projPolyline, projQuad, goalPost, type ProjPath,
+  fieldPt, fieldY, fieldScale, fieldXRange, fieldQuad, projPolyline, projFlight, goalPost, type ProjPath,
 } from '@drip/core/engine/fieldPerspective';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
@@ -235,7 +235,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   const fgLift = fgPost ? (u: number) => u * u * (fgPost.base.y - fgPost.through.y) : undefined;
   const airEnd = arc ? (catchX ?? arc.x2) : 0;
   const airPath: ProjPath | null = !arc ? null : isPassy
-    ? projQuad(arc.x1, MID, (arc.x1 + airEnd) / 2, arcControlY(arc.x1, airEnd, (MID + endY) / 2, TOP), airEnd, endY, fgLift)
+    ? projFlight(arc.x1, MID, airEnd, endY, fgLift)
     : projPolyline([[arc.x1, MID], [arc.x2, endY]], fgLift);
   const runPath: ProjPath | null = arc && carrying && catchX != null
     ? projPolyline(overlaps ? [[catchX, endY], [catchX, carryY], [arc.x2, carryY]] : [[catchX, endY], [arc.x2, endY]])

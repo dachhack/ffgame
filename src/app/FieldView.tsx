@@ -20,10 +20,10 @@ import { teamLogo, headshot } from '@drip/core/data/media';
 import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
-import { playPath, arcControlY, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
+import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
 import {
   FIELD_W, FIELD_EZ, FIELD_TOP, FIELD_BOT, PROJ_H, POST_COLOR,
-  fieldPt, fieldX, fieldY, fieldScale, fieldQuad, projPolyline, projQuad, goalPost, type ProjPath,
+  fieldPt, fieldX, fieldY, fieldScale, fieldQuad, projPolyline, projFlight, goalPost, type ProjPath,
 } from '@drip/core/engine/fieldPerspective';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { projectedBox } from '@drip/core/engine/projectedBox';
@@ -421,7 +421,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const fgLift = fgPost ? (u: number) => u * u * (fgPost.base.y - fgPost.through.y) : undefined;
   const airEnd = arc ? (catchX ?? arc.x2) : 0;
   const airPath: ProjPath | null = !arc ? null : isPassy
-    ? projQuad(arc.x1, midY, (arc.x1 + airEnd) / 2, arcControlY(arc.x1, airEnd, (midY + endY) / 2, TOP), airEnd, endY, fgLift)
+    ? projFlight(arc.x1, midY, airEnd, endY, fgLift)
     : projPolyline([[arc.x1, midY], [arc.x2, endY]], fgLift);
   const runPath: ProjPath | null = arc && carrying && catchX != null
     ? projPolyline(overlaps ? [[catchX, endY], [catchX, carryY], [arc.x2, carryY]] : [[catchX, endY], [arc.x2, endY]])
