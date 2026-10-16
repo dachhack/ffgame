@@ -68,6 +68,24 @@ import { isDynastySettings, dynFormatOfSlots, dynValues } from '../../packages/c
  *  25 seconds from filing until the 3am run — thousands of them, burying the
  *  lines worth reading. Counting outstanding claims means the seat files two
  *  and then goes quiet until the waiver run answers. */
+/** The seats a sweep walks: agent seats and 🤖 seats, narrowed to `only`'s
+ *  league (and seat) for an ops pass. 🤖 wins over an agent row (v0.524.0):
+ *  account-less AI seats hold an agent so their lineups are stored, but the
+ *  wire still judges them as AI.
+ *
+ *  A NEW ARRAY, ALWAYS (v0.729.3). v0.665.1 (merged Oct 10, 23:54 ET) narrowed
+ *  in place (emptied the list, then pushed `wanted` back) and with no
+ *  filter `wanted` WAS `seatRows`, so emptying one emptied both: every hourly
+ *  sweep from Oct 11 walked zero seats while one-seat ops passes (a filtered
+ *  copy) worked. Ops 063's log: "0 of 0 league(s) loaded, 0 drafted, 0 seat(s)". */
+export function sweepSeats(agentRows, aiRows, only = null) {
+  const aiSeat = new Set((aiRows ?? []).map((r) => `${r.league_id}:${r.sleeper_roster_id}`));
+  const all = (agentRows ?? []).filter((r) => !aiSeat.has(`${r.league_id}:${r.roster_id}`))
+    .map((r) => ({ league_id: r.league_id, roster_id: r.roster_id, kind: 'agent' }));
+  for (const r of aiRows ?? []) all.push({ league_id: r.league_id, roster_id: r.sleeper_roster_id, kind: 'ai' });
+  return only ? all.filter((r) => r.league_id === only.leagueId && (only.rosterId == null || r.roster_id === only.rosterId)) : all;
+}
+
 /** Every row of a read, a thousand at a time (PostgREST's page cap), and
  *  a failed page logged rather than read as "no rows" (v0.729.1). */
 export async function readAll(build, what, log = () => {}) {
@@ -132,23 +150,14 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
   const agentRows = await readAll(() => db().from('seat_agent').select('league_id,roster_id'), 'seat agents', log);
   const aiRows = await readAll(() => db().from('league_membership')
     .select('league_id,sleeper_roster_id').eq('controller', 'ai'), 'AI seats', log);
-  // 🤖 wins over an agent row (v0.524.0): account-less AI seats now hold an
-  // agent so their lineups are stored, but the wire still judges them as AI.
-  const aiSeat = new Set((aiRows ?? []).map((r) => `${r.league_id}:${r.sleeper_roster_id}`));
-  const seatRows = (agentRows ?? []).filter((r) => !aiSeat.has(`${r.league_id}:${r.roster_id}`))
-    .map((r) => ({ league_id: r.league_id, roster_id: r.roster_id, kind: 'agent' }));
-  for (const r of aiRows ?? []) seatRows.push({ league_id: r.league_id, roster_id: r.sleeper_roster_id, kind: 'ai' });
-  const wanted = only ? seatRows.filter((r) => r.league_id === only.leagueId && (only.rosterId == null || r.roster_id === only.rosterId)) : seatRows;
-  if (only && !wanted.length) log('seat wire', only.leagueId, 'seat', only.rosterId ?? '*', 'is not an AI or agent seat — nothing to do');
-  if (!wanted.length) return 0;
-  seatRows.length = 0; seatRows.push(...wanted);
+  const seatRows = sweepSeats(agentRows, aiRows, only);
+  if (only && !seatRows.length) log('seat wire', only.leagueId, 'seat', only.rosterId ?? '*', 'is not an AI or agent seat — nothing to do');
+  if (!seatRows.length) return 0;
   const leagueIds = [...new Set(seatRows.map((r) => r.league_id))];
 
-  // IN CHUNKS (v0.729.1). One `.in()` read of all the ids carried every
-  // league id in its URL; once enough leagues had AI seats the URL ran past
-  // the gateway's limit, the read failed, its error was never looked at, and
-  // the hourly sweep walked no league at all — AI claims stopped everywhere
-  // after Oct 11 (ops 060–062). A hundred ids a read, and a failed read says so.
+  // IN CHUNKS (v0.729.1): a hundred ids a read so the URL stays short however
+  // many leagues there are, and a failed read says so. (Not the Oct 11 stop —
+  // that was sweepSeats' in-place narrowing; ops 062 counted only 14 leagues.)
   const lgs = await inChunks(leagueIds, (ids) => db().from('league')
     .select('id,settings_json,lineup_policy').in('id', ids), 'leagues', log);
   const drafts = await inChunks(leagueIds, (ids) => db().from('draft')

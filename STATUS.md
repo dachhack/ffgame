@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.729.3 — AI teams make waiver moves again (the real cause)
+
+> - AI-run teams had stopped making waiver claims and pickups since Oct 11. The cause is found and fixed; they'll catch up within the hour.
+
+Confirmed cause. Ops 063 (v0.729.1's chunked sweep) logged "0 of 0 league(s)
+loaded, 0 drafted, 0 seat(s)", while ops 062 counted 49 AI seats and 114 agent
+rows in only 14 leagues, so v0.729.1's URL-length theory was wrong. v0.665.1
+(#1200, merged Oct 10 23:54 ET) added the one-seat ops filter by narrowing the
+seat list in place: `seatRows.length = 0; seatRows.push(...wanted)`. With no
+filter, `wanted` was the same array, so emptying it emptied both. Every hourly
+sweep from Oct 11 walked zero seats, while one-seat ops passes (a filtered
+copy) worked, which is why ops 059 fixed Team 4. Now `sweepSeats` always
+returns a new list; check:seatwaivers runs it with no filter (old code: 0
+seats). Ops 064 re-runs the full sweep. v0.729.1's chunking and error logging
+stay as hardening.
+
 ### v0.729.2 — The target at the end of an incomplete pass
 
 > - On the live field, an incomplete pass now shows the player it was thrown to at the end of the ball's arc, by the ✕, instead of back at the line of scrimmage.
