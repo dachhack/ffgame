@@ -20,7 +20,7 @@ import { teamLogo, headshot } from '@drip/core/data/media';
 import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
-import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
+import { playPath, arcControlY, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { projectedBox } from '@drip/core/engine/projectedBox';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
@@ -575,8 +575,9 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
               {(() => { const right = flip ? !attacksRight : attacksRight; return (
                 <text x={right ? 15 : -15} y={midY + 3.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={10} fontWeight={700} textAnchor="middle">{right ? '▶' : '◀'}</text>
               ); })()}
-              {/* the ball carrier, above the spot: headshot in a ring, name under */}
-              {carrier && (
+              {/* the ball carrier, above the spot: headshot in a ring, name under.
+                  An incompletion's target sits at the ✕ instead (below). */}
+              {carrier && !(incomplete && arc) && (
                 <g>
                   <defs><clipPath id={`fvc-${feed.key}`}><circle cx={0} cy={TOP + 13} r={11} /></clipPath></defs>
                   <circle cx={0} cy={TOP + 13} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
@@ -587,6 +588,20 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
               )}
             </g>
           )}
+          {/* THE TARGET AT THE ✕ (v0.729.2): an incomplete pass draws who it
+              was thrown to at the end of the arc, not at the spot. */}
+          {carrier && incomplete && arc && !over && (() => {
+            const { ringY, plateY } = targetMarkY(endY);
+            return (
+              <g transform={`translate(${Math.min(W - 38, Math.max(38, arc.x2))} 0)`} style={{ animation: 'fvtxt .3s ease .5s both' }}>
+                <defs><clipPath id={`fvt-${feed.key}`}><circle cx={0} cy={ringY} r={11} /></clipPath></defs>
+                <circle cx={0} cy={ringY} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
+                {carrierImg && <image href={carrierImg} x={-11} y={ringY - 11} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvt-${feed.key})`} />}
+                <rect x={-38} y={plateY} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
+                <text x={0} y={plateY + 10} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier.name}</text>
+              </g>
+            );
+          })()}
         </svg>
         {/* scoring-play takeover — pops over the field, holds, fades (pure CSS) */}
         {takeover && !over && (() => {

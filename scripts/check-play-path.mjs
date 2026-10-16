@@ -10,7 +10,7 @@
 // In check:parity because the geometry is shared by two platforms that each
 // used to own a copy, and because "do these two strokes lie on top of each
 // other" is exactly the kind of thing you cannot see in a diff.
-import { playPath, arcControlY, playSide, playSideDy } from '../packages/core/src/engine/playPath';
+import { playPath, arcControlY, playSide, playSideDy, targetMarkY } from '../packages/core/src/engine/playPath';
 import { unopposedCopy, claimsOpponentAbsent } from '../packages/core/src/data/slotLabels';
 import { isMetricSet } from '../packages/core/src/data/metrics';
 import { metricGapFills, DEFAULT_AI_METRIC } from '../packages/core/src/data/aiLineup';
@@ -270,6 +270,20 @@ const run = (cur) => {
   const flipped = (y, tm) => 400 - xOf(y, tm);
   const fl = playPath(deep, flipped(deep.yl, deep.tm), flipped(deep.yl2, deep.tm), flipped);
   ok('a ↔-flipped field mirrors the catch with the endpoints', fl.catchX != null && Math.abs(fl.catchX - (400 - at(deep).catchX)) < 0.01);
+}
+
+// v0.729.2: an incompletion's target is drawn at the ✕, clear of it, inside the field (H 130).
+{
+  for (const endY of [41, 63, 85]) {
+    const { ringY, plateY } = targetMarkY(endY);
+    const top = Math.min(ringY - 12, plateY), bot = Math.max(ringY + 12, plateY + 13);
+    ok(`target mark at endY ${endY} stays on the field and off the ✕`, top >= 0 && bot <= 130 && (bot < endY - 4 || top > endY + 4), { ringY, plateY });
+  }
+  for (const f of ['src/app/FieldView.tsx', 'apps/mobile/src/ui/FieldView.tsx']) {
+    const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(`${f}: the incomplete target is drawn at the arc's end, not the spot`,
+      src.includes('carrier && !(incomplete && arc) &&') && src.includes('carrier && incomplete && arc && !over') && src.includes("Math.max(38, arc.x2)"));
+  }
 }
 
 if (fails) { console.log(`\n${fails} PLAY-PATH ASSERTION(S) FAILED`); process.exit(1); }

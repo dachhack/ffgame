@@ -1,0 +1,6 @@
+{
+  "mode": "seat-wire",
+  "week": 6,
+  "season": "2026",
+  "why": "v0.729.1 reads the sweep's leagues and drafts in chunks of 100 ids and logs any read error. One full pass, as the hourly does, to show AI seats moving again and work the backlog since Oct 11."
+}

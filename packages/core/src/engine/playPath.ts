@@ -181,3 +181,14 @@ export function playSideDy(
   const toward = side === 'right' ? 1 : -1;      // +1 = down the screen
   return toward * (attacksRightOnScreen ? 1 : -1) * lane;
 }
+
+/** THE TARGET AT THE END OF THE ARC (v0.729.2). Founder, on an incomplete
+ *  pass to J. Smith-Njigba drawn at the line of scrimmage: "Let's put the
+ *  targeted player at the end of the ball arc." On an incompletion the ball
+ *  never reaches the spot, so the headshot moves to the ✕ instead. Where the
+ *  ring and name plate go around the ✕ at `endY`: above it when there's room
+ *  (the plate on top), else below it (the plate under the ring). Ring is r=12;
+ *  the plate is 13 tall. */
+export function targetMarkY(endY: number): { ringY: number; plateY: number } {
+  return endY - 47 >= 0 ? { ringY: endY - 20, plateY: endY - 47 } : { ringY: endY + 20, plateY: endY + 33 };
+}

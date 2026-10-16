@@ -30,7 +30,7 @@ import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { projectedBox, type ProjectedRow } from '@drip/core/engine/projectedBox';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { playPath, arcControlY, playSide, playSideDy } from '@drip/core/engine/playPath';
+import { playPath, arcControlY, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
 import { useTheme, MONO, alpha, mix, fs, fsTight } from '../theme.native';
@@ -387,8 +387,9 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
             <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 3.5} fill={ballCol?.c ?? t.faint} fontSize={10} fontWeight="700" textAnchor="middle">
               {(flip ? !attacksRight : attacksRight) ? '▶' : '◀'}
             </SvgText>
-            {/* the ball carrier, above the spot: headshot in a ring, name under */}
-            {carrier && (
+            {/* the ball carrier, above the spot: headshot in a ring, name under.
+                An incompletion's target sits at the ✕ instead (below). */}
+            {carrier && !(incomplete && arc) && (
               <G>
                 <Circle cx={0} cy={TOP + 13} r={12} fill={t.surface} stroke={ballCol?.c ?? t.dimstrong} strokeWidth={1.4} />
                 {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
@@ -398,6 +399,20 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
             )}
           </AnimatedG>
         )}
+        {/* THE TARGET AT THE ✕ (v0.729.2): an incomplete pass draws who it
+            was thrown to at the end of the arc, not at the spot. */}
+        {carrier && incomplete && arc && !over && (() => {
+          const { ringY, plateY } = targetMarkY(endY);
+          const ring = ballCol?.c ?? t.dimstrong;
+          return (
+            <G transform={`translate(${Math.min(W - 38, Math.max(38, arc.x2))} 0)`}>
+              <Circle cx={0} cy={ringY} r={12} fill={t.surface} stroke={ring} strokeWidth={1.4} />
+              {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={ringY - 11} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
+              <Rect x={-38} y={plateY} width={76} height={13} rx={2} fill={alpha('#000000', 0.6)} />
+              <SvgText x={0} y={plateY + 10} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
+            </G>
+          );
+        })()}
       </Svg>
       {/* ── FINAL banner (v0.342.0, web parity) ────────────────────────────
           A finished game's field is a clean pitch — no arc, no ball spot, no

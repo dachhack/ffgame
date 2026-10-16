@@ -614,5 +614,24 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(cli.includes("if (req.league) argv.push(`--league=${req.league}`);") && cli.includes("league ? { leagueId: league"), 'ops seat-wire: no league runs the whole sweep once, with its log');
 }
 
+// v0.729.1: the sweep's league read in chunks, every page, errors logged.
+{
+  const { inChunks, readAll } = await import('../server/src/seatWire.js');
+  const ids = Array.from({ length: 250 }, (_, i) => `L${i}`);
+  const calls = [];
+  const fake = (part) => ({ range: async (a, b) => { calls.push(part.length); return { data: part.slice(a, b + 1).map((id) => ({ id })), error: null }; } });
+  const got = await inChunks(ids, fake, 'leagues');
+  ok(got.length === 250 && calls.length === 3 && Math.max(...calls) === 100, `250 league ids read in three chunks of at most 100 (got ${got.length} rows, ${calls.join('/')})`);
+  const rows = Array.from({ length: 2300 }, (_, i) => ({ i }));
+  const all = await readAll(() => ({ range: async (a, b) => ({ data: rows.slice(a, b + 1), error: null }) }), 'AI seats');
+  ok(all.length === 2300, `every page past PostgREST's 1000-row cap is read (got ${all.length})`);
+  const logged = [];
+  const failed = await readAll(() => ({ range: async () => ({ data: null, error: { message: 'URI too long' } }) }), 'leagues', (...m) => logged.push(m.join(' ')));
+  ok(failed.length === 0 && logged.some((l) => l.includes('leagues read failed') && l.includes('URI too long')), 'a failed read is logged, not taken for "no leagues"');
+  const { readFileSync } = await import('node:fs');
+  const sw = readFileSync(new URL('../server/src/seatWire.js', import.meta.url), 'utf8');
+  ok(!/\.in\('id', leagueIds\)|\.in\('league_id', leagueIds\)/.test(sw), 'no unchunked league-id read left in the sweep');
+}
+
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);
