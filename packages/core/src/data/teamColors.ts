@@ -51,3 +51,27 @@ export function teamColor(abbr?: string | null): TeamColor | null {
   const key = abbr.toUpperCase();
   return COLORS[ALIAS[key] ?? key] ?? null;
 }
+
+// THE READABLE ONE OF THE PAIR (v0.730.4). A small mark in a team's colour —
+// the scoreboard's timeout dots — vanishes when the primary is close to the
+// background: Seattle's navy on a dark theme. Sleeper uses Seattle's green.
+// Pick whichever of the two club colours stands further from `bg` (luminance
+// contrast); without a background, the brighter one.
+const lum = (hex: string): number | null => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const ch = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+};
+const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+export function teamMarkColor(abbr?: string | null, bg?: string | null): string | null {
+  const tc = teamColor(abbr);
+  if (!tc) return null;
+  const lc = lum(tc.c), lt = lum(tc.t);
+  if (lc == null || lt == null) return tc.c;
+  const lb = bg ? lum(bg) : null;
+  if (lb == null) return lt > lc ? tc.t : tc.c;
+  return contrast(lt, lb) > contrast(lc, lb) ? tc.t : tc.c;
+}

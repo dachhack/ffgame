@@ -17,7 +17,7 @@ import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { weekTitle, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
@@ -28,7 +28,7 @@ import {
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { projectedBox } from '@drip/core/engine/projectedBox';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
-import { teamColor } from '@drip/core/data/teamColors';
+import { teamColor, teamMarkColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 import { openPlayerCard } from './playerCard';
 
@@ -861,12 +861,28 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
   const sit = last ? situationLabel(last, home, away) : null;
   const ballTm = last ? (last.tm2 ?? last.tm) : null;
   const hc = teamColor(home), ac = teamColor(away);
+  // TIMEOUTS LEFT (v0.730.4): Sleeper's dots under each name — lit for each one left, hollow for each used.
+  const tos = !over ? timeoutsLeft(feed) : null;
+  const toDots = (abbr: string, right: boolean) => {
+    if (!tos) return null;
+    const left = abbr === away ? tos.away : tos.home;
+    // the club colour that reads on this theme (Seattle's green, not navy)
+    const col = teamMarkColor(abbr, typeof document !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue('--bg') : null) ?? 'var(--you)';
+    return (
+      <div aria-label={`${left} timeout${left === 1 ? '' : 's'} left`} title={`${left} timeout${left === 1 ? '' : 's'} left`} style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', gap: 5, marginTop: 4 }}>
+        {Array.from({ length: tos.of }, (_, i) => (
+          <span key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: i < left ? col : 'transparent', border: `1px solid ${i < left ? col : 'color-mix(in srgb, var(--text) 30%, transparent)'}`, boxSizing: 'border-box' }} />
+        ))}
+      </div>
+    );
+  };
   const teamCol = (abbr: string, score: number | null, right: boolean) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', minWidth: 0 }}>
       <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
         {teamLogo(abbr, { week }) && <img src={teamLogo(abbr, { week })!} alt="" width={22} height={22} />}
         <span className="mono" style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>{clubNick(abbr)}</span>
       </div>
+      {toDots(abbr, right)}
       <div style={{ display: 'flex', flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
         <span className="mono" style={{ fontSize: 34, fontWeight: 800, color: 'var(--text)', lineHeight: 1.1 }}>{score == null ? '–' : score}</span>
         {ballTm === abbr && !over && <span style={{ fontSize: 12 }}>🏈</span>}

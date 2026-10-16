@@ -15,12 +15,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { gameFeedFor, weekBoxGames, latestPlay, feedScore, type GamePlay } from '@drip/core/data/gameFeed';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel, timeoutsLeft } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { teamColor } from '@drip/core/data/teamColors';
+import { teamColor, teamMarkColor } from '@drip/core/data/teamColors';
 import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { stripSlugTag } from '@drip/core/data/slugMeta';
 import { useTheme, MONO, alpha, fs } from '../theme.native';
@@ -64,6 +64,21 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
   const sit = last ? situationLabel(last, home, away) : null;
   const ballTm = last ? (last.tm2 ?? last.tm) : null;
   const hc = teamColor(home), ac = teamColor(away);
+  // TIMEOUTS LEFT (v0.730.4, founder: "dots to represent time outs left on the live score board"): Sleeper's
+  // three dots under each name — lit for each one left, hollow for each one used. Core derives the count.
+  const tos = feed && live ? timeoutsLeft(feed) : null;
+  const toDots = (abbr: string, right: boolean) => {
+    if (!tos) return null;
+    const left = abbr === away ? tos.away : tos.home;
+    const col = teamMarkColor(abbr, t.bg) ?? t.you;   // the club colour that reads on this theme (Seattle's green, not navy)
+    return (
+      <View accessibilityLabel={`${left} timeout${left === 1 ? '' : 's'} left`} style={{ flexDirection: right ? 'row-reverse' : 'row', gap: 5, marginTop: 4 }}>
+        {Array.from({ length: tos.of }, (_, i) => (
+          <View key={i} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: i < left ? col : 'transparent', borderWidth: 1, borderColor: i < left ? col : alpha(t.text, 30) }} />
+        ))}
+      </View>
+    );
+  };
 
   const teamCol = (abbr: string, score: number | null, right: boolean) => (
     <View style={{ flex: 1, alignItems: right ? 'flex-end' : 'flex-start' }}>
@@ -71,6 +86,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
         {!!teamLogo(abbr, { week }) && <Image source={{ uri: teamLogo(abbr, { week })! }} style={{ width: 22, height: 22 }} />}
         <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '800', color: t.text }}>{clubNick(abbr)}</Text>
       </View>
+      {toDots(abbr, right)}
       <View style={{ flexDirection: right ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
         <Text style={{ fontFamily: MONO, fontSize: 34, fontWeight: '800', color: t.text, lineHeight: 38 }}>{score == null ? '–' : score}</Text>
         {ballTm === abbr && !over && <Text style={{ fontSize: 12 }}>🏈</Text>}

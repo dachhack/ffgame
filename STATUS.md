@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.4 — Timeout dots on the live scoreboard
+
+> - The live game screen's scoreboard now shows each team's timeouts left as dots under its name, like Sleeper's: lit for each one left, hollow for each one used.
+
+Founder: "We need dots to represent time outs left on the live score board."
+The feed has no timeout count, but every timeout is a stoppage row ("Timeout
+#1 by DEN at 12:51."). Core `timeoutsLeft` (data/gameView) derives it: three
+a half, two in overtime, minus each one called since the half began. The
+caller comes from the text (ESPN's code, or the club spelled out), not the
+row's team, which is the side with the ball. Halftime shows the second
+half's three; a finished game and a feed without the live header (baked
+replays) show no dots. Both game views (web GameView in src/app/FieldView,
+phone ui/GameView) draw them in `teamMarkColor`: the club colour that reads
+on the theme (Seattle's green on dark, navy on light). check:gameview covers it.
+
 ### v0.730.3 — The server keeps other squads' power-ups face down too
 
 > - Your opponent's power-ups are now hidden by the server itself until their cards flip, not just by the app.

@@ -5,7 +5,8 @@
 // app's and the web's Game view cannot disagree about a down, a spot or a
 // drive. Pure functions over the feed's plays; no fetching.
 import type { GamePlay, TeamGameFeed } from './gameFeed';
-import { NAME_RE } from './spokenPlay';
+import { NAME_RE, clubCity, clubNick } from './spokenPlay';
+import { normTeam } from './teamCodes';
 
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
 
@@ -195,4 +196,53 @@ export function ballCarrier(p: Pick<GamePlay, 'txt' | 'ty'>): string | null {
   const ret = txt.match(/\b((?:[A-Z][a-z]{0,2})\.(?:St\. )?[A-Z][A-Za-z'’-]+) (?:to|returns?|pushed|ran)/);
   if (/Kickoff|Punt/i.test(p.ty) && ret && names.includes(ret[1])) return ret[1];
   return names[0];
+}
+
+// ── TIMEOUTS LEFT (v0.730.4) ─────────────────────────────────────────────
+// Founder: "We need dots to represent time outs left on the live score board"
+// — Sleeper's three dots under each team. The feed carries no count, but every
+// timeout is a stoppage row ("Timeout #1 by DEN at 12:51."), so the count is
+// derived: three a half, two in overtime (regular season), less each one called
+// since the half began. The team comes from the text ("by DEN"); the row's own
+// team is ESPN's possession team, which on a defensive timeout is the other side.
+
+export interface TimeoutsLeft { away: number; home: number; of: number }
+
+/** Timeouts each side has left now, or null when there is nothing honest to
+ *  say: a finished or unstarted game, or a feed without the live header
+ *  (baked replays carry no stoppages, and "3 left" would be a guess). */
+export function timeoutsLeft(feed: Pick<TeamGameFeed, 'away' | 'home' | 'plays' | 'st' | 'status' | 'events'> | null | undefined): TimeoutsLeft | null {
+  if (!feed || feed.st === 'post' || !feed.status) return null;
+  const name = String(feed.status.name ?? '').toUpperCase();
+  if (name === 'STATUS_FINAL' || name === 'STATUS_SCHEDULED' || (feed.st === 'pre' && !feed.plays.length)) return null;
+  const lastC = Math.max(-1, ...feed.plays.map((p) => p.c), ...(feed.events ?? []).map((e) => e.c));
+  let period = feed.status.period ?? (lastC >= 0 ? (lastC >= 3600 ? 5 : Math.floor(lastC / 900) + 1) : 1);
+  // At halftime (or the end of the 2nd) the second half's three are what's left.
+  if (stoppageLabel(feed) === 'HALFTIME') period = 3;
+  const of = period >= 5 ? 2 : 3;
+  const from = period >= 5 ? 3600 : period >= 3 ? 1800 : 0;
+  const away = normTeam(feed.away), home = normTeam(feed.home);
+  const used = { away: 0, home: 0 };
+  for (const e of feed.events ?? []) {
+    if (e.c < from || !/timeout/i.test(e.ty) || /official|tv|media/i.test(e.ty)) continue;
+    const tm = timeoutTeam(e.txt ?? '', feed.away, feed.home) ?? normTeam(e.tm ?? '');
+    if (tm === away) used.away++; else if (tm === home) used.home++;
+  }
+  return { away: Math.max(0, of - used.away), home: Math.max(0, of - used.home), of };
+}
+
+/** Who called a timeout, from its text: "by DEN" (ESPN's code), or the club
+ *  spelled out ("by Denver", "by Broncos"). Null when it names neither side. */
+function timeoutTeam(txt: string, awayRaw: string, homeRaw: string): string | null {
+  const m = /\bby\s+(.+?)(?:\s+at\s+\d|[.,]|$)/i.exec(txt);
+  if (!m) return null;
+  const who = m[1].trim();
+  for (const raw of [awayRaw, homeRaw]) {
+    const code = normTeam(raw);
+    if (normTeam(who) === code) return code;
+    const city = clubCity(raw).toLowerCase(), nick = clubNick(raw).toLowerCase();
+    const w = who.toLowerCase();
+    if (w === city || w === nick || w === `${city} ${nick}`) return code;
+  }
+  return null;
 }
