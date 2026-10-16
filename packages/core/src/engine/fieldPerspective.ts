@@ -165,3 +165,33 @@ export function goalPost(endX: number): { d: string; base: { x: number; y: numbe
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+// ── THE TEAM NAME IN ITS END ZONE (v0.730.7) ─────────────────────────────
+// Founder (screenshot: "SEA" spilling out of its end zone): "Can we get the
+// team names to fit in the end zone? Rotated." In perspective an end zone is
+// a slanted band — it leans in toward the centre as it runs to the far
+// sideline — so a label stood straight up the screen crosses its edges. The
+// label now runs along the band's own centre line (bottom-to-top on the left,
+// top-to-bottom on the right, as before) and is sized to the band: its letters
+// no taller than the band is wide, the word no longer than the band is long.
+
+/** Where and how big to draw an end zone's name. `ezX` is the end zone's flat
+ *  left edge (0 or FIELD_W − FIELD_EZ); `chars` the label's length. Draw it
+ *  with `transform="translate(x y) rotate(rot)"`, the text at (0, size·0.35),
+ *  anchored middle. `track` is extra letter spacing as a share of the size. */
+export function endZoneLabel(ezX: number, chars: number, track = 0): { x: number; y: number; rot: number; size: number } {
+  const cx = ezX + FIELD_EZ / 2;
+  const near = fieldPt(cx, FIELD_BOT), far = fieldPt(cx, FIELD_TOP), mid = fieldPt(cx, FIELD_MID);
+  const left = ezX < FIELD_W / 2;
+  // reads up the band on the left, down it on the right
+  const [a, b] = left ? [near, far] : [far, near];
+  const rot = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  const len = Math.hypot(far.x - near.x, far.y - near.y);
+  // the band's width across its centre line at the middle, from the two edges there
+  const e0 = fieldPt(ezX, FIELD_MID), e1 = fieldPt(ezX + FIELD_EZ, FIELD_MID);
+  const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+  const across = Math.abs((e1.x - e0.x) * -uy + (e1.y - e0.y) * ux);
+  const n = Math.max(1, chars);
+  const size = Math.min(across * 0.72, (len * 0.78) / (n * (0.62 + track)));
+  return { x: mid.x, y: mid.y, rot, size };
+}

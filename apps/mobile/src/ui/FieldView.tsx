@@ -33,7 +33,7 @@ import { teamLogo, headshot } from '@drip/core/data/media';
 import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
 import {
   FIELD_W, FIELD_EZ, FIELD_TOP, FIELD_BOT, PROJ_H, BLEED_OVER, POST_COLOR,
-  fieldPt, fieldY, fieldScale, fieldXRange, fieldQuad, projPolyline, projFlight, goalPost, type ProjPath,
+  fieldPt, fieldY, fieldScale, fieldXRange, fieldQuad, projPolyline, projFlight, goalPost, endZoneLabel, type ProjPath,
 } from '@drip/core/engine/fieldPerspective';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
@@ -345,11 +345,12 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
         <Polygon points={fieldQuad(ezHomeX, TOP, ezHomeX + EZ, BOT)} fill={ezFill(homeCol)} />
         {redZone && (() => { const x0 = (flip ? !attacksRight : attacksRight) ? W - EZ : 0; return (
           <Polygon points={fieldQuad(x0, TOP, x0 + EZ, BOT)} fill={alpha(t.fx.nuke, 32)} />); })()}
+        {/* the name runs along its end zone's slant, sized to fit it (v0.730.7) */}
         {([[ezAwayX, awayCol, away], [ezHomeX, homeCol, home]] as const).map(([ex, tc, abbr]) => {
-          const p = fieldPt(ex + EZ / 2, MID), s = fieldScale(MID);
+          const l = endZoneLabel(ex, abbr.length);
           return (
-            <SvgText key={`ez-${abbr}`} x={p.x} y={p.y + 4 * s} fill={ezText(tc)} fontSize={11 * s} fontWeight="800" textAnchor="middle"
-              transform={`rotate(${ex < W / 2 ? -90 : 90} ${p.x} ${p.y})`}>{abbr}</SvgText>
+            <SvgText key={`ez-${abbr}`} x={0} y={l.size * 0.35} fill={ezText(tc)} fontSize={l.size} fontWeight="800" textAnchor="middle"
+              transform={`translate(${l.x} ${l.y}) rotate(${l.rot})`}>{abbr}</SvgText>
           );
         })}
 

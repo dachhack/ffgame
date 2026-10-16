@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.7 — Team names fit in their end zones
+
+> - On the live field, each team's name now sits inside its end zone, tilted along the end zone's slant and sized to fit.
+
+Founder (screenshot: "SEA" spilling out of its end zone): "Can we get the
+team names to fit in the end zone? Rotated." In perspective an end zone is
+a slanted band, and the label stood straight up the screen across its
+edges. Core `endZoneLabel` (engine/fieldPerspective) places it on the band's
+centre line at mid-depth, rotated along it (reading up on the left, down on
+the right), its size capped by the band's width and length. Web and phone
+FieldViews both use it.
+
 ### v0.730.6 — The field's corners clip a little less
 
 > - On the phone, the live field's corners run only slightly off the screen now, and the ↔ button and the field's top line are no longer cut off inside the All fields sheet.
