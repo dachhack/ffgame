@@ -31,7 +31,7 @@ import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { installSportMarketFor } from '@drip/core/sports/market';
 import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
 import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
-import { holdersBySlug, copyOpen, copiesLeft, holderFor } from '@drip/core/data/copies';
+import { holdersBySlug, copyOpen, holderFor, copyWireTag } from '@drip/core/data/copies';
 import { ShotgunWeddingCard } from './ShotgunWeddingCard';
 import {
   readBlueprint, applyBlueprint, blueprintSummary, type LeagueBlueprint,
@@ -4115,9 +4115,12 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
                 {/* WHO HOLDS HIM. Only drawn when the list is showing owned
                     players, so the free-agent wire does not grow a column of
                     blanks. */}
-                {showOwned && holders.length > 0 && (() => {
+                {/* COPIES ON THE WIRE (v0.729.0): with copies, a partly-held player
+                    says how many are left and who has the rest on the default
+                    list too, not only under SHOW OWNED. */}
+                {(showOwned || copies > 1) && holders.length > 0 && (() => {
                   const names = holders.map((r) => r === myRoster ? 'you' : (seatName.get(r) ?? `Roster ${r}`));
-                  const tag = copies > 1 ? `${names.join(', ')} · ${copiesLeft(held, p.slug, copies)}/${copies} left` : names[0];
+                  const tag = copies > 1 ? copyWireTag(held, p.slug, copies, myRoster, (r) => seatName.get(r) ?? `Roster ${r}`) : names[0];
                   return (
                     <span className="mono" title={isMine && holders.length === 1 ? 'on your roster' : `rostered by ${names.join(', ')}`}
                       style={{ fontSize: 8.5, fontWeight: 700, color: isMine ? 'var(--you)' : 'var(--dim)', maxWidth: copies > 1 ? 160 : 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

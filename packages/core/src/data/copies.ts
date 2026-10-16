@@ -55,3 +55,16 @@ export function boardStashSets(rows: readonly (HeldRow & { spot?: string | null 
   }
   return { stashed, onIr };
 }
+
+/** THE WIRE'S COPIES TAG (v0.729.0). Founder: "In leagues with copies, should
+ *  we have number of copies available on waivers?" — yes, on the default list
+ *  too, not only under SHOW OWNED: "1 of 2 left · Hawks" for a player some
+ *  team already holds a copy of. Null with one copy, or when nobody holds him. */
+export function copyWireTag(held: Map<string, number[]>, slug: string, copies: number | null | undefined,
+  myRoster: number | null | undefined, nameOf: (rid: number) => string): string | null {
+  const n = copiesOf(copies);
+  const h = held.get(slug) ?? [];
+  if (n <= 1 || !h.length) return null;
+  const names = [...h].sort((a, b) => (a === myRoster ? -1 : b === myRoster ? 1 : a - b)).map((r) => (r === myRoster ? 'you' : nameOf(r)));
+  return `${copiesLeft(held, slug, n)} of ${n} left · ${names.join(', ')}`;
+}

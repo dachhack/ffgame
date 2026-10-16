@@ -30,7 +30,7 @@ import { sportLeagueMarket,
   leaguePoolCollege, type CollegePoolMeta,
   devySharesState, type DevySharesState,
 } from '@drip/core/data/liveApi';
-import { holdersBySlug, copyOpen, copiesLeft, holderFor } from '@drip/core/data/copies';
+import { holdersBySlug, copyOpen, holderFor, copyWireTag } from '@drip/core/data/copies';
 import { teamBook, fmtPts, stakesOf } from '@drip/core/data/devyShares';
 import { ClassicBoard } from '../ui/ClassicBoard';
 import { DevyMarketTab } from '../ui/DevyShares';
@@ -1379,10 +1379,14 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
                   <InjuryNow slug={p.slug} size={7.5} />
                   <FlagChip slug={p.slug} size={7.5} />
                   {clears && <Mono size={8.5} tone="warn" weight="700">W · {clears.short}</Mono>}
-                  {showOwned && holders.length > 0 && (
+                  {/* COPIES ON THE WIRE (v0.729.0): with copies, every partly-held
+                      player says how many are left and who has the rest — on the
+                      default list too, not only under SHOW OWNED. */}
+                  {(showOwned || copies > 1) && holders.length > 0 && (
                     <Mono size={8.5} tone={isMine ? 'you' : 'dim'} weight="700" numberOfLines={1}>
-                      → {holders.map((r) => r === myRoster ? 'you' : (seatName.get(r) ?? `Roster ${r}`)).join(', ')}
-                      {copies > 1 ? ` · ${copiesLeft(held, p.slug, copies)}/${copies} left` : ''}
+                      {copies > 1
+                        ? copyWireTag(held, p.slug, copies, myRoster, (r) => seatName.get(r) ?? `Roster ${r}`)
+                        : `→ ${holders.map((r) => r === myRoster ? 'you' : (seatName.get(r) ?? `Roster ${r}`)).join(', ')}`}
                     </Mono>
                   )}
                   {adds > 0 && (

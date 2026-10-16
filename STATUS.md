@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.729.0 — Copies left, on the waiver wire
+
+> - In leagues with copies, a player another team already holds now says so on the waiver list: "1 of 2 left · Hawks". You see who has him and how many copies are still open before you claim.
+
+Founder: "In leagues with copies, should we have number of copies available on
+waivers?" — "Yes, build it." The count used to show only under SHOW OWNED.
+Core `copyWireTag` (packages/core/src/data/copies.ts) makes the line; Team.tsx
+(phone) and NativeLeague.tsx (web) show it on the default wire whenever the
+league has more than one copy. check:copies covers it.
+
 ### v0.728.0 — In-season tiers: promotion and relegation inside one league
 
 > - Commissioners can turn a league's divisions into tiers (⚑ COMMISH → LADDER → IN-SEASON TIERS). Each tier plays only inside itself, and every 2–6 weeks (you pick; 4 by default) the bottom teams of each tier swap with the top teams of the tier below, on that stretch's record with points scored breaking ties. 1–3 teams move each way (2 by default).
