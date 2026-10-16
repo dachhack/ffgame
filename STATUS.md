@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.6 — The field's corners clip a little less
+
+> - On the phone, the live field's corners run only slightly off the screen now, and the ↔ button and the field's top line are no longer cut off inside the All fields sheet.
+
+Founder (screenshot: SEA@DEN in OT inside the All fields sheet, the posts
+and ↔ cut): "A little too clipped." The sheet clips about 9pt in from the
+screen's edge, so v0.730.5's 6% overhang lost far more than intended.
+`BLEED_OVER` is 2.5% now, and the edge-to-edge card's padding is the
+holder's own gap to each screen edge plus 8, so its controls keep the
+holder's width wherever an ancestor clips; only the field's corners run out.
+
 ### v0.730.5 — The field and its box go edge to edge on the phone
 
 > - On the phone, every live field and the box around it now span the whole screen, and the field's near corners run just off the edges, like Sleeper's.
