@@ -20,7 +20,7 @@
 // on the JS thread (useNativeDriver: false). They are short and small, and the
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
-import { stoppageLabel, liveClockLabel, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, type ReplayMode } from '@drip/core/data/gameView';
+import { stoppageLabel, liveClockLabel, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey, type ReplayMode } from '@drip/core/data/gameView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet, useWindowDimensions } from 'react-native';
@@ -71,7 +71,7 @@ const AnimatedLine = Animated.createAnimatedComponent(Line);
  *  from the box score; null draws the plain possession badge. */
 export type Carrier = { slug: string; name: string } | null;
 
-export function FieldView({ week, team, clock, side, carrierOf, pre, bleed = true }: {
+export function FieldView({ week, team, clock, side, carrierOf, pre, bleed = true, jump, onShown }: {
   week: number; team?: string | null; clock: number; side?: PlaySide | null; carrierOf?: (p: GamePlay) => Carrier;
   /** Edge to edge, Sleeper's way (v0.730.0; the default since v0.730.5): the card spans the screen and the
    *  field runs BLEED_OVER past each edge, so its near corners are clipped. false keeps the inset card. */
@@ -80,17 +80,21 @@ export function FieldView({ week, team, clock, side, carrierOf, pre, bleed = tru
    *  the slate's fixture, when the feed store has nothing for it yet. The card draws the empty field with the
    *  kickoff stamped on it and each side's three highest-projected men under it. */
   pre?: { away: string; home: string; kickoff?: string | null } | null;
+  /** Jump the replay to this play (its playKey); a new `n` re-jumps (v0.730.10). */
+  jump?: { key: string; n: number } | null;
+  /** The play the field is pinned on (its playKey), null while it follows live. */
+  onShown?: (key: string | null) => void;
 }) {
   const feed = gameFeedFor(week, team);
   if (!feed) {
     if (!pre) return null;
     const a = normTeam(pre.away), h = normTeam(pre.home);
-    return <Field feed={{ key: `${a}@${h}`, away: a, home: h, plays: [], st: 'pre', gid: null, kickoff: pre.kickoff ?? null }} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={bleed} />;
+    return <Field feed={{ key: `${a}@${h}`, away: a, home: h, plays: [], st: 'pre', gid: null, kickoff: pre.kickoff ?? null }} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={bleed} jump={jump} onShown={onShown} />;
   }
-  return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={bleed} />;
+  return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={bleed} jump={jump} onShown={onShown} />;
 }
 
-function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number; carrierOf?: (p: GamePlay) => Carrier; bleed: boolean }) {
+function Field({ feed, clock, side, week, carrierOf, bleed, jump, onShown }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number; carrierOf?: (p: GamePlay) => Carrier; bleed: boolean; jump?: { key: string; n: number } | null; onShown?: (key: string | null) => void }) {
   const t = useTheme();
   // BLEED: where this card sits in the window, so the drawing can be widened
   // to the screen plus BLEED_OVER each side and shifted back to the edge.
@@ -141,9 +145,19 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
     const id = setTimeout(() => stepTo(pin + 1), REPLAY_MS);
     return () => clearTimeout(id);
   }, [pin, replay]); // eslint-disable-line react-hooks/exhaustive-deps
+  // TAP A PLAY, THE REPLAY GOES THERE (v0.730.10, founder: "click the play on the play by play below and advance
+  // the replay to that play"): the game view's list hands a play's key; the field pins it in replay (keeping the
+  // viewer's AUTO/MANUAL), and reports back which play it shows so the list can light that row.
+  useEffect(() => {
+    if (!jump) return;
+    const i = plays.findIndex((x) => playKey(x) === jump.key);
+    if (i < 0) return;
+    setPin(i); setReplay((r) => r ?? replayPref);
+  }, [jump?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   // A replayed or stepped-back play reads its own clock and down, not the game's live status ("FINAL", "HALFTIME").
   const nowFeed = pin == null ? feed : null;
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
+  useEffect(() => { onShown?.(pin != null && cur ? playKey(cur) : null); }, [pin, cur?.pid, cur?.c]); // eslint-disable-line react-hooks/exhaustive-deps
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
   // "No next play" alone reads a live halftime as game over — trust the feed's

@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.10 — Tap a play to replay the field from it
+
+> - In a game's view, tap any play in the play-by-play list and the field above jumps to it in replay, then carries on from there (every 7 seconds on AUTO, or tap › on MANUAL). The play the field is showing is highlighted in the list. Long-press a play still reads it aloud.
+
+Founder: "click the play on the play by play below and advance the replay
+to that play." Core `playKey` (the play's id, else its clock) is what the
+list hands the field: FieldView takes `jump` ({ key, n }) and pins that play
+in replay with the viewer's AUTO/MANUAL, and reports `onShown` (the pinned
+play's key, null while live) so the game view lights that row. Web scrolls
+the field into view on a jump. Phone and web game views; check:gameview.
+
 ### v0.730.9 — The live field on the home page
 
 > - The home page has a new Game day card: the live field, game replays, and the live scoreboard with timeouts, each with a screen.

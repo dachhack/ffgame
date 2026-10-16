@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { gameFeedFor, weekBoxGames, latestPlay, feedScore, type GamePlay } from '@drip/core/data/gameFeed';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel, timeoutsLeft } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel, timeoutsLeft, playKey } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
@@ -59,6 +59,11 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
   const carrierOf = (p: GamePlay) => { const a = ballCarrier(p); const who = a ? personOf(a) : null; return who ? { slug: who.slug, name: shortName(who.full) } : null; };
 
   const [tab, setTab] = useState<'live' | 'stats'>('live');
+  // TAP A PLAY → THE FIELD REPLAYS FROM IT (v0.730.10). `jump` goes down to the field; `shown` comes back up so
+  // the row the field is on is lit. Long-press still reads the play aloud.
+  const [jump, setJump] = useState<{ key: string; n: number } | null>(null);
+  const [shown, setShown] = useState<string | null>(null);
+  useEffect(() => { setJump(null); setShown(null); }, [game?.key]);
   const [statTab, setStatTab] = useState<'off' | 'def'>('off');
   const drive = feed ? driveSummary(feed) : null;
   const sit = last ? situationLabel(last, home, away) : null;
@@ -167,7 +172,7 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
             {/* THE FIELD, with the carrier at the spot — edge to edge and a
                 little past, Sleeper's way (v0.730.0) */}
             <View style={{ marginHorizontal: 8 }}>
-              <FieldView week={week} team={home} clock={Number.MAX_SAFE_INTEGER} carrierOf={carrierOf} bleed />
+              <FieldView key={game.key} week={week} team={home} clock={Number.MAX_SAFE_INTEGER} carrierOf={carrierOf} bleed jump={jump} onShown={setShown} />
             </View>
             {!!drive && !over && (
               <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dimstrong, textAlign: 'center', marginTop: 4 }}>{drive.text}</Text>
@@ -212,8 +217,10 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
                   const names = playNames(p.txt).map((a) => personOf(a)).filter((x): x is GamePerson => !!x);
                   const s2 = situationLabel(p, home, away);
                   return (
-                    <Pressable key={p.pid ?? `${p.c}-${i}`} onLongPress={() => { appVoice.stop(); appVoice.speak(p.txt, () => {}); }}
-                      style={{ paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: alpha(t.bd, 0.6) }}>
+                    <Pressable key={p.pid ?? `${p.c}-${i}`} onPress={() => setJump({ key: playKey(p), n: Date.now() })} onLongPress={() => { appVoice.stop(); appVoice.speak(p.txt, () => {}); }}
+                      accessibilityHint="Replays the field from this play"
+                      style={{ paddingVertical: 10, paddingHorizontal: 6, marginHorizontal: -6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: alpha(t.bd, 0.6),
+                        ...(shown === playKey(p) ? { backgroundColor: alpha(t.warn, 12), borderLeftWidth: 2, borderLeftColor: t.warn } : {}) }}>
                       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                         {!!teamLogo(p.tm, { week }) && <Image source={{ uri: teamLogo(p.tm, { week })! }} style={{ width: 22, height: 22, marginTop: 2 }} />}
                         <View style={{ flex: 1, minWidth: 0 }}>
