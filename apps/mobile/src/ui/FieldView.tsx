@@ -20,7 +20,7 @@
 // on the JS thread (useNativeDriver: false). They are short and small, and the
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
-import { stoppageLabel, liveClockLabel } from '@drip/core/data/gameView';
+import { stoppageLabel, liveClockLabel, REPLAY_MS, replayModeLabel, parseReplayMode, type ReplayMode } from '@drip/core/data/gameView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet, useWindowDimensions } from 'react-native';
@@ -129,6 +129,20 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   const [pin, setPin] = useState<number | null>(null);
   const idx = pin != null ? Math.min(pin, plays.length - 1) : liveIdx;
   const stepTo = (i: number) => setPin(i >= plays.length - 1 && i >= liveIdx ? null : Math.max(0, i));
+  // ⟲ REANIMATE THE GAME (v0.730.8, founder: "Auto (7 sec) or manual advance"): from the first play, forward
+  // on its own every REPLAY_MS or one play per ›; past the last play it is live again. The mode is remembered.
+  const [replay, setReplay] = useState<ReplayMode | null>(null);
+  const [replayPref, setReplayPref] = useState<ReplayMode>(() => parseReplayMode(storeGet('fvreplay')));
+  const startReplay = () => { setPin(0); setReplay(replayPref); };
+  const toggleReplayMode = () => { const n: ReplayMode = replay === 'auto' ? 'manual' : 'auto'; setReplay(n); setReplayPref(n); storeSet('fvreplay', n); };
+  useEffect(() => {
+    if (pin == null) { if (replay) setReplay(null); return; }
+    if (replay !== 'auto') return;
+    const id = setTimeout(() => stepTo(pin + 1), REPLAY_MS);
+    return () => clearTimeout(id);
+  }, [pin, replay]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A replayed or stepped-back play reads its own clock and down, not the game's live status ("FINAL", "HALFTIME").
+  const nowFeed = pin == null ? feed : null;
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
@@ -216,7 +230,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   const carryY = (overlaps ? MID + CARRY_DY : MID) + sideDy;
 
   const situation = over ? 'FINAL'
-    : (stoppageLabel(feed) ?? (
+    : (stoppageLabel(nowFeed) ?? (
     !cur ? 'AWAITING KICKOFF'
     : nxt && nxt.dn > 0 ? `${ORD[nxt.dn].toUpperCase()} & ${nxt.dist} · ${spotText(nxt.yl, nxt.tm, away, home).toUpperCase()}`
     : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''))));
@@ -290,7 +304,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
         <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: '800', color: t.text }}>{score.a}</Text>
         {/* The LAST PLAY's clock, not the playback clock — a window clock can
             overshoot the real game and read a Q4 game as OT. */}
-        <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '600', color: t.faint }}>{over ? 'FINAL' : pre ? (kickoffText ?? 'SOON') : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '600', color: t.faint }}>{over ? 'FINAL' : pre ? (kickoffText ?? 'SOON') : (stoppageLabel(nowFeed) ?? liveClockLabel(nowFeed) ?? fmtQClock(cur ? cur.c : clock))}</Text>
         <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: '800', color: t.text }}>{score.h}</Text>
         {strip(home, ballTm === home)}
         <Pressable
@@ -308,12 +322,23 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.text }}>‹</Text>
           </Pressable>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.6, color: pin != null ? t.warn : t.faint }}>
-            {pin != null ? `PLAY ${idx + 1}/${plays.length}` : `LIVE · ${plays.length} PLAYS`}
+            {pin != null ? `${replay ? 'REPLAY' : 'PLAY'} ${idx + 1}/${plays.length}` : `${over ? 'FINAL' : 'LIVE'} · ${plays.length} PLAYS`}
           </Text>
           <Pressable onPress={() => stepTo(idx + 1)} disabled={pin == null} hitSlop={6}
             style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 9, paddingVertical: 1, opacity: pin == null ? 0.35 : 1 }}>
             <Text style={{ fontFamily: MONO, fontSize: 10, fontWeight: '700', color: t.text }}>›</Text>
           </Pressable>
+          {pin == null ? (
+            <Pressable onPress={startReplay} hitSlop={6} accessibilityLabel="Replay the game from the first play"
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1 }}>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.you }}>⟲ REPLAY</Text>
+            </Pressable>
+          ) : replay ? (
+            <Pressable onPress={toggleReplayMode} hitSlop={6} accessibilityLabel={replay === 'auto' ? 'Switch to manual advance' : 'Switch to auto advance'}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.warn, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1, backgroundColor: replay === 'auto' ? alpha(t.warn, 15) : 'transparent' }}>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.warn }}>{replay === 'auto' ? '⏵ ' : '⏸ '}{replayModeLabel(replay)}</Text>
+            </Pressable>
+          ) : null}
           {pin != null && (
             <Pressable onPress={() => setPin(null)} hitSlop={6}
               style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.you, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1 }}>

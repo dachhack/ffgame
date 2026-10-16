@@ -4,7 +4,7 @@
 // header, drive line and play rows are readings off the play feed; both
 // hosts' Game views take them from here, pinned against real week-1 lines.
 // Run: npx tsx scripts/check-game-view.mjs
-import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft } from '../packages/core/src/data/gameView.ts';
+import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode } from '../packages/core/src/data/gameView.ts';
 import { teamMarkColor } from '../packages/core/src/data/teamColors.ts';
 import { namesFromSlugs, resolveGamebookPerson } from '../packages/core/src/engine/gameNames.ts';
 
@@ -80,6 +80,17 @@ const P = (o) => ({ c: 0, drv: 3, tm: 'KC', dn: 1, dist: 10, yl: 80, yl2: 80, ty
   ok(g([to(100, 'Timeout #1 by LAR at 10:00.')], live, { home: 'LA' }).home === 2, 'ESPN\'s LAR is the Rams\' LA');
   ok(teamMarkColor('SEA', '#0b1020') === '#69BE28' && teamMarkColor('DEN', '#0b1020') === '#FB4F14', 'dots read on a dark theme: Seattle green, Denver orange');
   ok(teamMarkColor('SEA', '#ffffff') === '#002244', '…and on a light one, Seattle navy');
+}
+
+// ── REANIMATE THE GAME (v0.730.8): ⟲ REPLAY, auto every 7s or manual ─────
+{
+  const { readFileSync } = await import('node:fs');
+  ok(REPLAY_MS === 7000 && replayModeLabel('auto') === 'AUTO 7s' && replayModeLabel('manual') === 'MANUAL', 'auto advances every 7 seconds; the chip says which mode');
+  ok(parseReplayMode('manual') === 'manual' && parseReplayMode(null) === 'auto' && parseReplayMode('junk') === 'auto', 'a remembered mode reads back; anything else is auto');
+  for (const f of ['src/app/FieldView.tsx', 'apps/mobile/src/ui/FieldView.tsx']) {
+    const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(src.includes('setTimeout(() => stepTo(pin + 1), REPLAY_MS)') && src.includes('⟲ REPLAY') && src.includes('replayModeLabel(replay)'), `${f}: ⟲ REPLAY starts at play 1, AUTO steps on REPLAY_MS, the chip toggles the mode`);
+  }
 }
 
 console.log(fails ? `\n${fails} GAME-VIEW PROBE(S) FAILED` : '\nALL GAME-VIEW PROBES PASSED');
