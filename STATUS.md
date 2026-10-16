@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.729.2 — The target at the end of an incomplete pass
+
+> - On the live field, an incomplete pass now shows the player it was thrown to at the end of the ball's arc, by the ✕, instead of back at the line of scrimmage.
+
+Founder (screenshot: Darnold incomplete to J. Smith-Njigba, headshot at the
+SEA 26 spot, ✕ at the 40): "Let's put the targeted player at the end of the
+ball arc." Runs and catches already end at the spot; only an incompletion's
+arc ends elsewhere. Core `targetMarkY` (engine/playPath) places the ring and
+name plate above the ✕ when there's room, else below; both FieldViews (web
+src/app, phone ui/) draw it there, clamped inside the field. check:playpath
+covers the geometry and the wiring.
+
 ### v0.729.1 — AI teams make waiver moves again
 
 > - AI-run teams had stopped making waiver claims and pickups since Oct 11. They're back, and will catch up over the next hour.
