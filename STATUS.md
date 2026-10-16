@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.0 — The field in perspective, with goal posts
+
+> - The live field now looks like Sleeper's: a wide field seen from the stands, with gold goal posts standing at each end.
+> - On the phone's game screen, the field runs to the edges of the screen and a little past.
+> - The ball carrier's photo now stands on the field as a pin over the spot, with the name under it.
+
+Founder (Sleeper's SEA@DEN game screen): "Let's mirror the sleeper field
+view. Stretched to the edges and a bit over. Draw the same goal posts."
+New core `engine/fieldPerspective` projects the flat 400×130 field (far
+sideline at 0.66× the near one, a pinhole ground plane so yard lines stay
+straight); both FieldViews (web src/app, phone ui/) draw its points instead
+of tilting the drawing with a 3D transform, which laid the headshot flat
+and could not stand anything up. Posts, the ball badge and the carrier pin
+stand upright at projected spots; a made field goal's arc climbs between
+the uprights. Phone `FieldView bleed` (GameView) measures its window x and
+widens the drawing to the screen + 5% each side, card chrome off. Also
+fixes the phone's carrier name plate, which was drawn at 0.6% opacity
+(`alpha` takes a percent). check:playpath covers the projection and wiring.
+Plain JavaScript; no iPhone build.
+
 ### v0.729.2 — The target at the end of an incomplete pass
 
 > - On the live field, an incomplete pass now shows the player it was thrown to at the end of the ball's arc, by the ✕, instead of back at the line of scrimmage.

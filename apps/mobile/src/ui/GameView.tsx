@@ -148,9 +148,10 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
               </View>
             )}
 
-            {/* THE FIELD, with the carrier at the spot */}
+            {/* THE FIELD, with the carrier at the spot — edge to edge and a
+                little past, Sleeper's way (v0.730.0) */}
             <View style={{ marginHorizontal: 8 }}>
-              <FieldView week={week} team={home} clock={Number.MAX_SAFE_INTEGER} carrierOf={carrierOf} />
+              <FieldView week={week} team={home} clock={Number.MAX_SAFE_INTEGER} carrierOf={carrierOf} bleed />
             </View>
             {!!drive && !over && (
               <Text style={{ fontFamily: MONO, fontSize: fs(9.5), color: t.dimstrong, textAlign: 'center', marginTop: 4 }}>{drive.text}</Text>

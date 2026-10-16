@@ -23,14 +23,18 @@
 import { stoppageLabel, liveClockLabel } from '@drip/core/data/gameView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
-import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
-import Svg, { Circle, G, Image as SvgImage, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet, useWindowDimensions } from 'react-native';
+import Svg, { Circle, Ellipse, G, Image as SvgImage, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { kickoffLabel } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { projectedBox, type ProjectedRow } from '@drip/core/engine/projectedBox';
 import { teamLogo, headshot } from '@drip/core/data/media';
 import { playPath, arcControlY, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
+import {
+  FIELD_W, FIELD_EZ, FIELD_TOP, FIELD_BOT, PROJ_H, BLEED_OVER, POST_COLOR,
+  fieldPt, fieldY, fieldScale, fieldXRange, fieldQuad, projPolyline, projQuad, goalPost, type ProjPath,
+} from '@drip/core/engine/fieldPerspective';
 import { teamColor } from '@drip/core/data/teamColors';
 import { storeGet, storeSet } from '@drip/core/platform';
 import { useTheme, MONO, alpha, mix, fs, fsTight } from '../theme.native';
@@ -38,9 +42,10 @@ import { Overlay } from './Overlay';
 import { openPlayerCard } from './PlayerCardSheet';
 import { PlayByPlaySheet } from './PlayByPlaySheet';
 
-// Geometry (SVG user units) — identical to the web's.
-const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
-const MID = (TOP + BOT) / 2;
+// Geometry (SVG user units) — identical to the web's: the flat field is
+// core's, and fieldPerspective projects it into the VH-tall drawing.
+const W = FIELD_W, EZ = FIELD_EZ, FX = EZ, FW = W - 2 * EZ, TOP = FIELD_TOP, BOT = FIELD_BOT;
+const MID = (TOP + BOT) / 2, VH = PROJ_H;
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
 
 export type PlaySide = 'you' | 'their' | 'both';
@@ -59,35 +64,17 @@ const spotText = (yte: number, tm: string, away: string, home: string): string =
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedG = Animated.createAnimatedComponent(G);
-
-/** Length of the path we're about to draw, so strokeDashoffset can run from it
- *  to zero. The web sets `pathLength={1}` and lets the browser normalise;
- *  react-native-svg doesn't implement pathLength, so the length is measured
- *  here — sampled for the quadratic, exact for the straight line. */
-function pathLen(x1: number, x2: number, curved: boolean, y1: number = MID, y2: number = MID): number {
-  if (!curved) return Math.hypot(x2 - x1, y2 - y1);
-  // The SAME control point AND the same endpoints the path uses (v0.333.0,
-  // v0.335.0). The apex scales with the throw and the far end now sits on the
-  // side the play text named, so a length measured against a flat centred arc
-  // would come up short and leave the stroke drawn only part way.
-  const cx = (x1 + x2) / 2, cy = arcControlY(x1, x2, (y1 + y2) / 2, TOP);
-  let len = 0, px = x1, py = y1;
-  for (let i = 1; i <= 16; i++) {
-    const t = i / 16, u = 1 - t;
-    const x = u * u * x1 + 2 * u * t * cx + t * t * x2;
-    const y = u * u * y1 + 2 * u * t * cy + t * t * y2;
-    len += Math.hypot(x - px, y - py); px = x; py = y;
-  }
-  return len;
-}
+const AnimatedLine = Animated.createAnimatedComponent(Line);
 
 /** Who has the ball on the shown play — drawn at the spot with his headshot
  *  and name (v0.390.3, Sleeper's K. Walker marker). The host resolves it
  *  from the box score; null draws the plain possession badge. */
 export type Carrier = { slug: string; name: string } | null;
 
-export function FieldView({ week, team, clock, side, carrierOf, pre }: {
+export function FieldView({ week, team, clock, side, carrierOf, pre, bleed }: {
   week: number; team?: string | null; clock: number; side?: PlaySide | null; carrierOf?: (p: GamePlay) => Carrier;
+  /** Run the field to the screen's edges and a little past, card chrome off (the game view's Sleeper look). */
+  bleed?: boolean;
   /** A GAME STILL TO KICK OFF (v0.696.4, founder: "Show the field with the start time and projected point leaders"):
    *  the slate's fixture, when the feed store has nothing for it yet. The card draws the empty field with the
    *  kickoff stamped on it and each side's three highest-projected men under it. */
@@ -97,13 +84,20 @@ export function FieldView({ week, team, clock, side, carrierOf, pre }: {
   if (!feed) {
     if (!pre) return null;
     const a = normTeam(pre.away), h = normTeam(pre.home);
-    return <Field feed={{ key: `${a}@${h}`, away: a, home: h, plays: [], st: 'pre', gid: null, kickoff: pre.kickoff ?? null }} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} />;
+    return <Field feed={{ key: `${a}@${h}`, away: a, home: h, plays: [], st: 'pre', gid: null, kickoff: pre.kickoff ?? null }} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={!!bleed} />;
   }
-  return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} />;
+  return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={!!bleed} />;
 }
 
-function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number; carrierOf?: (p: GamePlay) => Carrier }) {
+function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number; carrierOf?: (p: GamePlay) => Carrier; bleed: boolean }) {
   const t = useTheme();
+  // BLEED: where this card sits in the window, so the drawing can be widened
+  // to the screen plus BLEED_OVER each side and shifted back to the edge.
+  const { width: winW } = useWindowDimensions();
+  const holderRef = useRef<View>(null);
+  const [holderX, setHolderX] = useState<number | null>(null);
+  const measureHolder = () => holderRef.current?.measureInWindow((x) => setHolderX(x));
+  const bleedW = bleed && holderX != null ? winW * (1 + 2 * BLEED_OVER) : null;
   const { away, home, plays } = feed;
 
   // ↔ mirrors the field to match the viewer's broadcast. Remembered per game,
@@ -184,7 +178,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
   const fgKick = !!cur && /Field Goal/.test(cur.ty);
   const fgGood = fgKick && (!!cur!.sc || /\bGOOD\b/.test(cur!.txt));
   const fgDir = arc && cur ? (mx(xOf(0, cur.tm)) >= arc.x1 ? 1 : -1) : 1;
-  if (arc && cur && fgKick) { const goal = mx(xOf(0, cur.tm)); arc.x2 = fgGood ? goal + fgDir * (EZ - 4) : goal; }
+  if (arc && cur && fgKick) { const goal = mx(xOf(0, cur.tm)); arc.x2 = fgGood ? goal + fgDir * EZ : goal; }
   const fgTail = arc && fgKick && !fgGood ? arc.x2 + fgDir * (EZ - 4) : null;
   // Through playPath (v0.332.0) so the two ports cannot drift on geometry
   // they each used to own a copy of — and so `overlaps`, the property that
@@ -234,10 +228,21 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
   const drawKey = cur ? String(cur.pid ?? cur.c) : '';
   const air = useRef(new Animated.Value(0)).current;
   const run = useRef(new Animated.Value(0)).current;
-  const airLen = arc ? pathLen(arc.x1, catchX ?? arc.x2, isPassy, MID, endY) : 0;
-  // + the drop into the carry lane, or the stroke animation runs out before the
-  // runback is fully drawn and the line stops mid-field.
-  const runLen = arc && catchX != null ? pathLen(catchX, arc.x2, false, endY, endY) + (overlaps ? CARRY_DY : 0) : 0;
+  // The play, projected (v0.730.0). Lengths are measured ON SCREEN, which
+  // is what the stroke-draw animation runs over. A made field goal climbs to
+  // the crossbar on its way to the end line: fgLift raises it, most at the end.
+  const fgPost = fgGood && arc ? goalPost(fgDir > 0 ? W : 0) : null;
+  const fgLift = fgPost ? (u: number) => u * u * (fgPost.base.y - fgPost.through.y) : undefined;
+  const airEnd = arc ? (catchX ?? arc.x2) : 0;
+  const airPath: ProjPath | null = !arc ? null : isPassy
+    ? projQuad(arc.x1, MID, (arc.x1 + airEnd) / 2, arcControlY(arc.x1, airEnd, (MID + endY) / 2, TOP), airEnd, endY, fgLift)
+    : projPolyline([[arc.x1, MID], [arc.x2, endY]], fgLift);
+  const runPath: ProjPath | null = arc && carrying && catchX != null
+    ? projPolyline(overlaps ? [[catchX, endY], [catchX, carryY], [arc.x2, carryY]] : [[catchX, endY], [arc.x2, endY]])
+    : null;
+  const tailPath: ProjPath | null = arc && fgTail != null ? projPolyline([[arc.x2, endY], [fgTail, endY]]) : null;
+  const playEnd = incomplete ? airPath?.end : (tailPath ?? runPath ?? airPath)?.end;
+  const yMid = fieldY(MID);
   useEffect(() => {
     if (!arc) return;
     air.setValue(0); run.setValue(0);
@@ -267,7 +272,9 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
   );
 
   return (
-    <View style={{ marginTop: 5, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 6 }}>
+    <View style={bleed
+      ? { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6 }
+      : { marginTop: 5, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 6 }}>
       {/* score + clock strip */}
       <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 5, paddingRight: 30 }}>
         {strip(away, ballTm === away)}
@@ -307,108 +314,129 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
         </View>
       )}
 
-      {/* The web tilts the field back — `perspective: 560` on the wrapper and
-          `rotateX(20deg)` on the svg, hinged at the bottom edge. It is the
-          difference between a diagram and a field you are looking down at.
-          transformOrigin is what makes it hinge rather than pivot about the
-          middle; without it the far end swings up instead of away. */}
-      <View style={{ transform: [{ perspective: 560 }, { rotateX: '20deg' }], transformOrigin: '50% 100%' }}>
-      <Svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ aspectRatio: W / H }}>
-        {/* turf + end zones */}
-        <Rect x={FX} y={TOP} width={FW} height={BOT - TOP} fill={mix(t.you, 5, t.surface)} />
-        <Rect x={ezAwayX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(awayCol)} />
-        <Rect x={ezHomeX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(homeCol)} />
-        {/* THE UPRIGHTS (v0.697.0): on each end line, for a kick to fly through */}
-        {[4, W - 4].map((px) => { const tip = px < W / 2 ? 0.5 : W - 0.5; return (
-          <G key={`up-${px}`}>
-            <Line x1={px} y1={MID - 9} x2={px} y2={MID + 9} stroke={t.dim} strokeWidth={1.4} />
-            <Line x1={px} y1={MID - 9} x2={tip} y2={MID - 9} stroke={t.dim} strokeWidth={1.4} />
-            <Line x1={px} y1={MID + 9} x2={tip} y2={MID + 9} stroke={t.dim} strokeWidth={1.4} />
-          </G>); })}
-        {redZone && (
-          <Rect x={(flip ? !attacksRight : attacksRight) ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP} fill={alpha(t.fx.nuke, 32)} />
-        )}
-        <SvgText x={ezAwayX + EZ / 2} y={MID} fill={ezText(awayCol)} fontSize={13} fontWeight="800" textAnchor="middle"
-          transform={`rotate(${ezAwayX < W / 2 ? -90 : 90} ${ezAwayX + EZ / 2} ${MID})`}>{away}</SvgText>
-        <SvgText x={ezHomeX + EZ / 2} y={MID} fill={ezText(homeCol)} fontSize={13} fontWeight="800" textAnchor="middle"
-          transform={`rotate(${ezHomeX < W / 2 ? -90 : 90} ${ezHomeX + EZ / 2} ${MID})`}>{home}</SvgText>
+      {/* THE FIELD IN PERSPECTIVE (v0.730.0, founder over Sleeper's game
+          screen: "mirror the sleeper field view. Stretched to the edges and a
+          bit over. Draw the same goal posts"). The tilt used to be an RN 3D
+          transform, which laid everything down flat — a headshot by the far
+          sideline came out squashed, and nothing could stand up on the grass.
+          Now core's fieldPerspective projects the field's points and this
+          draws them: the grass, lines and arcs on the ground, the posts, the
+          ball badge and the carrier's pin standing upright at their spots.
+          With `bleed` the drawing runs to the screen's edges and a little
+          past, the way Sleeper's near corners sit off the screen. */}
+      <View ref={holderRef} onLayout={bleed ? measureHolder : undefined} style={{ opacity: bleed && holderX == null ? 0 : 1 }}>
+      <View style={bleedW != null ? { width: bleedW, marginLeft: -(holderX ?? 0) - winW * BLEED_OVER } : undefined}>
+      <Svg viewBox={`0 0 ${W} ${VH}`} width={bleedW ?? '100%'} height={bleedW != null ? (bleedW * VH) / W : undefined} style={bleedW != null ? undefined : { aspectRatio: W / VH }}>
+        {/* turf, its ten-yard bands, end zones */}
+        <Polygon points={fieldQuad(FX, TOP, FX + FW, BOT)} fill={mix(t.you, 5, t.surface)} stroke={alpha(t.dim, 45)} strokeWidth={1} />
+        {Array.from({ length: 10 }, (_, i) => i % 2 === 0 ? null : (
+          <Polygon key={`band-${i}`} points={fieldQuad(FX + (i / 10) * FW, TOP, FX + ((i + 1) / 10) * FW, BOT)} fill={alpha(t.text, 5)} />
+        ))}
+        <Polygon points={fieldQuad(ezAwayX, TOP, ezAwayX + EZ, BOT)} fill={ezFill(awayCol)} />
+        <Polygon points={fieldQuad(ezHomeX, TOP, ezHomeX + EZ, BOT)} fill={ezFill(homeCol)} />
+        {redZone && (() => { const x0 = (flip ? !attacksRight : attacksRight) ? W - EZ : 0; return (
+          <Polygon points={fieldQuad(x0, TOP, x0 + EZ, BOT)} fill={alpha(t.fx.nuke, 32)} />); })()}
+        {([[ezAwayX, awayCol, away], [ezHomeX, homeCol, home]] as const).map(([ex, tc, abbr]) => {
+          const p = fieldPt(ex + EZ / 2, MID), s = fieldScale(MID);
+          return (
+            <SvgText key={`ez-${abbr}`} x={p.x} y={p.y + 4 * s} fill={ezText(tc)} fontSize={11 * s} fontWeight="800" textAnchor="middle"
+              transform={`rotate(${ex < W / 2 ? -90 : 90} ${p.x} ${p.y})`}>{abbr}</SvgText>
+          );
+        })}
 
         {/* yard lines + numbers — v0.590.0: every label sized to read on a
-            phone, where the 400-wide drawing renders ~330pt (×0.8). */}
-        {Array.from({ length: 21 }, (_, i) => (
-          <Line key={i} x1={FX + (i / 20) * FW} y1={TOP} x2={FX + (i / 20) * FW} y2={BOT}
-            stroke={i % 2 ? alpha(t.bd, 55) : t.bd} strokeWidth={i === 0 || i === 20 ? 1.6 : 0.7} />
-        ))}
-        {[10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => (
-          <SvgText key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill={t.dim} fontSize={10.5} fontWeight="700" textAnchor="middle">{n}</SvgText>
-        ))}
+            phone; the numbers sit by the near sideline, where s ≈ 1. */}
+        {Array.from({ length: 21 }, (_, i) => {
+          const x = FX + (i / 20) * FW, a = fieldPt(x, TOP), b = fieldPt(x, BOT);
+          return <Line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={i % 2 ? alpha(t.bd, 55) : t.bd} strokeWidth={i === 0 || i === 20 ? 1.6 : 0.7} />;
+        })}
+        {[10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, i) => {
+          const p = fieldPt(FX + ((i + 1) / 10) * FW, BOT - 4);
+          return <SvgText key={i} x={p.x} y={p.y} fill={t.dim} fontSize={10.5 * fieldScale(BOT - 4)} fontWeight="700" textAnchor="middle">{n}</SvgText>;
+        })}
 
         {/* first-down line */}
-        {!over && fdX != null && <Line x1={mx(fdX)} y1={TOP} x2={mx(fdX)} y2={BOT} stroke={t.warn} strokeWidth={1.4} opacity={0.9} />}
+        {!over && fdX != null && (() => { const a = fieldPt(mx(fdX), TOP), b = fieldPt(mx(fdX), BOT); return (
+          <Line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={t.warn} strokeWidth={1.4} opacity={0.9} />); })()}
+
+        {/* THE GOAL POSTS — Sleeper's: gold, standing on each end line. A made
+            field goal's arc climbs through them (fgLift). */}
+        {[0, W].map((ex) => { const g = goalPost(ex); return (
+          <G key={`post-${ex}`}>
+            <Ellipse cx={g.base.x} cy={g.base.y} rx={4} ry={1.4} fill={alpha('#000000', 35)} />
+            <Path d={g.d} fill="none" stroke={POST_COLOR} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+          </G>); })}
 
         {/* last-play arc */}
-        {arc && !over && (
+        {arc && airPath && !over && (
           <G>
             <AnimatedPath
-              d={isPassy
-                ? `M ${arc.x1} ${MID} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, (MID + endY) / 2, TOP)} ${catchX ?? arc.x2} ${endY}`
-                : `M ${arc.x1} ${MID} L ${arc.x2} ${endY}`}
+              d={airPath.d}
               fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
-              strokeDasharray={`${airLen}`}
-              strokeDashoffset={air.interpolate({ inputRange: [0, 1], outputRange: [airLen, 0] }) as unknown as number}
+              strokeDasharray={`${airPath.len}`}
+              strokeDashoffset={air.interpolate({ inputRange: [0, 1], outputRange: [airPath.len, 0] }) as unknown as number}
             />
-            {fgTail != null && <Line x1={arc.x2} y1={endY} x2={fgTail} y2={endY} stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="2.5 3.5" />}
-            {carrying && (
+            {tailPath && <Path d={tailPath.d} fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="2.5 3.5" />}
+            {runPath && (
               <AnimatedPath
-                d={overlaps
-                  ? `M ${catchX} ${endY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
-                  : `M ${catchX} ${endY} L ${arc.x2} ${endY}`}
+                d={runPath.d}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
-                strokeDasharray={`${runLen}`}
-                strokeDashoffset={run.interpolate({ inputRange: [0, 1], outputRange: [runLen, 0] }) as unknown as number}
+                strokeDasharray={`${runPath.len}`}
+                strokeDashoffset={run.interpolate({ inputRange: [0, 1], outputRange: [runPath.len, 0] }) as unknown as number}
               />
             )}
-            {cur && teamLogo(cur.tm, { week })
-              ? <SvgImage href={{ uri: teamLogo(cur.tm, { week })! }} x={arc.x1 - 5.5} y={MID - 5.5} width={11} height={11} />
-              : <Circle cx={arc.x1} cy={MID} r={3} fill={arc.color} />}
-            {incomplete
-              ? <SvgText x={arc.x2} y={endY + 3} fill={t.fx.nuke} fontSize={9} fontWeight="800" textAnchor="middle">✕</SvgText>
-              : <SvgText x={fgTail ?? arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>}
+            {(() => { const p = fieldPt(arc.x1, MID), r = 5.5 * fieldScale(MID); return cur && teamLogo(cur.tm, { week })
+              ? <SvgImage href={{ uri: teamLogo(cur.tm, { week })! }} x={p.x - r} y={p.y - r} width={2 * r} height={2 * r} />
+              : <Circle cx={p.x} cy={p.y} r={3} fill={arc.color} />; })()}
+            {playEnd && (incomplete
+              ? <SvgText x={playEnd.x} y={playEnd.y + 3} fill={t.fx.nuke} fontSize={9} fontWeight="800" textAnchor="middle">✕</SvgText>
+              : <SvgText x={playEnd.x} y={playEnd.y + 2.5} fontSize={7} textAnchor="middle">🏈</SvgText>)}
           </G>
         )}
 
-        {/* line of scrimmage + ball marker */}
+        {/* line of scrimmage + ball marker. `bx` is the FLAT x; each row maps it
+            through its own scale, which is linear in x, so it interpolates. */}
         {ballX != null && !over && (
-          <AnimatedG x={bx as unknown as number}>
-            <Line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
-            <Circle cx={0} cy={MID} r={10.5} fill={ballCol ? mix(ballCol.c, 30, t.surface) : t.surface} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
-            <SvgText x={0} y={MID + 3.5} fill={t.text} fontSize={9} fontWeight="800" textAnchor="middle">{ballTm}</SvgText>
-            {ballTm && teamLogo(ballTm, { week }) && <SvgImage href={{ uri: teamLogo(ballTm, { week })! }} x={-10} y={MID - 10} width={20} height={20} />}
-            <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={MID + 3.5} fill={ballCol?.c ?? t.faint} fontSize={10} fontWeight="700" textAnchor="middle">
-              {(flip ? !attacksRight : attacksRight) ? '▶' : '◀'}
-            </SvgText>
-            {/* the ball carrier, above the spot: headshot in a ring, name under.
-                An incompletion's target sits at the ✕ instead (below). */}
-            {carrier && !(incomplete && arc) && (
-              <G>
-                <Circle cx={0} cy={TOP + 13} r={12} fill={t.surface} stroke={ballCol?.c ?? t.dimstrong} strokeWidth={1.4} />
-                {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
-                <Rect x={-38} y={TOP + 27} width={76} height={13} rx={2} fill={alpha('#000000', 0.6)} />
-                <SvgText x={0} y={TOP + 37} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
-              </G>
-            )}
-          </AnimatedG>
+          <G>
+            <AnimatedLine x1={bx.interpolate({ inputRange: [0, W], outputRange: fieldXRange(TOP) }) as unknown as number} y1={fieldY(TOP)}
+              x2={bx as unknown as number} y2={fieldY(BOT)} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
+            <AnimatedG x={bx.interpolate({ inputRange: [0, W], outputRange: fieldXRange(MID) }) as unknown as number}>
+              {/* The badge, unless the carrier's pin stands at the spot instead. */}
+              {!(carrier && !(incomplete && arc)) && (
+                <G>
+                  <Circle cx={0} cy={yMid} r={10.5} fill={ballCol ? mix(ballCol.c, 30, t.surface) : t.surface} stroke={ballCol?.c ?? accent ?? t.dimstrong} strokeWidth={1.4} />
+                  <SvgText x={0} y={yMid + 3.5} fill={t.text} fontSize={9} fontWeight="800" textAnchor="middle">{ballTm}</SvgText>
+                  {ballTm && teamLogo(ballTm, { week }) && <SvgImage href={{ uri: teamLogo(ballTm, { week })! }} x={-10} y={yMid - 10} width={20} height={20} />}
+                </G>
+              )}
+              <SvgText x={(flip ? !attacksRight : attacksRight) ? 15 : -15} y={yMid + 3.5} fill={ballCol?.c ?? t.faint} fontSize={10} fontWeight="700" textAnchor="middle">
+                {(flip ? !attacksRight : attacksRight) ? '▶' : '◀'}
+              </SvgText>
+              {/* the ball carrier's pin, standing on the spot: headshot in a
+                  ring, a point down to the grass, the name under the spot.
+                  An incompletion's target sits at the ✕ instead (below). */}
+              {carrier && !(incomplete && arc) && (
+                <G>
+                  <Path d={`M -5 ${yMid - 14} L 5 ${yMid - 14} L 0 ${yMid - 3} Z`} fill={ballCol?.c ?? t.dimstrong} />
+                  <Circle cx={0} cy={yMid - 25} r={12} fill={t.surface} stroke={ballCol?.c ?? t.dimstrong} strokeWidth={1.4} />
+                  {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={yMid - 36} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
+                  <Rect x={-38} y={yMid + 2} width={76} height={13} rx={2} fill={alpha('#000000', 60)} />
+                  <SvgText x={0} y={yMid + 12} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
+                </G>
+              )}
+            </AnimatedG>
+          </G>
         )}
         {/* THE TARGET AT THE ✕ (v0.729.2): an incomplete pass draws who it
             was thrown to at the end of the arc, not at the spot. */}
-        {carrier && incomplete && arc && !over && (() => {
-          const { ringY, plateY } = targetMarkY(endY);
+        {carrier && incomplete && arc && playEnd && !over && (() => {
+          const { ringY, plateY } = targetMarkY(playEnd.y);
           const ring = ballCol?.c ?? t.dimstrong;
           return (
-            <G transform={`translate(${Math.min(W - 38, Math.max(38, arc.x2))} 0)`}>
+            <G transform={`translate(${Math.min(W - 38, Math.max(38, playEnd.x))} 0)`}>
               <Circle cx={0} cy={ringY} r={12} fill={t.surface} stroke={ring} strokeWidth={1.4} />
               {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={ringY - 11} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
-              <Rect x={-38} y={plateY} width={76} height={13} rx={2} fill={alpha('#000000', 0.6)} />
+              <Rect x={-38} y={plateY} width={76} height={13} rx={2} fill={alpha('#000000', 60)} />
               <SvgText x={0} y={plateY + 10} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
             </G>
           );
@@ -432,6 +460,7 @@ function Field({ feed, clock, side, week, carrierOf }: { feed: TeamGameFeed; clo
           </View>
         </View>
       )}
+      </View>
       </View>
       {pre && leaders && (
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>

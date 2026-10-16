@@ -21,6 +21,10 @@ import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageL
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, arcControlY, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
+import {
+  FIELD_W, FIELD_EZ, FIELD_TOP, FIELD_BOT, PROJ_H, POST_COLOR,
+  fieldPt, fieldX, fieldY, fieldScale, fieldQuad, projPolyline, projQuad, goalPost, type ProjPath,
+} from '@drip/core/engine/fieldPerspective';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { projectedBox } from '@drip/core/engine/projectedBox';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
@@ -29,7 +33,8 @@ import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 import { openPlayerCard } from './playerCard';
 
 // Geometry (SVG user units). The 100-yd field spans FX..FX+FW; EZ = end zone.
-const W = 400, H = 130, EZ = 26, FX = EZ, FW = W - 2 * EZ, TOP = 12, BOT = H - 16;
+// The flat field is core's; fieldPerspective projects it into the VH-tall drawing.
+const W = FIELD_W, EZ = FIELD_EZ, FX = EZ, FW = W - 2 * EZ, TOP = FIELD_TOP, BOT = FIELD_BOT, VH = PROJ_H;
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
 
 // Which roster a play belongs to — 'you' tints the visual green-side (--you),
@@ -366,7 +371,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const fgKick = !!cur && /Field Goal/.test(cur.ty);
   const fgGood = fgKick && (!!cur!.sc || /\bGOOD\b/.test(cur!.txt));
   const fgDir = arc && cur ? (mx(xOf(0, cur.tm)) >= arc.x1 ? 1 : -1) : 1;
-  if (arc && cur && fgKick) { const goal = mx(xOf(0, cur.tm)); arc.x2 = fgGood ? goal + fgDir * (EZ - 4) : goal; }
+  if (arc && cur && fgKick) { const goal = mx(xOf(0, cur.tm)); arc.x2 = fgGood ? goal + fgDir * EZ : goal; }
   const fgTail = arc && fgKick && !fgGood ? arc.x2 + fgDir * (EZ - 4) : null;
   // Split point: where the ball stopped FLYING and started being CARRIED.
   // Completed pass with YAC → the catch point (air arc, then run-after line).
@@ -410,6 +415,20 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   // "a line on the ground and an arch above", which is exactly what the founder
   // then reported. `overlaps` already knew the difference; now it decides.
   const carryY = (overlaps ? midY + CARRY_DY : midY) + sideDy;
+  // The play, projected (v0.730.0) — the app draws the same paths. A made
+  // field goal climbs to the crossbar on its way to the end line (fgLift).
+  const fgPost = fgGood && arc ? goalPost(fgDir > 0 ? W : 0) : null;
+  const fgLift = fgPost ? (u: number) => u * u * (fgPost.base.y - fgPost.through.y) : undefined;
+  const airEnd = arc ? (catchX ?? arc.x2) : 0;
+  const airPath: ProjPath | null = !arc ? null : isPassy
+    ? projQuad(arc.x1, midY, (arc.x1 + airEnd) / 2, arcControlY(arc.x1, airEnd, (midY + endY) / 2, TOP), airEnd, endY, fgLift)
+    : projPolyline([[arc.x1, midY], [arc.x2, endY]], fgLift);
+  const runPath: ProjPath | null = arc && carrying && catchX != null
+    ? projPolyline(overlaps ? [[catchX, endY], [catchX, carryY], [arc.x2, carryY]] : [[catchX, endY], [arc.x2, endY]])
+    : null;
+  const tailPath: ProjPath | null = arc && fgTail != null ? projPolyline([[arc.x2, endY], [fgTail, endY]]) : null;
+  const playEnd = incomplete ? airPath?.end : (tailPath ?? runPath ?? airPath)?.end;
+  const yMid = fieldY(midY);
 
   const situation = over ? 'FINAL'
     : (stoppageLabel(feed) ?? (
@@ -472,31 +491,35 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
           )}
         </div>
       )}
-      {/* the field, with a light perspective tilt */}
-      <div style={{ perspective: 560, position: 'relative' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%', transform: 'rotateX(20deg)', transformOrigin: '50% 100%' }}>
-          {/* turf + end zones */}
-          <rect x={FX} y={TOP} width={FW} height={BOT - TOP} fill="color-mix(in srgb, var(--you) 5%, var(--surface))" />
-          {/* end zones in each team's brand paint (sides swap with ↔ flip) */}
+      {/* THE FIELD IN PERSPECTIVE (v0.730.0, founder over Sleeper's game
+          screen: "mirror the sleeper field view … draw the same goal posts").
+          The tilt used to be a CSS 3D transform that laid everything flat; core's
+          fieldPerspective now projects the field's points (the app draws the
+          same numbers), and the posts, the ball badge and the carrier's pin
+          stand upright at their projected spots. */}
+      <div style={{ position: 'relative' }}>
+        <svg viewBox={`0 0 ${W} ${VH}`} style={{ display: 'block', width: '100%', overflow: 'visible' }}>
+          {/* turf, its ten-yard bands, end zones in each team's brand paint (sides swap with ↔ flip) */}
+          <polygon points={fieldQuad(FX, TOP, FX + FW, BOT)} fill="color-mix(in srgb, var(--you) 5%, var(--surface))" stroke="color-mix(in srgb, var(--dim) 45%, transparent)" strokeWidth={1} />
+          {Array.from({ length: 10 }, (_, i) => i % 2 === 0 ? null : (
+            <polygon key={`band-${i}`} points={fieldQuad(FX + (i / 10) * FW, TOP, FX + ((i + 1) / 10) * FW, BOT)} fill="color-mix(in srgb, var(--text) 5%, transparent)" />
+          ))}
           {(() => {
             const ezAwayX = flip ? W - EZ : 0, ezHomeX = flip ? 0 : W - EZ;
-            const label = (x: number, tc: ReturnType<typeof teamColor>, abbr: string) => (
-              <text x={x + EZ / 2} y={midY} fill={ezText(tc)} fontSize={13} fontWeight={800} textAnchor="middle"
-                transform={`rotate(${x < W / 2 ? -90 : 90} ${x + EZ / 2} ${midY})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
-            );
+            const label = (x: number, tc: ReturnType<typeof teamColor>, abbr: string) => {
+              const p = fieldPt(x + EZ / 2, midY), s = fieldScale(midY);
+              return (
+                <text x={p.x} y={p.y + 4 * s} fill={ezText(tc)} fontSize={11 * s} fontWeight={800} textAnchor="middle"
+                  transform={`rotate(${x < W / 2 ? -90 : 90} ${p.x} ${p.y})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
+              );
+            };
+            const rz = (flip ? !attacksRight : attacksRight) ? W - EZ : 0;
             return (
               <>
-                <rect x={ezAwayX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(awayCol)} />
-                {/* THE UPRIGHTS (v0.697.0): on each end line, for a kick to fly through */}
-                {[4, W - 4].map((px) => { const tip = px < W / 2 ? 0.5 : W - 0.5; return (
-                  <g key={`up-${px}`} stroke="var(--dim)" strokeWidth={1.4}>
-                    <line x1={px} y1={midY - 9} x2={px} y2={midY + 9} />
-                    <line x1={px} y1={midY - 9} x2={tip} y2={midY - 9} />
-                    <line x1={px} y1={midY + 9} x2={tip} y2={midY + 9} />
-                  </g>); })}
-                <rect x={ezHomeX} y={TOP} width={EZ} height={BOT - TOP} fill={ezFill(homeCol)} />
+                <polygon points={fieldQuad(ezAwayX, TOP, ezAwayX + EZ, BOT)} fill={ezFill(awayCol)} />
+                <polygon points={fieldQuad(ezHomeX, TOP, ezHomeX + EZ, BOT)} fill={ezFill(homeCol)} />
                 {redZone && (
-                  <rect x={(flip ? !attacksRight : attacksRight) ? W - EZ : 0} y={TOP} width={EZ} height={BOT - TOP}
+                  <polygon points={fieldQuad(rz, TOP, rz + EZ, BOT)}
                     fill="color-mix(in srgb, var(--fx-nuke) 32%, transparent)" style={{ animation: 'bpulse 1.4s ease infinite' }} />
                 )}
                 {label(ezAwayX, awayCol, away)}
@@ -504,96 +527,101 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
               </>
             );
           })()}
-          {/* yard lines + numbers */}
-          {Array.from({ length: 21 }, (_, i) => (
-            <line key={i} x1={FX + (i / 20) * FW} y1={TOP} x2={FX + (i / 20) * FW} y2={BOT}
-              stroke={i % 2 ? 'color-mix(in srgb, var(--bd) 55%, transparent)' : 'var(--bd)'} strokeWidth={i === 0 || i === 20 ? 1.6 : 0.7} />
-          ))}
-          {yardNums.map((n, i) => (
-            <text key={i} x={FX + ((i + 1) / 10) * FW} y={BOT - 4} fill="var(--dim)" fontSize={10.5} fontWeight={700} textAnchor="middle" className="mono">{n}</text>
-          ))}
+          {/* yard lines + numbers (the numbers by the near sideline, where s ≈ 1) */}
+          {Array.from({ length: 21 }, (_, i) => {
+            const x = FX + (i / 20) * FW, a = fieldPt(x, TOP), b = fieldPt(x, BOT);
+            return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+              stroke={i % 2 ? 'color-mix(in srgb, var(--bd) 55%, transparent)' : 'var(--bd)'} strokeWidth={i === 0 || i === 20 ? 1.6 : 0.7} />;
+          })}
+          {yardNums.map((n, i) => {
+            const p = fieldPt(FX + ((i + 1) / 10) * FW, BOT - 4);
+            return <text key={i} x={p.x} y={p.y} fill="var(--dim)" fontSize={10.5 * fieldScale(BOT - 4)} fontWeight={700} textAnchor="middle" className="mono">{n}</text>;
+          })}
           {/* first-down line */}
-          {!over && fdX != null && <line x1={mx(fdX)} y1={TOP} x2={mx(fdX)} y2={BOT} stroke="var(--warn)" strokeWidth={1.4} opacity={0.9} />}
+          {!over && fdX != null && (() => { const a = fieldPt(mx(fdX), TOP), b = fieldPt(mx(fdX), BOT); return (
+            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--warn)" strokeWidth={1.4} opacity={0.9} />); })()}
+          {/* THE GOAL POSTS — Sleeper's: gold, standing on each end line. A
+              made field goal's arc climbs through them (fgLift). */}
+          {[0, W].map((ex) => { const g = goalPost(ex); return (
+            <g key={`post-${ex}`}>
+              <ellipse cx={g.base.x} cy={g.base.y} rx={4} ry={1.4} fill="rgba(0,0,0,0.35)" />
+              <path d={g.d} fill="none" stroke={POST_COLOR} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+            </g>); })}
           {/* last-play arc (re-mounts per play → draw animation). A play splits
-              at the catch point: the ball in the AIR rides the centre line, the
-              ball being CARRIED rides its own lane just below it, joined by a
-              short drop at the catch. The offense logo marks the snap; the play
-              ends in a football — or an ✕ for an incompletion.
-
-              ── WHY THE CARRY GETS ITS OWN LANE (v0.332.0) ──────────────────
-              Founder, on a punt: "we've got a double line thing going on."
-              Both strokes were drawn at midY, which is fine for a pass — the
-              run-after continues in the SAME direction, so air and carry meet
-              end to end — and wrong for a KICK, where the returner runs back
-              the way the ball came. The runback then retraced the flight path
-              in the same colour at the same width and y, and read as one line
-              drawn twice. Measured against the real geometry (W=400, EZ=26):
-
-                pass + YAC       air 235→287  carry 183→235  meet end to end
-                punt + return    air  71→270  carry  71→113  OVERLAP 41.8px
-                kickoff + return air  43→252  carry  43→130  OVERLAP 87.0px
-
-              The overlap is not a mistake in the data — the ball really did fly
-              out and get run back over the same grass. It is a mistake to draw
-              two phases of a play on one line and expect the reader to know
-              which is which. */}
-          {arc && !over && (
+              at the catch point: the ball in the AIR, then the ball being
+              CARRIED — on its own lane just below when it doubles back over the
+              flight (a returned kick), in line with it otherwise. The offense
+              logo marks the snap; the play ends in a football — or an ✕ for an
+              incompletion. See engine/playPath for the measured overlap that
+              made the lane necessary (v0.332.0). */}
+          {arc && airPath && !over && (
             <g key={cur!.pid ?? cur!.c}>
-              <path d={isPassy
-                ? `M ${arc.x1} ${midY} Q ${(arc.x1 + (catchX ?? arc.x2)) / 2} ${arcControlY(arc.x1, catchX ?? arc.x2, (midY + endY) / 2, TOP)} ${catchX ?? arc.x2} ${endY}`
-                : `M ${arc.x1} ${midY} L ${arc.x2} ${endY}`}
+              <path d={airPath.d}
                 fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round"
                 pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .55s ease both' }} />
-              {fgTail != null && <line x1={arc.x2} y1={endY} x2={fgTail} y2={endY} stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="2.5 3.5" />}
-              {carrying && (
-                <path d={overlaps
-                  ? `M ${catchX} ${endY} L ${catchX} ${carryY} L ${arc.x2} ${carryY}`
-                  : `M ${catchX} ${endY} L ${arc.x2} ${endY}`}
+              {tailPath && <path d={tailPath.d} fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="2.5 3.5" />}
+              {runPath && (
+                <path d={runPath.d}
                   fill="none" stroke={arc.color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"
                   pathLength={1} strokeDasharray={1} style={{ animation: 'fvdraw .35s ease .5s both' }} />
               )}
-              {offLogo
-                ? <image href={offLogo} x={arc.x1 - 5.5} y={midY - 5.5} width={11} height={11} />
-                : <circle cx={arc.x1} cy={midY} r={3} fill={arc.color} />}
+              {(() => { const p = fieldPt(arc.x1, midY), r = 5.5 * fieldScale(midY); return offLogo
+                ? <image href={offLogo} x={p.x - r} y={p.y - r} width={2 * r} height={2 * r} />
+                : <circle cx={p.x} cy={p.y} r={3} fill={arc.color} />; })()}
               {/* The ball ends where the PLAY ended — on the carry lane when the
                   play was carried, or it would float above the runback. */}
-              {incomplete
-                ? <text x={arc.x2} y={endY + 3} fill="var(--fx-nuke)" fontSize={9} fontWeight={800} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>✕</text>
-                : <text x={fgTail ?? arc.x2} y={(carrying ? carryY : endY) + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>}
+              {playEnd && (incomplete
+                ? <text x={playEnd.x} y={playEnd.y + 3} fill="var(--fx-nuke)" fontSize={9} fontWeight={800} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>✕</text>
+                : <text x={playEnd.x} y={playEnd.y + 2.5} fontSize={7} textAnchor="middle" style={{ animation: 'fvtxt .3s ease .5s both' }}>🏈</text>)}
             </g>
           )}
-          {/* line of scrimmage + ball marker (transitions to each new spot) */}
-          {ballX != null && !over && (
-            <g style={{ transform: `translateX(${mx(ballX)}px)`, transition: 'transform .55s ease' }}>
-              {/* line of scrimmage carries the possession team's color */}
-              <line x1={0} y1={TOP} x2={0} y2={BOT} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
-              {/* abbr badge always drawn; the logo (when available) covers it */}
-              <circle cx={0} cy={midY} r={10.5} fill={ballCol ? `color-mix(in srgb, ${ballCol.c} 30%, var(--surface))` : 'var(--surface)'} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
-              <text x={0} y={midY + 3.5} fill="var(--text)" fontSize={9} fontWeight={800} textAnchor="middle" className="mono">{ballTm}</text>
-              {logo && <image href={logo} x={-10} y={midY - 10} width={20} height={20} style={cur?.sc ? { animation: 'bpulse 1s ease 2' } : undefined} />}
-              {/* drive direction in the possession color */}
-              {(() => { const right = flip ? !attacksRight : attacksRight; return (
-                <text x={right ? 15 : -15} y={midY + 3.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={10} fontWeight={700} textAnchor="middle">{right ? '▶' : '◀'}</text>
-              ); })()}
-              {/* the ball carrier, above the spot: headshot in a ring, name under.
-                  An incompletion's target sits at the ✕ instead (below). */}
-              {carrier && !(incomplete && arc) && (
-                <g>
-                  <defs><clipPath id={`fvc-${feed.key}`}><circle cx={0} cy={TOP + 13} r={11} /></clipPath></defs>
-                  <circle cx={0} cy={TOP + 13} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
-                  {carrierImg && <image href={carrierImg} x={-11} y={TOP + 2} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvc-${feed.key})`} />}
-                  <rect x={-38} y={TOP + 27} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
-                  <text x={0} y={TOP + 37} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier.name}</text>
+          {/* line of scrimmage + ball marker (transitions to each new spot).
+              The line runs from the far sideline's x to the near one's; it is
+              drawn at the near x and skewed so its top lands on the far x —
+              one transform, so it slides with the badge. */}
+          {ballX != null && !over && (() => {
+            const fx = mx(ballX), nearX = fieldX(fx, BOT), farX = fieldX(fx, TOP), yN = fieldY(BOT), yF = fieldY(TOP);
+            const skew = Math.atan((farX - nearX) / (yF - yN)) * 180 / Math.PI;
+            const right = flip ? !attacksRight : attacksRight;
+            const pinned = carrier && !(incomplete && arc);
+            return (
+              <>
+                <line x1={0} y1={yF} x2={0} y2={yN} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4}
+                  style={{ transformOrigin: `0px ${yN}px`, transform: `translateX(${nearX}px) skewX(${skew}deg)`, transition: 'transform .55s ease' }} />
+                <g style={{ transform: `translateX(${fieldX(fx, midY)}px)`, transition: 'transform .55s ease' }}>
+                  {/* abbr badge (the logo, when available, covers it) — unless the carrier's pin stands at the spot instead */}
+                  {!pinned && (
+                    <>
+                      <circle cx={0} cy={yMid} r={10.5} fill={ballCol ? `color-mix(in srgb, ${ballCol.c} 30%, var(--surface))` : 'var(--surface)'} stroke={ballCol?.c ?? accent ?? 'var(--dimstrong)'} strokeWidth={1.4} />
+                      <text x={0} y={yMid + 3.5} fill="var(--text)" fontSize={9} fontWeight={800} textAnchor="middle" className="mono">{ballTm}</text>
+                      {logo && <image href={logo} x={-10} y={yMid - 10} width={20} height={20} style={cur?.sc ? { animation: 'bpulse 1s ease 2' } : undefined} />}
+                    </>
+                  )}
+                  {/* drive direction in the possession color */}
+                  <text x={right ? 15 : -15} y={yMid + 3.5} fill={ballCol?.c ?? 'var(--faint)'} fontSize={10} fontWeight={700} textAnchor="middle">{right ? '▶' : '◀'}</text>
+                  {/* the ball carrier's pin, standing on the spot: headshot in a
+                      ring, a point down to the grass, the name under the spot.
+                      An incompletion's target sits at the ✕ instead (below). */}
+                  {carrier && !(incomplete && arc) && (
+                    <g>
+                      <defs><clipPath id={`fvc-${feed.key}`}><circle cx={0} cy={yMid - 25} r={11} /></clipPath></defs>
+                      <path d={`M -5 ${yMid - 14} L 5 ${yMid - 14} L 0 ${yMid - 3} Z`} fill={ballCol?.c ?? 'var(--dimstrong)'} />
+                      <circle cx={0} cy={yMid - 25} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
+                      {carrierImg && <image href={carrierImg} x={-11} y={yMid - 36} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvc-${feed.key})`} />}
+                      <rect x={-38} y={yMid + 2} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
+                      <text x={0} y={yMid + 12} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier!.name}</text>
+                    </g>
+                  )}
                 </g>
-              )}
-            </g>
-          )}
+              </>
+            );
+          })()}
           {/* THE TARGET AT THE ✕ (v0.729.2): an incomplete pass draws who it
               was thrown to at the end of the arc, not at the spot. */}
-          {carrier && incomplete && arc && !over && (() => {
-            const { ringY, plateY } = targetMarkY(endY);
+          {carrier && incomplete && arc && playEnd && !over && (() => {
+            const { ringY, plateY } = targetMarkY(playEnd.y);
             return (
-              <g transform={`translate(${Math.min(W - 38, Math.max(38, arc.x2))} 0)`} style={{ animation: 'fvtxt .3s ease .5s both' }}>
+              <g transform={`translate(${Math.min(W - 38, Math.max(38, playEnd.x))} 0)`} style={{ animation: 'fvtxt .3s ease .5s both' }}>
                 <defs><clipPath id={`fvt-${feed.key}`}><circle cx={0} cy={ringY} r={11} /></clipPath></defs>
                 <circle cx={0} cy={ringY} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
                 {carrierImg && <image href={carrierImg} x={-11} y={ringY - 11} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvt-${feed.key})`} />}
