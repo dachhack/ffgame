@@ -17,7 +17,7 @@ import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { weekTitle, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, type ReplayMode } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey, type ReplayMode } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
@@ -286,7 +286,7 @@ export function FieldBoard({ week, entries, scheduled, onClose, onRefresh }: {
  *  and name (v0.390.3, Sleeper's K. Walker marker). Null = the plain badge. */
 export type Carrier = { slug: string; name: string } | null;
 
-function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; clock: number; week: number; pidSide?: (pid?: number) => PlaySide | null; carrierOf?: (p: GamePlay) => Carrier }) {
+function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed: TeamGameFeed; clock: number; week: number; pidSide?: (pid?: number) => PlaySide | null; carrierOf?: (p: GamePlay) => Carrier; jump?: { key: string; n: number } | null; onShown?: (key: string | null) => void }) {
   const { away, home, plays } = feed;
   // ↔ mirror this game's field to match the viewer's TV broadcast — the feed
   // carries no camera orientation, so the default (away attacks right) is a
@@ -314,6 +314,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   // ⟲ REANIMATE THE GAME (v0.730.8, founder: "Auto (7 sec) or manual advance"): from the first play, forward
   // on its own every REPLAY_MS or one play per ›; past the last play it is live again. The mode is remembered.
   const [replay, setReplay] = useState<ReplayMode | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [replayPref, setReplayPref] = useState<ReplayMode>(() => { try { return parseReplayMode(localStorage.getItem('fvreplay')); } catch { return 'auto'; } });
   const startReplay = () => { setPin(0); setReplay(replayPref); };
   const toggleReplayMode = () => { const n: ReplayMode = replay === 'auto' ? 'manual' : 'auto'; setReplay(n); setReplayPref(n); try { localStorage.setItem('fvreplay', n); } catch { /* ignore */ } };
@@ -323,9 +324,20 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
     const id = setTimeout(() => stepTo(pin + 1), REPLAY_MS);
     return () => clearTimeout(id);
   }, [pin, replay]); // eslint-disable-line react-hooks/exhaustive-deps
+  // TAP A PLAY, THE REPLAY GOES THERE (v0.730.10, founder: "click the play on the play by play below and advance
+  // the replay to that play"): the game view's list hands a play's key; the field pins it in replay (keeping the
+  // viewer's AUTO/MANUAL), and reports back which play it shows so the list can light that row.
+  useEffect(() => {
+    if (!jump) return;
+    const i = plays.findIndex((x) => playKey(x) === jump.key);
+    if (i < 0) return;
+    setPin(i); setReplay((r) => r ?? replayPref);
+    rootRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });   // the field may be scrolled off above the list
+  }, [jump?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   // A replayed or stepped-back play reads its own clock and down, not the game's live status ("FINAL", "HALFTIME").
   const nowFeed = pin == null ? feed : null;
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
+  useEffect(() => { onShown?.(pin != null && cur ? playKey(cur) : null); }, [pin, cur?.pid, cur?.c]); // eslint-disable-line react-hooks/exhaustive-deps
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
   const carrierImg = carrier ? headshot(carrier.slug) : null;
@@ -479,7 +491,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   );
 
   return (
-    <div style={{ marginTop: 5, background: 'var(--bg)', border: `1px solid ${accent ? `color-mix(in srgb, ${accent} 55%, var(--bd))` : 'var(--bd)'}`, boxShadow: accent ? `0 0 12px color-mix(in srgb, ${accent} 18%, transparent)` : undefined, borderRadius: 4, padding: '6px 8px 7px', transition: 'border-color .3s ease, box-shadow .3s ease' }}>
+    <div ref={rootRef} style={{ marginTop: 5, background: 'var(--bg)', border: `1px solid ${accent ? `color-mix(in srgb, ${accent} 55%, var(--bd))` : 'var(--bd)'}`, boxShadow: accent ? `0 0 12px color-mix(in srgb, ${accent} 18%, transparent)` : undefined, borderRadius: 4, padding: '6px 8px 7px', transition: 'border-color .3s ease, box-shadow .3s ease' }}>
       {/* score + clock strip — logos + a football on the possession side */}
       <div className="mono" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center', fontSize: 14, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--dim)', marginBottom: 5, paddingRight: 30 }}>
         {stripTeam(away, awayLogo, ballTm === away)}
@@ -880,6 +892,9 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
   const personOf = (abbr: string): GamePerson | null => resolveGamebookPerson(people, abbr);
   const carrierOf = (p: GamePlay): Carrier => { const a = ballCarrier(p); const who = a ? personOf(a) : null; return who ? { slug: who.slug, name: shortName(who.full) } : null; };
   const [tab, setTab] = useState<'live' | 'stats'>('live');
+  // TAP A PLAY → THE FIELD REPLAYS FROM IT (v0.730.10): `jump` down to the field, `shown` back up to light the row.
+  const [jump, setJump] = useState<{ key: string; n: number } | null>(null);
+  const [shown, setShown] = useState<string | null>(null);
   const [statTab, setStatTab] = useState<'off' | 'def'>('off');
   const drive = driveSummary(feed);
   const sit = last ? situationLabel(last, home, away) : null;
@@ -939,7 +954,7 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
           <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.35, marginTop: 2 }}>{last.txt}</div>
         </div>
       )}
-      <Field feed={feed} clock={clock} week={week} pidSide={pidSide} carrierOf={carrierOf} />
+      <Field key={feed.key} feed={feed} clock={clock} week={week} pidSide={pidSide} carrierOf={carrierOf} jump={jump} onShown={setShown} />
       {drive && !over && <div className="mono" style={{ fontSize: 9.5, color: 'var(--dimstrong)', textAlign: 'center', marginTop: 4 }}>{drive.text}</div>}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 10, borderBottom: '1px solid var(--bd)' }}>
         {tabBtn('live', live ? '● LIVE' : 'PLAYS')}
@@ -966,8 +981,10 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
             const names = playNames(p.txt).map((a) => personOf(a)).filter((x): x is GamePerson => !!x);
             const s2 = situationLabel(p, home, away);
             return (
-              <div key={p.pid ?? `${p.c}-${i}`} title="Double-click to hear this play" onDoubleClick={() => { webVoice.stop(); webVoice.speak(p.txt, () => {}); }}
-                style={{ display: 'flex', gap: 8, padding: '10px 4px', borderBottom: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)' }}>
+              <div key={p.pid ?? `${p.c}-${i}`} title="Click to replay the field from this play · double-click to hear it"
+                onClick={() => setJump({ key: playKey(p), n: Date.now() })} onDoubleClick={() => { webVoice.stop(); webVoice.speak(p.txt, () => {}); }}
+                style={{ display: 'flex', gap: 8, padding: '10px 4px', cursor: 'pointer', borderBottom: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)',
+                  ...(shown === playKey(p) ? { background: 'color-mix(in srgb, var(--warn) 12%, transparent)', boxShadow: 'inset 2px 0 0 var(--warn)' } : {}) }}>
                 {teamLogo(p.tm, { week }) && <img src={teamLogo(p.tm, { week })!} alt="" width={22} height={22} style={{ marginTop: 2, flex: 'none' }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 9, fontWeight: 700, color: 'var(--dim)' }}>

@@ -4,7 +4,7 @@
 // header, drive line and play rows are readings off the play feed; both
 // hosts' Game views take them from here, pinned against real week-1 lines.
 // Run: npx tsx scripts/check-game-view.mjs
-import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip } from '../packages/core/src/data/gameView.ts';
+import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey } from '../packages/core/src/data/gameView.ts';
 import { teamMarkColor } from '../packages/core/src/data/teamColors.ts';
 import { namesFromSlugs, resolveGamebookPerson } from '../packages/core/src/engine/gameNames.ts';
 
@@ -80,6 +80,18 @@ const P = (o) => ({ c: 0, drv: 3, tm: 'KC', dn: 1, dist: 10, yl: 80, yl2: 80, ty
   ok(g([to(100, 'Timeout #1 by LAR at 10:00.')], live, { home: 'LA' }).home === 2, 'ESPN\'s LAR is the Rams\' LA');
   ok(teamMarkColor('SEA', '#0b1020') === '#69BE28' && teamMarkColor('DEN', '#0b1020') === '#FB4F14', 'dots read on a dark theme: Seattle green, Denver orange');
   ok(teamMarkColor('SEA', '#ffffff') === '#002244', '…and on a light one, Seattle navy');
+}
+
+// ── TAP A PLAY, THE REPLAY GOES THERE (v0.730.10) ─────────────────────────
+{
+  const { readFileSync } = await import('node:fs');
+  ok(playKey({ pid: 4012, c: 900 }) === '4012' && playKey({ c: 900 }) === 'c900', 'a play\'s key is its id, else its clock');
+  const mf = readFileSync(new URL('../apps/mobile/src/ui/FieldView.tsx', import.meta.url), 'utf8');
+  const wf = readFileSync(new URL('../src/app/FieldView.tsx', import.meta.url), 'utf8');
+  const mg = readFileSync(new URL('../apps/mobile/src/ui/GameView.tsx', import.meta.url), 'utf8');
+  for (const [f, src] of [['phone FieldView', mf], ['web FieldView', wf]]) ok(src.includes('plays.findIndex((x) => playKey(x) === jump.key)') && src.includes('onShown?.(pin != null && cur ? playKey(cur) : null)'), `${f}: a jump pins that play in replay and reports the play shown`);
+  ok(mg.includes('onPress={() => setJump({ key: playKey(p), n: Date.now() })}') && mg.includes('jump={jump} onShown={setShown}'), 'phone game view: a tapped play jumps the field; the shown row is lit');
+  ok(wf.includes('onClick={() => setJump({ key: playKey(p), n: Date.now() })}') && wf.includes('jump={jump} onShown={setShown}'), 'web game view: a clicked play jumps the field; the shown row is lit');
 }
 
 // ── THE CHIP BEFORE THE NEXT SNAP (v0.730.9): no empty box under a live field

@@ -269,3 +269,8 @@ export function liveSituationChip(status: { sit?: { dd?: string | null; spot?: s
   const spot = status?.sit?.spot?.trim();
   return `${dd.toUpperCase()}${spot ? ` · AT ${spot.toUpperCase()}` : ''}`;
 }
+
+/** A play's stable key across the feed's polls (v0.730.10): the source's play
+ *  id, else its clock. The play-by-play list hands this to the field to jump
+ *  the replay to that play, and the field hands back the one it's showing. */
+export const playKey = (p: Pick<GamePlay, 'pid' | 'c'>): string => (p.pid != null ? String(p.pid) : `c${p.c}`);
