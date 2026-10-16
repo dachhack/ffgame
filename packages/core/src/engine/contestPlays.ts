@@ -213,3 +213,38 @@ export function aiContestPlays(o: {
   }
   return out;
 }
+
+// ═══ PLAYS STAY FACE DOWN WITH THEIR CARDS (v0.730.2) ═════════════════════════
+// Founder (a Weekly Cointest matchup, every card still on its back, yet "TEAM
+// ⚡ UP" under both squads and "⚡ UP" on both RB1s): "Don't show that opponent
+// or other teams have power ups applied until cards flip over." A play is part
+// of the hand, and the hand is hidden like the picks: you always see your own;
+// anyone else's shows when the card it rides turns face up. Both builders (web
+// and phone) ask here, so the reveal is the same everywhere.
+
+/** May the viewer see the play on this spot yet?
+ *  @param mineSpot the spot is on the viewer's own squad.
+ *  @param theirs the play is aimed AT this spot by the other squad (Spy, Jinx).
+ *  @param seated the viewer is one of this matchup's two squads.
+ *  @param slug the spot's player when his card is face up (null while sealed).
+ *  @param locked his game has kicked off. */
+export function contestSpotPlayShown(o: { mineSpot: boolean; theirs: boolean; seated: boolean; slug: string | null; locked: boolean }): boolean {
+  // The viewer's own play: on their own spot, or aimed by them at the other side.
+  const own = o.theirs ? !o.mineSpot && o.seated : o.mineSpot;
+  if (own) return true;
+  // The other squad's play aimed at MY spot: my card is always face up to me,
+  // so the moment it turns for them — his kickoff — is when theirs shows.
+  if (o.mineSpot) return o.locked;
+  // Anything on another squad's spot: when that card has turned.
+  return !!o.slug;
+}
+
+/** May the viewer see a squad's TEAM plays yet? Their own always; another
+ *  squad's once any of its cards has turned (its first player kicked off). */
+export function contestSquadPlaysShown(o: { mine: boolean; slugs: readonly (string | null | undefined)[] }): boolean {
+  return o.mine || o.slugs.some((s) => !!s);
+}
+
+/** The phantom is a play dealt as a card: another squad's shows from the
+ *  week's first kickoff, and until then its spot looks like any sealed one. */
+export const contestGhostShown = (o: { mine: boolean; started: boolean }): boolean => o.mine || o.started;

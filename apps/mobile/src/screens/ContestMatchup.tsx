@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal, contestPlayById, contestPlaysFor, contestPlayCap, contestPlayTarget, contestSpotOpen, contestHandCard, type ContestPlayId } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal, contestPlayById, contestPlaysFor, contestPlayCap, contestPlayTarget, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { ringScore } from '@drip/core/engine/bullseye';
@@ -153,6 +153,10 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
     // THE PLAYS (v0.687.0): mine on my spot, or the other side's aimed at it (Spy, Jinx) once they show; the phantom as a card
     const pl = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target !== 'opp')
       ?? (s === 'home' ? m.away_plays : m.home_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target === 'opp') ?? null;
+    // ANOTHER SQUAD'S PHANTOM STAYS ON ITS BACK (v0.730.2) until the week's first kickoff — the card IS the play.
+    if (!r.slug && !r.sealed && pl?.id === 'ghost' && !contestGhostShown({ mine, started: !!st.started })) {
+      return <FlipCard key={`${s}-${r.slot}-ghost`} flipped={false} idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={<View />} />;
+    }
     if (!r.slug && !r.sealed && pl?.id === 'ghost') {
       return <FlipCard key={`${s}-${r.slot}-ghost`} flipped idx={i} back={<CardBack seed={`${m.id}|${s}|${r.slot}`} />} face={<CardFace slug={GHOST_PLAYER.id} name={GHOST_CARD.name} pos="FLEX" team={null} mine={mine} badge="👻" />} />;
     }
@@ -199,11 +203,15 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   // his game is on, the projection under it; a Bullseye spot's target and how
   // far off. A sealed pick shows nothing — a projection would give him away.
   /** The play on a spot: mine on my spot, or the other side's aimed at it (Spy, Jinx) once it shows. */
-  const playAt = (s: 'home' | 'away', r: Row): { pl: ContestPlayRow; theirs: boolean } | null => {
+  // A PLAY STAYS FACE DOWN WITH ITS CARD (v0.730.2, founder: "Don't show that opponent or other teams have
+  // power ups applied until cards flip over"): yours always; anyone else's once the card it rides has turned.
+  const playAt = (s: 'home' | 'away', r: Row, mine: boolean): { pl: ContestPlayRow; theirs: boolean } | null => {
     const own = (s === 'home' ? m.home_plays : m.away_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target !== 'opp');
-    if (own) return { pl: own, theirs: false };
-    const aimed = (s === 'home' ? m.away_plays : m.home_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target === 'opp');
-    return aimed ? { pl: aimed, theirs: true } : null;
+    const aimed = own ? null : (s === 'home' ? m.away_plays : m.home_plays)?.find((x) => x.slot === r.slot && contestPlayById(x.id)?.target === 'opp');
+    const pl = own ?? aimed;
+    if (!pl) return null;
+    const theirs = !own;
+    return contestSpotPlayShown({ mineSpot: mine, theirs, seated: L.mine, slug: r.slug, locked: locked(r.slug) }) ? { pl, theirs } : null;
   };
   const playText = (pl: ContestPlayRow, theirs: boolean, mine: boolean) => {
     const d = contestPlayById(pl.id);
@@ -228,7 +236,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
             beside the spot's label, no icon on the card; tap it for the play's details. */}
         <View style={{ flexDirection: edge === 'left' ? 'row' : 'row-reverse', alignItems: 'center', gap: 4 }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', letterSpacing: 0.8, color: alpha(t.text, 65) }}>{`${labels[r.slot] ?? r.slot}${target != null ? ` · 🎯 ${target}` : ''}`}</Text>
-          {(() => { const a = playAt(s, r); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} actions={myTable && mine && !a.theirs ? [{ label: 'TAKE BACK', onPress: () => void disarm(a.pl) }] : undefined}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
+          {(() => { const a = playAt(s, r, mine); return a ? <InfoChip label="⚡ UP" title={contestPlayById(a.pl.id)?.name ?? a.pl.id} actions={myTable && mine && !a.theirs ? [{ label: 'TAKE BACK', onPress: () => void disarm(a.pl) }] : undefined}>{playText(a.pl, a.theirs, mine)}</InfoChip> : null; })()}
         </View>
         <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', color: score != null ? color : alpha(t.text, 35) }}>{score != null ? score.toFixed(1) : r.sealed ? '◈' : '—'}</Text>
         {raw != null && <Text style={{ fontFamily: MONO, fontSize: fs(11), fontWeight: '700', color: alpha(t.text, 50), textDecorationLine: 'line-through' }}>{raw.toFixed(1)}</Text>}
@@ -275,7 +283,8 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   const penText = (x: { pen: number; shows: number }) => ` · −${x.pen} · ${x.shows} no-show${x.shows === 1 ? '' : 's'}`;
   /** A side's squad plays — mine from the seat's own rows, theirs from the matchup (shown once the week starts). */
   const squadPlays = (s: 'home' | 'away', mine: boolean): ContestPlayRow[] =>
-    (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
+    !contestSquadPlaysShown({ mine, slugs: (s === left ? L : R).rows.map((r) => r.slug) }) ? []
+      : (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const x = tally(s, S);
     const color = S.mine ? t.you : t.opp;

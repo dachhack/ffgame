@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.2 — Other squads' power-ups stay hidden until their cards turn
+
+> - In a contest matchup, you no longer see that your opponent (or the squads in another matchup) played a power-up until the card it's on flips over. Their team power-ups show once their first card flips.
+> - A power-up your opponent aimed at one of your players shows when that player's game kicks off.
+
+Founder (Weekly Cointest, every card face down, "TEAM ⚡ UP" under both
+squads and "⚡ UP" on both RB1s): "Don't show that opponent or other teams
+have power ups applied until cards flip over." The matchup has carried the
+other side's plays since the week's first kickoff, and both builders drew
+them at once. Core `contestSpotPlayShown`, `contestSquadPlaysShown` and
+`contestGhostShown` (engine/contestPlays) now decide: your own plays always;
+another squad's spot play once that card is face up; its team plays once any
+of its cards is; a play aimed at your spot at your player's kickoff; another
+squad's phantom from the first kickoff (its spot shows a sealed back until
+then). Web and phone ContestMatchup both ask. UI only: the matchup payload
+still carries the plays from the first kickoff. check:playreveal.
+
 ### v0.730.1 — The ball rises into the air
 
 > - On the live field, passes and kicks now arc up into the air above the field and come down on their spot, like Sleeper's. A made field goal drops between the uprights.
