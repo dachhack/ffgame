@@ -4,7 +4,7 @@
 // header, drive line and play rows are readings off the play feed; both
 // hosts' Game views take them from here, pinned against real week-1 lines.
 // Run: npx tsx scripts/check-game-view.mjs
-import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode } from '../packages/core/src/data/gameView.ts';
+import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip } from '../packages/core/src/data/gameView.ts';
 import { teamMarkColor } from '../packages/core/src/data/teamColors.ts';
 import { namesFromSlugs, resolveGamebookPerson } from '../packages/core/src/engine/gameNames.ts';
 
@@ -81,6 +81,11 @@ const P = (o) => ({ c: 0, drv: 3, tm: 'KC', dn: 1, dist: 10, yl: 80, yl2: 80, ty
   ok(teamMarkColor('SEA', '#0b1020') === '#69BE28' && teamMarkColor('DEN', '#0b1020') === '#FB4F14', 'dots read on a dark theme: Seattle green, Denver orange');
   ok(teamMarkColor('SEA', '#ffffff') === '#002244', '…and on a light one, Seattle navy');
 }
+
+// ── THE CHIP BEFORE THE NEXT SNAP (v0.730.9): no empty box under a live field
+ok(liveSituationChip({ sit: { dd: '1st & 10', spot: 'DEN 19' } }) === '1ST & 10 · AT DEN 19', 'the live header\'s situation, in the chip\'s words');
+ok(liveSituationChip({ sit: { dd: '3rd & 2', spot: null } }) === '3RD & 2', 'no spot: just the down');
+ok(liveSituationChip(null) === null && liveSituationChip({ sit: { dd: '  ' } }) === null, 'nothing to say: null, and the chip hides');
 
 // ── REANIMATE THE GAME (v0.730.8): ⟲ REPLAY, auto every 7s or manual ─────
 {

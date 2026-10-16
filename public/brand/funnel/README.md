@@ -32,6 +32,9 @@ app header) and keep the thing you're showing in the upper half.
 | `positions-scoped.png` | Positions | A lineup with Vets 7+, NFC Only and Rookie SF spots, on 2026 rosters |
 | `scoring-bestball-mix.png` | Scoring options | A matchup board with one best-ball spot (FLEX, AUTO) among hand-set ones |
 | `scoring-scoped-bonuses.png` | Scoring options | Scoring → Adjustments, opening on the scoped-bonus rules and the scope chips |
+| `gameday-field.png` | Game day | A game view mid-drive: the field in perspective with its posts, a pass arcing through the air, the carrier's pin on his spot |
+| `gameday-replay.png` | Game day | A field during ⟲ REPLAY: REPLAY n/N and the AUTO 7s chip over a play |
+| `gameday-scoreboard.png` | Game day | The game view's scoreboard with a timeout or two used (the dots), the last play and the field under it |
 
 The matchup card rotates the site's existing drip and classic screens in
 `public/brand/` (`shot-drip-live.png`, `shot-sealed.jpg`, `shot-duel.png`,

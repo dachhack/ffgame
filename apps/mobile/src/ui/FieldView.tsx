@@ -20,7 +20,7 @@
 // on the JS thread (useNativeDriver: false). They are short and small, and the
 // alternative — faking a stroke reveal with an overlaid mask — would be worse.
 // It is still the one place where a busy JS tick could show.
-import { stoppageLabel, liveClockLabel, REPLAY_MS, replayModeLabel, parseReplayMode, type ReplayMode } from '@drip/core/data/gameView';
+import { stoppageLabel, liveClockLabel, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, type ReplayMode } from '@drip/core/data/gameView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet, useWindowDimensions } from 'react-native';
@@ -237,6 +237,8 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   // Down & distance the CURRENT play was snapped on (the chip above shows the
   // resulting next snap). Goal-to-go when the sticks reach the goal line; dn 0
   // = kickoff/PAT, nothing to show. Ported from the web FieldView.
+  // the next snap not in yet: the live header's situation, else no chip at all (v0.730.9)
+  const sitChip = situation || liveSituationChip(nowFeed?.status) || '';
   const curDD = cur && cur.dn > 0 ? `${ORD[cur.dn]} & ${cur.dist >= cur.yl ? 'Goal' : cur.dist}` : null;
   const score = cur ? { a: cur.as, h: cur.hs } : { a: 0, h: 0 };
 
@@ -506,10 +508,10 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
 
       {/* situation chip + play text — the FINAL banner carries the verdict on
           a finished game, and a kneel-down sentence under it is noise */}
-      {!over && (
+      {!over && !!sitChip && (
         <View style={{ alignItems: 'center', marginTop: 4 }}>
           <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: t.surface }}>
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.8, color: accent ?? (cur?.sc ? t.warn : t.you) }}>{situation}</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', letterSpacing: 0.8, color: accent ?? (cur?.sc ? t.warn : t.you) }}>{sitChip}</Text>
           </View>
         </View>
       )}

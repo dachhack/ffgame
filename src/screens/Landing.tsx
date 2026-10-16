@@ -2,7 +2,7 @@
 //
 // Founder's revamp of the signed-out web flow, revised: the welcome and the
 // innovators line, "Count me in! | Sign in" with no small print under it, then
-// the five feature groups — the chips stay — each with a rail of phone
+// the feature groups (five, then Game day in v0.730.9) — the chips stay — each with a rail of phone
 // screens under them that the chips pick (v0.651.0; it turned on its own
 // before), and the matchup card doubling as the door to
 // the demo ("Click here for a demo"). Bullseye joined the competitive modes.
@@ -61,6 +61,12 @@ export const FUNNEL_SHOTS: Record<string, Shot[]> = {
   'Scoring options': [
     { file: 'scoring-bestball-mix.png', label: 'Best ball and set spots, mixed', chip: 'Single-spot best ball' },
     { file: 'scoring-scoped-bonuses.png', label: 'Scoped bonuses', chip: 'Scoped bonuses' },
+  ],
+  // v0.730.9: the live field's card — stand-ins shot from the web game view at phone size, mark-free.
+  'Game day': [
+    { file: 'gameday-field.png', label: 'The live field · a drive in perspective', chip: 'Live field' },
+    { file: 'gameday-replay.png', label: 'Replay · auto every 7 seconds', chip: 'Replay' },
+    { file: 'gameday-scoreboard.png', label: 'The scoreboard · timeouts as dots', chip: 'Live scoreboard' },
   ],
   // The matchup card shows the drip screens the site already has (shot in
   // the running app, v0.614.1) — landscape, so it gets the wide frame.

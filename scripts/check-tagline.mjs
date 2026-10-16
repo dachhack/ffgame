@@ -166,8 +166,11 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   ok('Shotgun Wedding\'s line says 2-for-2, like for like, and new vows', sw && /2-for-2/.test(sw.line) && /like-for-like/.test(sw.line) && /new vows/.test(sw.line), sw?.line);
   const matchup = LANDING_FEATURES.find((g) => g.heading === 'Matchup style');
   ok('the matchup card speaks the funnel\'s lines, Classic first', matchup && matchup.notes[0]?.name === 'Classic' && matchup.notes[1]?.line === drip?.line, matchup?.notes.map((n) => n.name));
-  ok('the five cards are still the five the founder named',
-    LANDING_FEATURES.map((g) => g.heading).join('|') === 'League types|Competitive modes|Positions|Scoring options|Matchup style', LANDING_FEATURES.map((g) => g.heading));
+  ok('the founder\'s five cards, with Game day (v0.730.9) before the matchup card, which stays last',
+    LANDING_FEATURES.map((g) => g.heading).join('|') === 'League types|Competitive modes|Positions|Scoring options|Game day|Matchup style', LANDING_FEATURES.map((g) => g.heading));
+  const gd = LANDING_FEATURES.find((g) => g.heading === 'Game day');
+  ok('Game day is the live field, the replay and the scoreboard', gd?.notes.map((n) => n.name).join('|') === 'Live field|Replay|Live scoreboard', gd?.notes.map((n) => n.name));
+  ok('the replay chip says 7 seconds or a tap', gd && /7 seconds/.test(gd.notes[1].line) && /tap/.test(gd.notes[1].line));
   ok('every landing chip has a line', LANDING_FEATURES.every((g) => g.notes.every((n) => n.line.length > 20)));
   // v0.652.0 — founder: one chip for the plain shapes, one for every position, no "Others".
   const lt = LANDING_FEATURES.find((g) => g.heading === 'League types');
