@@ -167,6 +167,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
   const outTagsOf = new Map();   // 0307: the OUT shelf's list, per league
   try {
     for (const lg of lgs ?? []) {
+    try {
       // Through modeOfSettings, never the raw row: settings_json calls the
       // builder spec `roster_slots` while leagueSlotDefs reads `slots`, so a
       // raw row silently yields the default nine spots for a builder league.
@@ -324,6 +325,7 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
 
       const agents = await seatAgentsFor([lg.id]);
       for (const seat of seatRows.filter((r) => r.league_id === lg.id)) {
+      try {
         if (seat.kind === 'agent') {
           if (!agents.has(`${lg.id}:${seat.roster_id}`)) continue;   // claimed since we read
         } else {
@@ -593,7 +595,20 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
             log('seat wire', lg.id, seat.roster_id, c.add, e.message);
           }
         }
+      } catch (e) {
+        // …and one seat cannot stop its league (v0.727.0).
+        log('seat wire seat failed', lg.id, seat.roster_id, e?.stack ? String(e.stack).split('\n').slice(0, 4).join(' | ') : String(e));
       }
+      }
+    } catch (e) {
+      // ONE LEAGUE CANNOT STOP THE REST (v0.727.0). The loop used to sit in a
+      // single try/finally, so one league that threw ended the whole sweep —
+      // every hour — for every league after it. From Oct 11 no AI seat in any
+      // league filed a claim (ops 060), while one-seat passes worked (059:
+      // Kickoff League's Team 4 legalised at once). Now the failure is
+      // logged with its league and the sweep moves on.
+      log('seat wire league failed', lg.id, e?.stack ? String(e.stack).split('\n').slice(0, 4).join(' | ') : String(e));
+    }
     }
   } finally {
     // Leave no module global installed past the sweep — the next caller in this

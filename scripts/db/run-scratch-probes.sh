@@ -109,6 +109,7 @@ RUN=probe_run
 $RUN -f scripts/db/native-league-probes.sql | grep -E "PROBE FAIL|ALL PROBES" || { echo "PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/auction-engine-probes.sql | grep -E "PROBE FAIL|ALL AUCTION-ENGINE PROBES" || { echo "AUCTION-ENGINE PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/division-probes.sql | grep -E "PROBE FAIL|ALL DIVISION PROBES" || { echo "DIVISION PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/league-tiers-probes.sql | grep -E "PROBE FAIL|ALL LEAGUE-TIERS PROBES" || { echo "LEAGUE-TIERS PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/contract-probes.sql | grep -E "PROBE FAIL|ALL CONTRACT PROBES" || { echo "CONTRACT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/format-probes.sql | grep -E "PROBE FAIL|ALL FORMAT PROBES" || { echo "FORMAT PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/preseason-practice-probes.sql | grep -E "PROBE FAIL|PROBES PASS" || { echo "PRESEASON PROBES FAILED"; exit 1; }

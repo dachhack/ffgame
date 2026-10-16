@@ -78,6 +78,7 @@ import { Overlay } from '../ui/Overlay';
 import { InfoChip, LabelInfo } from '../ui/InfoChip';
 import { CopiesCard, RosterCapsCard } from '../ui/RosterSettingsCards';
 import { LadderCommishCard } from '../ui/Ladder';
+import { TiersCommishCard } from '../ui/LeagueTiers';
 import { SportLineup } from '../ui/SportLineup';
 import { SportSettings } from '../ui/SportSettings';
 import { SPORTS, type Sport } from '@drip/core/sports/index';
@@ -530,6 +531,7 @@ export function CommishTools({ leagueId, native, contest = false, rosterId, init
             {section === 'players' && native && <CommishPlayers key={`players-${epoch}`} leagueId={leagueId} onChanged={() => void refresh()} />}
             {section === 'dynasty' && native && <DynastyCard leagueId={leagueId} />}
             {section === 'ladder' && native && <LadderCommishCard leagueId={leagueId} />}
+            {section === 'ladder' && native && <TiersCommishCard leagueId={leagueId} />}
             {section === 'commish' && <CommissionersCard leagueId={leagueId} />}
             {section === 'locks' && native && <LocksCard leagueId={leagueId} />}
             {section === 'order' && native && <><WaiverOrderCard leagueId={leagueId} /><WaiverHoldsCard leagueId={leagueId} /><TxnLimitsCard leagueId={leagueId} /></>}

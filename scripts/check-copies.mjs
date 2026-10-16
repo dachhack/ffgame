@@ -1,7 +1,7 @@
 // COPIES (0500): who holds a player is a list. These helpers decide what the
 // wire, the draft board and the matchup board show on web and app alike; with
 // one copy they must answer exactly as the old one-owner maps did.
-import { holdersBySlug, copyOpen, copiesLeft, holderFor, boardStashSets } from '../packages/core/src/data/copies';
+import { holdersBySlug, copyOpen, copiesLeft, holderFor, boardStashSets, copyWireTag } from '../packages/core/src/data/copies';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -38,6 +38,16 @@ ok('a team off the board does not count', !s12.stashed.has('y'));
 ok('the rival’s own stash still shows', s12.stashed.has('w') && !s12.onIr.has('w'));
 const s21 = boardStashSets(st, [1, 2], 2);
 ok('from the rival’s side, their IR copy is IR', s21.stashed.has('x') && s21.onIr.has('x'));
+
+// the wire's copies tag (v0.729.0)
+const nm = (r) => `T${r}`;
+ok('wire tag: one held, one left, who has it', copyWireTag(held, 'b', 2, 1, nm) === '1 of 2 left · T2', copyWireTag(held, 'b', 2, 1, nm));
+ok('wire tag: mine first, as "you"', copyWireTag(held, 'a', 3, 3, nm) === '1 of 3 left · you, T1', copyWireTag(held, 'a', 3, 3, nm));
+ok('wire tag: none with one copy or nobody holding him', copyWireTag(held, 'b', 1, 1, nm) === null && copyWireTag(held, 'z', 2, 1, nm) === null);
+for (const f of ['apps/mobile/src/screens/Team.tsx', 'src/screens/NativeLeague.tsx']) {
+  const src = (await import('node:fs')).readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+  ok(`${f}: the tag shows on the default wire with copies`, src.includes('(showOwned || copies > 1) && holders.length > 0') && src.includes('copyWireTag('));
+}
 
 if (fails) { console.log(`\n${fails} copies check(s) failed`); process.exit(1); }
 console.log('\nall copies checks passed');

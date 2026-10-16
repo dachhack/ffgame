@@ -602,5 +602,17 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
     'worker: the AI seats pass the dynasty market as keepValueOf in a dynasty league');
 }
 
+// ── ONE LEAGUE CANNOT STOP THE REST (v0.727.0) ───────────────────────────────
+{
+  const { readFileSync } = await import('node:fs');
+  const sw = readFileSync(new URL('../server/src/seatWire.js', import.meta.url), 'utf8');
+  const lgLoop = sw.indexOf('for (const lg of lgs ?? []) {\n    try {');
+  const seatLoop = sw.indexOf('for (const seat of seatRows.filter((r) => r.league_id === lg.id)) {\n      try {');
+  ok(lgLoop > 0 && sw.includes("log('seat wire league failed', lg.id"), 'seat wire: each league runs in its own try — a failure is logged with its league and the sweep goes on');
+  ok(seatLoop > lgLoop && sw.includes("log('seat wire seat failed', lg.id, seat.roster_id"), 'seat wire: each seat in its own try too');
+  const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
+  ok(cli.includes("if (req.league) argv.push(`--league=${req.league}`);") && cli.includes("league ? { leagueId: league"), 'ops seat-wire: no league runs the whole sweep once, with its log');
+}
+
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

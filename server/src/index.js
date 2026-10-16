@@ -33,6 +33,7 @@ import { sweepOffboardDaily } from './offboard.js';
 import { sweepCollegeSlate, COLLEGE_BASE, COLLEGE_WEEKS, BOWL_BASE, bowlSchedule, etTuesdayStart } from './poll/collegeSlate.js';
 import { setCollegeProjections } from '../../packages/core/src/engine/projScoring.ts';
 import { sweepDynasty } from './poll/dynasty.js';
+import { advanceLeagueTiers } from './tiers.js';
 import { lockDueMatchups, lockDueWindows, finalizeMatchups, backfillLockAt, materializeAutoLineups, sealDueClassicPicks, teamKickoffs, autoSlotClassicLineups } from './lock.js';
 import { LOCK_LEAD_MS } from '../../packages/core/src/data/nflSlate.ts';
 import { normTeam } from '../../packages/core/src/data/slugMeta.ts';
@@ -754,6 +755,13 @@ async function tickContext(ctx, season) {
       const bites = await sweepVampireBites(log);
       if (bites) log(`[${ctx.tag}] vampire`, bites, 'bites');
     } catch (e) { log(`[${ctx.tag}] vampire bites`, e.message); }
+    // TIERS INSIDE A LEAGUE (0507, v0.728.0): when a period's last week is
+    // final, its movers swap tiers and the next period's in-tier schedule is
+    // built. Idempotent per period, so the hour is only how soon.
+    try {
+      const moved = await advanceLeagueTiers(log);
+      if (moved) log(`[${ctx.tag}] tiers`, moved, 'teams moved');
+    } catch (e) { log(`[${ctx.tag}] tiers`, e.message); }
   }
 
   const locked = await lockDueMatchups(new Date(), wk, week);

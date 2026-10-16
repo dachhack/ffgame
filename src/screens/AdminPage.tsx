@@ -55,6 +55,7 @@ import { getPremiumTier, adminSetPremiumTier, type PremiumTier, markFreeState, a
 import { personalMarkFree } from '@drip/core/data/markFree';
 import { POWERUPS } from '@drip/core/data/powerups';
 import { LadderPanel } from './LadderPanel';
+import { TiersPanel } from './LeagueTiersPanel';
 import { card, h, mono, chip, linkBtn, btn, inp, subhead, Muted, TabBar, SideNav, NavHub, useWide, errMsg, RADIUS, InfoChip, LabelInfo, type TabDef, type NavGroup } from './adminUi';
 import { seedStart, seedsCustom, moveSeed as moveSeedIn } from '@drip/core/data/seeds';
 import { CommissionersPanel, LocksPanel, WaiverOrderPanel, WaiverHoldsPanel, TxnLimitsPanel, MedianGamePanel, TradeFloorPanel, AwardsPanel, PublicApiPanel, WriteApiPanel, ScoresPanel, WeeklyReportPanel, SchedulePanel, PlayedWeeksPanel, DuesPanel, TopUpPoolPanel } from './CommishDesk';
@@ -1800,6 +1801,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
 
       {/* 🪜 relegation (0502): tiers of linked leagues, rolled over together */}
       {tab === 'ladder' && l.provider === 'native' && <LadderPanel leagueId={l.league_id} leagueName={l.name} />}
+      {tab === 'ladder' && l.provider === 'native' && <TiersPanel leagueId={l.league_id} />}
 
       {/* 📜 SALARY (0217–0220): cap, lengths, and the whole salary rulebook */}
       {tab === 'salary' && l.provider === 'native' && <SalaryPanel leagueId={l.league_id} />}
