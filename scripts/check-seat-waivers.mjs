@@ -633,5 +633,20 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(!/\.in\('id', leagueIds\)|\.in\('league_id', leagueIds\)/.test(sw), 'no unchunked league-id read left in the sweep');
 }
 
+// v0.729.3: THE OCT 11 STOP. With no filter the sweep must walk every seat.
+{
+  const { sweepSeats } = await import('../server/src/seatWire.js');
+  const agents = [{ league_id: 'L1', roster_id: 1 }, { league_id: 'L1', roster_id: 2 }, { league_id: 'L2', roster_id: 4 }];
+  const ais = [{ league_id: 'L1', sleeper_roster_id: 2 }, { league_id: 'L3', sleeper_roster_id: 7 }];
+  const all = sweepSeats(agents, ais);
+  ok(all.length === 4, `the hourly sweep (no filter) walks every seat — got ${all.length} (v0.665.1 walked 0)`);
+  ok(all.find((r) => r.league_id === 'L1' && r.roster_id === 2)?.kind === 'ai', 'an AI seat with an agent row is walked once, as AI');
+  ok(sweepSeats(agents, ais, { leagueId: 'L1', rosterId: null }).length === 2, 'one league: its seats');
+  ok(sweepSeats(agents, ais, { leagueId: 'L3', rosterId: 7 }).length === 1, 'one seat: that seat');
+  const { readFileSync } = await import('node:fs');
+  const sw = readFileSync(new URL('../server/src/seatWire.js', import.meta.url), 'utf8');
+  ok(!sw.includes('seatRows.length = 0'), 'no in-place narrowing of the seat list left');
+}
+
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

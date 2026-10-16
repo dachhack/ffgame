@@ -1,0 +1,6 @@
+{
+  "mode": "seat-wire",
+  "week": 6,
+  "season": "2026",
+  "why": "Ops 063 logged '0 of 0 league(s) loaded, 0 drafted, 0 seat(s)' though 062 counted 49 AI seats and 114 agent rows: v0.665.1 (merged Oct 10 23:54 ET) narrowed the seat list in place, and with no filter that emptied it, so every hourly sweep since Oct 11 walked no seat. v0.729.3 builds a new list. One full pass to confirm seats are walked and to work the backlog."
+}
