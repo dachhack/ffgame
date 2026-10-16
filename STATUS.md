@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.729.1 — AI teams make waiver moves again
+
+> - AI-run teams had stopped making waiver claims and pickups since Oct 11. They're back, and will catch up over the next hour.
+
+Ops 061 ran v0.727.0's isolated sweep over every league: clean, no league
+failed, 0 moves in 1.6 s. So it wasn't one league throwing. `sweepSeatWire`
+loaded its leagues with one `.in('id', leagueIds)` PostgREST read, every league
+with an AI or agent seat in the URL, and never looked at the read's error.
+Past the gateway's URL limit the read fails, `lgs` is null, and the sweep walks
+nothing, silently. The seat reads had the same blind spot at PostgREST's
+1000-row page cap. Now: `inChunks` (100 ids a read) and `readAll` (every page),
+any failed read logged, plus a one-line load summary per sweep. Ops 062 (read
+only) counts the ids and when they crossed the line; ops 063 runs the sweep
+again. **Unconfirmed until 062/063's logs are read.** check:seatwaivers covers
+the chunking, paging and error logging.
+
 ### v0.729.0 — Copies left, on the waiver wire
 
 > - In leagues with copies, a player another team already holds now says so on the waiver list: "1 of 2 left · Hawks". You see who has him and how many copies are still open before you claim.

@@ -68,6 +68,29 @@ import { isDynastySettings, dynFormatOfSlots, dynValues } from '../../packages/c
  *  25 seconds from filing until the 3am run — thousands of them, burying the
  *  lines worth reading. Counting outstanding claims means the seat files two
  *  and then goes quiet until the waiver run answers. */
+/** Every row of a read, a thousand at a time (PostgREST's page cap), and
+ *  a failed page logged rather than read as "no rows" (v0.729.1). */
+export async function readAll(build, what, log = () => {}) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().range(from, from + 999);
+    if (error) { log('seat wire', `${what} read failed`, error.message); break; }
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+/** A `.in(...)` read split into chunks of `size` ids, so the URL stays short
+ *  however many leagues there are (v0.729.1). */
+export async function inChunks(ids, build, what, log = () => {}, size = 100) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += size) {
+    out.push(...await readAll(() => build(ids.slice(i, i + size)), what, log));
+  }
+  return out;
+}
+
 const MAX_OUTSTANDING_CLAIMS = 2;
 
 /** THE FRENZY (v0.428.0). When the wire holds several players worth real
@@ -106,9 +129,9 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
   // auto-pilot (v0.432.3 — account or not: the founder's rule is that a seat
   // on AI control is the AI's to manage, roster included; 0308's gate says
   // the same).
-  const { data: agentRows } = await db().from('seat_agent').select('league_id,roster_id');
-  const { data: aiRows } = await db().from('league_membership')
-    .select('league_id,sleeper_roster_id').eq('controller', 'ai');
+  const agentRows = await readAll(() => db().from('seat_agent').select('league_id,roster_id'), 'seat agents', log);
+  const aiRows = await readAll(() => db().from('league_membership')
+    .select('league_id,sleeper_roster_id').eq('controller', 'ai'), 'AI seats', log);
   // 🤖 wins over an agent row (v0.524.0): account-less AI seats now hold an
   // agent so their lineups are stored, but the wire still judges them as AI.
   const aiSeat = new Set((aiRows ?? []).map((r) => `${r.league_id}:${r.sleeper_roster_id}`));
@@ -121,11 +144,17 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
   seatRows.length = 0; seatRows.push(...wanted);
   const leagueIds = [...new Set(seatRows.map((r) => r.league_id))];
 
-  const { data: lgs } = await db().from('league')
-    .select('id,settings_json,lineup_policy').in('id', leagueIds);
-  const { data: drafts } = await db().from('draft')
-    .select('league_id,status').in('league_id', leagueIds);
+  // IN CHUNKS (v0.729.1). One `.in()` read of all the ids carried every
+  // league id in its URL; once enough leagues had AI seats the URL ran past
+  // the gateway's limit, the read failed, its error was never looked at, and
+  // the hourly sweep walked no league at all — AI claims stopped everywhere
+  // after Oct 11 (ops 060–062). A hundred ids a read, and a failed read says so.
+  const lgs = await inChunks(leagueIds, (ids) => db().from('league')
+    .select('id,settings_json,lineup_policy').in('id', ids), 'leagues', log);
+  const drafts = await inChunks(leagueIds, (ids) => db().from('draft')
+    .select('league_id,status').in('league_id', ids), 'drafts', log);
   const complete = new Set((drafts ?? []).filter((d) => d.status === 'complete').map((d) => d.league_id));
+  log('seat wire', `${lgs.length} of ${leagueIds.length} league(s) loaded, ${complete.size} drafted, ${seatRows.length} seat(s)`);
 
   // ── THE WIRE'S MOMENTUM (v0.642.0) ──────────────────────────────────────
   // Founder: AI teams should "pickup trending and higher ranked players".

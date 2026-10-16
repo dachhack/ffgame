@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/seat-wire-league-load.sql",
+  "why": "Ops 061's full sweep ran clean (no league failure logged) yet made 0 moves in 1.6 s. The sweep loads leagues with one .in('id', leagueIds) read whose error it ignored; past ~8 KB of URL that read fails and the sweep walks nothing. Read only: how many league ids it carries now, and when the count crossed the line (AI claims stopped after Oct 11)."
+}
