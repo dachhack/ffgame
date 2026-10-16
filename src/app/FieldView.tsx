@@ -23,7 +23,7 @@ import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/e
 import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
 import {
   FIELD_W, FIELD_EZ, FIELD_TOP, FIELD_BOT, PROJ_H, POST_COLOR,
-  fieldPt, fieldX, fieldY, fieldScale, fieldQuad, projPolyline, projFlight, goalPost, type ProjPath,
+  fieldPt, fieldX, fieldY, fieldScale, fieldQuad, projPolyline, projFlight, goalPost, endZoneLabel, type ProjPath,
 } from '@drip/core/engine/fieldPerspective';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { projectedBox } from '@drip/core/engine/projectedBox';
@@ -506,11 +506,12 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
           ))}
           {(() => {
             const ezAwayX = flip ? W - EZ : 0, ezHomeX = flip ? 0 : W - EZ;
+            // the name runs along its end zone's slant, sized to fit it (v0.730.7)
             const label = (x: number, tc: ReturnType<typeof teamColor>, abbr: string) => {
-              const p = fieldPt(x + EZ / 2, midY), s = fieldScale(midY);
+              const l = endZoneLabel(x, abbr.length, 0.2);
               return (
-                <text x={p.x} y={p.y + 4 * s} fill={ezText(tc)} fontSize={11 * s} fontWeight={800} textAnchor="middle"
-                  transform={`rotate(${x < W / 2 ? -90 : 90} ${p.x} ${p.y})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
+                <text x={0} y={l.size * 0.35} fill={ezText(tc)} fontSize={l.size} fontWeight={800} textAnchor="middle"
+                  transform={`translate(${l.x} ${l.y}) rotate(${l.rot})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
               );
             };
             const rz = (flip ? !attacksRight : attacksRight) ? W - EZ : 0;
