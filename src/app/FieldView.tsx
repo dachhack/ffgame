@@ -17,7 +17,7 @@ import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { weekTitle, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, type ReplayMode } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, type ReplayMode } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
@@ -452,6 +452,8 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   // Down & distance the CURRENT play was snapped on (dn/dist are pre-snap; the
   // situation chip above shows the RESULTING next snap). Goal-to-go when the
   // sticks reach the goal line. dn 0 = kickoff/PAT — no down to show.
+  // the next snap not in yet: the live header's situation, else no chip at all (v0.730.9)
+  const sitChip = situation || liveSituationChip(nowFeed?.status) || '';
   const curDD = cur && cur.dn > 0 ? `${ORD[cur.dn]} & ${cur.dist >= cur.yl ? 'Goal' : cur.dist}` : null;
   const score = cur ? { a: cur.as, h: cur.hs } : { a: 0, h: 0 };
 
@@ -685,9 +687,9 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
         )}
       </div>
       {/* situation chip + play text */}
-      {!over && (
+      {!over && !!sitChip && (
         <div style={{ textAlign: 'center', marginTop: 4 }}>
-          <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: accent ?? (cur?.sc ? 'var(--warn)' : 'var(--you)'), border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 7px', background: 'var(--surface)' }}>{situation}</span>
+          <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: accent ?? (cur?.sc ? 'var(--warn)' : 'var(--you)'), border: '1px solid var(--bd)', borderRadius: 3, padding: '2px 7px', background: 'var(--surface)' }}>{sitChip}</span>
         </div>
       )}
       {cur && !over && (

@@ -257,3 +257,15 @@ export const REPLAY_MS = 7000;
 export type ReplayMode = 'auto' | 'manual';
 export const replayModeLabel = (m: ReplayMode): string => (m === 'auto' ? `AUTO ${REPLAY_MS / 1000}s` : 'MANUAL');
 export const parseReplayMode = (v: string | null | undefined): ReplayMode => (v === 'manual' ? 'manual' : 'auto');
+
+/** THE CHIP WHEN THE NEXT SNAP ISN'T IN YET (v0.730.9). The field's situation
+ *  chip reads the NEXT play's down and spot, so on a live game's newest play
+ *  it had nothing and drew an empty box under the field (founder's 11:28
+ *  screenshot). The live header already says it ("1st & 10", "DEN 19"); this
+ *  is that, in the chip's words — or null, and the chip stays hidden. */
+export function liveSituationChip(status: { sit?: { dd?: string | null; spot?: string | null } | null } | null | undefined): string | null {
+  const dd = status?.sit?.dd?.trim();
+  if (!dd) return null;
+  const spot = status?.sit?.spot?.trim();
+  return `${dd.toUpperCase()}${spot ? ` · AT ${spot.toUpperCase()}` : ''}`;
+}

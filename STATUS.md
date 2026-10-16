@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.9 — The live field on the home page
+
+> - The home page has a new Game day card: the live field, game replays, and the live scoreboard with timeouts, each with a screen.
+> - On a live game, the chip under the field shows the down and distance instead of an empty box.
+
+Founder: "Let's add the new features to the home page." LANDING_FEATURES
+gains Game day (Live field · Replay · Live scoreboard) before the matchup
+card, which stays last as the demo's door; FUNNEL_SHOTS gains three
+stand-ins (`gameday-field.png`, `gameday-replay.png`,
+`gameday-scoreboard.png`, shot from the web game view at phone size,
+mark-free, tactical theme; the funnel README lists them to replace).
+check:tagline pins the six cards. Shooting them showed the empty situation
+chip from the founder's 11:28 screenshot: on a live game's newest play the
+chip read the next snap, which isn't in yet. Core `liveSituationChip` falls
+back to the live header's down and spot, and the chip hides when there's
+nothing (web and phone FieldViews; check:gameview).
+
 ### v0.730.8 — Replay a game on the field
 
 > - Every live field has a ⟲ REPLAY button: it goes back to the first play and walks the game forward, one play every 7 seconds (AUTO) or one per tap of › (MANUAL). Tap the chip to switch; the app remembers your choice.

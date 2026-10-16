@@ -270,6 +270,14 @@ export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote
     { name: 'Scoped bonuses', icon: '✨', line: 'Bonus points or multipliers for players who match a filter, like a team, a position or a tenure. Stack as many as you want.' },
     // v0.652.0: the "Others" chip is gone (founder) — the knobs live under ⚖ SCORING.
   ] },
+  // GAME DAY (v0.730.9, founder: "Let's add the new features to the home page"): the live field as it
+  // stands after v0.730.0–v0.730.8 — Sleeper's perspective and posts, the ball in the air, the replay,
+  // the timeout dots. Before the matchup card, which stays last as the door to the demo.
+  { heading: 'Game day', sub: 'Every game, live, on the field.', notes: [
+    { name: 'Live field', icon: '🏟️', line: 'Every drive on a field in perspective: the ball arcs through the air on passes and kicks, the ball carrier stands on his spot, and a made field goal splits the uprights.' },
+    { name: 'Replay', icon: '⟲', line: 'Reanimate any game from the first snap, one play every 7 seconds or one per tap, with the score, clock and down as they were.' },
+    { name: 'Live scoreboard', icon: '⏱️', line: 'Score, clock, down and distance, and each team’s timeouts left as dots, with the play-by-play read aloud if you want it.' },
+  ] },
   { heading: 'Matchup style', sub: 'How you play each week.', notes: [
     note(FUNNEL_GAMES, 'Classic'), note(FUNNEL_GAMES, 'Drip'),
   ] },
