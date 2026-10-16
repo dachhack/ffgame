@@ -71,9 +71,10 @@ const AnimatedLine = Animated.createAnimatedComponent(Line);
  *  from the box score; null draws the plain possession badge. */
 export type Carrier = { slug: string; name: string } | null;
 
-export function FieldView({ week, team, clock, side, carrierOf, pre, bleed }: {
+export function FieldView({ week, team, clock, side, carrierOf, pre, bleed = true }: {
   week: number; team?: string | null; clock: number; side?: PlaySide | null; carrierOf?: (p: GamePlay) => Carrier;
-  /** Run the field to the screen's edges and a little past, card chrome off (the game view's Sleeper look). */
+  /** Edge to edge, Sleeper's way (v0.730.0; the default since v0.730.5): the card spans the screen and the
+   *  field runs BLEED_OVER past each edge, so its near corners are clipped. false keeps the inset card. */
   bleed?: boolean;
   /** A GAME STILL TO KICK OFF (v0.696.4, founder: "Show the field with the start time and projected point leaders"):
    *  the slate's fixture, when the feed store has nothing for it yet. The card draws the empty field with the
@@ -84,9 +85,9 @@ export function FieldView({ week, team, clock, side, carrierOf, pre, bleed }: {
   if (!feed) {
     if (!pre) return null;
     const a = normTeam(pre.away), h = normTeam(pre.home);
-    return <Field feed={{ key: `${a}@${h}`, away: a, home: h, plays: [], st: 'pre', gid: null, kickoff: pre.kickoff ?? null }} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={!!bleed} />;
+    return <Field feed={{ key: `${a}@${h}`, away: a, home: h, plays: [], st: 'pre', gid: null, kickoff: pre.kickoff ?? null }} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={bleed} />;
   }
-  return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={!!bleed} />;
+  return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={bleed} />;
 }
 
 function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number; carrierOf?: (p: GamePlay) => Carrier; bleed: boolean }) {
@@ -98,6 +99,10 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   const [holderX, setHolderX] = useState<number | null>(null);
   const measureHolder = () => holderRef.current?.measureInWindow((x) => setHolderX(x));
   const bleedW = bleed && holderX != null ? winW * (1 + 2 * BLEED_OVER) : null;
+  // THE BOX GOES EDGE TO EDGE TOO (v0.730.5, founder: "expand the field and the box it is in so the bottom
+  // corners just get clipped by the screen like sleeper"): the card is shifted back to the screen's left edge
+  // and made the screen's width; the field inside it is wider still.
+  const PAD = 8;
   const { away, home, plays } = feed;
 
   // ↔ mirrors the field to match the viewer's broadcast. Remembered per game,
@@ -272,9 +277,10 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
   );
 
   return (
+    <View ref={holderRef} onLayout={bleed ? measureHolder : undefined} style={{ opacity: bleed && holderX == null ? 0 : 1 }}>
     <View style={bleed
-      ? { marginTop: 5, paddingHorizontal: 8, paddingVertical: 6 }
-      : { marginTop: 5, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 6 }}>
+      ? { marginTop: 5, marginLeft: -(holderX ?? 0), width: winW, backgroundColor: t.bg, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, paddingHorizontal: PAD, paddingVertical: 6, overflow: 'hidden' }
+      : { marginTop: 5, backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: accent ? mix(accent, 55, t.bd) : t.bd, borderRadius: 4, paddingHorizontal: PAD, paddingVertical: 6 }}>
       {/* score + clock strip */}
       <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 5, paddingRight: 30 }}>
         {strip(away, ballTm === away)}
@@ -324,8 +330,8 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
           ball badge and the carrier's pin standing upright at their spots.
           With `bleed` the drawing runs to the screen's edges and a little
           past, the way Sleeper's near corners sit off the screen. */}
-      <View ref={holderRef} onLayout={bleed ? measureHolder : undefined} style={{ opacity: bleed && holderX == null ? 0 : 1 }}>
-      <View style={bleedW != null ? { width: bleedW, marginLeft: -(holderX ?? 0) - winW * BLEED_OVER } : undefined}>
+      <View>
+      <View style={bleedW != null ? { width: bleedW, marginLeft: -PAD - winW * BLEED_OVER } : undefined}>
       <Svg viewBox={`0 0 ${W} ${VH}`} width={bleedW ?? '100%'} height={bleedW != null ? (bleedW * VH) / W : undefined} style={bleedW != null ? undefined : { aspectRatio: W / VH }}>
         {/* turf, its ten-yard bands, end zones */}
         <Polygon points={fieldQuad(FX, TOP, FX + FW, BOT)} fill={mix(t.you, 5, t.surface)} stroke={alpha(t.dim, 45)} strokeWidth={1} />
@@ -511,6 +517,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed }: { feed: TeamGameFe
       <BoxScoreSheet visible={boxOpen} onClose={() => setBoxOpen(false)}
         week={week} home={home} away={away} clock={pin != null && cur ? cur.c : clock} />
       <PlayByPlaySheet visible={pbpOpen} onClose={() => setPbpOpen(false)} week={week} team={home} />
+    </View>
     </View>
   );
 }

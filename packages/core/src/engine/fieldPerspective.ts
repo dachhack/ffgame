@@ -45,7 +45,7 @@ export const PROJ_H = PROJ_NEAR_Y + 2;
 
 /** How far the drawing runs past each screen edge when it bleeds, as a share
  *  of the screen's width. Sleeper's near corners sit just off the screen. */
-export const BLEED_OVER = 0.05;
+export const BLEED_OVER = 0.06;
 
 /** The scale a point at flat `y` draws at: 1 on the near sideline. */
 export function fieldScale(y: number): number {

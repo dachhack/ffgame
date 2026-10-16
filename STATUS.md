@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.5 — The field and its box go edge to edge on the phone
+
+> - On the phone, every live field and the box around it now span the whole screen, and the field's near corners run just off the edges, like Sleeper's.
+
+Founder: "expand the field and the box it is in so the bottom corners just
+get clipped by the screen like sleeper." Phone `FieldView` bleeds by default
+now (all fields lists, the board's game sheet, Live Picks, the game view):
+an unshifted holder measures its window x, the card is moved back to the
+screen's left edge at the screen's width (top and bottom rules, no side
+border or radius, overflow hidden), and the drawing inside runs
+`BLEED_OVER` (now 6%) past each side, so the screen clips its near corners.
+`bleed={false}` keeps the inset card. Web unchanged.
+
 ### v0.730.4 — Timeout dots on the live scoreboard
 
 > - The live game screen's scoreboard now shows each team's timeouts left as dots under its name, like Sleeper's: lit for each one left, hollow for each one used.
