@@ -17,7 +17,7 @@ import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { weekTitle, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, type ReplayMode } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
@@ -311,6 +311,20 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const [pin, setPin] = useState<number | null>(null);
   const idx = pin != null ? Math.min(pin, plays.length - 1) : liveIdx;
   const stepTo = (i: number) => setPin(i >= plays.length - 1 && i >= liveIdx ? null : Math.max(0, i));
+  // ⟲ REANIMATE THE GAME (v0.730.8, founder: "Auto (7 sec) or manual advance"): from the first play, forward
+  // on its own every REPLAY_MS or one play per ›; past the last play it is live again. The mode is remembered.
+  const [replay, setReplay] = useState<ReplayMode | null>(null);
+  const [replayPref, setReplayPref] = useState<ReplayMode>(() => { try { return parseReplayMode(localStorage.getItem('fvreplay')); } catch { return 'auto'; } });
+  const startReplay = () => { setPin(0); setReplay(replayPref); };
+  const toggleReplayMode = () => { const n: ReplayMode = replay === 'auto' ? 'manual' : 'auto'; setReplay(n); setReplayPref(n); try { localStorage.setItem('fvreplay', n); } catch { /* ignore */ } };
+  useEffect(() => {
+    if (pin == null) { if (replay) setReplay(null); return; }
+    if (replay !== 'auto') return;
+    const id = setTimeout(() => stepTo(pin + 1), REPLAY_MS);
+    return () => clearTimeout(id);
+  }, [pin, replay]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A replayed or stepped-back play reads its own clock and down, not the game's live status ("FINAL", "HALFTIME").
+  const nowFeed = pin == null ? feed : null;
   const cur: GamePlay | null = idx >= 0 ? plays[idx] : null;
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
@@ -431,7 +445,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
   const yMid = fieldY(midY);
 
   const situation = over ? 'FINAL'
-    : (stoppageLabel(feed) ?? (
+    : (stoppageLabel(nowFeed) ?? (
     !cur ? 'AWAITING KICKOFF'
     : nxt && nxt.dn > 0 ? `${ORD[nxt.dn].toUpperCase()} & ${nxt.dist} · ${spotText(nxt.yl, nxt.tm, away, home).toUpperCase()}`
     : (cur.sc ? (/TOUCHDOWN/i.test(cur.txt) ? 'TOUCHDOWN' : 'SCORE') : (nxt ? nxt.ty.toUpperCase() : ''))));
@@ -471,7 +485,7 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
         {/* the LAST PLAY's clock, not the playback clock — the live window clock
             can overshoot the real game (slot bookkeeping past regulation), which
             read a Q4 game as "OT" during the first live-fire. */}
-        <span style={{ color: 'var(--faint)', fontWeight: 600, fontSize: 12 }}>{over ? 'FINAL' : (stoppageLabel(feed) ?? liveClockLabel(feed) ?? fmtQClock(cur ? cur.c : clock))}</span>
+        <span style={{ color: 'var(--faint)', fontWeight: 600, fontSize: 12 }}>{over ? 'FINAL' : (stoppageLabel(nowFeed) ?? liveClockLabel(nowFeed) ?? fmtQClock(cur ? cur.c : clock))}</span>
         <span style={{ color: 'var(--text)', fontSize: 17, fontWeight: 800 }}>{score.h}</span>
         {stripTeam(home, homeLogo, ballTm === home)}
         {/* mirror the field to match your TV broadcast (remembered per game) */}
@@ -482,9 +496,16 @@ function Field({ feed, clock, week, pidSide, carrierOf }: { feed: TeamGameFeed; 
         <div className="mono" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 3, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em' }}>
           <button onClick={() => stepTo(idx - 1)} disabled={idx <= 0} title="previous play"
             style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)', background: 'none', border: '1px solid var(--bd)', borderRadius: 3, padding: '0 8px', cursor: 'pointer', lineHeight: 1.5, opacity: idx <= 0 ? 0.35 : 1 }}>‹</button>
-          <span style={{ color: pin != null ? 'var(--warn)' : 'var(--faint)' }}>{pin != null ? `PLAY ${idx + 1}/${plays.length}` : `LIVE · ${plays.length} PLAYS`}</span>
+          <span style={{ color: pin != null ? 'var(--warn)' : 'var(--faint)' }}>{pin != null ? `${replay ? 'REPLAY' : 'PLAY'} ${idx + 1}/${plays.length}` : `${over ? 'FINAL' : 'LIVE'} · ${plays.length} PLAYS`}</span>
           <button onClick={() => stepTo(idx + 1)} disabled={pin == null} title="next play"
             style={{ fontSize: 10, fontWeight: 700, color: 'var(--text)', background: 'none', border: '1px solid var(--bd)', borderRadius: 3, padding: '0 8px', cursor: 'pointer', lineHeight: 1.5, opacity: pin == null ? 0.35 : 1 }}>›</button>
+          {pin == null ? (
+            <button onClick={startReplay} title="replay the game from the first play"
+              style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', background: 'none', border: '1px solid var(--you)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer', lineHeight: 1.4 }}>⟲ REPLAY</button>
+          ) : replay ? (
+            <button onClick={toggleReplayMode} title={replay === 'auto' ? 'switch to manual advance' : 'switch to auto advance'} aria-pressed={replay === 'auto'}
+              style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--warn)', background: replay === 'auto' ? 'color-mix(in srgb, var(--warn) 15%, transparent)' : 'none', border: '1px solid var(--warn)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer', lineHeight: 1.4 }}>{replay === 'auto' ? '⏵ ' : '⏸ '}{replayModeLabel(replay)}</button>
+          ) : null}
           {pin != null && (
             <button onClick={() => setPin(null)} title="back to the latest play"
               style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--you)', background: 'none', border: '1px solid var(--you)', borderRadius: 3, padding: '1px 6px', cursor: 'pointer', lineHeight: 1.4 }}>LIVE ▸</button>

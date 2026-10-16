@@ -246,3 +246,14 @@ function timeoutTeam(txt: string, awayRaw: string, homeRaw: string): string | nu
   }
   return null;
 }
+
+// ── REANIMATE THE GAME (v0.730.8) ────────────────────────────────────────
+// Founder: "Let's add reanimate the game. Auto (7 sec) or manual advance."
+// The field's ⟲ REPLAY goes back to the first play and walks the game forward
+// play by play, each drawn as it was when it landed: on its own every
+// REPLAY_MS (AUTO), or one play per › tap (MANUAL). Past the last play it is
+// live again. Both FieldViews read the beat and the mode words from here.
+export const REPLAY_MS = 7000;
+export type ReplayMode = 'auto' | 'manual';
+export const replayModeLabel = (m: ReplayMode): string => (m === 'auto' ? `AUTO ${REPLAY_MS / 1000}s` : 'MANUAL');
+export const parseReplayMode = (v: string | null | undefined): ReplayMode => (v === 'manual' ? 'manual' : 'auto');

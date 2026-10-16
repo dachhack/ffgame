@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.8 — Replay a game on the field
+
+> - Every live field has a ⟲ REPLAY button: it goes back to the first play and walks the game forward, one play every 7 seconds (AUTO) or one per tap of › (MANUAL). Tap the chip to switch; the app remembers your choice.
+
+Founder: "Let's add reanimate the game. Auto (7 sec) or manual advance."
+Built on the field's ‹ › stepping (v0.390.2): ⟲ REPLAY pins play 1 and,
+in AUTO, a timer steps the pin every core `REPLAY_MS` (7000); past the last
+play it is live again and the replay ends. The mode chip (core
+`replayModeLabel`) toggles AUTO/MANUAL, stored per device. A pinned play
+now reads its own clock and down instead of the game's live status, which
+showed FINAL/HALFTIME over a replayed play. Web and phone FieldViews both;
+check:gameview covers it.
+
 ### v0.730.7 — Team names fit in their end zones
 
 > - On the live field, each team's name now sits inside its end zone, tilted along the end zone's slant and sized to fit.
