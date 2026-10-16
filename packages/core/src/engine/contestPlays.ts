@@ -227,11 +227,14 @@ export function aiContestPlays(o: {
  *  @param theirs the play is aimed AT this spot by the other squad (Spy, Jinx).
  *  @param seated the viewer is one of this matchup's two squads.
  *  @param slug the spot's player when his card is face up (null while sealed).
- *  @param locked his game has kicked off. */
-export function contestSpotPlayShown(o: { mineSpot: boolean; theirs: boolean; seated: boolean; slug: string | null; locked: boolean }): boolean {
+ *  @param locked his game has kicked off.
+ *  @param ghost the play is the phantom, whose card shows from the week's first
+ *         kickoff (`started`) — the server's rule too (0508 _contest_visible_plays). */
+export function contestSpotPlayShown(o: { mineSpot: boolean; theirs: boolean; seated: boolean; slug: string | null; locked: boolean; ghost?: boolean; started?: boolean }): boolean {
   // The viewer's own play: on their own spot, or aimed by them at the other side.
   const own = o.theirs ? !o.mineSpot && o.seated : o.mineSpot;
   if (own) return true;
+  if (o.ghost) return contestGhostShown({ mine: false, started: !!o.started });
   // The other squad's play aimed at MY spot: my card is always face up to me,
   // so the moment it turns for them — his kickoff — is when theirs shows.
   if (o.mineSpot) return o.locked;

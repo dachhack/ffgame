@@ -211,7 +211,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     const pl = own ?? aimed;
     if (!pl) return null;
     const theirs = !own;
-    return contestSpotPlayShown({ mineSpot: mine, theirs, seated: L.mine, slug: r.slug, locked: locked(r.slug) }) ? { pl, theirs } : null;
+    return contestSpotPlayShown({ mineSpot: mine, theirs, seated: L.mine, slug: r.slug, locked: locked(r.slug), ghost: pl.id === 'ghost', started: !!st.started }) ? { pl, theirs } : null;
   };
   const playText = (pl: ContestPlayRow, theirs: boolean, mine: boolean) => {
     const d = contestPlayById(pl.id);

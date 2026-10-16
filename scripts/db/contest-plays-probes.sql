@@ -98,7 +98,16 @@ begin
   perform assert_err(contest_disarm_play(h, wk, 'double-or-nothing', 'S1'), 'cp6b …nor taking back a play on a spot whose player kicked off');
   perform assert_ok(contest_disarm_play(h, wk, 'underdog', 'S3'), 'cp6b2 …but a spot whose player has not kicked off still gives its play back');
   perform assert_ok(contest_arm_play(h, wk, 'underdog', 'S3'), 'cp6b3 …and takes it again, from the hand');
-  perform probe_as('b'); perform assert_true(not (contest_plays(h, wk, 1) ->> 'sealed')::boolean and jsonb_array_length(contest_plays(h, wk, 1) -> 'plays') = 2, 'cp6c the opponent''s plays unseal');
+  -- 0508: the opponent's plays turn with their cards, not all at the first kickoff
+  perform probe_as('b');
+  r := contest_plays(h, wk, 1);
+  perform assert_true(jsonb_array_length(r -> 'plays') = 1 and r -> 'plays' -> 0 ->> 'slot' = 'S1', 'cp6c only the play on Q One (kicked off) shows to b; Underdog on R Three (KC, not yet) stays down');
+  r := contest_matchup(h, wk);
+  perform assert_true(jsonb_array_length(r -> 'matchup' -> 'home_plays') = 1 and r -> 'matchup' -> 'home_plays' -> 0 ->> 'id' = 'double-or-nothing', 'cp6d …the matchup the same');
+  update nfl_slate set kickoff = now() - interval '1 hour' where season = '2026' and week = wk and home = 'SF';
+  perform assert_true(jsonb_array_length(contest_plays(h, wk, 1) -> 'plays') = 2, 'cp6e R Three kicks off: his card and its Underdog turn');
+  perform probe_as('a');
+  perform assert_true(jsonb_array_length(contest_matchup(h, wk) -> 'matchup' -> 'home_plays') = 2, 'cp6f my own plays were open to me all along');
 end $$;
 -- ── PR 3 (0485): Spy, Jinx, Magnet, Re-deal ──────────────────────────────────
 do $$
@@ -151,6 +160,22 @@ begin
   perform assert_ok(contest_disarm_play(b2, wk, 'magnet', 'S2'), 'cq7b the per-spot magnet taken back');
   r := contest_arm_play(b2, wk, 'magnet', 'S2'); perform assert_ok(r, 'cq7c Magnet under a one-team total takes the squad');
   perform assert_true(r -> 'plays' -> 1 ->> 'slot' is null or (select count(*) from contest_play where league_id = b2 and roster_id = 1 and play_id = 'magnet' and slot is null) = 1, 'cq7d …no spot on its row');
+  -- 0508: PLAYS TURN WITH THEIR CARDS. b plays Hail Mary (a team play); a has Spy + Jinx on b's S1 (Q One, PHI).
+  perform probe_as('b'); perform assert_ok(contest_arm_play(h, wk, 'hail-mary'), 'cf0 b arms Hail Mary');
+  perform assert_true(jsonb_array_length(contest_matchup(h, wk) -> 'matchup' -> 'home_plays') = 0, 'cf1 before kickoff b sees none of a''s plays, not even the Spy and Jinx aimed at b');
+  perform assert_true(jsonb_array_length(contest_matchup(h, wk) -> 'matchup' -> 'away_plays') = 1, 'cf1b b''s own are open to b');
+  perform probe_as('a');
+  -- a's Spy has turned b's S1 for a, so b's team play shows to a (one of b's cards is face up to a)
+  perform assert_true(jsonb_array_length(contest_matchup(h, wk) -> 'matchup' -> 'away_plays') = 1, 'cf2 a''s Spy turned a card of b''s: b''s team play shows to a');
+  delete from contest_play where league_id = h and week = wk and roster_id = 1 and play_id = 'spy';
+  perform assert_true(jsonb_array_length(contest_matchup(h, wk) -> 'matchup' -> 'away_plays') = 0, 'cf3 without the Spy every b card is down: b''s team play hidden');
+  update nfl_slate set kickoff = now() - interval '1 hour' where season = '2026' and week = wk and home = 'PHI';
+  perform assert_true(jsonb_array_length(contest_matchup(h, wk) -> 'matchup' -> 'away_plays') = 1, 'cf4 Q One kicks off: b''s card turns, b''s team play shows');
+  perform probe_as('b');
+  r := contest_matchup(h, wk);
+  perform assert_true(jsonb_array_length(r -> 'matchup' -> 'home_plays') = 1 and r -> 'matchup' -> 'home_plays' -> 0 ->> 'id' = 'jinx', 'cf5 b''s Q One kicked off: a''s Jinx on him shows to b');
+  perform assert_true((contest_plays(h, wk, 1) -> 'plays') = (r -> 'matchup' -> 'home_plays'), 'cf6 contest_plays reads the same');
+  perform probe_as('a');
 end $$;
 -- ── THE SHOP AND THE HAND (0486) ────────────────────────────────────────────
 do $$

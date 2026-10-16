@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.3 — The server keeps other squads' power-ups face down too
+
+> - Your opponent's power-ups are now hidden by the server itself until their cards flip, not just by the app.
+
+Founder: "yes, hide them on the server too." Migration 0508: new
+`_contest_visible_plays` filters another squad's contest_play rows by the
+same moments the apps use (v0.730.2): a spot play when that spot's player
+has kicked off (or the viewer's Spy shows it), a team play when any of its
+spots has turned, a Spy/Jinx aimed across the table when the player it hit
+has kicked off, the phantom from the first kickoff. `contest_matchup`
+(re-created from 0491) sends home_plays/away_plays through it;
+`contest_plays` filters another seat the same way (a seat's own, the
+commissioner's and an admin's reads stay open), and its `sealed` flag no
+longer tells whether anything was held back. Core `contestSpotPlayShown`
+takes the phantom's rule too, so its chip shows with its card. Scratch-DB
+probes: contest-plays cp6c–f and cf0–cf6 (new), every contest-* suite
+passes. (The full run stops earlier at graduation gr0 over 0506's
+`injury_change.player_slug` — unrelated, on main already.)
+
 ### v0.730.2 — Other squads' power-ups stay hidden until their cards turn
 
 > - In a contest matchup, you no longer see that your opponent (or the squads in another matchup) played a power-up until the card it's on flips over. Their team power-ups show once their first card flips.

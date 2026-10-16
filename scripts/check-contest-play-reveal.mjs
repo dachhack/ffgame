@@ -26,13 +26,27 @@ ok(spot({ mineSpot: true, theirs: true, slug: 'x', locked: true }), 'and shows w
 ok(contestSquadPlaysShown({ mine: true, slugs: [null, null] }), 'my team plays always show');
 ok(!contestSquadPlaysShown({ mine: false, slugs: [null, undefined, null] }), "another squad's team plays hide while all its cards are down");
 ok(contestSquadPlaysShown({ mine: false, slugs: [null, 'x'] }), 'and show once any of its cards turns');
+ok(!spot({ ghost: true, started: false }) && spot({ ghost: true, started: true }) && spot({ mineSpot: true, ghost: true, started: false }), "another squad's phantom chip shows from the first kickoff, like its card (and the server, 0508)");
 // ── the phantom ───────────────────────────────────────────────────────────
 ok(contestGhostShown({ mine: true, started: false }) && !contestGhostShown({ mine: false, started: false }) && contestGhostShown({ mine: false, started: true }), "another squad's phantom stays on its back until the first kickoff");
 
 for (const f of ['src/screens/ContestMatchup.tsx', 'apps/mobile/src/screens/ContestMatchup.tsx']) {
   const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+  ok(src.includes("ghost: pl.id === 'ghost', started: !!st.started"), `${f}: the phantom's chip follows its card`);
   ok(`${f} asks core before drawing a play`.length > 0 && src.includes('contestSpotPlayShown({') && src.includes('contestSquadPlaysShown({') && src.includes('contestGhostShown({') && !src.includes('playAt(s, r)'),
     `${f}: spot chips, team chip and phantom all go through the reveal rule`);
+}
+
+
+// ── the server's twin (0508) names the same moments ───────────────────────
+{
+  const sql = readFileSync(new URL('../supabase/migrations/0508_contest_plays_face_down.sql', import.meta.url), 'utf8');
+  const f2 = (re, msg) => ok(re.test(sql), msg);
+  f2(/create or replace function _contest_visible_plays/, '0508 defines _contest_visible_plays');
+  f2(/'home_plays', _contest_visible_plays\(/, 'contest_matchup sends home_plays through it');
+  f2(/else _contest_visible_plays\(p_league, wk, m\.away_roster_id/, '…and away_plays');
+  f2(/plays := _contest_visible_plays\(p_league, p_week, rid, opp, lg\.season, false\)/, 'contest_plays filters another seat the same way');
+  f2(/'sealed', not open_,/, "contest_plays' sealed flag never says whether anything was held back");
 }
 
 if (fails) { console.log(`\n${fails} PLAY-REVEAL ASSERTION(S) FAILED`); process.exit(1); }
