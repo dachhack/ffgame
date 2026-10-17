@@ -54,6 +54,9 @@ export interface BoardEntry {
   roof?: Roof | null;
   /** Thursday/Sunday/Monday night — see isPrimetime. */
   primetime?: boolean;
+  /** No longer on the team's roster, still on its matchup: he played for them this week, or his
+   *  sealed pick holds a starting spot (v0.730.12, data/copies boardOffRoster). Drawn as a note. */
+  offRoster?: boolean;
 }
 
 /** A spot's darts under bullseye (v0.643.0): the target, and each side's

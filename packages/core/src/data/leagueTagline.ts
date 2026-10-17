@@ -234,6 +234,8 @@ export const FUNNEL = {
 export const FUNNEL_GAMES: FormatNote[] = [
   { name: 'Classic', icon: '🏈', line: 'You know, H2H fantasy football.' },
   { name: 'Drip', icon: '💧', line: 'For active and existing leagues looking for an additional layer of fun and competition. H2H card battles with special effects and power-ups. (Works with existing leagues.)' },
+  // v0.730.13, founder: "add weekly contest (dfs) to the matchup style feature share on the home page".
+  { name: 'Weekly contest', icon: '🎟️', line: 'Draft a fresh squad under a $50,000 salary cap every week, then play it head to head or on a league-wide board: most points, golf (fewest) or Bullseye, with optional power-up cards.' },
 ];
 
 // ── THE LANDING'S FEATURE BOARD (v0.614.0) ────────────────────────────────
@@ -279,7 +281,7 @@ export const LANDING_FEATURES: { heading: string; sub: string; notes: FormatNote
     { name: 'Live scoreboard', icon: '⏱️', line: 'Score, clock, down and distance, and each team’s timeouts left as dots, with the play-by-play read aloud if you want it.' },
   ] },
   { heading: 'Matchup style', sub: 'How you play each week.', notes: [
-    note(FUNNEL_GAMES, 'Classic'), note(FUNNEL_GAMES, 'Drip'),
+    note(FUNNEL_GAMES, 'Classic'), note(FUNNEL_GAMES, 'Drip'), note(FUNNEL_GAMES, 'Weekly contest'),
   ] },
 ];
 

@@ -38,7 +38,7 @@ import {
   nativeRosters, loadLiveInjuries, ensureTeamByes, byeTag, playoffState,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
-import { boardStashSets } from '@drip/core/data/copies';
+import { boardStashSets, boardHeldBy, heldNow, boardOffRoster } from '@drip/core/data/copies';
 import { PlayerImg, PosPill, InjuryNow, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
 import { VampirePanel } from './VampirePanel';
 import { SportWeekPanel } from './SportWeekPanel';
@@ -485,6 +485,8 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action, empty }: {
           {/* v0.712.4: the bye week beside the team, Sleeper's "CLE (11)". */}
           {e.team ? byeTag(e.team) : ''}
           {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
+          {/* v0.730.12: dropped, still on the matchup (he played for them, or his pick holds the spot) */}
+          {e.offRoster ? <span title="No longer on this team's roster: he played for them this week, so his points stay on the matchup" style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> · OFF ROSTER</span> : null}
         </span>
         {action}
       </div>
@@ -536,6 +538,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // TAXI/IR stashes (0164): stashed players can't start or best-ball fill —
   // the DB refuses them; filtering here keeps the picker and fills honest.
   const [stashed, setStashed] = useState<Set<string>>(new Set());
+  // WHO EACH TEAM HOLDS NOW (v0.730.11): a live week's pool keeps the players dropped since kickoff (0314,
+  // add-only); the bench, the fill preview and the auto-slot read the roster as it stands. Null until loaded.
+  const [heldBy, setHeldBy] = useState<Map<number, Set<string>> | null>(null);
   // WHICH of the stashed are on IR (v0.427.2, founder: "Taxi spot players
   // should still get a projection. They could score this week. IR guys are
   // not going to play so no points"). The board draws taxi and IR in one
@@ -711,6 +716,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           const sets = boardStashSets(rows, [m.home_roster_id, m.away_roster_id], r.rosterId);
           setStashed(sets.stashed);
           setOnIr(sets.onIr);
+          setHeldBy(boardHeldBy(rows, [m.home_roster_id, m.away_roster_id]));
           setStashReady(true);
         }).catch(() => {});
         leagueGameMode(r.leagueId).then(async (gm) => {
@@ -1129,7 +1135,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   const used = useMemo(() => new Set(
     slotDefs.filter((d) => !bb.has(d.slot)).map((d) => mine[d.slot]).filter(Boolean) as string[],
   ), [mine, bb, slotDefs]);
-  const bench = useMemo(() => pool.filter((p) => !used.has(p.slug)), [pool, used]);
+  const bench = useMemo(() => pool.filter((p) => !used.has(p.slug) && heldNow(heldBy, ros?.rosterId, p.slug)), [pool, used, heldBy, ros?.rosterId]);
 
   // ── The head-to-head board (v0.228.0) ────────────────────────────────────
   // A game is treated as FINAL 3h20m after kickoff. The slate carries no
@@ -1324,12 +1330,12 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     };
     // BULLSEYE per-team deal (v0.645.0): each side's best-ball fill values ITS card.
     setBullseyeRoster(myRid ?? null);
-    const mineFx = build(mine, pool.map((p) => p.slug), off(myRid));
+    const mineFx = build(mine, pool.filter((p) => heldNow(heldBy, myRid, p.slug)).map((p) => p.slug), off(myRid));
     setBullseyeRoster(oppRid ?? null);
-    const theirsFx = build(theirs, oppPool.map((p) => p.slug), off(oppRid));
+    const theirsFx = build(theirs, oppPool.filter((p) => heldNow(heldBy, oppRid, p.slug)).map((p) => p.slug), off(oppRid));
     setBullseyeRoster(null);
     return { mine: mineFx, theirs: theirsFx };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, expMap, fillValue, entryFor, issues, ros?.rosterId, sport, bullseye]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, heldBy, expMap, fillValue, entryFor, issues, ros?.rosterId, sport, bullseye]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
@@ -1337,14 +1343,18 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     const mkSide = (rid: number, team: string, avatar: string | null, lineup: Record<string, string | null>, benchList: PoolPlayer[]) => ({
       rosterId: rid, team, avatar,
       record: records[rid] ? { ...records[rid], rank: records[rid].rank } : null,
-      starters: Object.fromEntries(slotDefs.map((d) => [d.slot, entryFor(lineup[d.slot], d.pos, d.slot)])),
-      bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
+      // OFF ROSTER, STILL ON THE MATCHUP (v0.730.12): a dropped starter is marked; a dropped bench player stays,
+      // marked, only once his game has started — before that he is gone (data/copies boardOffRoster).
+      starters: Object.fromEntries(slotDefs.map((d) => { const e = entryFor(lineup[d.slot], d.pos, d.slot); return [d.slot, e ? boardOffRoster(e, heldBy, rid, 'starter') : e]; })),
+      bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e)
+        .map((e) => boardOffRoster(e, heldBy, rid, 'bench')).filter((e): e is BoardEntry => !!e),
       ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
     });
     // Benched = on the roster and NOT in the EFFECTIVE lineup. Deliberately not
     // the stored picks: a best-ball spot's occupant and an unmanaged seat's
     // auto-filled starter have no row of their own, so keying off stored picks
     // listed them under BENCH and in a starting spot at the same time.
+    // Who is on the roster NOW is boardOffRoster's call in mkSide (v0.730.12: a dropped man who played stays, marked).
     const benchOf = (roster: PoolPlayer[], lineup: Record<string, string | null>) => {
       const starting = new Set(Object.values(lineup).filter(Boolean) as string[]);
       return roster.filter((p) => !starting.has(p.slug));
@@ -1358,7 +1368,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
       // wired up.
       away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, benchOf(oppPool, effective.theirs)),
     });
-  }, [matchup, ros, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, entryFor, locked, bullseye]);
+  }, [matchup, ros, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, heldBy, entryFor, locked, bullseye]);
 
   // EVERY GAME'S SCORE (v0.323.0). `gameFeeds` is the whole week's feeds, and
   // the worker polls every live game rather than only rostered ones, so this is
@@ -1573,6 +1583,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     if (!setupReady || !stashReady || !pool.length || !slotDefs.length || !slate.length) return;
     const roster = pool
       .filter((p) => !stashed.has(p.slug))                       // taxi/IR: the DB would refuse the row
+      .filter((p) => heldNow(heldBy, ros?.rosterId, p.slug))     // dropped since kickoff (v0.730.11)
       .map((p) => ({ id: p.slug, pos: p.pos, team: p.team, exp: expMap[p.slug] ?? null }));
     const plan = autoSlotPlan(slotDefs, bestball, mine, roster, fillValue);
     autoSlotted.current = true;

@@ -38,4 +38,7 @@ app header) and keep the thing you're showing in the upper half.
 
 The matchup card rotates the site's existing drip and classic screens in
 `public/brand/` (`shot-drip-live.png`, `shot-sealed.jpg`, `shot-duel.png`,
-`shot-classic.png`), landscape, under the "Click here for a demo" button.
+`shot-classic.png`), landscape, under the "Click here for a demo" button —
+and, for the Weekly contest chip (v0.730.13), `shot-contest.png`: a weekly
+contest matchup (the squads' cards and the scoreboard), landscape like the
+others, mark-free. Until it is there the chip shows the placeholder.

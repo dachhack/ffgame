@@ -1,7 +1,7 @@
 // COPIES (0500): who holds a player is a list. These helpers decide what the
 // wire, the draft board and the matchup board show on web and app alike; with
 // one copy they must answer exactly as the old one-owner maps did.
-import { holdersBySlug, copyOpen, copiesLeft, holderFor, boardStashSets, copyWireTag } from '../packages/core/src/data/copies';
+import { holdersBySlug, copyOpen, copiesLeft, holderFor, boardStashSets, copyWireTag, boardHeldBy, heldNow, boardOffRoster } from '../packages/core/src/data/copies';
 
 let fails = 0;
 const ok = (name, cond, got) => {
@@ -47,6 +47,38 @@ ok('wire tag: none with one copy or nobody holding him', copyWireTag(held, 'b', 
 for (const f of ['apps/mobile/src/screens/Team.tsx', 'src/screens/NativeLeague.tsx']) {
   const src = (await import('node:fs')).readFileSync(new URL('../' + f, import.meta.url), 'utf8');
   ok(`${f}: the tag shows on the default wire with copies`, src.includes('(showOwned || copies > 1) && holders.length > 0') && src.includes('copyWireTag('));
+}
+
+// ── THE BENCH IS THE ROSTER NOW (v0.730.11) ───────────────────────────────
+// Founder: "team 4 has 10 bench, but in match up they have 13". Kickoff League
+// week 7: three waiver drops after the Thursday kickoff stayed in the live
+// week's add-only pool (0314); the board listed them on Team 4's bench.
+{
+  const rows = [{ roster_id: 4, slug: 'hunter-henry' }, { roster_id: 4, slug: 'marshawn-lloyd' }, { roster_id: 7, slug: 'hunter-henry' }, { roster_id: 2, slug: 'x' }];
+  const held = boardHeldBy(rows, [4, 7]);
+  ok('only the board\'s two teams are read', !held.has(2) && held.get(4).size === 2 && held.get(7).has('hunter-henry'));
+  ok('a player dropped since kickoff is not on the roster now', !heldNow(held, 4, 'tyler-higbee') && !heldNow(held, 4, 'romeo-doubs'));
+  ok('a current player is', heldNow(held, 4, 'marshawn-lloyd'));
+  ok('copies: one team\'s copy says nothing about the other\'s roster', heldNow(held, 7, 'hunter-henry') && !heldNow(held, 7, 'marshawn-lloyd'));
+  ok('not loaded yet reads as held (the board draws what it drew before)', heldNow(null, 4, 'anyone') && heldNow(held, null, 'anyone'));
+  // v0.730.12 (founder: "if they have already played, then dropped … keep them in the matchup but remove from my
+  // team. Make a note on players off roster"): a dropped bench player stays once his game started, marked.
+  const e = (slug, state, opponent = '@ CIN') => ({ slug, state, opponent });
+  ok('a dropped bench player who has not played is gone', boardOffRoster(e('romeo-doubs', 'pre'), held, 4, 'bench') === null);
+  ok('a dropped bench player who played stays, marked', boardOffRoster(e('tyler-higbee', 'done'), held, 4, 'bench')?.offRoster === true
+    && boardOffRoster(e('atl-dst', 'live'), held, 4, 'bench')?.offRoster === true);
+  ok('a bye is not playing', boardOffRoster(e('x', 'done', 'BYE'), held, 4, 'bench') === null);
+  ok('a dropped starter is never removed, only marked', boardOffRoster(e('romeo-doubs', 'pre'), held, 4, 'starter')?.offRoster === true);
+  ok('a current player is untouched', boardOffRoster(e('marshawn-lloyd', 'pre'), held, 4, 'bench')?.offRoster === undefined);
+  for (const f of ['src/screens/ClassicBoard.tsx', 'apps/mobile/src/ui/ClassicBoard.tsx']) {
+    const src = (await import('node:fs')).readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(`${f}: the matchup marks or drops a player off the roster; the fill preview and the auto-slot read the roster as it stands`,
+      src.includes('boardHeldBy(rows, [m.home_roster_id, m.away_roster_id])')
+      && src.includes("boardOffRoster(e, heldBy, rid, 'bench')") && src.includes("boardOffRoster(e, heldBy, rid, 'starter')")
+      && src.includes('OFF ROSTER')
+      && /oppPool\.filter\(\(p\) => heldNow\(heldBy, oppRid, p\.slug\)\)/.test(src)
+      && src.includes('// dropped since kickoff (v0.730.11)'));
+  }
 }
 
 if (fails) { console.log(`\n${fails} copies check(s) failed`); process.exit(1); }

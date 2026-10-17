@@ -22,6 +22,54 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.13 — Weekly contests on the home page
+
+> - The home page's Matchup style card now has a Weekly contest chip, next to Classic and Drip: a fresh salary-cap squad every week, head to head or on a league-wide board.
+
+Founder: "let's add weekly contest (dfs) to the matchup style feature share
+on the home page." FUNNEL_GAMES gains Weekly contest ($50,000 cap; head to
+head or a board; most points, golf or Bullseye; optional power-up cards);
+the Matchup style card shows it third. Its screen is `shot-contest.png` in
+public/brand/ (landscape, like the card's other shots), not there yet, so
+the chip shows the labelled placeholder until it is; the funnel README says
+what to shoot. check:tagline.
+
+### v0.730.12 — Off the roster, still on the matchup, with a note
+
+> - A player a team dropped after his game this week stays on the matchup, since his points count for them, marked OFF ROSTER. One dropped before his game is gone from the matchup. My Team only ever shows who's on the roster now.
+
+Founder, on v0.730.11: "if they have already played, then dropped or
+removed from the roster somehow, you can keep them in the matchup but
+remove from my team. Make a note on players off roster but still in the
+matchup screen." Core `boardOffRoster` (data/copies): a bench entry the
+team no longer holds stays once his game has started (a bye is not
+playing), marked `offRoster`; before that it is dropped. A starter is
+never removed (his sealed pick holds the spot), only marked. Both
+ClassicBoards draw " · OFF ROSTER" after the position line (the web
+explains it on hover); BoardEntry gains `offRoster`. My Team (Team.tsx)
+reads native_roster already. check:copies.
+
+### v0.730.11 — The matchup bench shows the roster as it stands
+
+> - The matchup board no longer lists players a team dropped during the week on its bench. They stay only where they were started.
+
+Founder: "I think team 4 in kickoff league has too many players on their
+roster … In my team, team 4 has 10 bench, but in match up they have 13."
+Ops 065 (read only): Team 4 is legal — 24 of 24 (rounds), 21 of 21 active
+(11 starters, 10 bench), 3 of 3 IR; every add this week was a waiver claim
+with a drop. The board's bench is the live week's pool (sleeper_lineup)
+minus starters, and a live week's pool is refreshed add-only (0314: a
+dropped man who already played must keep the spot his pick holds), so the
+three players Team 4 dropped by waiver after the Thursday kickoff (Higbee
+Oct 16; ATL D/ST and Doubs Oct 17) were still in it: 13. Keaton Mitchell,
+dropped Oct 15 before kickoff, was rewritten out, as the rule says. Core
+`boardHeldBy`/`heldNow` (data/copies): both ClassicBoards read the bench,
+the best-ball/auto-fill preview and the auto-slot write from the roster as
+it stands (native_roster, already loaded for the stash sets); a dropped
+starter keeps his spot. The resolver already scored from native_roster, so
+no score changes. Ops 066 (read only) lists each team's pool entries gone
+from its roster, to confirm. check:copies.
+
 ### v0.730.10 — Tap a play to replay the field from it
 
 > - In a game's view, tap any play in the play-by-play list and the field above jumps to it in replay, then carries on from there (every 7 seconds on AUTO, or tap › on MANUAL). The play the field is showing is highlighted in the list. Long-press a play still reads it aloud.

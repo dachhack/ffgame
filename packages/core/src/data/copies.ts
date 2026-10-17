@@ -68,3 +68,44 @@ export function copyWireTag(held: Map<string, number[]>, slug: string, copies: n
   const names = [...h].sort((a, b) => (a === myRoster ? -1 : b === myRoster ? 1 : a - b)).map((r) => (r === myRoster ? 'you' : nameOf(r)));
   return `${copiesLeft(held, slug, n)} of ${n} left · ${names.join(', ')}`;
 }
+
+/** WHO HOLDS WHOM NOW, for the board's two teams (v0.730.11). A live week's
+ *  pool (sleeper_lineup) is refreshed add-only (0314) — a dropped man who
+ *  already played must keep the starting spot his sealed pick holds — so it
+ *  still lists every player a team dropped since kickoff. Founder: "team 4 has
+ *  10 bench, but in match up they have 13" (Kickoff League, three waiver drops
+ *  after the Thursday kickoff). The bench, the best-ball/auto-fill preview and
+ *  the auto-slot write read the roster as it stands; this is that, per team.
+ *  The resolver already scores from native_roster, so this only makes the
+ *  boards say what it counts. */
+export function boardHeldBy(rows: readonly HeldRow[], rids: readonly (number | null | undefined)[]): Map<number, Set<string>> {
+  const out = new Map<number, Set<string>>();
+  for (const r of rows) {
+    if (!rids.includes(r.roster_id)) continue;
+    if (!out.has(r.roster_id)) out.set(r.roster_id, new Set());
+    out.get(r.roster_id)!.add(r.slug);
+  }
+  return out;
+}
+
+/** Is `slug` on `rid`'s roster now? Unknown (rows not loaded yet) reads as yes,
+ *  so a board draws what it drew before the read lands rather than an empty bench. */
+export const heldNow = (held: Map<number, Set<string>> | null | undefined, rid: number | null | undefined, slug: string): boolean =>
+  !held || rid == null || !!held.get(rid)?.has(slug);
+
+/** OFF THE ROSTER, STILL ON THE MATCHUP (v0.730.12). Founder: "if they have
+ *  already played, then dropped or removed from the roster somehow, you can
+ *  keep them in the matchup but remove from my team. Make a note on players
+ *  off roster but still in the matchup screen." A bench entry whose player the
+ *  team no longer holds stays only once his game has started this week (he
+ *  played for them; a bye is not playing), marked `offRoster`; before that he
+ *  is gone. A starter is never removed (his sealed pick holds the spot) — just
+ *  marked, so a dropped man in a lineup is visible as one. */
+export function boardOffRoster<E extends { slug: string; state: 'pre' | 'live' | 'done'; opponent?: string | null }>(
+  e: E, held: Map<number, Set<string>> | null | undefined, rid: number | null | undefined, where: 'bench' | 'starter',
+): (E & { offRoster?: boolean }) | null {
+  if (heldNow(held, rid, e.slug)) return e;
+  const played = e.state !== 'pre' && e.opponent !== 'BYE';
+  if (where === 'bench' && !played) return null;
+  return { ...e, offRoster: true };
+}
