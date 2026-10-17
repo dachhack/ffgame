@@ -22,6 +22,18 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.13 — Weekly contests on the home page
+
+> - The home page's Matchup style card now has a Weekly contest chip, next to Classic and Drip: a fresh salary-cap squad every week, head to head or on a league-wide board.
+
+Founder: "let's add weekly contest (dfs) to the matchup style feature share
+on the home page." FUNNEL_GAMES gains Weekly contest ($50,000 cap; head to
+head or a board; most points, golf or Bullseye; optional power-up cards);
+the Matchup style card shows it third. Its screen is `shot-contest.png` in
+public/brand/ (landscape, like the card's other shots), not there yet, so
+the chip shows the labelled placeholder until it is; the funnel README says
+what to shoot. check:tagline.
+
 ### v0.730.12 — Off the roster, still on the matchup, with a note
 
 > - A player a team dropped after his game this week stays on the matchup, since his points count for them, marked OFF ROSTER. One dropped before his game is gone from the matchup. My Team only ever shows who's on the roster now.

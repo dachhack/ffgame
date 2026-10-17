@@ -166,6 +166,8 @@ const DRIP_WORDS = /hidden|nuke|erasure|hot streak|secret|effect/i;
   ok('Shotgun Wedding\'s line says 2-for-2, like for like, and new vows', sw && /2-for-2/.test(sw.line) && /like-for-like/.test(sw.line) && /new vows/.test(sw.line), sw?.line);
   const matchup = LANDING_FEATURES.find((g) => g.heading === 'Matchup style');
   ok('the matchup card speaks the funnel\'s lines, Classic first', matchup && matchup.notes[0]?.name === 'Classic' && matchup.notes[1]?.line === drip?.line, matchup?.notes.map((n) => n.name));
+  ok('the matchup card names the weekly contest (v0.730.13): salary cap, head to head or a board',
+    matchup?.notes[2]?.name === 'Weekly contest' && /\$50,000 salary cap/.test(matchup.notes[2].line) && /head to head/.test(matchup.notes[2].line) && /board/.test(matchup.notes[2].line), matchup?.notes.map((n) => n.name));
   ok('the founder\'s five cards, with Game day (v0.730.9) before the matchup card, which stays last',
     LANDING_FEATURES.map((g) => g.heading).join('|') === 'League types|Competitive modes|Positions|Scoring options|Game day|Matchup style', LANDING_FEATURES.map((g) => g.heading));
   const gd = LANDING_FEATURES.find((g) => g.heading === 'Game day');

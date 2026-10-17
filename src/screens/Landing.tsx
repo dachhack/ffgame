@@ -75,6 +75,8 @@ export const FUNNEL_SHOTS: Record<string, Shot[]> = {
     { file: 'shot-sealed.jpg', label: 'Drip · sealed picks before kickoff', dir: 'brand' },
     { file: 'shot-duel.png', label: 'Drip · a live duel', dir: 'brand' },
     { file: 'shot-classic.png', label: 'Classic · the board', dir: 'brand', chip: 'Classic' },
+    // v0.730.13: the weekly salary-cap contest. Until the file is there the rail draws its labelled placeholder.
+    { file: 'shot-contest.png', label: 'Weekly contest · the matchup', dir: 'brand', chip: 'Weekly contest' },
   ],
 };
 
