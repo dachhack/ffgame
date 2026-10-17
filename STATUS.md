@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.12 — Off the roster, still on the matchup, with a note
+
+> - A player a team dropped after his game this week stays on the matchup, since his points count for them, marked OFF ROSTER. One dropped before his game is gone from the matchup. My Team only ever shows who's on the roster now.
+
+Founder, on v0.730.11: "if they have already played, then dropped or
+removed from the roster somehow, you can keep them in the matchup but
+remove from my team. Make a note on players off roster but still in the
+matchup screen." Core `boardOffRoster` (data/copies): a bench entry the
+team no longer holds stays once his game has started (a bye is not
+playing), marked `offRoster`; before that it is dropped. A starter is
+never removed (his sealed pick holds the spot), only marked. Both
+ClassicBoards draw " · OFF ROSTER" after the position line (the web
+explains it on hover); BoardEntry gains `offRoster`. My Team (Team.tsx)
+reads native_roster already. check:copies.
+
 ### v0.730.11 — The matchup bench shows the roster as it stands
 
 > - The matchup board no longer lists players a team dropped during the week on its bench. They stay only where they were started.

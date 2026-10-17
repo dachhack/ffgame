@@ -38,7 +38,7 @@ import {
   nativeRosters, loadLiveInjuries, ensureTeamByes, byeTag, playoffState,
   vampireState, feedingBell, bittenNotice, type VampireState,
 } from '@drip/core/data/liveApi';
-import { boardStashSets, boardHeldBy, heldNow } from '@drip/core/data/copies';
+import { boardStashSets, boardHeldBy, heldNow, boardOffRoster } from '@drip/core/data/copies';
 import { PlayerImg, PosPill, InjuryNow, useIsMobile, usePullRefresh, NoGameScreen, Sheet } from '../app/ui';
 import { VampirePanel } from './VampirePanel';
 import { SportWeekPanel } from './SportWeekPanel';
@@ -485,6 +485,8 @@ function BoardCell({ e, align, onName, face = 32, gap = 8, action, empty }: {
           {/* v0.712.4: the bye week beside the team, Sleeper's "CLE (11)". */}
           {e.team ? byeTag(e.team) : ''}
           {e.injury ? <span style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> {e.injury}</span> : null}
+          {/* v0.730.12: dropped, still on the matchup (he played for them, or his pick holds the spot) */}
+          {e.offRoster ? <span title="No longer on this team's roster: he played for them this week, so his points stay on the matchup" style={{ color: 'var(--warn, #c66)', fontWeight: 700 }}> · OFF ROSTER</span> : null}
         </span>
         {action}
       </div>
@@ -1341,28 +1343,30 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     const mkSide = (rid: number, team: string, avatar: string | null, lineup: Record<string, string | null>, benchList: PoolPlayer[]) => ({
       rosterId: rid, team, avatar,
       record: records[rid] ? { ...records[rid], rank: records[rid].rank } : null,
-      starters: Object.fromEntries(slotDefs.map((d) => [d.slot, entryFor(lineup[d.slot], d.pos, d.slot)])),
-      bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
+      // OFF ROSTER, STILL ON THE MATCHUP (v0.730.12): a dropped starter is marked; a dropped bench player stays,
+      // marked, only once his game has started — before that he is gone (data/copies boardOffRoster).
+      starters: Object.fromEntries(slotDefs.map((d) => { const e = entryFor(lineup[d.slot], d.pos, d.slot); return [d.slot, e ? boardOffRoster(e, heldBy, rid, 'starter') : e]; })),
+      bench: benchList.filter((p) => !stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e)
+        .map((e) => boardOffRoster(e, heldBy, rid, 'bench')).filter((e): e is BoardEntry => !!e),
       ir: benchList.filter((p) => stashed.has(p.slug)).map((p) => entryFor(p.slug)).filter((e): e is BoardEntry => !!e),
     });
     // Benched = on the roster and NOT in the EFFECTIVE lineup. Deliberately not
     // the stored picks: a best-ball spot's occupant and an unmanaged seat's
     // auto-filled starter have no row of their own, so keying off stored picks
     // listed them under BENCH and in a starting spot at the same time.
-    // …and on the roster NOW (v0.730.11): a player dropped since kickoff stays in a starting spot his pick holds,
-    // never on the bench.
-    const benchOf = (rid: number | null | undefined, roster: PoolPlayer[], lineup: Record<string, string | null>) => {
+    // Who is on the roster NOW is boardOffRoster's call in mkSide (v0.730.12: a dropped man who played stays, marked).
+    const benchOf = (roster: PoolPlayer[], lineup: Record<string, string | null>) => {
       const starting = new Set(Object.values(lineup).filter(Boolean) as string[]);
-      return roster.filter((p) => !starting.has(p.slug) && heldNow(heldBy, rid, p.slug));
+      return roster.filter((p) => !starting.has(p.slug));
     };
     return buildMatchupBoard({
       week: matchup.week, locked, slots: slotDefs, labelFor: nameOf,
-      home: mkSide(ros.rosterId, names.me, avatars.me, effective.mine, benchOf(ros.rosterId, pool, effective.mine)),
+      home: mkSide(ros.rosterId, names.me, avatars.me, effective.mine, benchOf(pool, effective.mine)),
       // THEIR BENCH TOO (v0.249.0, founder). Classic lineups are open all week
       // (0178) and the board already fills their spots from that same roster —
       // so there was never anything here to withhold, only a column nobody had
       // wired up.
-      away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, benchOf(oppRoster, oppPool, effective.theirs)),
+      away: mkSide(oppRoster, names.opp, avatars.opp, effective.theirs, benchOf(oppPool, effective.theirs)),
     });
   }, [matchup, ros, slotDefs, effective, names, avatars, records, pool, oppPool, stashed, heldBy, entryFor, locked, bullseye]);
 

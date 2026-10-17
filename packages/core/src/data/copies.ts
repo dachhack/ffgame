@@ -92,3 +92,20 @@ export function boardHeldBy(rows: readonly HeldRow[], rids: readonly (number | n
  *  so a board draws what it drew before the read lands rather than an empty bench. */
 export const heldNow = (held: Map<number, Set<string>> | null | undefined, rid: number | null | undefined, slug: string): boolean =>
   !held || rid == null || !!held.get(rid)?.has(slug);
+
+/** OFF THE ROSTER, STILL ON THE MATCHUP (v0.730.12). Founder: "if they have
+ *  already played, then dropped or removed from the roster somehow, you can
+ *  keep them in the matchup but remove from my team. Make a note on players
+ *  off roster but still in the matchup screen." A bench entry whose player the
+ *  team no longer holds stays only once his game has started this week (he
+ *  played for them; a bye is not playing), marked `offRoster`; before that he
+ *  is gone. A starter is never removed (his sealed pick holds the spot) — just
+ *  marked, so a dropped man in a lineup is visible as one. */
+export function boardOffRoster<E extends { slug: string; state: 'pre' | 'live' | 'done'; opponent?: string | null }>(
+  e: E, held: Map<number, Set<string>> | null | undefined, rid: number | null | undefined, where: 'bench' | 'starter',
+): (E & { offRoster?: boolean }) | null {
+  if (heldNow(held, rid, e.slug)) return e;
+  const played = e.state !== 'pre' && e.opponent !== 'BYE';
+  if (where === 'bench' && !played) return null;
+  return { ...e, offRoster: true };
+}
