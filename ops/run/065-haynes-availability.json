@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/haynes-availability.sql",
+  "why": "Founder: 'Haynes is D in the app but healthy per reports.' The ACC's Game Day report (Sat Oct 17, 13:30 ET) lists Justice Haynes (GT RB #22) as Game Time Decision, which maps to Q. Read only: the row the app holds for him, which report it came from and when it was written, and whether today's college availability poll is writing."
+}
