@@ -648,5 +648,21 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(!sw.includes('seatRows.length = 0'), 'no in-place narrowing of the seat list left');
 }
 
+// v0.730.16: positions a league caps at 0 never reach the wire's candidates.
+{
+  const { unrosteredPositions } = await import('../server/src/seatWire.js');
+  const caps = { QB: null, RB: null, WR: null, TE: null, K: 0, DEF: 0 };
+  const asked = [];
+  const rpc = async (fn, { p_pos }) => { asked.push(p_pos); return fn === 'league_pos_cap' ? { data: caps[p_pos] ?? null, error: null } : { data: null, error: { message: 'no' } }; };
+  const off = await unrosteredPositions('L', ['QB', 'RB', 'RB', 'DEF', 'K', 'WR', null], () => {}, rpc);
+  ok(off.has('DEF') && off.has('K') && off.size === 2, `a no-D/ST, no-K league: DEF and K off the wire (got ${[...off]})`);
+  ok(asked.length === 5, `each position asked once (asked ${asked.length})`);
+  const failed = await unrosteredPositions('L', ['DEF'], () => {}, async () => ({ data: null, error: { message: 'boom' } }));
+  ok(failed.size === 0, 'a failed ask keeps the position (the server still refuses the add)');
+  const { readFileSync } = await import('node:fs');
+  const sw = readFileSync(new URL('../server/src/seatWire.js', import.meta.url), 'utf8');
+  ok(sw.includes('&& !unrostered.has(p.pos))'), 'the sweep filters its candidates by them');
+}
+
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

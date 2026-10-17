@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.16 — AI teams stop chasing positions their league doesn't use
+
+> - AI-run teams no longer try to pick up D/STs (or kickers) in leagues that don't roster them, so their waiver claims go to players they can actually use.
+
+Founder: "Fix the D/ST thing." Ops 064's full sweep logged about a dozen "this
+league does not roster D/ST" refusals in one league: the wire planned D/ST
+adds the server always refuses, and each one spent an AI seat's claim room.
+`unrosteredPositions` asks `league_pos_cap` (0366: the commissioner's caps,
+else the builder spec's spots) once per position per league per sweep. A
+position capped at 0 never reaches the candidates. A failed ask keeps the
+position, so the server still refuses the add as before. check:seatwaivers
+covers it.
+
 ### v0.730.15 — The weekly contest's screen on the home page
 
 > - The Weekly contest chip on the home page now shows the matchup itself: the two squads' cards, the score, and the other side's cards face down until their games kick off.
