@@ -12,8 +12,8 @@
 // three that matter harder to spot, not easier.
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { injuryNow, onInjuryReport } from '@drip/core/data/injuries';
-import { ensureInjuryReport } from '@drip/core/data/liveApi';
+import { injuryNow } from '@drip/core/data/injuries';
+import { watchInjuryReport } from '@drip/core/data/liveApi';
 import type { PoolGroup } from '@drip/core/data/poolEntry';
 import { flagFor } from '@drip/core/data/commish';
 import { useTheme, MONO, fsTight } from '../theme.native';
@@ -84,9 +84,8 @@ export function InjuryBadge({ status, size = 8 }: { status: string | null; size?
 export function InjuryNow({ slug, size = 8 }: { slug: string | null | undefined; size?: number }) {
   const [, bump] = useState(0);
   useEffect(() => {
-    const off = onInjuryReport(() => bump((n) => n + 1));
-    void ensureInjuryReport();
-    return off;
+    // v0.730.14: kept fresh while shown (2 min Fri/Sat), not read once.
+    return watchInjuryReport(() => bump((n) => n + 1));
   }, []);
   return <InjuryBadge status={injuryNow(slug)} size={size} />;
 }

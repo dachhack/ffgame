@@ -5,8 +5,8 @@ import type { Session } from '@supabase/supabase-js';
 import type { Pos, ThemeName } from '@drip/core/theme';
 import { useStore, type CardSkin } from './store';
 import { headshot, espnHeadshot, teamLogo } from '@drip/core/data/media';
-import { injuryFor, injuryNow, onInjuryReport } from '@drip/core/data/injuries';
-import { ensureInjuryReport } from '@drip/core/data/liveApi';
+import { injuryFor, injuryNow } from '@drip/core/data/injuries';
+import { watchInjuryReport } from '@drip/core/data/liveApi';
 import { flagFor } from '@drip/core/data/commish';
 import { REG_SEASON_WEEKS } from '@drip/core/data/league';
 import { APP_VERSION, DATA_SOURCE } from '@drip/core/version';
@@ -286,9 +286,8 @@ export function InjuryBadge({ week, slug, style }: { week: number; slug: string;
 export function InjuryNow({ slug, style }: { slug: string | null | undefined; style?: CSSProperties }) {
   const [, bump] = useState(0);
   useEffect(() => {
-    const off = onInjuryReport(() => bump((n) => n + 1));
-    void ensureInjuryReport();
-    return off;
+    // v0.730.14: kept fresh while shown (2 min Fri/Sat), not read once.
+    return watchInjuryReport(() => bump((n) => n + 1));
   }, []);
   return <InjuryTag status={injuryNow(slug)} style={style} />;
 }

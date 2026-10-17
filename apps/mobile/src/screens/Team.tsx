@@ -9,6 +9,7 @@
 // Everything the web TeamManage does lives here now — waivers/FAAB, trades
 // (ui/TradeCenter), the avatar grid (ui/AvatarGrid), and the commissioner's
 // whole kit. The old "web only for now" list is empty.
+import { injuryRefreshMs } from '@drip/core/data/injuries';
 import { useMySeatRule, seatRuleShows, SeatRuleBanner } from '../ui/seatRule';
 import { installSportMarketFor } from '@drip/core/sports/market';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -422,7 +423,17 @@ export function Team({ leagueId, onBack, onDraft, tradePartner, lineupUserId, li
         taxiLocked: !!r.taxi_locked_now,
       });
     }).catch(() => {});
-    injuryTags().then(setInjTags).catch(() => {});
+  }, [leagueId]);
+  // THE ROSTER'S TAGS ON THE REPORT'S CLOCK (v0.730.14): read on open, then
+  // again whenever they're older than injuryRefreshMs (2 min Fri/Sat, 10
+  // otherwise) — a list left open no longer shows a status the server has
+  // already replaced.
+  useEffect(() => {
+    let at = 0;
+    const tick = () => { if (Date.now() - at >= injuryRefreshMs()) { at = Date.now(); injuryTags().then(setInjTags).catch(() => {}); } };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
   }, [leagueId]);
   const [claimFor, setClaimFor] = useState<{ p: LeaguePoolPlayer; drop?: string } | null>(null); // FAAB blind bid
   // A bid already typed when the server said "roster full" — carried into the
