@@ -164,5 +164,22 @@ clearLiveInjuries();
   eq('…before the widget task is registered', at >= 0 && at < idx.indexOf('registerMatchupWidget();'), true);
 }
 
+// v0.730.14: Fri/Sat statuses kept to 2 minutes on every screen, 10 otherwise.
+{
+  const { injuryRefreshMs } = await import('../packages/core/src/data/injuries.ts');
+  const at = (iso) => injuryRefreshMs(Date.parse(iso));
+  eq('Sat 1:32pm ET (17:32 UTC): 2 min', at('2026-10-17T17:32:00Z'), 120000);
+  eq('Fri 10am ET: 2 min', at('2026-10-16T14:00:00Z'), 120000);
+  eq('Sat night 11pm ET (Sun 03:00 UTC): 2 min', at('2026-10-18T03:00:00Z'), 120000);
+  eq('Sun 1pm ET: 10 min', at('2026-10-18T17:00:00Z'), 600000);
+  eq('Wed: 10 min', at('2026-10-14T17:00:00Z'), 600000);
+  const { readFileSync } = await import('node:fs');
+  const rd = (f) => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+  for (const f of ['apps/mobile/src/ui/rosterGroup.tsx', 'src/app/ui.tsx']) eq(`${f}: the badge watches the report, not one read`, rd(f).includes('return watchInjuryReport('), true);
+  for (const f of ['apps/mobile/src/screens/Team.tsx', 'src/screens/NativeLeague.tsx']) eq(`${f}: roster tags re-read on the report's clock`, rd(f).includes('Date.now() - at >= injuryRefreshMs()') && rd(f).includes('setInterval(tick, 60_000)'), true);
+  eq('phone: statuses re-read when the app comes back', rd('apps/mobile/App.tsx').includes('void ensureInjuryReport(); } });'), true);
+  eq('worker: college reports every 5 min on game days', /collegeAvailGamedayMs: Number\(process\.env\.COLLEGE_AVAIL_MS_GAMEDAY \|\| 300000\)/.test(rd('server/src/config.js')), true);
+}
+
 console.log(fails ? `FAIL  ${fails} injury assertion(s) failed` : 'OK    injury report precedence');
 process.exit(fails ? 1 : 0);

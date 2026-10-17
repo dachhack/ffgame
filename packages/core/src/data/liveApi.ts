@@ -7,7 +7,7 @@ import { getSupabase } from './supabaseClient';
 import { platform, storeGet, storeRemove } from '../platform';
 import { track, Ev, type Props } from '../analytics';
 import { readPool, type PoolGroup } from './poolEntry';
-import { setLiveInjuries, setInjuryReport, injuryReportAt, type InjuryRow } from './injuries';
+import { setLiveInjuries, setInjuryReport, injuryReportAt, injuryRefreshMs, onInjuryReport, type InjuryRow } from './injuries';
 import { setTeamOverrides } from './playerTeam';
 import { setDepthChart, hasDepthChart } from './playerDepth';
 import { resolveUser } from './sleeper';
@@ -702,7 +702,7 @@ export function ensureDepthChart(): Promise<number> {
  *  mount and repaint on onInjuryReport. Concurrent callers share one read.
  *  Never throws. */
 let reportLoad: Promise<number> | null = null;
-export function ensureInjuryReport(maxAgeMs = 10 * 60_000): Promise<number> {
+export function ensureInjuryReport(maxAgeMs = injuryRefreshMs()): Promise<number> {
   if (Date.now() - injuryReportAt() < maxAgeMs) return Promise.resolve(-1);
   if (!reportLoad) {
     reportLoad = fetchInjuryRows()
@@ -711,6 +711,26 @@ export function ensureInjuryReport(maxAgeMs = 10 * 60_000): Promise<number> {
       .finally(() => { reportLoad = null; });
   }
   return reportLoad;
+}
+
+/** KEEP IT FRESH WHILE A SCREEN IS OPEN (v0.730.14). A badge used to read the
+ *  report once, on mount, so a screen left open (or an app left in the
+ *  background) showed a designation the server had already replaced. Every
+ *  watcher shares one minute timer that re-reads whenever the report is
+ *  older than injuryRefreshMs (2 min Fri/Sat, 10 otherwise); `fn` hears each
+ *  new report. Returns the unsubscribe; the timer stops with the last one. */
+let watchers = 0;
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+export function watchInjuryReport(fn: () => void): () => void {
+  const off = onInjuryReport(fn);
+  watchers++;
+  void ensureInjuryReport();
+  if (!watchTimer) watchTimer = setInterval(() => { void ensureInjuryReport(); }, 60_000);
+  return () => {
+    off();
+    watchers = Math.max(0, watchers - 1);
+    if (!watchers && watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+  };
 }
 
 async function fetchInjuryRows(): Promise<Record<string, InjuryRow>> {
