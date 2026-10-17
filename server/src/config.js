@@ -70,7 +70,7 @@ export const config = {
   // midweek; ten minutes on a college game day catches the final one before
   // the lock. Three-hourly when no league is on the college calendar.
   collegeAvailPollMs: Number(process.env.COLLEGE_AVAIL_MS || 1800000),            // 30m
-  collegeAvailGamedayMs: Number(process.env.COLLEGE_AVAIL_MS_GAMEDAY || 600000),  // 10m
+  collegeAvailGamedayMs: Number(process.env.COLLEGE_AVAIL_MS_GAMEDAY || 300000),  // 5m (v0.730.14, was 10m: founder wants faster Fri/Sat college statuses)
   collegeAvailIdleMs: Number(process.env.COLLEGE_AVAIL_MS_IDLE || 10800000),      // 3h
   // The ESPN roster sweep (32 small fetches): where every player currently
   // plays. Separate from the Sleeper DIRECTORY refresh below, which is 14MB and

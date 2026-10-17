@@ -6,6 +6,7 @@
 //   • DraftRoom  — live snake draft: pick clock, autopick for absent/vacant
 //     seats (any client's poll advances it via draft_tick), searchable board.
 //   • TeamManage — roster, drops, free agents, waiver claims + waiver order.
+import { injuryRefreshMs } from '@drip/core/data/injuries';
 import { useMySeatRule, seatRuleShows, SeatRuleBanner } from '../app/seatRule';
 import { ClassicBoard } from './ClassicBoard';
 import { devyLegParts, twoSeatDevyLegs, offersDevy, fmtPts, teamBook, collegeSetupBlocked, collegeSetupActive, collegeSetupLine, collegePoolOpts, collegeScheduleWeeks, COLLEGE_SETUP_INFO, DEFAULT_COLLEGE_SETUP, type CollegeSetup } from '@drip/core/data/devyShares';
@@ -3272,7 +3273,17 @@ export function TeamManage({ leagueId, onDraft, focus, lineupUserId, lineupRoste
         taxiLocked: !!r.taxi_locked_now,
       });
     }).catch(() => {});
-    injuryTags().then(setInjTags).catch(() => {});
+  }, [leagueId]);
+  // THE ROSTER'S TAGS ON THE REPORT'S CLOCK (v0.730.14): read on open, then
+  // again whenever they're older than injuryRefreshMs (2 min Fri/Sat, 10
+  // otherwise) — a list left open no longer shows a status the server has
+  // already replaced.
+  useEffect(() => {
+    let at = 0;
+    const tick = () => { if (Date.now() - at >= injuryRefreshMs()) { at = Date.now(); injuryTags().then(setInjTags).catch(() => {}); } };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
   }, [leagueId]);
   /** Why this player may NOT go in that place — null when he may. The wording
    *  matches the server's refusal, because the server is still the authority

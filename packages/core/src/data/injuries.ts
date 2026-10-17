@@ -96,6 +96,19 @@ export function setInjuryReport(rows: Record<string, InjuryRow>, at: number = Da
   reportAt = at;
   for (const fn of reportListeners) { try { fn(); } catch { /* a listener's problem */ } }
 }
+/** HOW STALE A SCREEN MAY LET THE REPORT GET (v0.730.14). Founder, after a
+ *  college RB showed D on his phone at 1:32 while the server had held the
+ *  ACC's 1:30 Game Day "Game Time Decision" (Q) since 1:30:55: "we need more
+ *  frequent college injury updates Fri/sat." The conferences post their
+ *  reports Thursday to Saturday, the last one about ninety minutes before
+ *  kickoff, so Friday and Saturday (US time — Fri 10:00 UTC to Sun 08:00 UTC,
+ *  roughly 6am Friday to 4am Sunday Eastern) a screen keeps it to 2 minutes;
+ *  any other day, 10. */
+export function injuryRefreshMs(now: number = Date.now()): number {
+  const d = new Date(now), dow = d.getUTCDay(), h = d.getUTCHours();
+  const weekend = (dow === 5 && h >= 10) || dow === 6 || (dow === 0 && h < 8);
+  return weekend ? 2 * 60_000 : 10 * 60_000;
+}
 /** When the current report was installed (ms), 0 if never. */
 export function injuryReportAt(): number { return reportAt; }
 /** Hear when a new report lands — a screen repaints its badges. Returns the unsubscribe. */

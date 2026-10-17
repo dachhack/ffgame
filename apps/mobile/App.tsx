@@ -30,7 +30,7 @@ import { DevRoomScreen, DevRoomBar } from './src/screens/DevRoom';
 import { BullseyeStart, BullseyeLeagueRoom } from './src/screens/BullseyeLeague';
 import { BullseyeSquad, BullseyeGate } from './src/screens/BullseyeContest';
 import { Leagues } from './src/screens/Leagues';
-import { isAdmin, loadCollegeWeekDates, loadCollegeLogos, syncMarkFree } from '@drip/core/data/liveApi';
+import { isAdmin, loadCollegeWeekDates, loadCollegeLogos, syncMarkFree, ensureInjuryReport } from '@drip/core/data/liveApi';
 import { onMarkFree } from '@drip/core/data/markFree';
 import { onHelmetMode } from '@drip/core/data/helmets';
 import { LIVE_SEASON } from '@drip/core/data/realPbp';
@@ -154,7 +154,7 @@ export function App() {
   // things first (a lineup just saved, a sign-in that just happened).
   useEffect(() => {
     void refreshMatchupWidgets({ fresh: true });
-    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') void refreshMatchupWidgets({ fresh: true }); });
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') { void refreshMatchupWidgets({ fresh: true }); void ensureInjuryReport(); } });  // v0.729.4: statuses fresh on return
     return () => sub.remove();
   }, [session?.user.id]);
   // A tap on the widget: dripfantasy://matchup?league=…&roster=… opens that

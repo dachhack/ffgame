@@ -22,6 +22,29 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.14 — Injury statuses refresh faster on Fridays and Saturdays
+
+> - Injury statuses now stay current while a screen is open: every 2 minutes on Fridays and Saturdays, when the college reports come out, and every 10 minutes other days. They also refresh when you reopen the app.
+
+Founder: "Haynes is D in the app but healthy per reports" → "we need more
+frequent college injury updates Fri/sat." Ops 065: the server held Justice Haynes
+(GT RB) as Q, "ACC availability report · Game Day (Saturday 13:30 ET) · Game
+Time Decision", written 13:30:55 ET. That was 25 seconds after the report and
+before the founder's 1:32 screenshot. So the server was current and the screen
+was stale: badges read the report once on mount, and the roster screens'
+tags (`injuryTags`) once per league open.
+
+- Core `injuryRefreshMs`: 2 min Fri 10:00 UTC to Sun 08:00 UTC, 10 otherwise.
+  It is `ensureInjuryReport`'s default.
+- `watchInjuryReport` shares one minute timer across every badge, and the
+  timer stops with the last one.
+- Team.tsx and NativeLeague re-read their tags on the same clock.
+- The phone re-reads on foreground.
+- Worker: college availability every 5 min on game days (was 10;
+  `COLLEGE_AVAIL_MS_GAMEDAY` overrides it, so check the host's env doesn't
+  still say 600000).
+- check:injuries covers it.
+
 ### v0.730.13 — Weekly contests on the home page
 
 > - The home page's Matchup style card now has a Weekly contest chip, next to Classic and Drip: a fresh salary-cap squad every week, head to head or on a league-wide board.
