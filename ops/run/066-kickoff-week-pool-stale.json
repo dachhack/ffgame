@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/kickoff-week-pool-stale.sql",
+  "why": "Confirms v0.730.11's cause: Kickoff League's live week pool still lists the players each team dropped after kickoff (0314 is add-only), which the board showed on the bench (Team 4: 13 vs 10). Per team: pool size, roster size, and the pool entries gone from the roster. Read only, seats and players only."
+}

@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.11 — The matchup bench shows the roster as it stands
+
+> - The matchup board no longer lists players a team dropped during the week on its bench. They stay only where they were started.
+
+Founder: "I think team 4 in kickoff league has too many players on their
+roster … In my team, team 4 has 10 bench, but in match up they have 13."
+Ops 065 (read only): Team 4 is legal — 24 of 24 (rounds), 21 of 21 active
+(11 starters, 10 bench), 3 of 3 IR; every add this week was a waiver claim
+with a drop. The board's bench is the live week's pool (sleeper_lineup)
+minus starters, and a live week's pool is refreshed add-only (0314: a
+dropped man who already played must keep the spot his pick holds), so the
+three players Team 4 dropped by waiver after the Thursday kickoff (Higbee
+Oct 16; ATL D/ST and Doubs Oct 17) were still in it: 13. Keaton Mitchell,
+dropped Oct 15 before kickoff, was rewritten out, as the rule says. Core
+`boardHeldBy`/`heldNow` (data/copies): both ClassicBoards read the bench,
+the best-ball/auto-fill preview and the auto-slot write from the roster as
+it stands (native_roster, already loaded for the stash sets); a dropped
+starter keeps his spot. The resolver already scored from native_roster, so
+no score changes. Ops 066 (read only) lists each team's pool entries gone
+from its roster, to confirm. check:copies.
+
 ### v0.730.10 — Tap a play to replay the field from it
 
 > - In a game's view, tap any play in the play-by-play list and the field above jumps to it in replay, then carries on from there (every 7 seconds on AUTO, or tap › on MANUAL). The play the field is showing is highlighted in the list. Long-press a play still reads it aloud.
