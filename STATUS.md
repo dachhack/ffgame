@@ -32,6 +32,7 @@ ContestMatchup in the tactical theme, mark-free, rendered against stand-in
 reads (two made-up squads, "Shots FC" v "Taco Time Titans", mid-Sunday), and
 cropped to the scoreboard and the first two rows: one card still sealed, one
 pair turned and scored. The chip's placeholder is gone.
+
 ### v0.730.14 — Injury statuses refresh faster on Fridays and Saturdays
 
 > - Injury statuses now stay current while a screen is open: every 2 minutes on Fridays and Saturdays, when the college reports come out, and every 10 minutes other days. They also refresh when you reopen the app.
