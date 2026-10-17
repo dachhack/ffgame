@@ -86,6 +86,19 @@ export function sweepSeats(agentRows, aiRows, only = null) {
   return only ? all.filter((r) => r.league_id === only.leagueId && (only.rosterId == null || r.roster_id === only.rosterId)) : all;
 }
 
+/** The positions a league caps at 0 — league_pos_cap's word, asked once per
+ *  position. A failed ask counts as "rostered": the server still refuses
+ *  the add, as it did before (v0.730.16). */
+export async function unrosteredPositions(leagueId, positions, log = () => {}, rpc = (fn, args) => db().rpc(fn, args)) {
+  const out = new Set();
+  for (const pos of new Set(positions.filter(Boolean))) {
+    const { data, error } = await rpc('league_pos_cap', { p_league_id: leagueId, p_pos: pos });
+    if (error) { log('seat wire', leagueId, 'pos cap', pos, error.message); continue; }
+    if (data === 0) out.add(pos);
+  }
+  return out;
+}
+
 /** Every row of a read, a thousand at a time (PostgREST's page cap), and
  *  a failed page logged rather than read as "no rows" (v0.729.1). */
 export async function readAll(build, what, log = () => {}) {
@@ -295,8 +308,16 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
         openSince = Number.isFinite(t) ? t : null;
       }
       const now = Date.now();
+      // POSITIONS THIS LEAGUE DOES NOT ROSTER (v0.730.16). A league whose
+      // spots take no D/ST (or no K) caps it at 0, and every add of one is
+      // refused — but the wire kept planning them: ops 064's pass logged a
+      // dozen "this league does not roster D/ST" refusals in one league, each
+      // a claim slot an AI seat spent on nothing. The server's own rule
+      // (league_pos_cap, 0366: the commissioner's caps, else the builder
+      // spec's spots) decides, once per league per sweep.
+      const unrostered = await unrosteredPositions(lg.id, pool.map((p) => p.pos), log);
       const available = pool
-        .filter((p) => !owned.has(p.slug) && !noAdd.has(p.slug) && p.pos)
+        .filter((p) => !owned.has(p.slug) && !noAdd.has(p.slug) && p.pos && !unrostered.has(p.pos))
         .map((p) => {
           const heldUntil = p.waived_until ? new Date(p.waived_until).getTime() : null;
           const inst = wireInstrument({ heldUntil }, { faOpen, openSince }, now);
