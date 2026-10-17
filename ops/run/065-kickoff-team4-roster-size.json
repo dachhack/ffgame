@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/kickoff-team4-roster-size.sql",
+  "why": "Founder: Kickoff League's Team 4 (AI) looks like it added players over its roster limit. Which limit (active seats, a shelf, or the draft's rounds), by how many, and which adds since Oct 12 put it there? Every team's counts too, to see if it's only Team 4. Read only, seats and players only."
+}
