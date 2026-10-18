@@ -664,5 +664,31 @@ ok(HOLE_MIN_GAIN < UPGRADE_MIN_GAIN, 'the hole bar stays BELOW the upgrade bar (
   ok(sw.includes('&& !unrostered.has(p.pos))'), 'the sweep filters its candidates by them');
 }
 
+// v0.730.17 (#1365): an IR tag is a stay, not a season.
+{
+  const { irRosShare, legalizeIrDrop: lid } = await import('../packages/core/src/engine/seatWaivers.ts');
+  const fri = Date.parse('2026-10-17T20:56:00Z');   // when Team 4 cut A.J. Brown, week 6
+  const left = 18 - 6 + 1;
+  const back = irRosShare({ returnDate: '2026-10-18', comment: null }, left, fri);
+  ok(back > 0.9, `back tomorrow: nearly all his season is left (${back.toFixed(2)})`);
+  ok(Math.abs(irRosShare(null, left, fri) - 9 / 13) < 1e-9, 'no return date: the four-game minimum');
+  ok(irRosShare({ returnDate: null, comment: 'Placed on IR; season-ending ACL tear.' }, left, fri) === 0, 'a season-ending note is 0');
+  ok(irRosShare({ returnDate: '2027-02-01', comment: null }, left, fri) === 0, 'back after the season is 0');
+  ok(irRosShare({ returnDate: '2026-10-18' }, 0, fri) === 0, 'no weeks left is 0');
+  // The cut that happened: Brown (WR, IR-tagged, on the active roster for want of IR room) vs a bench scrub.
+  const P = (id, pos) => ({ id, pos, team: 'X' });
+  const SL = [{ slot: 'RB', pos: ['RB'] }, { slot: 'WR', pos: ['WR'] }];
+  const active = [P('rb1', 'RB'), P('wr1', 'WR'), P('aj', 'WR'), P('scrub', 'RB')];
+  const proj = { rb1: 12, wr1: 11, aj: 14, scrub: 2, healed: 9 };
+  const old = (p) => (p.id === 'aj' ? 0 : proj[p.id]);
+  const now = (p) => (p.id === 'aj' ? proj.aj * back : proj[p.id]);
+  const start = (p) => (p.id === 'aj' ? 0 : proj[p.id]);   // out this week: he does not start
+  ok(lid(SL, active, P('healed', 'RB'), old, start) === 'aj', 'the old rule cut the IR-tagged star (reproduces #1365)');
+  ok(lid(SL, active, P('healed', 'RB'), now, start) === 'scrub', 'now the bench scrub goes, and the star stays');
+  const { readFileSync } = await import('node:fs');
+  const sw = readFileSync(new URL('../server/src/seatWire.js', import.meta.url), 'utf8');
+  ok(sw.includes('ros * irRosShare(details.get(p.id), weeksLeft)'), 'the sweep values IR players by irRosShare');
+}
+
 console.log(fails ? `\n${fails} PROBE FAIL(s)` : '\nALL SEAT-WAIVER ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

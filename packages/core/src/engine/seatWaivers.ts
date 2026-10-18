@@ -674,3 +674,22 @@ export function legalizeIrDrop<P extends SpotPlayer>(
   if (cheapest && (rosOf(cheapest) <= rosOf(healed) || soleCover(slots, together, healed))) return cheapest.id;
   return healed.id;
 }
+
+/** HOW MUCH OF THE REST OF THE SEASON AN IR PLAYER WILL PLAY (v0.730.17).
+ *  Issue #1365, Kickoff League: "AJ Brown is about to make a return" — the
+ *  AI's Team 4 had cut him the day before New England activated him, because
+ *  every IR tag read as season-ending and his rest-of-season value as 0, so
+ *  he was the first body out when a place had to be cleared. NFL IR is a
+ *  four-game minimum, not a season. The share is the weeks left after his
+ *  return over the weeks left: his return date when the report has one, else
+ *  four weeks out; 0 only when the report says the season is over for him or
+ *  he can't be back before it ends. `weeksLeft` counts this week. Pure. */
+export function irRosShare(inj: { returnDate?: string | null; comment?: string | null } | null | undefined,
+  weeksLeft: number, now: number = Date.now()): number {
+  const left = Math.max(0, Math.floor(weeksLeft));
+  if (!left) return 0;
+  if (/season[- ]ending|for the (rest of the )?season|out for the year|rest of the season/i.test(String(inj?.comment ?? ''))) return 0;
+  const ret = inj?.returnDate ? Date.parse(inj.returnDate) : NaN;
+  const out = Number.isFinite(ret) ? Math.max(0, Math.ceil((ret - now) / (7 * 86400e3))) : 4;
+  return Math.max(0, left - out) / left;
+}

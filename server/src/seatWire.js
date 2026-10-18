@@ -46,10 +46,10 @@
 //     for the rest of the year than the one it adds.
 //   • THE THIN POSITION fills first when the lineup itself wants nothing.
 import { db } from './supabase.js';
-import { ruledOutSlugs, injuryStatusMap } from './injuries.js';
+import { ruledOutSlugs, injuryStatusMap, injuryDetailMap } from './injuries.js';
 import { leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj } from '../../packages/core/src/engine/classic.ts';
 import { playRisk } from '../../packages/core/src/engine/golfFloor.ts';
-import { seatWirePlan, shortlistWire, wireInstrument, trendMomentum, legalizeIrDrop } from '../../packages/core/src/engine/seatWaivers.ts';
+import { seatWirePlan, shortlistWire, wireInstrument, trendMomentum, legalizeIrDrop, irRosShare } from '../../packages/core/src/engine/seatWaivers.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, projectedPoints } from '../../packages/core/src/engine/projScoring.ts';
 import { modeOfSettings } from './resolve.js';
@@ -122,6 +122,8 @@ export async function inChunks(ids, build, what, log = () => {}, size = 100) {
   return out;
 }
 
+/** The NFL's regular season, for how many weeks an IR player has left. */
+const REGULAR_WEEKS = 18;
 const MAX_OUTSTANDING_CLAIMS = 2;
 
 /** THE FRENZY (v0.428.0). When the wire holds several players worth real
@@ -410,8 +412,15 @@ export async function sweepSeatWire(week, slate = null, log = () => {},
         const statuses = await injuryStatusMap();
         // Rest-of-season value (v0.426.0), needed here already for the depth
         // of the wire and again below for every drop and price.
-        const statusesRos = (p) => (statuses.get(p.id) === 'IR' ? 0
-          : projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? meta.get(p.id)?.sleeper_id ?? null }));
+        // An IR tag is a stay, not a season (v0.730.17, #1365: Team 4 cut
+        // A.J. Brown at 0 the day before he was activated). His projection
+        // counts for the weeks left after his return — irRosShare.
+        const details = await injuryDetailMap();
+        const weeksLeft = Math.max(0, REGULAR_WEEKS - Number(week) + 1);
+        const statusesRos = (p) => {
+          const ros = projectedPoints({ id: p.id, pos: p.pos ?? '', team: p.team, sleeperId: p.sleeperId ?? meta.get(p.id)?.sleeper_id ?? null });
+          return statuses.get(p.id) === 'IR' ? ros * irRosShare(details.get(p.id), weeksLeft) : ros;
+        };
         const irTags = new Set((irTagsOf.get(lg.id) ?? []).map((t) => String(t).toUpperCase()));
         const irCap = Number(lg.settings_json?.roster_shape?.ir) || 0;
         const qualifies = (slug) => irTags.has(statuses.get(slug) ?? '');
