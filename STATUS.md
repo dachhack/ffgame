@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.18 — The screen stays on while the play-by-play reads aloud
+
+> - While CATCH UP or LIVE is reading the play-by-play aloud, your phone won't auto-lock, so the reading keeps going. STOP, the final, or leaving the screen lets it sleep again.
+
+Founder: "How do I get the read aloud play by play to keep going when I close
+my phone?" The phone suspends the app when it locks, and the reader (core
+PlayReader + expo-speech) with it. Option 1 of two: ReaderBar holds
+expo-keep-awake (part of the expo package, already autolinked, so OTA; the
+iOS fingerprint is unchanged) while the reader's mode is catchup or live and
+not finished at the final. The live status says "SCREEN STAYS ON". Locking
+by hand still stops it. True pocket listening (iOS background audio plus an
+Android foreground service) needs native builds and is not started.
+
 ### v0.730.17 — AI teams stop cutting injured stars who are about to return
 
 > - AI-run teams no longer treat a player on injured reserve as gone for the season. A star coming back soon keeps his value, so the AI cuts a bench body instead of him.
