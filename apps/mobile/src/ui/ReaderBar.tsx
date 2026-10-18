@@ -11,6 +11,7 @@ import type { GamePlay, TeamGameFeed } from '@drip/core/data/gameFeed';
 import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { useTheme, MONO, alpha, fs } from '../theme.native';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { appVoice } from './voice';
 
 export const feedOver = (feed: TeamGameFeed | null | undefined): boolean => {
@@ -37,6 +38,21 @@ export function ReaderBar({ week, feed, label, onState }: {
   }, [home, away]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { reader.current?.update(plays, over); }, [plays, over]);
 
+  // THE SCREEN STAYS ON WHILE IT READS (v0.730.18). Founder: "How do I get
+  // the read aloud play by play to keep going when I close my phone?" — the
+  // phone suspends the app when it auto-locks, and the reader with it. While
+  // CATCH UP or LIVE is reading, auto-lock is held off; STOP, the final, or
+  // leaving the screen lets the phone sleep again. (Locking it by hand still
+  // stops it — pocket listening is a native change of its own.)
+  const awakeTag = useRef(`pbp-reader-${Math.random().toString(36).slice(2)}`);
+  const reading = rs.mode !== 'idle' && !(over && rs.finished);
+  useEffect(() => {
+    const tag = awakeTag.current;
+    if (!reading) return;
+    void activateKeepAwakeAsync(tag).catch(() => {});
+    return () => { void Promise.resolve(deactivateKeepAwake(tag)).catch(() => {}); };
+  }, [reading]);
+
   const btn = (text: string, on: boolean, onPress: () => void, tone: string) => (
     <Pressable onPress={onPress}
       style={{ flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth,
@@ -45,7 +61,7 @@ export function ReaderBar({ week, feed, label, onState }: {
     </Pressable>
   );
   const status = rs.mode === 'catchup' ? `READING FROM THE TOP · ${Math.min(rs.cursor, plays.length)}/${plays.length}${over ? '' : ' · GOES LIVE WHEN CAUGHT UP'}`
-    : rs.mode === 'live' ? (rs.speaking ? 'READING THE LATEST PLAY' : over ? 'THAT’S THE FINAL' : 'LIVE · WAITING FOR THE NEXT PLAY')
+    : rs.mode === 'live' ? (rs.speaking ? 'READING THE LATEST PLAY · SCREEN STAYS ON' : over ? 'THAT’S THE FINAL' : 'LIVE · WAITING FOR THE NEXT PLAY · SCREEN STAYS ON')
     : 'CATCH UP reads from the top · LIVE reads each play as it lands · voice: ⚙ Settings';
   return (
     <View style={{ gap: 5 }}>
