@@ -1,0 +1,5 @@
+{
+  "mode": "computer-recard",
+  "issue": 1365,
+  "why": "Founder: 'Post a response in the chat.' #1365 (Kickoff League: 'AJ Brown is about to make a return') is fixed by #1367. Posts the closed-issue card from #1367's chat-summary / chat-report in Kickoff League chat, or rewrites the relay's line if it already posted one."
+}
