@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/kickoff-team4-ajbrown.sql",
+  "why": "Issue #1365 (Kickoff League chat): 'AJ Brown is about to make a return' after 'Team 4 dropped A.J. Brown' (Oct 17 20:56 UTC). Team 4 is an AI seat; the seat wire's bare drops are its IR-legalising cuts, which value any IR-tagged player at 0 rest-of-season. Read only: his tag and spot, Team 4's moves and claims since Oct 15, its roster and the league's IR rules — which path cut him, and why."
+}
