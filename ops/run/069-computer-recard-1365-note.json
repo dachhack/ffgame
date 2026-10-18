@@ -1,0 +1,5 @@
+{
+  "mode": "computer-recard",
+  "issue": 1365,
+  "why": "Ops 068 rewrote the #1365 card with no report (report_chars 0): the issue's closed event carries no commit (closed by #1367's merge), so the relay found no closing PR and fell back to the title. The fix note now on #1365 carries the chat-summary / chat-report; this rewrites the card (message 553) from it."
+}
