@@ -73,8 +73,21 @@ export async function injuryStatusMap(now = Date.now()) {
   return statusCache.map;
 }
 
+let detailCache = null; // { at: ms, map: Map<slug, { status, returnDate, comment }> }
+/** The same report with its return date and note (v0.730.17), for the seat
+ *  wire's IR value: how long a player is out, not just that he is. Same
+ *  cache rule — a failed read serves the last known map. */
+export async function injuryDetailMap(now = Date.now()) {
+  if (detailCache && now - detailCache.at < TTL_MS) return detailCache.map;
+  const { rows, error } = await allRows((from, to) => db().from('injury_status')
+    .select('player_slug,status,return_date,comment').order('player_slug').range(from, to));
+  if (error) return detailCache?.map ?? new Map();
+  detailCache = { at: now, map: new Map(rows.map((r) => [r.player_slug, { status: String(r.status ?? '').toUpperCase(), returnDate: r.return_date ?? null, comment: r.comment ?? null }])) };
+  return detailCache.map;
+}
+
 /** Test hook: drop the caches so the next call re-reads. */
-export function clearRuledOutCache() { cache = null; statusCache = null; }
+export function clearRuledOutCache() { cache = null; statusCache = null; detailCache = null; }
 
 
 // ── HURT IN HIS GAME (v0.701.0) ──────────────────────────────────────────────

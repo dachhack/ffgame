@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.17 — AI teams stop cutting injured stars who are about to return
+
+> - AI-run teams no longer treat a player on injured reserve as gone for the season. A star coming back soon keeps his value, so the AI cuts a bench body instead of him.
+
+Issue #1365 (Kickoff League chat): "AJ Brown is about to make a return",
+after "Team 4 dropped A.J. Brown" (Oct 17 20:56 UTC). Ops 067:
+- It was a bare drop. The worker's only bare drop is the seat wire's
+  IR-legalising cut.
+- Brown's row now reads "The Patriots activated Brown (ankle) from injured
+  reserve Saturday", so on Friday he was still IR-tagged.
+- Team 4's three IR places were full (Hurts, Love, Etienne), so he sat on
+  the active roster.
+- `statusesRos` valued every IR tag at 0 rest-of-season. When a place had to
+  be cleared, `legalizeIrDrop` picked the cheapest bench body: him.
+
+Fix: core `irRosShare` gives the weeks left after his return over the weeks
+left. It uses his return date, else NFL IR's four-game minimum, and is 0 only
+for a season-ending note or a return after week 18. The worker's new
+`injuryDetailMap` supplies the date and note. check:seatwaivers reproduces
+the cut under the old rule and shows the scrub going under the new one.
+
 ### v0.730.16 — AI teams stop chasing positions their league doesn't use
 
 > - AI-run teams no longer try to pick up D/STs (or kickers) in leagues that don't roster them, so their waiver claims go to players they can actually use.
