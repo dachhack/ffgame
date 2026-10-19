@@ -1,7 +1,8 @@
 -- 0478 swap-history probes.
 --   • the first save is no swap; a change to a saved squad is a row per spot;
 --   • the commissioner's fix logs as 'commish';
---   • a member reads their own any time; another seat's once the week unseals; the commissioner any time.
+--   • a member reads their own any time; another seat's once the week unseals; the commissioner any time;
+--   • (0515) the commissioner may unset a spot or the whole squad; a member still fills every spot.
 \set QUIET on
 \pset pager off
 \set ON_ERROR_STOP on
@@ -64,5 +65,15 @@ begin
   perform assert_err(contest_swaps(h, wk, 1), 'unseal', 'sw8 b can''t read a''s before kickoff');
   update nfl_slate set kickoff = now() - interval '1 hour' where season = '2026' and week = wk and home = 'PHI';
   perform assert_ok(contest_swaps(h, wk, 1), 'sw9 …but can once the week has kicked off');
+  -- UNSET (0515): the commissioner may leave a spot open — even a locked one — and the member fills it again
+  perform probe_as('a');
+  perform assert_ok(commish_set_contest_squad(h, wk, 2, sq - 'S1', 'unset the QB'), 'sw10 the commissioner unsets b''s QB after his game kicked off');
+  perform assert_true((select jsonb_array_length(starters_json) from sleeper_lineup where league_id = h and week = wk and roster_id = 2) = 8
+                      and not exists (select 1 from sleeper_lineup s, jsonb_array_elements(s.starters_json) x where s.league_id = h and s.week = wk and s.roster_id = 2 and x ->> 'slot' = 'S1'), 'sw10b S1 is empty');
+  perform assert_ok(commish_set_contest_squad(h, wk, 2, jsonb_build_object('S1', null, 'S2', ''), 'clear two'), 'sw11 null and blank both read as empty');
+  perform assert_ok(commish_set_contest_squad(h, wk, 2, '{}'::jsonb, 'start over'), 'sw12 the commissioner unsets the whole squad');
+  perform assert_true((select starters_json from sleeper_lineup where league_id = h and week = wk and roster_id = 2) = '[]'::jsonb, 'sw12b an empty squad, still a saved row');
+  perform probe_as('b');
+  perform assert_err(save_contest_entry(h, wk, sq - 'S9'), 'fill every spot', 'sw13 a member still fills every spot');
 end $$;
 select 'ALL CONTEST-SWAPS PROBES PASSED' as result;

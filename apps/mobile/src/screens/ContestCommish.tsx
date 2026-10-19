@@ -382,7 +382,7 @@ function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   return (
     <View style={{ gap: 6, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.bd }}>
       <Mono size={9} weight="700" tone="dim">{`🧾 SET A SQUAD · WEEK ${week}`}</Mono>
-      <Mono size={8.5} tone="faint">One seat’s squad for this week, past the kickoff locks. The budget, the floor and each spot’s rules still apply. The league is told who came in and who went out, with your reason.</Mono>
+      <Mono size={8.5} tone="faint">One seat’s squad for this week, past the kickoff locks. Leave a spot — empty — to unset it and the member picks again. The budget and each spot’s rules still apply. The league is told who came in and who went out, with your reason.</Mono>
       <Field value={findQ} onChangeText={setFindQ} maxLength={30} placeholder="find a team…" autoCorrect={false} />
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
         {shown.map((s) => <Chip key={s.roster_id} small on={rid === s.roster_id} label={seatName(s)} onPress={() => { tap(); setRid(rid === s.roster_id ? null : s.roster_id); setOpen(null); }} />)}
@@ -415,6 +415,9 @@ function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
               </View>
             );
           })}
+          <View style={{ flexDirection: 'row', marginTop: 4 }}>
+            <Chip small disabled={busy || defs.every((d) => !picks[d.slot])} label="UNSET ALL" onPress={() => { tap(); setPicks(Object.fromEntries(defs.map((d) => [d.slot, null]))); setOpen(null); }} />
+          </View>
           <Mono size={9} tone={budget > 0 && spent > budget ? 'warn' : 'faint'} style={{ marginTop: 4 }}>
             {`$${n0(spent)} of ${budget > 0 ? `$${n0(budget)}` : 'no cap'}${sq.min_spend ? ` · min spend $${n0(sq.min_spend)}` : ''}${sq.stamped ? ' · this seat’s week is stamped — re-score after saving' : ''}`}
           </Mono>

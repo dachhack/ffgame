@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.31 — The commissioner can unset picks
+
+> - Commissioners can now take players out of a member's squad: in FIX A WEEK → SET A SQUAD, set a spot to "— empty —", or tap UNSET ALL. The member then picks again. This works even after a player's game has kicked off.
+
+Founder (commissioner of Monday Showdown, not playing): "Can I have the
+commish option to unset picks". SET A SQUAD (0474) already offered "— empty —"
+per spot, but `_contest_squad_check` refused any open spot ("fill every spot"),
+so the commissioner could only swap players. Migration 0515 lets the
+commissioner's fix (`p_member` false) leave spots empty. The minimum spend
+waits until every spot is filled. The member's own save still has to fill every
+spot. An emptied squad is still a saved row, so the worker's no-show build
+doesn't refill it. Both apps get an UNSET ALL chip. The new
+`contest-swaps-probes.sql` checks sw10–sw13 (one spot unset, past its kickoff;
+null and blank; the whole squad; a member still has to fill every spot) all
+pass on scratch.
+
 ### v0.730.30 — The shared matchup link shows both teams before either has picked
 
 > - The public matchup page now shows both teams even before either has saved a squad. An open spot reads "not picked yet".
