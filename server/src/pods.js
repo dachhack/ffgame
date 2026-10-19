@@ -21,7 +21,7 @@ import { normTeam, TeamMap } from '../../packages/core/src/data/teamCodes.ts';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
-import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds, contestOwnLockMs, contestPlayoffs, contestPlaysFor, contestPlayCap, aiContestPlays, contestCoinRules } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestCard, contestAutoBuild, contestPriced, contestPriceAdjOf, noShowBuilds, contestOwnLockMs, contestPlayoffs, contestPlaysFor, contestPlayCap, aiContestPlays, contestCoinRules } from '../../packages/core/src/engine/contest.ts';
 import { leagueWeekProj } from '../../packages/core/src/engine/contestBuilder.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { priceBoard } from '../../packages/core/src/engine/salaryPricing.ts';
@@ -325,7 +325,7 @@ export async function ensurePods(week, season, idx) {
     // THE CPU'S POOL (v0.695.0, founder: "CPUs failed to set HC"): priced the league's own way, as the builder's
     // FILL FOR ME prices it (leagueWeekProj) — a head coach by his game this week, who the shared board carries
     // at 0 and the dart's auto-build therefore never picked.
-    const cpuPool = contest ? playable.map((r) => ({ ...r, proj: leagueWeekProj(r, podCatalog, r.pos === 'HC' ? (slate?.get(r.team) ?? null) : undefined) })) : playable;
+    const cpuPool = contest ? contestPriced(playable, contestPriceAdjOf(pod.settings_json)).map((r) => ({ ...r, proj: leagueWeekProj(r, podCatalog, r.pos === 'HC' ? (slate?.get(r.team) ?? null) : undefined) })) : playable;
     // DFS Bullseye (0462): AI seats and no-shows AIM at the card instead.
     const bullCfg = contest ? null : dfsBullseyeConfigOf(pod.settings_json);
     const card = bullCfg ? dfsCard(pod.id, week) : null;

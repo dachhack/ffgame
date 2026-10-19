@@ -71,7 +71,7 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   const [slate, setSlate] = useState<Map<string, SlateSpot>>(new Map());
   // ▦ FIELDS (v0.703.0, founder: "the all fields chip in the matchup screens for classic and weekly competitions")
   const [fieldsOpen, setFieldsOpen] = useState(false);
-  useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week]);
+  useEffect(() => { podSalaries(week, '2026', leagueId).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week, leagueId]);
   const bySlug = useMemo(() => new Map(board.map((r) => [r.slug, r])), [board]);
   const slots = useMemo(() => classicSlotsFromSpec(st?.slots ?? null) ?? [], [st?.slots]);
   const labels = useMemo(() => contestSlotLabels(slots), [slots]);

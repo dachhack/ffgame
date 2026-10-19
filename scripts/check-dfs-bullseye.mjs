@@ -101,7 +101,7 @@ ok('worker: scored under the league\'s catalog, RET spots as RET', /classicPoint
 ok('lock: no drip auto-lineup for a Bullseye contest', /settings_json\?\.dfs_bullseye === true\) continue/.test(read('server/src/lock.js')));
 const pods = read('server/src/pods.js');
 // v0.695.0: contest builds take cpuPool — `playable` (the ruled out dropped) re-priced the league's way.
-ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(cpuPool\.filter\(\(b\) => !teamLocked\(b\.team\)\), contest,/.test(pods) && /const cpuPool = contest \? playable\.map/.test(pods));
+ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(cpuPool\.filter\(\(b\) => !teamLocked\(b\.team\)\), contest,/.test(pods) && /const cpuPool = contest \? contestPriced\(playable, contestPriceAdjOf\(pod\.settings_json\)\)\.map/.test(pods));
 // v0.673.0: a leaderboard league takes the no-show block (its NO SQUAD BY LOCK
 // rule) and then leaves the loop — no AI seats to sub, no pairs to make.
 ok('pods: a leaderboard contest gets its no-shows, then leaves the seat loop', /noShowBuilds\(contest, mems \?\? \[\], haveSet, lockPassed\)/.test(pods) && /if \(boardLeague\) continue;/.test(pods) && !/if \(contest && contest\.format === 'board'\) continue;/.test(pods));

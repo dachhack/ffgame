@@ -12,7 +12,7 @@
 import { db } from './supabase.js';
 import { config } from './config.js';
 import { ruledOutSlugs } from './injuries.js';
-import { contestConfigOf, contestCard, contestAutoBuild } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestCard, contestAutoBuild, contestPriced, contestPriceAdjOf } from '../../packages/core/src/engine/contest.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { TeamMap, normTeam } from '../../packages/core/src/data/teamCodes.ts';
 
@@ -88,7 +88,7 @@ export async function sweepContestSubs(week, season, now = Date.now()) {
     const { data: mems } = await db().from('league_membership').select('sleeper_roster_id, app_user_id, controller, team_name').eq('league_id', lg.id);
     const seats = new Map((mems ?? []).map((m) => [m.sleeper_roster_id, m]));
     const card = cfg.contest === 'bullseye' ? contestCard(lg.id, week, cfg.slots, leagueCatalogOf({ scoring: lg.settings_json?.scoring_classic ?? null, ppr: lg.settings_json?.ppr })) : null;
-    const plan = planSubs({ league: lg, cfg, board: boardRows, entries, seats, kicks, outs, card, now });
+    const plan = planSubs({ league: lg, cfg, board: contestPriced(boardRows, contestPriceAdjOf(lg.settings_json)), entries, seats, kicks, outs, card, now });
     if (!plan.length) continue;
     const { error } = await db().from('sleeper_lineup').upsert(
       plan.map((p) => ({ league_id: lg.id, week, roster_id: p.roster_id, starters_json: p.starters_json })), { onConflict: 'league_id,week,roster_id' });

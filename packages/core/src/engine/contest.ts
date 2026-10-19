@@ -209,6 +209,29 @@ export function contestCard(leagueId: string, week: number, slots: ClassicSlotDe
   return dealBullseyeCard(leagueId, week, slots.map((d) => ({ slot: d.slot, type: d.type, pos: [...d.pos] })), catalog);
 }
 
+/** THE LEAGUE'S PRICES (0518): a contest league's own adjustment to the
+ *  shared board, by position (settings_json.price_adj, e.g. { QB: -2000 }).
+ *  Never below $0. The server's squad check prices the same way
+ *  (_contest_price), so the worker and the apps price as the save does. */
+export function contestPriceAdjOf(settings: unknown): Record<string, number> {
+  const raw = (settings as { price_adj?: unknown } | null)?.price_adj ?? settings;
+  const out: Record<string, number> = {};
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      const n = Number(v);
+      if (k !== 'price_adj' && Number.isFinite(n) && n !== 0) out[k.toUpperCase()] = Math.trunc(n);
+    }
+  }
+  return out;
+}
+export function contestPriced<T extends { pos: string; salary: number }>(rows: T[], adj: Record<string, number>): T[] {
+  if (!Object.keys(adj).length) return rows;
+  return rows.map((r) => {
+    const d = adj[String(r.pos).toUpperCase()];
+    return d ? { ...r, salary: Math.max(0, r.salary + d) } : r;
+  });
+}
+
 /** A stored squad (sleeper_lineup.starters_json) as spot → slug. Rows on the
  *  league's own spots (S1…) are read by name; a squad saved before 0466
  *  (DFS names, or the numbered slots of save_pod_entry and an AI build) fills

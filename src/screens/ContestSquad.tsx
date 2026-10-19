@@ -155,7 +155,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
     const slots = classicSlotsFromSpec(s.slots ?? null) ?? [];
     const mine = contestSquadOf(s.entry, slots);
     setPicks(mine); setSaved(mine);
-    const [rows, lk, sl] = await Promise.all([podSalaries(s.week).catch(() => []), weekGameLocks(s.week, '2026', 0).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
+    const [rows, lk, sl] = await Promise.all([podSalaries(s.week, '2026', leagueId).catch(() => []), weekGameLocks(s.week, '2026', 0).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
     setBoard(rows); setLocks(lk); setSlate(sl);
     void loadLiveInjuries(s.week).then(() => setInjTick((n) => n + 1));
   }, [leagueId, weekProp, rosterId]);

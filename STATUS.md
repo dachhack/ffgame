@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.33 — A league's own prices: QBs $2,000 off in Monday Showdown
+
+> - In Monday Showdown, QBs are $2,000 off tonight: Purdy is $6,600, Daniels $4,500, Mariota $1,000. The cap stays $30,000.
+
+Founder: "Let's discount QBs in this league by $2000", and, offered a cap raise
+that came to the same thing (#1392, closed): "No. Do the QB discount".
+`pod_salary` is shared by every league, so the adjustment lives in the league's
+settings as `price_adj`, a position → dollars map. 0518 adds:
+- `_contest_price(lg, pos, salary)`: never below $0. `_contest_squad_check`
+  sums with it. The Underdog's bottom third and the coin's cheapest/dearest
+  rank within a position, so a flat cut doesn't change them.
+- `contest_price_adj(p_league)` for the apps. `podSalaries(week, season,
+  leagueId)` applies it in both apps' builder, matchup and commish boards.
+- Core `contestPriced` / `contestPriceAdjOf`, which the worker's CPU and no-show
+  builds and the auto-sub price with.
+
+Then Monday Showdown gets `{"QB": -2000}`, guarded on WAS@SF's kickoff. On
+scratch, a squad $1,000 over a cap failed undiscounted and passed with the QB
+cut. New `check:contestprices` added; the contest probe suites and worker tests pass.
+
 ### v0.730.32 — Monday Showdown's budget cut, take two
 
 > - Monday Showdown's budget is now $30,000 and both squads are cleared, ready to rebuild before kickoff.
