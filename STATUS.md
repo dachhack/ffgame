@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.28 — A contest league made mid-week no longer locks in players who've already played
+
+> - In a contest league made after its week has started, the computer no longer fills a team with players whose games are over, and a team isn't auto-filled before the league's first game still to come.
+
+A member of Monday Showdown (made Monday for week 6, with only WAS@SF left):
+"it says my team is locked in as … who have all already played." Two rules in
+server/src/pods.js:
+- **The no-show deadline** (`noShowBuilds`' lockPassed) was the week's first
+  kickoff, Thursday's. A league made on Monday was past it from the start,
+  so every human seat without a squad was auto-built at once.
+- **The CPU's build** (`contestAutoBuild`) drew from the whole week's board,
+  so it took Sunday's players (Josh Allen, Kyren Williams). Their games had
+  started, so the seat couldn't swap them out.
+
+Now core `contestOwnLockMs` makes the deadline the first kickoff after the
+league was made, and the build only takes players whose team hasn't kicked
+off. server/test/contest-midweek.mjs covers both. Ops 075 (read only) shows
+Monday Showdown's squads. Clearing them is a separate step once this is live.
+
 ### v0.730.27 — A commissioner with no team can watch a contest league's matchups
 
 > - If you run a contest league but don't have a team in it, opening the league now takes you to its MATCHUP room, where you can flip between every matchup and see each team's picks. On the web, the league's card has a "▦ matchups" button.
