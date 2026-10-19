@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.25 — A commissioner who isn't playing sees every pick
+
+> - If you're the commissioner of a contest league but don't have a team in it, you now see every team's picks and power-ups on the matchup before kickoff. If you do have a team, you see other teams' picks at kickoff, as before.
+
+Founder: "I'm commish but not playing in Monday Showdown. When you are commish,
+but not playing in the league, let you see the picks by any team."
+`contest_matchup` sealed another squad's picks and plays until each player's
+kickoff (0479/0485/0508). A commissioner with no seat was "another squad" to
+everyone. Migration 0512 adds `ref` (no seat here, and the league's
+commissioner) and opens both sides' `_contest_sealed_entry` and
+`_contest_visible_plays` to them. The apps need nothing: a card with a player
+turns face up. scripts/db/contest-matchup-probes.sql (cr0–cr5) covers the
+referee, the player who still sees the other side sealed, and the playing
+commissioner (cm3b). cr4 fails on 0508's function.
+
 ### v0.730.24 — Contest leagues drop the Sleeper tools
 
 > - A contest league's commissioner page no longer shows "sync season", "go native", preseason practice or K / D-ST fill. None of them apply to a league Drip runs itself, and they made it look like you had to sync to get a matchup.
