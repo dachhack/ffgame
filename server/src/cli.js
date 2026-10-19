@@ -838,6 +838,7 @@ async function main() {
         if (req.dry) argv.push('--dry');
       } else if (req.mode === 'computer-recard') {
         // v0.599.0: rewrite a posted close line as the closed-issue card.
+        // v0.730.23: a DM ask too, and an open issue's shipped fix as an "update" card.
         argv.push('computer-recard', need('issue'));
       } else if (req.mode === 'computer-context') {
         // v0.595.0: post the chat before an already-filed @computer ask on its issue.
@@ -864,7 +865,7 @@ async function main() {
         argv.push('college-report', Array.isArray(req.weeks) ? req.weeks.join(',') : need('weeks'));
         if (req.league) argv.push(`--league=${req.league}`);
       } else {
-        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | report | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard | seal-audit | shotgun-preview | seat-wire | salary-audit | set-lineup | offboard-sweep | wire-audit`);
+        throw new Error(`unknown mode ${JSON.stringify(req.mode)} — diff | restamp | report | restore | refinalize | repoll | college-report | college-availability | college-sweep | declared-sweep | computer-context | computer-recard  | seal-audit | shotgun-preview | seat-wire | salary-audit | set-lineup | offboard-sweep | wire-audit`);
       }
       console.log(`ops-run: ${argv.join(' ')}`);
       const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...argv], { stdio: 'inherit' });

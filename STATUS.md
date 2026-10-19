@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.23 — Computer's fix card in DMs, as in league chat
+
+> - When something you asked the computer about in a DM gets fixed, the fix now shows up right in that DM: the same card as league chat, with what was wrong and how it was fixed behind READ THE REPORT.
+
+Founder: "Can you post in the dm the results of the fix?" then "this should be
+identical to the at computer process in regular chat. Please." (#1372, asked in
+a Gridiron Gang DM, fixed by #1378, open as `unconfirmed`.) A league ask's
+close posts the closed-issue card (0415). A DM ask's close only pushed the
+asker, because a DM line had nowhere to keep the card.
+- Migration 0511 gives `dm_message` a `fix` column, and `dm_messages` returns it.
+- `relayFixes` posts the same card into the DM on close (the push stays).
+- `recard` (ops `computer-recard`) works for DM asks too. For an open issue
+  with a shipped fix it posts an "Issue #N update" card, which a later recard
+  rewrites rather than duplicating.
+- Phone and web draw a DM card with the league's `FixCard`.
+- #1372's card is posted by an ops recard once 0511 is applied.
+- server/test/computer-dm.mjs covers it, and `dm_messages` returning the card
+  was checked on scratch.
+
 ### v0.730.22 — Projections in parentheses on the matchup
 
 > - On the matchup, a player who hasn't played yet now shows his projection in parentheses, like (13.4), so it can't be mistaken for a real score like 35.30.

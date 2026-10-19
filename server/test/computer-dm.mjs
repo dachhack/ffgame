@@ -109,5 +109,22 @@ ok('a second sweep neither files nor replies again', opened.length === 1 && T.dm
 const pushSrc = (await import('node:fs')).readFileSync(new URL('../src/push.js', import.meta.url), 'utf8');
 ok('push.js skips a DM line with no author', /if \(!t \|\| !d\.author_id\) continue;/.test(pushSrc));
 
+// v0.730.23 (0511): a DM ask gets the same card as a league ask — "identical to the at computer process in regular chat".
+{
+  const { updateHeader, closedHeader } = await import('../src/computer.js');
+  ok('an open issue with a shipped fix: an "update" card', updateHeader(1372, 'A refused power-up kept its card') === 'Issue #1372 update. A refused power-up kept its card.');
+  ok('…the close reads as the league card does', closedHeader(1372, 'A refused power-up kept its card.') === 'Issue #1372 closed. A refused power-up kept its card.');
+  const src = (await import('node:fs')).readFileSync(new URL('../src/computer.js', import.meta.url), 'utf8');
+  ok('the relay posts the card into the DM, with its report', src.includes("insert({ thread_id: m.thread_id, author_id: null, kind: 'computer', body: line, fix })"));
+  ok('recard finds a DM ask as well as a league one', src.includes("if (ask.source === 'dm')") && src.includes("row: (body, fix) => ({ thread_id: m.thread_id, author_id: null, kind: 'computer', body, fix })"));
+  ok('…and rewrites an update card on the next run rather than posting twice', src.includes('l.body.startsWith(`Issue #${n} update`)'));
+  const mig = (await import('node:fs')).readFileSync(new URL('../../supabase/migrations/0511_computer_card_in_dms.sql', import.meta.url), 'utf8');
+  ok('0511: dm_message keeps the card, dm_messages returns it', mig.includes('add column if not exists fix jsonb') && mig.includes("'fix', m.fix,"));
+  for (const f of ['../../apps/mobile/src/ui/Chat.tsx', '../../src/app/chat.tsx']) {
+    const c = (await import('node:fs')).readFileSync(new URL(f, import.meta.url), 'utf8');
+    ok(`${f.split('/').slice(-3).join('/')}: a DM card draws as the league FixCard`, c.includes("m.kind === 'computer' && m.fix ? (") && c.includes('<FixCard m={{ body: m.body, fix: m.fix }} />'));
+  }
+}
+
 if (fails) { console.log(`\nFAIL — ${fails} assertion(s) failed.`); process.exit(1); }
 console.log('\nPASS — @computer answers in a DM.');

@@ -311,31 +311,62 @@ async function closeStory(n) {
   return { summary: '', report: '' };
 }
 
+/** The header of an issue that is still open (v0.730.23): the card posted
+ *  ahead of the close, when a fix shipped but the issue waits to be seen to
+ *  hold (CLAUDE.md: "Unconfirmed → keep it open"). Pure. */
+export function updateHeader(n, summary) {
+  const s = String(summary ?? '').trim();
+  return `Issue #${n} update.${s ? ` ${/[.!?…]$/.test(s) ? s : `${s}.`}` : ''}`;
+}
+
+/** Where an ask was made, as the table its card goes in (v0.730.23: a DM as
+ *  well as a league chat — "identical to the at computer process in regular
+ *  chat"). league_message keeps the card in txn.fix, dm_message in fix (0511). */
+async function askHome(ask) {
+  if (ask.source === 'league') {
+    const { data: m } = await db().from('league_message').select('league_id, created_at').eq('id', ask.message_id).maybeSingle();
+    return m ? { table: 'league_message', key: 'league_id', id: m.league_id, at: m.created_at,
+      row: (body, fix) => ({ league_id: m.league_id, author_id: null, kind: 'computer', body, mentions: [], txn: { fix } }),
+      patch: (body, fix) => ({ body, txn: { fix } }) } : null;
+  }
+  if (ask.source === 'dm') {
+    const { data: m } = await db().from('dm_message').select('thread_id, created_at').eq('id', ask.message_id).maybeSingle();
+    return m ? { table: 'dm_message', key: 'thread_id', id: m.thread_id, at: m.created_at,
+      row: (body, fix) => ({ thread_id: m.thread_id, author_id: null, kind: 'computer', body, fix }),
+      patch: (body, fix) => ({ body, fix }) } : null;
+  }
+  return null;
+}
+
 /** Rewrite an already-posted close line as the card (ops "computer-recard",
- *  v0.599.0): the league line the relay posted for issue n — the old
- *  "✅ Fixed (#n)…" or an earlier card — gets the header and report the
- *  close story gives now. Posts one if none is found. */
+ *  v0.599.0): the line the relay posted for issue n — the old "✅ Fixed (#n)…"
+ *  or an earlier card — gets the header and report the close story gives now.
+ *  Posts one if none is found. Since v0.730.23 in a DM too, and for an issue
+ *  still open (a shipped fix waiting to be seen to hold) as an "update" card,
+ *  which the close later rewrites. */
 export async function recard(n) {
   const iss = await gh(`/issues/${n}`);
-  if (iss.state !== 'closed') throw new Error(`#${n} is not closed`);
+  const closed = iss.state === 'closed';
   const { data: ask } = await db().from('computer_ask').select('source, message_id').eq('issue', n).maybeSingle();
-  if (!ask || ask.source !== 'league') throw new Error(`#${n} was not asked in a league chat`);
-  const { data: m } = await db().from('league_message').select('league_id, created_at').eq('id', ask.message_id).maybeSingle();
-  if (!m) throw new Error(`the ask behind #${n} is gone`);
+  if (!ask) throw new Error(`#${n} was not asked in a chat`);
+  const home = await askHome(ask);
+  if (!home) throw new Error(`the ask behind #${n} is gone`);
   const story = await closeStory(n);
-  const body = closedHeader(n, story.summary || titleSummary(String(iss.title ?? '').replace(/^@computer:\s*/i, '')), iss.state_reason === 'not_planned');
+  if (!closed && !story.summary && !story.report) throw new Error(`#${n} is open with no fix note to post`);
+  const summary = story.summary || titleSummary(String(iss.title ?? '').replace(/^@computer:\s*/i, ''));
+  const body = closed ? closedHeader(n, summary, iss.state_reason === 'not_planned') : updateHeader(n, summary);
   const fix = { issue: n, url: iss.html_url ?? `https://github.com/${REPO}/issues/${n}`, report: story.report || '', ...(story.pr ? { pr: story.pr } : {}) };
-  const { data: lines } = await db().from('league_message').select('id, body')
-    .eq('league_id', m.league_id).eq('kind', 'computer').gt('created_at', m.created_at).order('created_at', { ascending: false }).limit(50);
-  const old = (lines ?? []).find((l) => l.body.startsWith(`✅ Fixed (#${n})`) || l.body.startsWith(`Issue #${n} closed`));
+  const { data: lines } = await db().from(home.table).select('id, body')
+    .eq(home.key, home.id).eq('kind', 'computer').gt('created_at', home.at).order('created_at', { ascending: false }).limit(50);
+  const old = (lines ?? []).find((l) => l.body.startsWith(`✅ Fixed (#${n})`) || l.body.startsWith(`Issue #${n} closed`) || l.body.startsWith(`Issue #${n} update`));
   if (old) {
-    const { error } = await db().from('league_message').update({ body, txn: { fix } }).eq('id', old.id);
+    const { error } = await db().from(home.table).update(home.patch(body, fix)).eq('id', old.id);
     if (error) throw new Error(error.message);
-    return { issue: n, updated: old.id, report_chars: fix.report.length };
+    return { issue: n, where: ask.source, updated: old.id, report_chars: fix.report.length };
   }
-  const { data: ins, error } = await db().from('league_message').insert({ league_id: m.league_id, author_id: null, kind: 'computer', body, mentions: [], txn: { fix } }).select('id').single();
+  const { data: ins, error } = await db().from(home.table).insert(home.row(body, fix)).select('id').single();
   if (error) throw new Error(error.message);
-  return { issue: n, posted: ins.id, report_chars: fix.report.length };
+  return { issue: n, where: ask.source, posted: ins.id, report_chars: fix.report.length };
 }
 
 /** One relay pass. Returns push rows (DM asks) for the caller to enqueue. */
@@ -371,7 +402,12 @@ export async function relayFixes(now = Date.now()) {
           if (e) { log('relay failed', a.issue, e.message); continue; }
         }
       } else {
-        const { data: m } = await db().from('dm_message').select('author_id').eq('id', a.message_id).maybeSingle();
+        const { data: m } = await db().from('dm_message').select('author_id, thread_id').eq('id', a.message_id).maybeSingle();
+        // THE CARD IN THE DM (v0.730.23, 0511): the same card a league ask gets, in the thread it came from
+        if (m?.thread_id) {
+          const { error: e } = await db().from('dm_message').insert({ thread_id: m.thread_id, author_id: null, kind: 'computer', body: line, fix });
+          if (e) { log('relay failed', a.issue, e.message); continue; }
+        }
         if (m?.author_id) receipts.push({
           app_user_id: m.author_id, kind: 'chat', title: `Closed · #${a.issue}`, body: line.replace(/^Issue #\d+ closed[^.]*\.\s*/, '') || line,
           data: { url: `https://github.com/${REPO}/issues/${a.issue}` }, dedupe_key: `computer-fixed:dm${a.message_id}`,

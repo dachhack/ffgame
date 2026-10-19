@@ -141,7 +141,7 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
 // Founder: "Issue xxx closed. (Short 1-2 sentence description). Click to
 // expand a brief report of the issue and solution". The header is the body;
 // the report opens under it.
-function FixCard({ m }: { m: ChatMessage }) {
+function FixCard({ m }: { m: Pick<ChatMessage, 'body' | 'fix'> }) {
   const [open, setOpen] = useState(false);
   const f = m.fix!;
   const shelved = /\(not planned\)/.test(m.body);
@@ -1224,7 +1224,10 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
       <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick} catchUp={catchUp}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
         {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Say hello.</div>}
-        {msgs?.map((m) => m.kind === 'computer' ? (
+        {msgs?.map((m) => m.kind === 'computer' && m.fix ? (
+          // 0511: the closed-issue card, as in league chat — the same FixCard
+          <div key={m.id} data-mid={m.id} style={{ marginBottom: 8 }}><FixCard m={{ body: m.body, fix: m.fix }} /></div>
+        ) : m.kind === 'computer' ? (
           // 0509: Computer's reply to an @computer ask — nobody's bubble, its own line
           <div key={m.id} data-mid={m.id} style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
             <div style={{ maxWidth: '86%', borderRadius: 10, padding: '6px 11px', background: 'var(--surface)', border: '1px dashed var(--bd)' }}>
