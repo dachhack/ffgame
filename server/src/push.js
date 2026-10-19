@@ -309,7 +309,7 @@ async function detectChat() {
     .gt('created_at', sinceIso());
   for (const d of dms ?? []) {
     const t = d.thread;
-    if (!t) continue;
+    if (!t || !d.author_id) continue;   // 0509: Computer's reply is nobody's message to be notified of
     const to = d.author_id === t.user_lo ? t.user_hi : t.user_lo;
     rows.push({
       app_user_id: to, kind: 'chat',

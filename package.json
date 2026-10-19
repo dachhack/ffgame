@@ -59,6 +59,8 @@
     "check:engineparity": "tsx scripts/check-engine-parity.mjs",
     "check:backupwin": "tsx scripts/check-backup-window.mjs",
     "check:changelog": "tsx scripts/check-changelog.mjs",
+    "check:probesql": "node scripts/check-probe-sql.mjs",
+    "check:computer": "cd server && tsx test/computer.mjs && tsx test/computer-dev.mjs && tsx test/computer-dm.mjs",
     "check:hooks": "tsx scripts/check-hooks.mjs --selftest && tsx scripts/check-hooks.mjs",
     "check:winphase": "tsx scripts/check-window-phase.mjs",
     "check:shopclock": "tsx scripts/check-shop-clock.mjs",

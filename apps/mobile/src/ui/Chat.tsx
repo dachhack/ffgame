@@ -1196,7 +1196,15 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         scrollEventThrottle={64} style={{ flex: 1, paddingTop: 8 }}>
         {msgs == null && <Mono size={10} tone="faint">Loading…</Mono>}
         {msgs?.length === 0 && <Mono size={10} tone="faint">Say hello.</Mono>}
-        {msgs?.map((m) => (
+        {msgs?.map((m) => m.kind === 'computer' ? (
+          // 0509: Computer's reply to an @computer ask — nobody's bubble, its own line
+          <View key={m.id} onLayout={sticky.rowLayout(m.id)} style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 8 }}>
+            <View style={{ maxWidth: '86%', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed' }}>
+              <Text numberOfLines={1} style={{ fontFamily: MONO, fontSize: fs(8), letterSpacing: 1, color: t.faint, marginBottom: 2 }}>COMPUTER · {fmtWhen(m.at)}</Text>
+              <Text style={{ fontSize: fs(12), lineHeight: fs(17), color: t.dim }}>{m.body}</Text>
+            </View>
+          </View>
+        ) : (
           <View key={m.id} onLayout={sticky.rowLayout(m.id)} style={{ flexDirection: 'row', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             {/* 0351: the same long press as the league channel, offering the
                 one thing that applies here — your own words, reworded. */}

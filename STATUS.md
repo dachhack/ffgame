@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.20 — Computer answers in DMs; probes can't read DMs
+
+> - Ask @computer in a DM and Computer now replies right there that it got the message, as it already did in league chat.
+> - The repo's diagnostic queries can no longer read anyone's direct messages.
+
+Founder: "yes, block DM tables in probes. Can you check my DMs in gridiron
+gang. I sent a message to the computer there. I'd like it to log an issue and
+respond that the message was received." The ask was filed (#1372) without
+reading any DMs: the worker had already opened it. What never came was a reply
+in the DM, because a DM line needed a human author.
+
+- 0509: a DM line may have no author when its kind is 'computer';
+  dm_messages carries `kind` and reads `mine` false on those lines. The
+  migration also posts the missed reply for DM asks filed in the last three
+  days (#1372's).
+- server/src/computer.js posts the house reply into the DM, as it does in league chat
+  and the dev room; push.js sends no "New direct message" for it. Web and
+  phone draw it as a centered COMPUTER line, not the other person's bubble.
+- scripts/check-probe-sql.mjs refuses an ops `query` file that names a DM
+  table (or the bare word "dm", so a name built in pieces is caught too): in
+  CI (probe-guard.yml) and again in ops-run.yml right before psql. A text
+  check stops accidents and anything a reviewer would see; it is not a
+  database permission.
+- check:computer (new) runs the three @computer tests, computer-dm.mjs among
+  them; check:probesql runs the guard and its self-test.
+
 ### v0.730.19 — The matchup shows what your power-ups did
 
 > - Under each team's score on a contest matchup, a "⚡ +2.9" chip shows how many points that side's power-ups added or cost. Tap it for each one: the player power-ups and the team bonuses that paid.

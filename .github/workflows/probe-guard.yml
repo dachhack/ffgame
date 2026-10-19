@@ -1,0 +1,22 @@
+name: Probes read no DMs
+# NO DMs IN A PROBE (v0.730.20). Founder: "yes, block DM tables in probes."
+# An ops `query` request prints what it reads into a public log, so a probe
+# file that names a DM table fails here, before it can merge. ops-run.yml runs
+# the same check again right before psql.
+on:
+  push:
+    paths:
+      - 'ops/run/**'
+      - 'scripts/db/**'
+      - 'scripts/check-probe-sql.mjs'
+      - '.github/workflows/probe-guard.yml'
+      - '.github/workflows/ops-run.yml'
+jobs:
+  probes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: No probe names a DM table
+        run: node scripts/check-probe-sql.mjs

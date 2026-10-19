@@ -1224,7 +1224,15 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
       <MessageScroll dep={msgs?.length ?? 0} onFile={img.pick} catchUp={catchUp}>
         {msgs == null && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Loading…</div>}
         {msgs?.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--faint)' }}>Say hello.</div>}
-        {msgs?.map((m) => (
+        {msgs?.map((m) => m.kind === 'computer' ? (
+          // 0509: Computer's reply to an @computer ask — nobody's bubble, its own line
+          <div key={m.id} data-mid={m.id} style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <div style={{ maxWidth: '86%', borderRadius: 10, padding: '6px 11px', background: 'var(--surface)', border: '1px dashed var(--bd)' }}>
+              <div className="mono" style={{ fontSize: 8, letterSpacing: 1, color: 'var(--faint)', marginBottom: 2 }}>COMPUTER · {fmtWhen(m.at)}</div>
+              <div style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--dim)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{m.body}</div>
+            </div>
+          </div>
+        ) : (
           <div key={m.id} data-mid={m.id} style={{ display: 'flex', justifyContent: m.mine ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
             <div style={{ maxWidth: '78%', borderRadius: 10, padding: '7px 11px', background: m.mine ? 'color-mix(in srgb, var(--you) 18%, var(--surface))' : 'var(--bg)', border: '1px solid var(--bd)' }}>
               {editing === m.id ? (
