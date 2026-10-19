@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/monday-showdown.sql",
+  "why": "Founder: 'I want this to be a native league that runs just tonight with 2 players. Do I need to sync the season to get the matchup board?' over Monday Showdown's commissioner page (POD, 0/2 enrolled). Read only: its kind, week and settings, its seats, any matchups, and tonight's slate."
+}
