@@ -21,7 +21,7 @@ import { normTeam, TeamMap } from '../../packages/core/src/data/teamCodes.ts';
 import { statsForSlug, hasStatsForSlug } from '../../packages/core/src/data/players.ts';
 import { PROJ_2026, PROJ_2026_SID } from '../../packages/core/src/data/proj2026.ts';
 import { dfsBullseyeConfigOf, dfsCard, aimBuild, DFS_SLOT_NAMES, dfsSlotPos } from '../../packages/core/src/engine/dfsBullseye.ts';
-import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds, contestPlayoffs, contestPlaysFor, contestPlayCap, aiContestPlays, contestCoinRules } from '../../packages/core/src/engine/contest.ts';
+import { contestConfigOf, contestCard, contestAutoBuild, noShowBuilds, contestOwnLockMs, contestPlayoffs, contestPlaysFor, contestPlayCap, aiContestPlays, contestCoinRules } from '../../packages/core/src/engine/contest.ts';
 import { leagueWeekProj } from '../../packages/core/src/engine/contestBuilder.ts';
 import { leagueCatalogOf } from '../../packages/core/src/engine/projScoring.ts';
 import { priceBoard } from '../../packages/core/src/engine/salaryPricing.ts';
@@ -270,7 +270,7 @@ export async function ensurePods(week, season, idx) {
   // (0463 retired the automatic weekly open Bullseye contest: Bullseye is now
   // leagues a commissioner makes — one week, or the season.)
   const { data: all } = await db().from('league')
-    .select('id, name, kind, contest_week, settings_json').in('kind', ['pod', 'weekly', 'dfs', 'bullseye']).eq('season', season);
+    .select('id, name, kind, contest_week, settings_json, created_at').in('kind', ['pod', 'weekly', 'dfs', 'bullseye']).eq('season', season);
   // Toss expired showdowns: their members' home screens drop the card once
   // every seat is unenrolled. League + matchup rows stay as history.
   let tossed = 0;
@@ -314,7 +314,12 @@ export async function ensurePods(week, season, idx) {
     const lead = contest ? 0 : config.lockLeadMs;
     const teamLocked = (team) => { const k = kicks?.get(team); return Number.isFinite(k) && k - lead <= Date.now(); };
     const lockAt = lockMs ? new Date(lockMs - lead).toISOString() : null;
-    const lockPassed = lockMs != null && lockMs - lead <= Date.now();
+    // A CONTEST LEAGUE MADE MID-WEEK (v0.730.28, Monday Showdown, made Monday
+    // for week 6): its no-show deadline is the first kickoff AFTER it was made
+    // — the week's Thursday kickoff had passed before anyone could build, so
+    // every human seat read as a no-show and was auto-built at once.
+    const ownLockMs = contest ? contestOwnLockMs(Date.parse(pod.created_at ?? ''), lockMs, kicks?.values() ?? []) : lockMs;
+    const lockPassed = ownLockMs != null && ownLockMs - lead <= Date.now();
     const podCatalog = contest ? leagueCatalogOf({ scoring: pod.settings_json?.scoring_classic ?? null, ppr: pod.settings_json?.ppr }) : null;
     const contestCardNow = contest?.contest === 'bullseye' ? contestCard(pod.id, week, contest.slots, podCatalog) : null;
     // THE CPU'S POOL (v0.695.0, founder: "CPUs failed to set HC"): priced the league's own way, as the builder's
@@ -348,7 +353,10 @@ export async function ensurePods(week, season, idx) {
       const rows = need.map(({ roster_id, how }) => {
         if (contest) {
           if (how === 'zero') return { league_id: pod.id, week, roster_id, starters_json: [] };
-          const built = contestAutoBuild(cpuPool, contest, `${pod.id}|w${week}|aim${roster_id}`, contestCardNow);
+          // ONLY PLAYERS STILL TO PLAY (v0.730.28): a build made after some games have kicked off must not
+          // take a player whose game has started (his points are already known) — a Monday-made league's
+          // CPU took Josh Allen and Kyren Williams from Sunday and locked them in.
+          const built = contestAutoBuild(cpuPool.filter((b) => !teamLocked(b.team)), contest, `${pod.id}|w${week}|aim${roster_id}`, contestCardNow);
           return {
             league_id: pod.id, week, roster_id,
             starters_json: contest.slots.filter((d) => built[d.slot]).map((d) => ({ slot: d.slot, sleeper_id: null, player_slug: built[d.slot], pos: board.find((b) => b.slug === built[d.slot])?.pos ?? d.pos[0] })),

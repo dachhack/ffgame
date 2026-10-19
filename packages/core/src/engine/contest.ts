@@ -120,6 +120,19 @@ export function contestPlayoffs(settings: Record<string, unknown> | null | undef
  *  `cpu` a built squad, `zero` an empty one, `drop` nothing. Golf's zero is
  *  the BEST score, so an empty squad there only forfeits when every spot
  *  prices a scoreless player (zero_pts); otherwise the CPU builds instead. */
+/** A CONTEST LEAGUE'S OWN LOCK (v0.730.28): when a no-show seat is built for.
+ *  The week's first kickoff, unless the league was made after it (Monday
+ *  Showdown, made Monday for week 6, while Thursday's game had long gone):
+ *  then the first kickoff after it was made. Null when no game is left to
+ *  kick off. Pure. */
+export function contestOwnLockMs(createdMs: number | null, weekLockMs: number | null, kickoffs: Iterable<number>): number | null {
+  if (weekLockMs == null) return null;
+  if (createdMs == null || !Number.isFinite(createdMs) || createdMs <= weekLockMs) return weekLockMs;
+  let next = Infinity;
+  for (const k of kickoffs) if (Number.isFinite(k) && k > createdMs && k < next) next = k;
+  return Number.isFinite(next) ? next : null;
+}
+
 export function noShowBuilds(
   cfg: ContestConfig,
   members: { sleeper_roster_id: number; enrolled?: boolean | null; app_user_id?: string | null; controller?: string | null }[],

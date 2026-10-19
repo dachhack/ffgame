@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/monday-showdown-squads.sql",
+  "why": "A Monday Showdown member: 'it says my team is locked in as … who have all already played.' Read only: each seat's state and week-6 squad, each pick's kickoff and whether it was before the league was made — to confirm the worker auto-built squads from finished games before anyone could pick."
+}
