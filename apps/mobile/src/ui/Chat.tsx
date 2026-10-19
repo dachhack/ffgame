@@ -122,7 +122,7 @@ function ReportLine({ m, onOpen }: { m: ChatMessage; onOpen: () => void }) {
 // ── THE CLOSED-ISSUE CARD (v0.598.0, 0415) — the web twin ──────────────────
 // "Issue xxx closed. (Short 1-2 sentence description). Click to expand a brief
 // report of the issue and solution."
-function FixCard({ m }: { m: ChatMessage }) {
+function FixCard({ m }: { m: Pick<ChatMessage, 'body' | 'fix'> }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const f = m.fix!;
@@ -1196,7 +1196,10 @@ function DmThreadView({ leagueId, thread, onBack, onThreadId }: {
         scrollEventThrottle={64} style={{ flex: 1, paddingTop: 8 }}>
         {msgs == null && <Mono size={10} tone="faint">Loading…</Mono>}
         {msgs?.length === 0 && <Mono size={10} tone="faint">Say hello.</Mono>}
-        {msgs?.map((m) => m.kind === 'computer' ? (
+        {msgs?.map((m) => m.kind === 'computer' && m.fix ? (
+          // 0511: the closed-issue card, as in league chat — the same FixCard
+          <View key={m.id} onLayout={sticky.rowLayout(m.id)} style={{ marginBottom: 8 }}><FixCard m={{ body: m.body, fix: m.fix }} /></View>
+        ) : m.kind === 'computer' ? (
           // 0509: Computer's reply to an @computer ask — nobody's bubble, its own line
           <View key={m.id} onLayout={sticky.rowLayout(m.id)} style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 8 }}>
             <View style={{ maxWidth: '86%', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6, backgroundColor: t.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderStyle: 'dashed' }}>

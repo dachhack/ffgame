@@ -3807,6 +3807,8 @@ export interface DmMessage {
   /** 0509: 'computer' for Computer's reply to an @computer ask (no author;
    *  `mine` is false for both people). Older rows read 'text'. */
   kind?: 'text' | 'computer';
+  /** 0511: Computer's closed-issue card, as a league line carries it (ChatMessage.fix). */
+  fix?: { issue: number; url?: string; report: string; pr?: number } | null;
 }
 /** `caption` (0350) rides beside the body rather than inside it: the body of an
  *  image message stays the bare URL every client already renders inline. */
