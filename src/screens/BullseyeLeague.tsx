@@ -270,6 +270,8 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
   // standings arrows walk these.
   const weeks = [...new Set([...(lg.weeks ?? []), ...(lg.week != null ? [lg.week] : [])])].sort((x, y) => x - y);
   const seated = !!lg.me;
+  /** THE COMMISSIONER WITH NO SEAT WATCHES (v0.730.27): the matchups are theirs to referee, and 0512 opens every pick to them. */
+  const watching = seated || !!lg.commish;
   // THE LEAGUE'S OWN FRAME (v0.663.2, founder: "Why does it have this skinny
   // stripped down league view. Match the other leagues please."): the hub's
   // header — crest, name, type line, COMMISH badge, ⚙ SETTINGS — and the
@@ -278,7 +280,7 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
   const strip: StripRoom | null = room === 'league' ? 'home' : room === 'matchup' ? 'matchup' : room === 'team' ? 'team' : null;
   return (
     <div style={{ maxWidth: wide ? 1080 : 560, margin: '0 auto', display: 'grid', gap: 12, paddingBottom: 24 }}>
-      <LeagueStrip leagueId={leagueId} name={lg.name ?? 'Contest'} hideName rosterId={lg.me?.roster_id ?? null} native={false}
+      <LeagueStrip leagueId={leagueId} name={lg.name ?? 'Contest'} hideName rosterId={lg.me?.roster_id ?? null} watch={!!lg.commish} native={false}
         here={strip} onGo={(r) => setRoom(r === 'home' ? 'league' : r === 'team' ? 'team' : 'matchup')} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div className="grotesk" style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 24 }}>{CONTEST_EMOJI[b.contest ?? 'bullseye']}</div>
@@ -295,7 +297,7 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
         </button>
       </div>
 
-      {room === 'matchup' && seated && (
+      {room === 'matchup' && watching && (
         // THE CARD TABLE (v0.677.0): the week's matchup as two columns of
         // cards — yours face up, theirs turning over at each kickoff — with
         // the standings beside it on a wide screen. Remounted on every visit
@@ -308,7 +310,7 @@ export function BullseyeLeaguePage({ leagueId, initialRoom, onBack: _onBack, onG
           {wide && <div style={{ display: 'grid', gap: 12 }}><LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} compact /></div>}
         </div>
       )}
-      {(room === 'league' || (room === 'matchup' && !seated) || (room === 'team' && !seated)) && <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} />}
+      {(room === 'league' || (room === 'matchup' && !watching) || (room === 'team' && !seated)) && <LeagueRoom lg={lg} weeks={weeks} week={week} onWeek={setWeek} />}
       {room === 'team' && seated && (
         // MY TEAM is where the weekly squad is built (v0.677.0, founder:
         // "make my team the place where you select your weekly team"); the

@@ -271,7 +271,8 @@ export function BullseyeLeagueRoom({ leagueId, room, onRoom, onBack, onGone }: {
       </View>
     );
   }
-  if (room === 'matchup' && lg.me && week != null) {
+  // A COMMISSIONER WITH NO SEAT watches it too (v0.730.27): contest_matchup lets them in, and 0512 opens every pick to them.
+  if (room === 'matchup' && (lg.me || lg.commish) && week != null) {
     // THE CARD TABLE (v0.677.0): the week's matchup as two columns of cards,
     // remounted on every visit so the reveal flips play again. It owns its
     // scroll since v0.695.0, so the hand at its foot pins over the room bar.

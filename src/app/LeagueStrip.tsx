@@ -38,7 +38,7 @@ export type StripRoom = 'home' | 'matchup' | 'draft' | 'team';
  *  only from a real answer, so a miss means "not asked yet", never "no". */
 const DRAFT_DONE = new Map<string, boolean>();
 
-export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hideName }: {
+export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hideName, watch = false }: {
   leagueId: string;
   name: string;
   /** The hub prints its own identity block (v0.356.9) — the strip stays for
@@ -46,6 +46,8 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
   hideName?: boolean;
   /** null when this account has no seat: no lineup and no team desk. */
   rosterId: number | null;
+  /** A contest league's commissioner without a seat still has MATCHUP — to watch (v0.730.27). */
+  watch?: boolean;
   native: boolean;
   /** Which room reads as current. null on rooms the strip doesn't name (the
    *  commissioner's console, the results table) — nothing is lit, and the
@@ -126,7 +128,7 @@ export function LeagueStrip({ leagueId, name, rosterId, native, here, onGo, hide
 
   const rooms: { id: StripRoom | 'chat'; label: string; show: boolean }[] = [
     { id: 'home', label: 'LEAGUE', show: true },
-    { id: 'matchup', label: 'MATCHUP', show: rosterId != null },
+    { id: 'matchup', label: 'MATCHUP', show: rosterId != null || watch },
     { id: 'draft', label: 'DRAFT', show: native && draftDone === false },
     // ANY SEAT (v0.356.17): native gets the full desk, an imported league the
     // read-only page the web finally has. The `native &&` here was the gate —

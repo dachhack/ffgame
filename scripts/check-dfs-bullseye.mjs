@@ -424,5 +424,15 @@ for (const f of ['src/screens/LiveOnboard.tsx', 'apps/mobile/src/screens/Leagues
   ok('web: #/watch/<id> is a route a cold load restores', store.includes("case 'watch': return seg[1] ? { name: 'watch', matchupId: decodeURIComponent(seg[1]) } : null;") && read('src/App.tsx').includes("route.name === 'watch' && <WatchMatchup"));
   ok('both matchups carry SHARE with the watch link', read('src/screens/ContestMatchup.tsx').includes('watchMatchupUrl(m.id)') && read('apps/mobile/src/screens/ContestMatchup.tsx').includes('Share.share({ message: `Follow it live: ${watchMatchupUrl(m.id)}`'));
 }
+// v0.730.27: a contest league's commissioner with no seat can watch its matchups
+{
+  const app = read('apps/mobile/App.tsx');
+  ok('phone: a seatless commissioner opens a contest league on MATCHUP', app.includes("setView(rosterId == null ? (isContestKind(kind) ? 'picks' : 'commishtools') : (landing ?? 'home'));") && app.includes("open.rosterId != null || open.commish ? 'matchup' : 'league'") && app.includes("open.rosterId != null || (open.commish && isContestKind(open.kind))"));
+  ok('phone: the managed card says what kind of league it is', read('apps/mobile/src/screens/Leagues.tsx').includes("onOpen(l.league_id, null, l.name, l.provider === 'native', true, undefined, undefined, l.kind)"));
+  ok('phone: the matchup room lets the commissioner in', read('apps/mobile/src/screens/BullseyeLeague.tsx').includes("room === 'matchup' && (lg.me || lg.commish) && week != null"));
+  const web = read('src/screens/BullseyeLeague.tsx');
+  ok('web: the matchup room and its tab let the commissioner in', web.includes("const watching = seated || !!lg.commish;") && web.includes("room === 'matchup' && watching &&") && web.includes('watch={!!lg.commish}') && read('src/app/LeagueStrip.tsx').includes("show: rosterId != null || watch"));
+  ok('web: a contest league\'s commissioner-only card has ▦ matchups', read('src/screens/LiveOnboard.tsx').includes('onWatch={isContestKind(l.kind) && onContest ? () => onContest(l.league_id) : undefined}'));
+}
 if (fails) { console.log(`\n${fails} DFS-BULLSEYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DFS-BULLSEYE ASSERTIONS PASSED');

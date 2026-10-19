@@ -382,7 +382,7 @@ export function Leagues({ userId, onOpen, onBoard, onAdd, onBullseyeStart }: {
       {filter !== 'weekly' && managed.map((l) => (
         <Pressable
           key={`mgmt-${l.league_id}`}
-          onPress={() => { tap(); onOpen(l.league_id, null, l.name, l.provider === 'native', true); }}
+          onPress={() => { tap(); onOpen(l.league_id, null, l.name, l.provider === 'native', true, undefined, undefined, l.kind); }}
           android_ripple={{ color: alpha(t.warn, 16) }}
           style={({ pressed }) => ({
             backgroundColor: t.surface, overflow: 'hidden',

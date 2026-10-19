@@ -1174,6 +1174,7 @@ function Enroll({ session, view, setView, commishCode, admin, onFields }: { sess
         setTarget({ leagueId, rosterId, week, name }); setView('podbuild');
       })()}
       onManage={(id) => guard(() => { setHomeFor(null); setManageId(id); setManageTab(undefined); setView('commishdash'); })()}
+      onContest={(id) => { setHomeFor(null); setBullLeague(id); setView('bleague'); }}
       onDraft={(leagueId, rosterId) => guard(() => { setHomeFor(null); setTarget({ leagueId, rosterId }); setView('draft'); })()}
       onOpen={(e) => {
         // Presence (0151) — skipped under browse-as: the admin looking is
@@ -1225,10 +1226,11 @@ function Enroll({ session, view, setView, commishCode, admin, onFields }: { sess
 
 // The signed-in home: one card per enrolled league showing your team, this week's
 // matchup, a commissioner badge where you run the league, and a big Set-lineup CTA.
-function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onPodBuild, onManage, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate, glance, onFields }: {
+function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onPodBuild, onManage, onContest, onDraft, onAdd, onFind, onDeleted, isCommish, onOpen, unreads, slate, glance, onFields }: {
   enrollments: Enrollment[]; commishLeagues: AdminLeague[]; cards: Record<string, MatchupCard>; commishIds: Set<string>;
   onPodBuild: (leagueId: string, rosterId: number, week?: number, name?: string) => void;
   onManage: (leagueId: string) => void;
+  /** A contest league with no seat of mine: open its matchups (v0.730.27). */ onContest?: (leagueId: string) => void;
   onDraft: (leagueId: string, rosterId: number) => void; onAdd: () => void; onFind: () => void;
   onDeleted: () => void; isCommish: boolean;
   /** Open the league's HOME page (0182) — the card's primary action. */
@@ -1413,7 +1415,7 @@ function LeagueHome({ enrollments: seats, commishLeagues, cards, commishIds, onP
       {/* Commissioned leagues on top; players below (hidden under the commish filter). */}
       {/* .lg-grid (styles.css): on a desktop every box is one size, its lines unwrapped (v0.707.6). */}
       <div className="lg-grid">
-        {filter !== 'weekly' && commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} />)}
+        {filter !== 'weekly' && commishOnly.map((l) => <CommishOnlyCard key={l.league_id} l={l} onManage={() => onManage(l.league_id)} onWatch={isContestKind(l.kind) && onContest ? () => onContest(l.league_id) : undefined} />)}
         {enrolledCommish.filter((e) => filter !== 'weekly' || weekly(e)).map((e) => e.league?.is_mock
           ? <MockLeagueCard key={enrollKey(e)} e={e} onDraft={() => onDraft(e.league_id, e.sleeper_roster_id)} onDeleted={onDeleted} />
           : <LeagueCard key={enrollKey(e)} e={e} commish slate={slate[enrollKey(e)]} glance={glance[enrollKey(e)]} seats={seatsIn[e.league_id]} unread={unreads[e.league_id]} onPodBuild={() => onPodBuild(e.league_id, e.sleeper_roster_id, e.league?.contest_week ?? cards[enrollKey(e)]?.matchup.week, e.league?.name)} onOpen={() => onOpen(e)} />
@@ -1470,7 +1472,8 @@ function SeasonCountdown() {
 }
 
 // A league you commission but don't play in — no matchup card, just a way in to manage it.
-function CommishOnlyCard({ l, onManage }: { l: AdminLeague; onManage: () => void }) {
+function CommishOnlyCard({ l, onManage, onWatch }: { l: AdminLeague; onManage: () => void;
+  /** A contest league (v0.730.27): its matchups, to watch — every pick open to a commissioner with no seat (0512). */ onWatch?: () => void }) {
   // Mirror LeagueCard's anatomy (identity row + status pill, boxed info strip,
   // full-width primary button) so play and commish-only cards read as one family.
   // You don't have a team here, so the info strip shows roster-fill instead of a
@@ -1508,6 +1511,7 @@ function CommishOnlyCard({ l, onManage }: { l: AdminLeague; onManage: () => void
           and this one kept it, which is exactly the drift the "mirror
           LeagueCard's anatomy" note above is meant to prevent. The league's own
           scoreboard is inside ⚑ manage league. */}
+      {onWatch && <button onClick={onWatch} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--you)', background: 'transparent', border: '1px solid var(--you)', borderRadius: 6, padding: '10px 0', cursor: 'pointer', marginTop: 9 }}>▦ matchups</button>}
       <button onClick={onManage} className="mono" style={{ width: '100%', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--on-accent)', background: 'var(--you)', border: 'none', borderRadius: 6, padding: '11px 0', cursor: 'pointer', marginTop: 9, boxShadow: '0 0 18px color-mix(in srgb, var(--you) 22%, transparent)' }}>⚑ manage league</button>
     </div>
   );
