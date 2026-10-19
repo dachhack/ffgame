@@ -101,7 +101,7 @@ ok('worker: scored under the league\'s catalog, RET spots as RET', /classicPoint
 ok('lock: no drip auto-lineup for a Bullseye contest', /settings_json\?\.dfs_bullseye === true\) continue/.test(read('server/src/lock.js')));
 const pods = read('server/src/pods.js');
 // v0.695.0: contest builds take cpuPool — `playable` (the ruled out dropped) re-priced the league's way.
-ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(cpuPool, contest,/.test(pods) && /const cpuPool = contest \? playable\.map/.test(pods));
+ok('pods: AI seats and no-shows aim at the card', /aimBuild\(board, card/.test(pods) && /contestAutoBuild\(cpuPool\.filter\(\(b\) => !teamLocked\(b\.team\)\), contest,/.test(pods) && /const cpuPool = contest \? playable\.map/.test(pods));
 // v0.673.0: a leaderboard league takes the no-show block (its NO SQUAD BY LOCK
 // rule) and then leaves the loop — no AI seats to sub, no pairs to make.
 ok('pods: a leaderboard contest gets its no-shows, then leaves the seat loop', /noShowBuilds\(contest, mems \?\? \[\], haveSet, lockPassed\)/.test(pods) && /if \(boardLeague\) continue;/.test(pods) && !/if \(contest && contest\.format === 'board'\) continue;/.test(pods));
@@ -333,7 +333,7 @@ const SP = await import('../packages/core/src/engine/salaryPricing.ts');
 ok('pricing: the replacement is the body after the 12-team starters', SP.STARTERS_12.RB === 24 && SP.STARTERS_12.WR === 36 && SP.TARGET_SHARE > 1);
 ok('pods: boards are priced by priceBoard and carry priced_proj', /priceBoard\(rows\)/.test(pods) && /priced_proj: row\.proj/.test(pods));
 ok('pods: the projection refreshes, the price does not', /export async function refreshBoardProj/.test(pods) && /salary: r\.salary, proj: next/.test(pods));
-ok('pods: CPU builds skip the ruled out and swap them before lock', /const playable = board\.filter\(\(r\) => !outs\.has\(r\.slug\)\)/.test(pods) && /contestAutoBuild\(cpuPool, contest,/.test(pods) && /\|sub\$\{e\.roster_id\}/.test(pods));
+ok('pods: CPU builds skip the ruled out and swap them before lock', /const playable = board\.filter\(\(r\) => !outs\.has\(r\.slug\)\)/.test(pods) && /contestAutoBuild\(cpuPool\.filter\(\(b\) => !teamLocked\(b\.team\)\), contest,/.test(pods) && /\|sub\$\{e\.roster_id\}/.test(pods));
 // v0.679.2: a CPU squad built before the board carried a spot's position gets
 // the spot filled later; the board's missing-position check runs every tick.
 ok('pods: the CPU pass fills a spot it left empty, not only a ruled-out one', /const empty = contest\.slots\.filter\(\(d\) => !filled\.has\(d\.slot\)\)/.test(pods) && /if \(!hurt\.length && !empty\.length\) continue;/.test(pods) && /if \(contest\) \{\n      const aiSeats/.test(pods));
