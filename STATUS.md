@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.29 — Monday Showdown's squads cleared to rebuild
+
+> - Monday Showdown's week 6 squads, filled by mistake with players whose games were already over, are cleared. Both teams can build from tonight's WAS–SF game before kickoff.
+
+Ops 075 confirmed v0.730.28's cause against the data: all 16 picks in both
+seats were Sunday players whose games kicked off before the league was made
+(Josh Allen, Kyren Williams, Brock Bowers…), auto-built at once by the old
+no-show deadline. Migration 0514 is Monday Showdown only, by id, and
+re-runnable:
+- It deletes each week-6 squad that holds no WAS/SF player, so a squad
+  already rebuilt is kept.
+- It drops the matchup's stale score.
+- It posts one Computer note in the league chat.
+
+The league's entry deadline is `open`, so an empty seat may enter. The new
+worker won't auto-build a human seat before the 00:15 UTC kickoff. Tested
+on scratch.
+
 ### v0.730.28 — A contest league made mid-week no longer locks in players who've already played
 
 > - In a contest league made after its week has started, the computer no longer fills a team with players whose games are over, and a team isn't auto-filled before the league's first game still to come.
