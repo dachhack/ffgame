@@ -434,5 +434,6 @@ for (const f of ['src/screens/LiveOnboard.tsx', 'apps/mobile/src/screens/Leagues
   ok('web: the matchup room and its tab let the commissioner in', web.includes("const watching = seated || !!lg.commish;") && web.includes("room === 'matchup' && watching &&") && web.includes('watch={!!lg.commish}') && read('src/app/LeagueStrip.tsx').includes("show: rosterId != null || watch"));
   ok('web: a contest league\'s commissioner-only card has ▦ matchups', read('src/screens/LiveOnboard.tsx').includes('onWatch={isContestKind(l.kind) && onContest ? () => onContest(l.league_id) : undefined}'));
 }
+ok('watch page: a head-to-head matchup shows both sides before either squad is saved', read('src/screens/WatchMatchup.tsx').includes("const solo = m.format === 'board';"));
 if (fails) { console.log(`\n${fails} DFS-BULLSEYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DFS-BULLSEYE ASSERTIONS PASSED');

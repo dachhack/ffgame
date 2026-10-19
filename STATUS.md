@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.30 — The shared matchup link shows both teams before either has picked
+
+> - The public matchup page now shows both teams even before either has saved a squad. An open spot reads "not picked yet".
+
+Founder, over Monday Showdown's #/watch page right after 0514 cleared both
+squads: "Looks like the public view just has one team?" `WatchMatchup` took
+"no away squad" to mean a leaderboard (self-paired) matchup. But the server's
+entry is null for any seat that hasn't saved a squad too, so a head-to-head
+with both squads cleared drew one team. Now only a leaderboard league
+(`format === 'board'`) draws one team. check:dfsbullseye covers it.
+
 ### v0.730.29 — Monday Showdown's squads cleared to rebuild
 
 > - Monday Showdown's week 6 squads, filled by mistake with players whose games were already over, are cleared. Both teams can build from tonight's WAS–SF game before kickoff.

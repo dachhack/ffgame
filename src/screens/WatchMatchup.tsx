@@ -44,7 +44,9 @@ export function WatchMatchup({ matchupId }: { matchupId: string }) {
   const entryOf = (s: 'home' | 'away', slot: string) => (s === 'home' ? m.home_entry : m.away_entry)?.find((e) => e.slot === slot) ?? null;
   const playOf = (s: 'home' | 'away', slot: string) => (s === 'home' ? m.home_plays : m.away_plays)?.find((p) => p.slot === slot) ?? null;
   const squadPlays = (s: 'home' | 'away') => ((s === 'home' ? m.home_plays : m.away_plays) ?? []).filter((p) => !p.slot);
-  const solo = !m.away_entry;
+  // One squad only on a leaderboard (self-paired); a head-to-head matchup shows both sides even before
+  // either has saved a squad (v0.730.30 — Monday Showdown, both squads cleared, drew one team).
+  const solo = m.format === 'board';
   const status = final ? 'FINAL' : m.started ? '● LIVE' : 'BEFORE KICKOFF';
 
   const cell = (s: 'home' | 'away', slot: string, right: boolean) => {
@@ -52,10 +54,10 @@ export function WatchMatchup({ matchupId }: { matchupId: string }) {
     const sc = scoreOf(s, slot);
     const pl = playOf(s, slot);
     const p = e?.player_slug ? m.names?.[e.player_slug] : null;
-    const name = e?.sealed ? '◈ sealed' : p ? p.name : e?.player_slug ? e.player_slug : '—';
+    const name = e?.sealed ? '◈ sealed' : p ? p.name : e?.player_slug ? e.player_slug : 'not picked yet';
     return (
       <div style={{ flex: 1, minWidth: 0, textAlign: right ? 'right' : 'left' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: e?.sealed ? 'var(--faint)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: e?.sealed || !e?.player_slug ? 'var(--faint)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {pl && !right && <span title={contestPlayById(pl.id)?.name ?? pl.id} style={{ marginRight: 4 }}>{contestPlayById(pl.id)?.icon ?? '⚡'}</span>}
           {name}
           {pl && right && <span title={contestPlayById(pl.id)?.name ?? pl.id} style={{ marginLeft: 4 }}>{contestPlayById(pl.id)?.icon ?? '⚡'}</span>}
