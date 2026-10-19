@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.26 — Share a contest matchup with anyone, no sign-in needed
+
+> - A contest matchup now has a SHARE button. It gives a link anyone can open on the web, signed in or not, to follow that one matchup live. Picks show as each player kicks off, the same as for the other team.
+
+Founder: "can we make a link to show the one match up in that league on a
+website for anyone not logged in? It's deciding a tie in one of my leagues and
+other league mates might want to follow it." Migration 0513:
+`public_contest_matchup(matchup id)`, granted to anon, returns
+`contest_matchup` as an outsider sees it (`_contest_sealed_entry` /
+`_contest_visible_plays` with open false, no Spy). It names only picks that
+have turned (from pod_salary), and its score rows carry no player id. Gate:
+an explicit `public_api` false (0327's opt-out) or a mock is refused; with no
+choice made, a contest league is open (`league_public_api` only counts
+provider 'native' as home). Web `#/watch/<id>` (`WatchMatchup`) shows both
+squads, scores, plays and status, refreshing each minute. SHARE on both
+apps' contest matchup copies the link (web) or opens the share sheet (phone).
+contest-matchup probes pm1–pm6 and check:dfsbullseye cover it.
+
 ### v0.730.25 — A commissioner who isn't playing sees every pick
 
 > - If you're the commissioner of a contest league but don't have a team in it, you now see every team's picks and power-ups on the matchup before kickoff. If you do have a team, you see other teams' picks at kickoff, as before.

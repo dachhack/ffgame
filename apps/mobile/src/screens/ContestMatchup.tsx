@@ -5,8 +5,8 @@
 // afresh on every visit, so the turns replay. The picker walks the week's
 // other matchups; the week arrows live in the league frame.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
+import { Alert, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot , watchMatchupUrl } from '@drip/core/data/liveApi';
 import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal, contestPlayById, contestPlaysFor, contestPlayCap, contestPlayTarget, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, contestPlayEffect, signedPts, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
@@ -326,11 +326,12 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
       {header}
       {/* ▦ FIELDS (v0.703.0): every game of the week, the live drive charts, from here as from the classic board */}
       {(st.matchups?.length ?? 0) <= 1 && (
-        <View style={{ flexDirection: 'row', gap: 6 }}><Chip small label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} /></View>
+        <View style={{ flexDirection: 'row', gap: 6 }}><Chip small label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />{/* SHARE (v0.730.26): the signed-out #/watch page (0513) */}<Chip small label="SHARE" onPress={() => { tap(); void Share.share({ message: `Follow it live: ${watchMatchupUrl(m.id)}`, url: watchMatchupUrl(m.id) }); }} /></View>
       )}
       {(st.matchups?.length ?? 0) > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
           <Chip small label="▦ FIELDS" onPress={() => { tap(); setFieldsOpen(true); }} />
+          <Chip small label="SHARE" onPress={() => { tap(); void Share.share({ message: `Follow it live: ${watchMatchupUrl(m.id)}`, url: watchMatchupUrl(m.id) }); }} />
           {(st.matchups ?? []).map((x) => (
             <Chip key={x.id} small on={x.id === m.id} label={x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}
               onPress={() => { tap(); setPick(x.mine ? null : x.id); }} />

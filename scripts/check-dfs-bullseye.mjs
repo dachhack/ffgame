@@ -415,5 +415,14 @@ for (const f of ['src/screens/LiveOnboard.tsx', 'apps/mobile/src/screens/Leagues
   const ph = read('apps/mobile/src/screens/CommishTools.tsx');
   ok('phone: K/D-ST fill hides in a contest league', ph.includes('{kdst && !contest && (') && ph.includes('<GameModeCard leagueId={leagueId} view="mode" contest={contest} />'));
 }
+// v0.730.26 (0513): one contest matchup, for anyone with the link
+{
+  const mig = read('supabase/migrations/0513_public_contest_matchup.sql');
+  ok('0513: the matchup as an outsider sees it, to anon', mig.includes('grant execute on function public_contest_matchup(uuid) to anon') && (mig.match(/_contest_sealed_entry\([^)]*, false, null\)/g) ?? []).length === 2 && (mig.match(/_contest_visible_plays\([^)]*, false, null\)/g) ?? []).length === 2);
+  ok('0513: an opted-out league or a mock is not served; score rows carry no player id', mig.includes("coalesce((lg.settings_json ->> 'public_api')::boolean, true)") && mig.includes('is_mock') && mig.includes("x - 'slug' - 'player_slug'"));
+  const store = read('src/app/store.tsx');
+  ok('web: #/watch/<id> is a route a cold load restores', store.includes("case 'watch': return seg[1] ? { name: 'watch', matchupId: decodeURIComponent(seg[1]) } : null;") && read('src/App.tsx').includes("route.name === 'watch' && <WatchMatchup"));
+  ok('both matchups carry SHARE with the watch link', read('src/screens/ContestMatchup.tsx').includes('watchMatchupUrl(m.id)') && read('apps/mobile/src/screens/ContestMatchup.tsx').includes('Share.share({ message: `Follow it live: ${watchMatchupUrl(m.id)}`'));
+}
 if (fails) { console.log(`\n${fails} DFS-BULLSEYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DFS-BULLSEYE ASSERTIONS PASSED');

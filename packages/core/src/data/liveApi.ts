@@ -951,6 +951,22 @@ async function rpcOk<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   if (error) return { ok: false, error: friendlyError(error) } as T;
   return data as T;
 }
+/** ONE CONTEST MATCHUP, FOR ANYONE WITH THE LINK (0513, v0.730.26). Signed
+ *  out is fine: picks and plays arrive as an outsider sees them (sealed until
+ *  each player kicks off). `names` names the picks that have turned. */
+export interface PublicContestMatchup {
+  ok: boolean; error?: string; league?: string; week?: number; started?: boolean; contest?: string; format?: string;
+  slots?: { slot: string; label?: string; pos?: string[] }[]; status?: string; playoff?: boolean; label?: string | null;
+  home_team?: string; away_team?: string; home_final?: number | null; away_final?: number | null;
+  home_entry?: { slot: string; player_slug?: string | null; sealed?: boolean }[] | null;
+  away_entry?: { slot: string; player_slug?: string | null; sealed?: boolean }[] | null;
+  home_plays?: ContestPlayRow[]; away_plays?: ContestPlayRow[];
+  names?: Record<string, { name: string; pos: string; team: string; proj: number }>;
+  state?: { home: number; away: number; slots: { side: 'home' | 'away'; slot: string; score: number; play?: string; raw?: number }[] } | null;
+}
+export const publicContestMatchup = (matchupId: string) => rpcOk<PublicContestMatchup>('public_contest_matchup', { p_matchup: matchupId });
+/** The link to it (v0.730.26): the site's #/watch page. */
+export const watchMatchupUrl = (matchupId: string) => `https://dripfantasy.com/#/watch/${matchupId}`;
 export const bullseyeContest = (season = '2026') => rpcOk<BullseyeContest>('bullseye_contest', { p_season: season });
 export const joinBullseyeContest = (teamName?: string | null, season = '2026') =>
   rpcOk<{ ok: boolean; error?: string; league_id?: string; week?: number; roster_id?: number; already?: boolean }>('join_bullseye_contest', { p_team_name: teamName ?? null, p_season: season });

@@ -73,7 +73,9 @@ export type Route =
   | { name: 'matchup'; week: number; phase: Phase }
   | { name: 'final'; week: number }
   | { name: 'classicSim' } // hidden playtest board: scrub a baked 2025 week under classic rules
-  | { name: 'changelog' }; // what shipped, by version (v0.393.0) — public/changelog.json
+  | { name: 'changelog' } // what shipped, by version (v0.393.0) — public/changelog.json
+  // ONE CONTEST MATCHUP, SIGNED OUT (v0.730.26): the shareable #/watch/<matchup id> page (0513).
+  | { name: 'watch'; matchupId: string };
 
 /** Identifies the user's real pilot matchup behind a sim board, so the board can
  *  persist its lineup to sealed_pick and align with the worker's scoring. */
@@ -100,6 +102,7 @@ function routeToHash(r: Route): string {
     case 'final': return `#/final/${r.week}`;
     case 'classicSim': return '#/classic-sim';
     case 'changelog': return '#/changelog';
+    case 'watch': return `#/watch/${encodeURIComponent(r.matchupId)}`;
   }
 }
 /** URL hash → Route, or null when the hash carries no (valid) route so the caller
@@ -118,6 +121,7 @@ function hashToRoute(hash: string): Route | null {
     case 'connect': return seg[1] ? { name: 'connect', provider: decodeURIComponent(seg[1]) as ProviderId } : null;
     case 'classic-sim': return { name: 'classicSim' };
     case 'changelog': return { name: 'changelog' };
+    case 'watch': return seg[1] ? { name: 'watch', matchupId: decodeURIComponent(seg[1]) } : null;
     default: return null;
   }
 }
