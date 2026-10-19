@@ -814,3 +814,13 @@ export function entryState(
   if (!Number.isFinite(t)) return 'pre';
   return t <= now ? 'live' : 'pre';
 }
+
+/** A PROJECTION, IN PARENTHESES (v0.730.21). Founder, over a Monday-night
+ *  matchup: "I cannot tell what is real and what is projected score. Maybe
+ *  parenthesis around projected?" Kittle's 13.4 and Daniels' 19.0 sat in the
+ *  same big type as the finals beside them, told apart only by a quieter
+ *  colour and one decimal fewer. A projection now reads (13.4); a score
+ *  stays 35.30. Pure. */
+export function projFigure(n: number): string {
+  return `(${(Number.isFinite(n) ? n : 0).toFixed(1)})`;
+}

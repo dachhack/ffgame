@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.21 — Projections in parentheses on the matchup
+
+> - On the matchup, a player who hasn't played yet now shows his projection in parentheses, like (13.4), so it can't be mistaken for a real score like 35.30.
+
+Founder, over Kickoff League's Monday-night matchup: "I cannot tell what is
+real and what is projected score. Maybe parenthesis around projected?"
+Kittle's 13.4 and Daniels' 19.0 (projections, Monday games) sat in the same
+big type as the finals around them. Only a quieter colour and one decimal
+fewer told them apart, by the founder's own v0.241.0 rule of no "proj" label.
+Core `projFigure` wraps a projection in parentheses. It's used in the phone
+board's row figure (`scoreOf`) and its compact score column, and in the web
+board's matchup card and compact row. Scores keep two decimals.
+check:board covers it.
+
 ### v0.730.20 — Computer answers in DMs; probes can't read DMs
 
 > - Ask @computer in a DM and Computer now replies right there that it got the message, as it already did in league chat.

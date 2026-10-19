@@ -13,7 +13,7 @@ import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { setLeagueBullseye, clearLeagueBullseye, setBullseyeRoster, bullseyeConfigOf, dealBullseyeCard, cardsFromRows, ringLabel, type BullseyeConfig, type BullseyeCard } from '@drip/core/engine/bullseye';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, compactKick, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { projFigure, buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, compactKick, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type BoardSide, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { roofFor } from '@drip/core/data/stadiums';
 import { injuryFor } from '@drip/core/data/injuries';
 import { playRisk } from '@drip/core/engine/golfFloor';
@@ -371,11 +371,12 @@ function roofMark(e: BoardEntry): string {
 }
 
 /** The figure on a row: points once the ball is live, the projection before it.
- *  No "proj" label — the founder wanted the number alone — so the difference is
- *  carried by colour (quiet before kickoff) rather than by a word. */
+ *  No "proj" label — the founder wanted the number alone — and since v0.730.21
+ *  the projection in parentheses, "(13.4)": colour alone did not tell it from a
+ *  final ("I cannot tell what is real and what is projected score"). */
 function scoreOf(e: BoardEntry | null): string {
   if (!e) return '—';
-  return e.state === 'pre' ? e.proj.toFixed(1) : e.live.toFixed(2);
+  return e.state === 'pre' ? projFigure(e.proj) : e.live.toFixed(2);
 }
 
 const ZERO = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
@@ -1701,7 +1702,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
     const scoreCol = (e: BoardEntry | null) => {
       if (!e) return null;
       return e.state === 'pre'
-        ? <Mono size={12.5} tone="dim" weight="700">{e.proj.toFixed(2)}</Mono>
+        ? <Mono size={12.5} tone="dim" weight="700">{projFigure(e.proj)}</Mono>
         : <>
             <Mono size={12.5} weight="700">{e.live.toFixed(2)}</Mono>
             <Mono size={8} tone="faint">{`proj ${e.proj.toFixed(1)}`}</Mono>
