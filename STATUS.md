@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.27 — A commissioner with no team can watch a contest league's matchups
+
+> - If you run a contest league but don't have a team in it, opening the league now takes you to its MATCHUP room, where you can flip between every matchup and see each team's picks. On the web, the league's card has a "▦ matchups" button.
+
+Founder: "if I'm the commish but don't have a team, how do I see the current
+match up, teams, picks?" The server already let them in (contest_matchup
+admits the commissioner, and 0512 opens every pick to one with no seat), but
+neither app would show the room:
+- **Phone:** the "Commissioner — no team" card dropped the league's kind, so
+  a contest league opened as a classic one on commissioner tools. App.tsx
+  sent a seatless open to commissioner tools, chose the LEAGUE room, and hid
+  MATCHUP. `BullseyeLeagueRoom` required `lg.me`.
+- **Web:** `BullseyeLeague` required a seat for the room, `LeagueStrip` hid
+  MATCHUP without a roster, and the commissioner-only card only offered ⚑
+  manage league.
+
+Now `lg.commish` counts for the matchup room on both apps. A seatless
+commissioner's contest league opens on it, the strip and bar show MATCHUP
+(`LeagueStrip` gains `watch`), and the web card gains ▦ matchups.
+check:dfsbullseye covers it.
+
 ### v0.730.26 — Share a contest matchup with anyone, no sign-in needed
 
 > - A contest matchup now has a SHARE button. It gives a link anyone can open on the web, signed in or not, to follow that one matchup live. Picks show as each player kicks off, the same as for the other team.

@@ -555,7 +555,7 @@ export function App() {
           // and ⚙ SETTINGS; its commissioner's tools are the classic
           // CommishTools (below), trimmed, with the CONTEST card.
           <View style={{ flex: 1 }}><BullseyeLeagueRoom key={`bull-${open.leagueId}`} leagueId={open.leagueId}
-            room={view === 'home' ? 'league' : view === 'team' ? 'team' : view === 'bsettings' ? 'settings' : open.rosterId != null ? 'matchup' : 'league'}
+            room={view === 'home' ? 'league' : view === 'team' ? 'team' : view === 'bsettings' ? 'settings' : open.rosterId != null || open.commish ? 'matchup' : 'league'}
             onRoom={(r) => setView(r === 'league' ? 'home' : r === 'team' ? 'team' : r === 'settings' ? 'bsettings' : r === 'commish' ? 'commishtools' : 'picks')}
             onBack={() => { setOpen(null); setView('picks'); }}
             onGone={() => { setOpen(null); setView('picks'); setLeaguesEpoch((n) => n + 1); }} /></View>
@@ -649,8 +649,11 @@ export function App() {
               // forget — an outsider's touch is a server-side no-op.
               void leagueTouch(leagueId).catch(() => {});
               // No seat → no lineup: a seatless commissioner lands on
-              // management, not on a MATCHUP tab that cannot render.
-              setView(rosterId == null ? 'commishtools' : (landing ?? 'home'));
+              // management, not on a MATCHUP tab that cannot render — except
+              // in a contest league (v0.730.27, founder: "if I'm the commish but
+              // don't have a team, how do I see the current matchup, teams,
+              // picks?"), whose matchups they referee and, since 0512, see whole.
+              setView(rosterId == null ? (isContestKind(kind) ? 'picks' : 'commishtools') : (landing ?? 'home'));
               setOpen({ leagueId, rosterId, name, native, commish, pickUserId, kind });
             }}
           />
@@ -671,7 +674,7 @@ export function App() {
             onGo={(id) => setView(id)}
             items={([
               ['home', '🏠', 'LEAGUE', true],                            // the hub (0182)
-              ['picks', '▦', 'MATCHUP', open.rosterId != null],          // no seat → no lineup
+              ['picks', '▦', 'MATCHUP', open.rosterId != null || (open.commish && isContestKind(open.kind))],          // no seat → no lineup; a contest league's commissioner watches (v0.730.27)
               ['draft', '⛏', 'DRAFT', open.native && draftDone === false], // native-only; leaves once drafted, absent until known
               ['team', '⇄', 'MY TEAM', open.rosterId != null],   // external gets the read-only page (v0.356.5)
               ['chat', '💬', 'CHAT', true],
