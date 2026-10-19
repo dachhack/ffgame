@@ -1318,6 +1318,12 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
   // coin to run. Its map keeps the classic SET UP (roster, scoring), the
   // seats, picks, matchups, kit and awards, and gains the CONTEST card.
   const contest = isContestKind(l.kind);
+  /** A LEAGUE DRIP RUNS ITSELF (v0.730.24): a contest league, or any provider
+   *  'pod' league (pods, showdowns). Nothing comes from Sleeper, so the import
+   *  tools — sync season, go native — and the season-long ones — preseason
+   *  practice, K/D-ST fill — never apply. Founder, over Monday Showdown's page:
+   *  "Do I need to sync the season to get the matchup board?" → "hide those". */
+  const ownGame = contest || l.provider === 'pod';
   useEffect(() => {
     if (l.provider !== 'native' && !contest) return;
     leagueGameMode(l.league_id).then((r) => { if (r.ok) setClassic(r.mode === 'classic'); }).catch(() => {});
@@ -1875,7 +1881,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           how does its season run", and neither filled a page alone. */}
       {tab === 'mode' && (
         <div style={{ marginTop: 14, borderTop: panels?.mode ? '1px solid var(--bd)' : 'none', paddingTop: panels?.mode ? 14 : 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {l.provider !== 'native' && (
+          {l.provider !== 'native' && !ownGame && (
           <div>
             <div style={subhead}>SCHEDULE</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1898,7 +1904,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {/* GO NATIVE (0263): the one-way door out of the import. Pre-season
               only (the RPC refuses once a matchup has locked); preview and
               commit are the same server code path. */}
-          {l.provider !== 'native' && (
+          {l.provider !== 'native' && !ownGame && (
           <div>
             <div style={subhead}>GO NATIVE</div>
             {!convert ? (
@@ -1959,7 +1965,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
           {l.provider === 'native' && <ContinuityEditor leagueId={l.league_id} sport={sport} />}
           {/* Practice is a commissioner tool, not an admin errand — it's how a
               league's players get to rehearse the live loop before Week 1. */}
-          {nflOnly && <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />}
+          {nflOnly && !ownGame && <PreseasonPractice on={!!l.preseason_at} leagueId={l.league_id} season={l.season} admin={admin} reload={reload} />}
         </div>
       )}
 
@@ -2112,7 +2118,7 @@ export function LeagueRow({ l, reload, admin = true, mine = false, defaultTab = 
       )}
       {/* K/DST fill (v0.216.2) — a setup decision about what the league
           rosters, so it lives with MODE & SEASON rather than under DIAGNOSE. */}
-      {tab === 'mode' && nflOnly && (
+      {tab === 'mode' && nflOnly && !ownGame && (
         <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
           <div style={subhead}>K / D-ST FILL</div>
           {!kdst ? <Muted text="Loading…" /> : (

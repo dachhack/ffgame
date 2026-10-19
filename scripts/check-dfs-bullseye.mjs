@@ -406,5 +406,14 @@ for (const f of ['src/screens/LiveOnboard.tsx', 'apps/mobile/src/screens/Leagues
   ok('game log: the web\'s choice keeps its hook above the early returns', web.indexOf('const [ask, setAsk]') < web.indexOf('if (!st) return'));
   ok('game log: every face-up matchup card opens his log (not only a locked one)', /if \(r\.slug\) \{/.test(read('apps/mobile/src/screens/ContestMatchup.tsx')) && /const logOpen = slug && !onPick \? \(\) =>/.test(read('src/screens/ContestMatchup.tsx')));
 }
+// v0.730.24: a league Drip runs itself shows no Sleeper import or season-long tools (founder: "hide those for contest leagues")
+{
+  const web = read('src/screens/AdminPage.tsx');
+  ok('web: ownGame = a contest league or any pod-provider league', web.includes("const ownGame = contest || l.provider === 'pod';"));
+  ok('web: sync season and go native hide for it', /l\.provider !== 'native' && !ownGame && \(\n\s*<div>\n\s*<div style=\{subhead\}>SCHEDULE/.test(web) && /l\.provider !== 'native' && !ownGame && \(\n\s*<div>\n\s*<div style=\{subhead\}>GO NATIVE/.test(web));
+  ok('web: preseason practice and K/D-ST fill hide for it', web.includes('{nflOnly && !ownGame && <PreseasonPractice on=') && web.includes("{tab === 'mode' && nflOnly && !ownGame && ("));
+  const ph = read('apps/mobile/src/screens/CommishTools.tsx');
+  ok('phone: K/D-ST fill hides in a contest league', ph.includes('{kdst && !contest && (') && ph.includes('<GameModeCard leagueId={leagueId} view="mode" contest={contest} />'));
+}
 if (fails) { console.log(`\n${fails} DFS-BULLSEYE ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL DFS-BULLSEYE ASSERTIONS PASSED');

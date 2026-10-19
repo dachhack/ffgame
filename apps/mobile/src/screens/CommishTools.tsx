@@ -502,7 +502,7 @@ export function CommishTools({ leagueId, native, contest = false, rosterId, init
             {section === 'contestweeks' && <ContestCommishCard leagueId={leagueId} part="weeks" />}
             {section === 'contestmoney' && <ContestCommishCard leagueId={leagueId} part="money" />}
             {section === 'contestboard' && <ContestCommishCard leagueId={leagueId} part="board" />}
-            {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" />}
+            {section === 'mode' && <GameModeCard leagueId={leagueId} view="mode" contest={contest} />}
             {section === 'lineup' && <GameModeCard leagueId={leagueId} view="lineup" onDragActive={(a) => setSheetScroll(!a)} />}
             {section === 'eligible' && <>
               <GameModeCard leagueId={leagueId} view="eligible" />
@@ -2038,8 +2038,10 @@ function ContinuityRow({ leagueId }: { leagueId: string }) {
   );
 }
 
-function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
+function GameModeCard({ leagueId, view = 'mode', onDragActive, contest = false }: {
   leagueId: string;
+  /** A contest league (v0.730.24): K/D-ST fill never applies — the contest's own spots decide. */
+  contest?: boolean;
   /** 'lineup' is ROSTER CONSTRUCTION; 'eligible' ELIGIBLE PLAYERS; 'rules' MANAGER ROSTER RULES (v0.714.0). */
   view?: 'mode' | 'lineup' | 'eligible' | 'rules' | 'scoring';
   /** Reorder drag in progress — the hosting sheet freezes its scroll so the
@@ -2523,7 +2525,7 @@ function GameModeCard({ leagueId, view = 'mode', onDragActive }: {
           decides league behaviour and belongs on a phone; MANUAL's per-team
           assignment is a 32-option dropdown per seat, which is a desk job, so
           it points at the web console rather than pretending to fit. */}
-      {kdst && (
+      {kdst && !contest && (
         <View style={{ marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.bd, paddingTop: 10 }}>
           <LabelInfo label="K / D-ST FILL"
             info={'When a league doesn\'t roster kickers or defenses, filling them keeps the Banker / Suppress metrics playable.\n\nRANDOM WEEKLY deals every team a not-on-bye K and D-ST each week. MANUAL lets each team be assigned specific ones (the per-team picker is on the web console). Changes take effect on the next sync.'} />
