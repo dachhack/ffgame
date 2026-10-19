@@ -15,7 +15,7 @@
 // leaderboard); the week arrows live in the league frame.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot, weekGameFeeds } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById, contestRedeal, contestPlaysFor, contestPlayCap, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, type ContestPlayId } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById, contestRedeal, contestPlaysFor, contestPlayCap, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, contestPlayEffect, signedPts, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { ringScore } from '@drip/core/engine/bullseye';
@@ -281,7 +281,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
     // distance, not the points; founder: "a penalty line instead of the unnecessary projected line")
     const shows = (m.state?.slots ?? []).filter((x) => x.side === s && x.aim?.penalty != null && Math.abs(x.score) < 1e-9);
     const pen = shows.reduce((a, x) => a + (x.aim?.penalty ?? 0), 0);
-    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay, pen, shows: shows.length, bonus: bonusRows.map((b) => `${contestPlayById(b.play ?? '')?.icon ?? '⚡'} ${b.score > 0 ? '+' : ''}${b.score}`).join(' ') };
+    return { points, projected, ring: bull ? S.score : null, ringProjected, toPlay, pen, shows: shows.length };
   };
   /** A side's squad plays — mine from the seat's own rows, theirs from the matchup (shown once the week starts). */
   const squadPlays = (s: 'home' | 'away', mine: boolean): ContestPlayRow[] =>
@@ -289,6 +289,12 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       : (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
   const final = m.status === 'final';
   const penText = (x: { pen: number; shows: number }) => ` · −${x.pen} · ${x.shows} no-show${x.shows === 1 ? '' : 's'}`;
+  /** A side's net from its plays (v0.730.19): a spot only once its play shows; event bonuses once its team plays show. */
+  const effectOf = (s: 'home' | 'away', S: typeof L) => !st.started ? { net: 0, parts: [] } : contestPlayEffect(m.state?.slots ?? [], s, {
+    nameOf: (slug) => bySlug.get(slug)?.name ?? slug,
+    shown: (row) => row.slot === 'PLAY' ? contestSquadPlaysShown({ mine: S.mine, slugs: S.rows.map((r) => r.slug) })
+      : (() => { const r = S.rows.find((x) => x.slot === row.slot); return !!r && !!playAt(s, r, S.mine); })(),
+  });
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const t = tally(s, S);
     const color = S.mine ? 'var(--you)' : 'var(--opp)';
@@ -302,10 +308,12 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
         <div style={{ display: 'grid', gap: 6, justifyItems: edge === 'left' ? 'start' : 'end' }}>
           <div style={cell}>
             <span className="mono" style={{ ...big, color: t.points != null ? color : 'color-mix(in srgb, var(--text) 35%, transparent)' }}>{fmt(t.points)}</span>
-            <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.pen > 0 ? penText(t) : !final && t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}${t.bonus ? ` · ${t.bonus}` : ''}`}</span>
+            <span className="mono" style={{ fontSize: 10.5, color: dim }}>{`${bull ? 'PTS' : word.toUpperCase()}${t.pen > 0 ? penText(t) : !final && t.projected != null ? ` · proj ${t.projected.toFixed(1)}` : ''}`}</span>
             {/* THE TEAM CHIP (v0.698.0, founder: "reserve some space under the projected points for a Team ⚡Up chip when
                 there is one active"): a fixed row, the chip in it while a squad play is on — tap for the plays and TAKE BACK */}
-            <div style={{ height: 16, display: 'flex', alignItems: 'center', justifyContent: edge === 'left' ? 'flex-start' : 'flex-end', marginTop: 2 }}>
+            {/* WHAT THE POWER-UPS DID (v0.730.19): the side's net from its plays beside the team chip — tap for each one */}
+            <div style={{ height: 16, display: 'flex', flexDirection: edge === 'left' ? 'row' : 'row-reverse', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              {(() => { const e = effectOf(s, S); return e.parts.length ? <InfoChip label={`⚡ ${signedPts(e.net)}`} title="What the power-ups did" info={e.parts.map((p) => `${p.label}: ${signedPts(p.delta)}`).join('\n') + `\n\nNet: ${signedPts(e.net)} points.`} /> : null; })()}
               {(() => { const sq = squadPlays(s, S.mine); return sq.length ? <InfoChip label="TEAM ⚡ UP" title={sq.length === 1 ? (contestPlayById(sq[0].id)?.name ?? sq[0].id) : 'Team plays'} info={sq.map((x) => `${contestPlayById(x.id)?.icon ?? ''} ${contestPlayById(x.id)?.name ?? x.id}: ${contestPlayById(x.id)?.blurb ?? ''}`).join('\n\n') + (S.mine && myTable ? '\n\nA squad play goes back to your hand until the week’s first kickoff.' : '')} actions={S.mine && myTable && !st.started ? sq.map((x) => ({ label: `TAKE BACK${sq.length > 1 ? ` ${(contestPlayById(x.id)?.name ?? x.id).toUpperCase()}` : ''}`, onPress: () => void disarm(x) })) : undefined} /> : null; })()}
             </div>
           </div>

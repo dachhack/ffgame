@@ -251,3 +251,38 @@ export function contestSquadPlaysShown(o: { mine: boolean; slugs: readonly (stri
 /** The phantom is a play dealt as a card: another squad's shows from the
  *  week's first kickoff, and until then its spot looks like any sealed one. */
 export const contestGhostShown = (o: { mine: boolean; started: boolean }): boolean => o.mine || o.started;
+
+/** WHAT THE POWER-UPS DID (v0.730.19). Founder, on the matchup: "Did my power
+ *  ups apply? Any way we can show the difference power ups make?" A side's
+ *  net change from plays, from the scored rows: a spot a play touched counts
+ *  its score minus its raw score (Josh Allen 18.3 → 21.2 is +2.9; Double or
+ *  Nothing missed is −his raw), and each event bonus row (slot 'PLAY') its
+ *  score. `shown(row)` keeps another side's sealed plays sealed; `nameOf`
+ *  names the player. Pure. */
+export function contestPlayEffect(
+  rows: readonly { side: string; slot: string; slug: string | null; score: number; play?: string; raw?: number }[],
+  side: string,
+  o: { shown?: (r: { slot: string; slug: string | null }) => boolean; nameOf?: (slug: string) => string } = {},
+): { net: number; parts: { label: string; delta: number }[] } {
+  const parts: { label: string; delta: number }[] = [];
+  for (const r of rows) {
+    if (r.side !== side || !r.play) continue;
+    const d = contestPlayById(r.play as ContestPlayId);
+    const name = `${d?.icon ?? '⚡'} ${d?.name ?? r.play}`;
+    if (r.slot === 'PLAY') {
+      if (Math.abs(r.score) < 1e-9 || (o.shown && !o.shown({ slot: r.slot, slug: null }))) continue;
+      parts.push({ label: name, delta: r.score });
+    } else if (r.raw != null && Math.abs(r.score - r.raw) > 1e-9) {
+      if (o.shown && !o.shown({ slot: r.slot, slug: r.slug })) continue;
+      parts.push({ label: r.slug ? `${name} · ${o.nameOf?.(r.slug) ?? r.slug}` : name, delta: r.score - r.raw });
+    }
+  }
+  const net = Math.round(parts.reduce((a, p) => a + p.delta, 0) * 10) / 10;
+  return { net, parts };
+}
+
+/** "+2.9" / "−7.3" — a power-up's effect, signed, one decimal. */
+export function signedPts(n: number): string {
+  const v = Math.round(n * 10) / 10;
+  return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`;
+}

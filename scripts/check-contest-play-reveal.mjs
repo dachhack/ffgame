@@ -49,5 +49,33 @@ for (const f of ['src/screens/ContestMatchup.tsx', 'apps/mobile/src/screens/Cont
   f2(/'sealed', not open_,/, "contest_plays' sealed flag never says whether anything was held back");
 }
 
+// ── WHAT THE POWER-UPS DID (v0.730.19): "Did my power ups apply? Any way we can show the difference power ups make?"
+{
+  const { contestPlayEffect, signedPts } = await import('../packages/core/src/engine/contest.ts');
+  // The founder's screen: his Josh Allen 18.3 → 21.2; their Bijan's Double or Nothing 7.3 → 0; a +15 Hail Mary banked.
+  const rows = [
+    { side: 'home', slot: 'QB', slug: 'josh-allen', score: 21.2, play: 'garbage-time', raw: 18.3 },
+    { side: 'home', slot: 'RB1', slug: 'bijan-robinson', score: 7.3 },
+    { side: 'home', slot: 'PLAY', slug: null, score: 15, play: 'hail-mary' },
+    { side: 'away', slot: 'RB1', slug: 'bijan-robinson', score: 0, play: 'double-or-nothing', raw: 7.3 },
+    { side: 'away', slot: 'QB', slug: 'josh-allen', score: 18.3, play: 'underdog', raw: 18.3 },   // a play that changed nothing (yet)
+  ];
+  const nm = (s) => ({ 'josh-allen': 'Josh Allen', 'bijan-robinson': 'Bijan Robinson' })[s] ?? s;
+  const mine = contestPlayEffect(rows, 'home', { nameOf: nm });
+  ok(mine.net === 17.9 && mine.parts.length === 2, `my side: Allen +2.9 and Hail Mary +15 = +17.9 (got ${mine.net}, ${mine.parts.length} parts)`);
+  ok(mine.parts[0].label.includes('Josh Allen') && Math.abs(mine.parts[0].delta - 2.9) < 1e-9, 'the spot part names its player and its difference');
+  const theirs = contestPlayEffect(rows, 'away', { nameOf: nm });
+  ok(theirs.net === -7.3 && theirs.parts.length === 1, `their side: Double or Nothing missed, −7.3; an unchanged play is left out (got ${theirs.net})`);
+  const sealed = contestPlayEffect(rows, 'away', { shown: () => false });
+  ok(sealed.parts.length === 0 && sealed.net === 0, 'a sealed side shows nothing');
+  ok(signedPts(2.9) === '+2.9' && signedPts(-7.3) === '−7.3' && signedPts(0) === '0.0', 'signed one decimal');
+  for (const f of ['apps/mobile/src/screens/ContestMatchup.tsx', 'src/screens/ContestMatchup.tsx']) {
+    const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(src.includes('contestPlayEffect(m.state?.slots ?? [], s,') && src.includes('label={`⚡ ${signedPts(e.net)}`}'), `${f}: the scoreboard carries the power-up net`);
+  }
+  const phone = readFileSync(new URL('../apps/mobile/src/screens/ContestMatchup.tsx', import.meta.url), 'utf8');
+  ok(/x\.side === s && x\.slot === 'PLAY'\)\) \{ pts \+= b\.score/.test(phone), 'phone: an event bonus counts in the points, as on the web');
+}
+
 if (fails) { console.log(`\n${fails} PLAY-REVEAL ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL PLAY-REVEAL ASSERTIONS PASSED');
