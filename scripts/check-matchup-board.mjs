@@ -8,7 +8,7 @@
 // implementation is wrong — a live player must not be worth live+proj, a
 // finished player must not be improved by a projection, and an EMPTY
 // starting spot is not "yet to play".
-import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, WHOLE_POOL_MIN, compactKick } from '../packages/core/src/engine/matchupBoard';
+import { projectEntry, winProbability, yetToPlayBreakdown, buildMatchupBoard, gameFor, entryState, isPrimetime, venueTeam, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, WHOLE_POOL_MIN, compactKick, projFigure } from '../packages/core/src/engine/matchupBoard';
 import { roofFor, isRoofed, STADIUM_ROOF } from '../packages/core/src/data/stadiums';
 import { slugMeta, setSlugMetaOverrides, clearSlugMetaOverrides } from '../packages/core/src/data/slugMeta';
 let fails = 0;
@@ -432,6 +432,16 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   ok('kick: on the hour drops ":00" — "Sun 1p"', compactKick(at(18, 13, 0)) === 'Sun 1p', compactKick(at(18, 13, 0)));
   ok('kick: noon is 12p, a Thursday night 8:15p', compactKick(at(18, 12, 0)) === 'Sun 12p' && compactKick(at(15, 20, 15)) === 'Thu 8:15p');
   ok('kick: an unreadable time is blank', compactKick('nope') === '');
+}
+// A PROJECTION, IN PARENTHESES (v0.730.22): "I cannot tell what is real and what is projected score."
+{
+  ok('a projection reads "(13.4)"', projFigure(13.4) === '(13.4)', projFigure(13.4));
+  ok('…one decimal, and a bad number is (0.0)', projFigure(19) === '(19.0)' && projFigure(NaN) === '(0.0)');
+  const { readFileSync } = await import('node:fs');
+  const ph = readFileSync(new URL('../apps/mobile/src/ui/ClassicBoard.tsx', import.meta.url), 'utf8');
+  const wb = readFileSync(new URL('../src/screens/ClassicBoard.tsx', import.meta.url), 'utf8');
+  ok('phone: a pre-game row shows the projection in parentheses', ph.includes("e.state === 'pre' ? projFigure(e.proj) : e.live.toFixed(2)") && ph.includes('{projFigure(e.proj)}</Mono>'));
+  ok('web: the matchup card and the compact row too', wb.includes("stashed ? '—' : projFigure(e.proj)") && wb.includes('{projFigure(e.proj)}</div>'));
 }
 console.log(fails ? `\n${fails} FAILED` : '\nALL MATCHUP-BOARD ASSERTIONS PASSED');
 process.exit(fails ? 1 : 0);

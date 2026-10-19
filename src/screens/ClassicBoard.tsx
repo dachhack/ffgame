@@ -18,7 +18,7 @@ import { setLeagueScoring, parseScoring, scoringLeague } from '@drip/core/engine
 import { setLeagueGolf } from '@drip/core/engine/golf';
 import { setLeagueBullseye, clearLeagueBullseye, setBullseyeRoster, bullseyeConfigOf, dealBullseyeCard, cardsFromRows, ringLabel, type BullseyeConfig, type BullseyeCard } from '@drip/core/engine/bullseye';
 import { setLeagueProjScoring, clearLeagueProjScoring, leagueCatalogOf, setLiveProjRate } from '@drip/core/engine/projScoring';
-import { buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
+import { projFigure, buildMatchupBoard, gameFor, entryState, collegeEntryState, tbdKickLabel, venueTeam, isPrimetime, isBye, slateChips, slateScores, slateSummary, lineupChipSummary, isRehearsalPool, type BoardEntry, type SlateChip } from '@drip/core/engine/matchupBoard';
 import { setRuntimeSlate, boardWeekTitle, weekTitle, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { roofFor, ROOF_LABEL } from '@drip/core/data/stadiums';
@@ -115,9 +115,11 @@ function GameCard({ e, align, onOpen, stashed }: { e: BoardEntry | null; align: 
               {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
             </div>
             {/* NO "proj" LABEL (founder, v0.241.0): the number alone — the
-                quiet colour says it is a projection. 16px since v0.368.1. */}
+                quiet colour and, since v0.730.22, parentheses say it is a
+                projection ("I cannot tell what is real and what is
+                projected score"). 16px since v0.368.1. */}
             <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--faint)', whiteSpace: 'nowrap' }}>
-              {stashed ? '—' : e.proj.toFixed(1)}
+              {stashed ? '—' : projFigure(e.proj)}
             </span>
           </div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', textAlign: right ? 'right' : 'left', lineHeight: 1.5 }}>
@@ -1869,7 +1871,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
         ) : <div style={{ minWidth: 0 }}>{empty}</div>}
         <div className="mono" style={{ textAlign: 'right' }}>
           {e && (e.state === 'pre'
-            ? <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dim)' }}>{e.proj.toFixed(2)}</div>
+            ? <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dim)' }}>{projFigure(e.proj)}</div>
             : <>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>{e.live.toFixed(2)}</div>
                 <div style={{ fontSize: 8.5, color: 'var(--faint)' }}>proj {e.proj.toFixed(1)}</div>
