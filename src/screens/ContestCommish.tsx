@@ -383,7 +383,7 @@ function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   return (
     <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--bd)' }}>
       <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--dim)', marginBottom: 4 }}>{`🧾 SET A SQUAD · WEEK ${week}`}</div>
-      <div className="mono" style={{ ...small, marginBottom: 6 }}>One seat’s squad for this week, past the kickoff locks — the app that died at 12:58, the ruling the league made. The budget, the floor and each spot’s rules still apply. The league is told who came in and who went out, with your reason.</div>
+      <div className="mono" style={{ ...small, marginBottom: 6 }}>One seat’s squad for this week, past the kickoff locks — the app that died at 12:58, the ruling the league made. Leave a spot — empty — to unset it and the member picks again. The budget and each spot’s rules still apply. The league is told who came in and who went out, with your reason.</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <select value={rid ?? ''} onChange={(e) => setRid(e.target.value ? Number(e.target.value) : null)} className="mono" style={{ ...input, width: 220 }}>
           <option value="">— pick a seat —</option>
@@ -408,6 +408,9 @@ function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
               </div>
             );
           })}
+          <div>
+            <button onClick={() => setPicks(Object.fromEntries(defs.map((d) => [d.slot, null])))} disabled={busy || defs.every((d) => !picks[d.slot])} className="mono" style={chip(false, defs.every((d) => !picks[d.slot]))}>UNSET ALL</button>
+          </div>
           <div className="mono" style={{ ...small, color: budget > 0 && spent > budget ? 'var(--warn, #c66)' : 'var(--faint)' }}>
             {`$${n0(spent)} of ${budget > 0 ? `$${n0(budget)}` : 'no cap'}${sq.min_spend ? ` · min spend $${n0(sq.min_spend)}` : ''}${sq.stamped ? ' · this seat’s week is stamped — re-score after saving' : ''}`}
           </div>
