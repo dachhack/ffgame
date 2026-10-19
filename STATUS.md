@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.34 — Monday Showdown's cap to $31,000
+
+> - Monday Showdown's cap is now $31,000, so a squad with Purdy and Kittle fits. QBs are still $2,000 off.
+
+Founder: farmercasey couldn't fit a QB and Kittle. Purdy, Kittle and the
+cheapest six others came to $30,600 under the $30,000 cap. "Make the cap $31k".
+0519 makes the change, guarded on WAS@SF's kickoff and on the cap still being
+$30,000, and posts one chat note. Tried on scratch: the first run applies, and a
+re-run changes nothing.
+
 ### v0.730.33 — A league's own prices: QBs $2,000 off in Monday Showdown
 
 > - In Monday Showdown, QBs are $2,000 off tonight: Purdy is $6,600, Daniels $4,500, Mariota $1,000. The cap stays $30,000.
