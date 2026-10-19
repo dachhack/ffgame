@@ -58,4 +58,38 @@ begin
   perform assert_true((select count(*) from jsonb_array_elements(r -> 'matchup' -> 'away_entry') e where e ->> 'player_slug' = 'cm-wr1') = 1
                   and (select count(*) from jsonb_array_elements(r -> 'matchup' -> 'away_entry') e where (e ->> 'sealed')::boolean) = 8, 'cm6 a player unseals at his kickoff');
 end $$;
+-- ── 0512: THE COMMISSIONER WHO ISN'T PLAYING SEES EVERY PICK ─────────────────
+-- (cm3b above: a commissioner who plays still sees the other squad sealed.)
+do $$
+declare r jsonb; h uuid; code text; wk int := 42; sq jsonb;
+begin
+  perform probe_as('c');
+  r := create_contest_league('CM Referee', 'high', 'h2h', 'week', 2, 50000, 'slots', 10, 'Commish', '2026', 0, null, false);
+  perform assert_ok(r, 'cr0'); h := (r ->> 'league_id')::uuid; code := r ->> 'invite_code';
+  update league set contest_week = wk where id = h;
+  -- the commissioner steps out of seat 1: it waits for a player, as an AI seat does
+  update league_membership set app_user_id = null, enrolled = false, controller = 'ai' where league_id = h and sleeper_roster_id = 1;
+  perform probe_as('a'); perform assert_ok(join_contest(code, 'Ants'), 'cr1 a joins');
+  perform probe_as('b'); perform assert_ok(join_contest(code, 'Bees'), 'cr1b b joins');
+  insert into nfl_slate (season, week, home, away, win, kickoff) values ('2026', wk, 'PHI', 'DAL', '', now() + interval '3 days'), ('2026', wk, 'SF', 'KC', '', now() + interval '3 days'), ('2026', wk, 'NYJ', 'BUF', '', now() + interval '3 days') on conflict do nothing;
+  update nfl_slate set kickoff = now() + interval '3 days' where season = '2026' and week = wk;
+  insert into pod_salary (season, week, slug, name, pos, team, salary, proj)
+    select '2026', wk, slug, name, pos, team, salary, proj from pod_salary where season = '2026' and week = 41 and slug like 'cm-%' on conflict do nothing;
+  sq := '{"S1":"cm-qb1","S2":"cm-rb1","S3":"cm-rb2","S4":"cm-wr1","S5":"cm-wr2","S6":"cm-wr3","S7":"cm-te1","S8":"cm-k1","S9":"cm-d1"}';
+  insert into matchup (league_id, week, home_roster_id, away_roster_id, status) values (h, wk, 1, 2, 'scheduled');
+  perform probe_as('a'); perform assert_ok(save_contest_entry(h, wk, sq), 'cr2 a saves');
+  perform probe_as('b'); perform assert_ok(save_contest_entry(h, wk, sq), 'cr2b b saves');
+  -- nothing has kicked off; the commissioner reads the matchup
+  perform probe_as('c');
+  r := contest_matchup(h, wk);
+  perform assert_ok(r, 'cr3 the commissioner reads it');
+  perform assert_true(r ->> 'me' is null, 'cr3b …holding no seat');
+  perform assert_true((select count(*) from jsonb_array_elements(r -> 'matchup' -> 'home_entry') e where e ->> 'player_slug' is not null) = 9
+                  and (select count(*) from jsonb_array_elements(r -> 'matchup' -> 'away_entry') e where e ->> 'player_slug' is not null) = 9,
+                  'cr4 every pick on both sides is open to them before kickoff');
+  -- a player in it still sees the other side sealed
+  perform probe_as('b');
+  r := contest_matchup(h, wk);
+  perform assert_true((select count(*) from jsonb_array_elements(r -> 'matchup' -> 'home_entry') e where (e ->> 'sealed')::boolean) = 9, 'cr5 a player still sees the other squad sealed');
+end $$;
 select 'ALL CONTEST-MATCHUP PROBES PASSED' as result;
