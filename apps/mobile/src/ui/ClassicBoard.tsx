@@ -371,7 +371,7 @@ function roofMark(e: BoardEntry): string {
 }
 
 /** The figure on a row: points once the ball is live, the projection before it.
- *  No "proj" label — the founder wanted the number alone — and since v0.730.21
+ *  No "proj" label — the founder wanted the number alone — and since v0.730.22
  *  the projection in parentheses, "(13.4)": colour alone did not tell it from a
  *  final ("I cannot tell what is real and what is projected score"). */
 function scoreOf(e: BoardEntry | null): string {

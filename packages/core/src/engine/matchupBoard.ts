@@ -815,7 +815,7 @@ export function entryState(
   return t <= now ? 'live' : 'pre';
 }
 
-/** A PROJECTION, IN PARENTHESES (v0.730.21). Founder, over a Monday-night
+/** A PROJECTION, IN PARENTHESES (v0.730.22). Founder, over a Monday-night
  *  matchup: "I cannot tell what is real and what is projected score. Maybe
  *  parenthesis around projected?" Kittle's 13.4 and Daniels' 19.0 sat in the
  *  same big type as the finals beside them, told apart only by a quieter

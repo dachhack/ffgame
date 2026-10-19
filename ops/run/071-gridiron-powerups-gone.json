@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/gridiron-powerups-gone.sql",
+  "why": "Re-run of 070 (it stopped at its first query: the session has no public search_path; the file now sets it). #1372: a Gridiron Gang team says its Double or Nothing and Grudge Match disappeared. Read the league's week 5-8 matchups (rebuilt?), armed loadouts, coin spends (orphaned?), bought vs armed counts, the picks under each stake, and tier moves. Seats and players only."
+}

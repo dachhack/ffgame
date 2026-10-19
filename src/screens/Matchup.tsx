@@ -30,7 +30,7 @@ import { REAL_WEEKS, loadRealWeek, isRealWeekLoaded, realPbpFor, setLivePlays, l
 import { ShopModal } from './LeagueOverview';
 import { buildBeats, type Beat } from '@drip/core/data/demoNarration';
 import { slotMoments, MOMENT_COLOR, type Moment } from '@drip/core/engine/moments';
-import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, opponentEmptyWindows, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, applyExtraSlotCard, type PickRow } from '@drip/core/data/liveApi';
+import { myPicks, savePicksBestEffort, friendlyError, getMatchup, getMatchupState, type WindowScore, getRevealedPicks, opponentEmptyWindows, revealedOppBuffs, weekLivePlays, weekGameFeeds, ensureWallet, walletBuyPowerup, armUnlock, myUnlocks, myInventory, myComboQty, applyTargeted, applyUnderdog, refundInventory, clearTargeted, useSpy as spyRevealRpc, leagueWeeklyBudget, leagueTestLiveAt, leagueCardTheme, leagueCardThemeBySleeper, demoCardTheme, myMatchup, lockHolds, applyExtraSlotCard, type PickRow } from '@drip/core/data/liveApi';
 import { pickFailureNote } from '@drip/core/data/pickSave';
 import { CardTableCss, PowerupHand, PowerupCard, LiveCard, MiniCard, liveCardFlags } from '../app/cardTable';
 import { DemoOverlay, DemoViewToggle } from './DemoOverlay';
@@ -431,26 +431,41 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
   // display source. Rejections are logged, not blocking (the board already
   // shows the local application; the server is authoritative at FINAL).
   const keyParts = (k: string) => ({ win: k.split('#')[0], slot: k.split('#')[1] });
-  const liveTargeted = (id: string, payload: Record<string, unknown>) => {
+  // A REFUSED PLAY GIVES THE CARD BACK (v0.730.21, #1372). The board draws a
+  // play and spends its card (consume_inventory) before apply_targeted
+  // answers. When the server refused (a window already kicked off, no pick at
+  // the slot), the card stayed spent and nothing was armed: a Gridiron Gang
+  // team's Double or Nothing and Grudge Match "disappeared". Now a refusal
+  // takes the play off the board and refunds the card. The undo reads the
+  // store through a ref, because the answer arrives after the render that
+  // made the play, and that render's remove functions see the old week.
+  const undoNow = useRef({ clearDoubleOrNothing, removeSlotListPu, removeRivalry, clearByeSteal, grantPowerup });
+  undoNow.current = { clearDoubleOrNothing, removeSlotListPu, removeRivalry, clearByeSteal, grantPowerup };
+  const liveTargeted = (id: string, payload: Record<string, unknown>, undo?: (u: typeof undoNow.current) => void) => {
     if (!liveCtx) return;
-    // A refused apply must be LOUD (v0.372.1): the local board had already
-    // drawn the play, so a console-only warn meant the official resolver and
-    // the player's screen quietly disagreed for the rest of the week.
-    applyTargeted(liveCtx.matchupId, id, payload)
-      .then((r) => { if (!r.ok) window.alert(`${powerupById(id)?.name ?? id} did NOT apply server-side: ${friendlyError(r.error ?? 'apply failed')}. The official score won't count it — back it out and try again.`); })
-      .catch((e) => window.alert(`${powerupById(id)?.name ?? id} did NOT apply server-side: ${friendlyError(e)}.`));
+    const name = powerupById(id)?.name ?? id;
+    const mid = liveCtx.matchupId;
+    applyTargeted(mid, id, payload)
+      .then((r) => {
+        if (r.ok) return;
+        if (undo) undo(undoNow.current);   // the remove refunds the card
+        else { undoNow.current.grantPowerup(id); refundInventory(mid, id).catch(() => {}); }
+        window.alert(`${name} didn’t play: ${friendlyError(r.error ?? 'refused')}. Your card is back in your hand.`);
+      })
+      // No answer is not a refusal: the play may have landed, so nothing is refunded.
+      .catch((e) => window.alert(`${name} may not have played: ${friendlyError(e)}. Reload to check before playing it again.`));
   };
   const liveClearTargeted = (id: string, payload?: Record<string, unknown>) => {
     if (!liveCtx) return;
     clearTargeted(liveCtx.matchupId, id, payload).catch((e) => console.warn('[live] clear_targeted', id, e));
   };
   function applyToSpot(key: string) {
-    if (pendingApply === 'double-or-nothing') { if (setDoubleOrNothing(week, key)) liveTargeted('double-or-nothing', keyParts(key)); setPendingApply(null); }
+    if (pendingApply === 'double-or-nothing') { if (setDoubleOrNothing(week, key)) liveTargeted('double-or-nothing', keyParts(key), (u) => u.clearDoubleOrNothing(week)); setPendingApply(null); }
     else if (pendingApply === 'bye-steal') setByeStealSlot(key); // keep pending until a bye player is chosen
     else if (pendingApply === 'spy') setSpySlot(key); // keep pending until a reveal is chosen
     else if (pendingApply === 'mulligan') setMulliganSlot(key); // keep pending until a metric is chosen
     else if (pendingApply === 'metric-swap' || pendingApply === 'player-swap') { setSwapTarget({ key, win: key.split('#')[0] as WindowId }); setPendingApply(null); } // open the swap menu on the tapped live spot
-    else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring' || pendingApply === 'ghost') { if (applySlotListPu(pendingApply, week, key)) liveTargeted(pendingApply, keyParts(key)); setPendingApply(null); }
+    else if (pendingApply === 'lead-change' || pendingApply === 'grudge' || pendingApply === 'jinx' || pendingApply === 'red-herring' || pendingApply === 'ghost') { const pu = pendingApply; if (applySlotListPu(pu, week, key)) liveTargeted(pu, keyParts(key), (u) => u.removeSlotListPu(pu, week, key)); setPendingApply(null); }
     else if (pendingApply === 'unlock-underdog') {
       // UNDERDOG modifier (0257): confirm-then-attach — apply_underdog consumes
       // the owned card server-side; the slot keeps its metric. No refunds.
@@ -492,7 +507,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           .catch((e) => window.alert(`Extra Slot did NOT apply: ${friendlyError(e)}`));
       } else applyExtraSlot(week, win);
     }
-    else if (pendingApply === 'rivalry') { if (applyRivalry(week, win)) liveTargeted('rivalry', { win }); setPendingApply(null); }
+    else if (pendingApply === 'rivalry') { if (applyRivalry(week, win)) liveTargeted('rivalry', { win }, (u) => u.removeRivalry(week, win)); setPendingApply(null); }
   }
   // Arm a clutch offer: Counter-Wipe negates the nuke at its own clock; Encore/
   // Halftime Gamble arm from the current live clock.
@@ -2359,7 +2374,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           onPick={(pid) => {
             if (applyByeSteal(week, byeStealSlot, pid)) {
               const bp = getPlayer(pid);
-              liveTargeted('bye-steal', { ...keyParts(byeStealSlot), slug: pid, pts: bp ? Math.min(BYE_STEAL_CAP, Math.round(projectedPoints(bp, week) * 10) / 10) : 0 });
+              liveTargeted('bye-steal', { ...keyParts(byeStealSlot), slug: pid, pts: bp ? Math.min(BYE_STEAL_CAP, Math.round(projectedPoints(bp, week) * 10) / 10) : 0 }, (u) => u.clearByeSteal(week));
             }
             setByeStealSlot(null); setPendingApply(null);
           }}

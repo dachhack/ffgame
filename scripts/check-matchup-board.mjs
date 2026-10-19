@@ -433,7 +433,7 @@ ok('no kickoff (bye) is not primetime', !isPrimetime(null) && !isPrimetime(undef
   ok('kick: noon is 12p, a Thursday night 8:15p', compactKick(at(18, 12, 0)) === 'Sun 12p' && compactKick(at(15, 20, 15)) === 'Thu 8:15p');
   ok('kick: an unreadable time is blank', compactKick('nope') === '');
 }
-// A PROJECTION, IN PARENTHESES (v0.730.21): "I cannot tell what is real and what is projected score."
+// A PROJECTION, IN PARENTHESES (v0.730.22): "I cannot tell what is real and what is projected score."
 {
   ok('a projection reads "(13.4)"', projFigure(13.4) === '(13.4)', projFigure(13.4));
   ok('…one decimal, and a bad number is (0.0)', projFigure(19) === '(19.0)' && projFigure(NaN) === '(0.0)');

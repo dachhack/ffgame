@@ -115,7 +115,7 @@ function GameCard({ e, align, onOpen, stashed }: { e: BoardEntry | null; align: 
               {e.primetime && <span title="Primetime kickoff" style={{ marginLeft: 4 }}>☾</span>}
             </div>
             {/* NO "proj" LABEL (founder, v0.241.0): the number alone — the
-                quiet colour and, since v0.730.21, parentheses say it is a
+                quiet colour and, since v0.730.22, parentheses say it is a
                 projection ("I cannot tell what is real and what is
                 projected score"). 16px since v0.368.1. */}
             <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--faint)', whiteSpace: 'nowrap' }}>

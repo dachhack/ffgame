@@ -22,7 +22,7 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
-### v0.730.21 — Projections in parentheses on the matchup
+### v0.730.22 — Projections in parentheses on the matchup
 
 > - On the matchup, a player who hasn't played yet now shows his projection in parentheses, like (13.4), so it can't be mistaken for a real score like 35.30.
 
@@ -35,6 +35,34 @@ Core `projFigure` wraps a projection in parentheses. It's used in the phone
 board's row figure (`scoreOf`) and its compact score column, and in the web
 board's matchup card and compact row. Scores keep two decimals.
 check:board covers it.
+### v0.730.21 — A power-up that doesn't play gives its card back
+
+> - On the web, if a power-up you play is refused (its game already started, say), it comes off the board and the card goes back in your hand. Before, the card could be spent with nothing played.
+> - The Gridiron Gang team whose Double or Nothing and Grudge Match vanished on Sunday has both cards back, in time for Monday night.
+
+#1372, asked from chat in Gridiron Gang: "Looks like the power ups disappeared"
+(a team had played Double or Nothing and Grudge Match). Ops 071/072, read
+only:
+- Seat 11 bought both cards on Oct 18 at 19:39 UTC.
+- Its hand spent them 10 and 17 seconds later.
+- Neither is armed on its week 6 matchup, and no refund followed.
+
+The web board spends a card when it draws the play (consume_inventory),
+then asks apply_targeted. A refusal only raised an alert, so the card stayed
+spent. The phone already applies first and spends only on success. At 19:39
+the am and early windows had kicked off, and week 5's two plays sat on am|0,
+so a refused "window already kicked off" is the likely refusal. Not confirmed
+from the client side.
+
+- src/screens/Matchup.tsx `liveTargeted`: a refusal (r.ok false) runs the
+  play's undo. Double or Nothing, Grudge/Lead Change/Jinx/Red Herring/Ghost,
+  Rivalry and Bye Steal take the play off the board and refund the card;
+  the rest refund the card. The undo reads the store through a ref, because
+  the answer arrives after the render that made the play. A failed request
+  refunds nothing, since the play may have landed.
+- 0510 puts seat 11's two cards back, by the books (purchases − armed − held,
+  only what is owed; a no-op once they are back).
+- check:refusedplay holds the wiring.
 
 ### v0.730.20 — Computer answers in DMs; probes can't read DMs
 
