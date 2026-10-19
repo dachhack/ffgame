@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.32 — Monday Showdown's budget cut, take two
+
+> - Monday Showdown's budget is now $30,000 and both squads are cleared, ready to rebuild before kickoff.
+
+0516 changed nothing: its guard wanted a 'scheduled' week-6 matchup, and a
+contest week reads 'live' from its first kickoff (Thursday). 0517 is 0516
+guarded on WAS@SF's kickoff instead. Tried on scratch: a live matchup before
+kickoff applies; after kickoff, nothing changes.
+
 ### v0.730.31 — The commissioner can unset picks
 
 > - Commissioners can now take players out of a member's squad: in FIX A WEEK → SET A SQUAD, set a spot to "— empty —", or tap UNSET ALL. The member then picks again. This works even after a player's game has kicked off.
