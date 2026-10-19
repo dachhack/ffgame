@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/gridiron-powerups-hand.sql",
+  "why": "#1372 second read: seat 11 paid for week 6 Grudge and Double or Nothing but neither is armed. Read its hand (were the cards spent?), the web board's saved week 6 state (where were they placed?), its week 6 picks and the window kickoffs. Seats and players only."
+}
