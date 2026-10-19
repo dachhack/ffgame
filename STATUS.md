@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.24 — Contest leagues drop the Sleeper tools
+
+> - A contest league's commissioner page no longer shows "sync season", "go native", preseason practice or K / D-ST fill. None of them apply to a league Drip runs itself, and they made it look like you had to sync to get a matchup.
+
+Founder, over Monday Showdown's commissioner page (a one-week head-to-head
+contest): "Do I need to sync the season to get the matchup board?" (no: the
+worker's hourly pod tick pairs it, ops 074) → "Yes, hide those for contest
+leagues." The web's MODE tab gated SCHEDULE (sync season), GO NATIVE, PRESEASON
+PRACTICE and K / D-ST FILL on "not native" or "NFL", which every
+provider-`pod` league passes. New `ownGame` (a contest league, or any pod
+league) hides all four. On the phone, the only one shown, K / D-ST fill,
+hides in a contest league. check:dfsbullseye covers it.
+
 ### v0.730.23 — Computer's fix card in DMs, as in league chat
 
 > - When something you asked the computer about in a DM gets fixed, the fix now shows up right in that DM: the same card as league chat, with what was wrong and how it was fixed behind READ THE REPORT.
