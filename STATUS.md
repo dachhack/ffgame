@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.19 — The matchup shows what your power-ups did
+
+> - Under each team's score on a contest matchup, a "⚡ +2.9" chip shows how many points that side's power-ups added or cost. Tap it for each one: the player power-ups and the team bonuses that paid.
+> - On the phone, a team power-up that pays (Hail Mary, Century Club…) now shows up and counts in the points, as it already did on the web.
+
+Founder, on a Weekly Cointest matchup: "Did my power ups apply? Anyway we can
+show the difference power ups make?" Per spot, the struck raw score under the
+powered-up one already showed a play landing. What was missing:
+- **The total:** no line said what the plays did overall.
+- **Event bonuses on the phone:** the server's `PLAY` slot rows were neither
+  shown nor tallied on the phone. The web showed them as bare text.
+
+Core `contestPlayEffect` takes each side's scored rows: score − raw for a spot
+a play touched, plus each event bonus. It applies the same reveal rule as the
+⚡ UP chips, so a sealed opponent shows nothing. Both ContestMatchups show the
+net as an ⓘ chip beside TEAM ⚡ UP. The web's bare bonus text is gone (the
+chip carries it), and the phone tally counts bonus rows. check:playreveal
+covers it.
+
 ### v0.730.18 — The screen stays on while the play-by-play reads aloud
 
 > - While CATCH UP or LIVE is reading the play-by-play aloud, your phone won't auto-lock, so the reading keeps going. STOP, the final, or leaving the screen lets it sleep again.

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal, contestPlayById, contestPlaysFor, contestPlayCap, contestPlayTarget, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, type ContestPlayId } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal, contestPlayById, contestPlaysFor, contestPlayCap, contestPlayTarget, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, contestPlayEffect, signedPts, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { ringScore } from '@drip/core/engine/bullseye';
@@ -259,6 +259,8 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   const radius = st.radius ?? 10;
   const tally = (s: 'home' | 'away', S: typeof L) => {
     let pts = 0, proj = 0, ringProj = 0, known = true, toPlay = 0;
+    // an event bonus (a squad play that paid) is points too — the web's tally always counted it (v0.730.19)
+    for (const b of (m.state?.slots ?? []).filter((x) => x.side === s && x.slot === 'PLAY')) { pts += b.score; proj += b.score; }
     for (const r of S.rows) {
       const score = st.started && r.slug ? scoreOf(s, r.slot) : null;
       if (score != null) pts += score;
@@ -285,6 +287,12 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
   const squadPlays = (s: 'home' | 'away', mine: boolean): ContestPlayRow[] =>
     !contestSquadPlaysShown({ mine, slugs: (s === left ? L : R).rows.map((r) => r.slug) }) ? []
       : (mine && myTable ? plays : ((s === 'home' ? m.home_plays : m.away_plays) ?? [])).filter((x) => !x.slot && contestPlayById(x.id)?.target !== 'opp');
+  /** A side's net from its plays (v0.730.19): a spot only once its play shows; event bonuses once its team plays show. */
+  const effectOf = (s: 'home' | 'away', S: typeof L) => !st.started ? { net: 0, parts: [] } : contestPlayEffect(m.state?.slots ?? [], s, {
+    nameOf: (slug) => bySlug.get(slug)?.name ?? slug,
+    shown: (row) => row.slot === 'PLAY' ? contestSquadPlaysShown({ mine: S.mine, slugs: S.rows.map((r) => r.slug) })
+      : (() => { const r = S.rows.find((x) => x.slot === row.slot); return !!r && !!playAt(s, r, S.mine); })(),
+  });
   const scoreboard = (s: 'home' | 'away', S: typeof L, edge: 'left' | 'right') => {
     const x = tally(s, S);
     const color = S.mine ? t.you : t.opp;
@@ -296,8 +304,10 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
         <View style={{ alignItems: edge === 'left' ? 'flex-start' : 'flex-end', maxWidth: '100%' }}>
           <Text style={{ fontFamily: MONO, fontSize: fs(26), fontWeight: '800', lineHeight: fs(28), color: x.points != null ? color : alpha(t.text, 35) }}>{fmt(x.points)}</Text>
           <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(9), color: dim, textAlign: edge }}>{`${bull ? 'PTS' : word.toUpperCase()}${x.pen > 0 ? penText(x) : !final && x.projected != null ? ` · proj ${x.projected.toFixed(1)}` : ''}`}</Text>
-          {/* THE TEAM CHIP (v0.698.0): a fixed row under the projection, the chip in it while a squad play is on */}
-          <View style={{ height: 16, justifyContent: 'center', alignItems: edge === 'left' ? 'flex-start' : 'flex-end', marginTop: 2 }}>
+          {/* THE TEAM CHIP (v0.698.0): a fixed row under the projection, the chip in it while a squad play is on.
+              WHAT THE POWER-UPS DID (v0.730.19): beside it, the side's net from its plays — tap for each one. */}
+          <View style={{ height: 16, flexDirection: edge === 'left' ? 'row' : 'row-reverse', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            {(() => { const e = effectOf(s, S); return e.parts.length ? <InfoChip label={`⚡ ${signedPts(e.net)}`} title="What the power-ups did">{e.parts.map((p) => `${p.label}: ${signedPts(p.delta)}`).join('\n') + `\n\nNet: ${signedPts(e.net)} points.`}</InfoChip> : null; })()}
             {(() => { const sq = squadPlays(s, S.mine); return sq.length ? <InfoChip label="TEAM ⚡ UP" title={sq.length === 1 ? (contestPlayById(sq[0].id)?.name ?? sq[0].id) : 'Team plays'} actions={S.mine && myTable && !st.started ? sq.map((p) => ({ label: `TAKE BACK${sq.length > 1 ? ` ${(contestPlayById(p.id)?.name ?? p.id).toUpperCase()}` : ''}`, onPress: () => void disarm(p) })) : undefined}>{sq.map((p) => `${contestPlayById(p.id)?.icon ?? ''} ${contestPlayById(p.id)?.name ?? p.id}: ${contestPlayById(p.id)?.blurb ?? ''}`).join('\n\n') + (S.mine && myTable ? '\n\nA squad play goes back to your hand until the week’s first kickoff.' : '')}</InfoChip> : null; })()}
           </View>
         </View>
