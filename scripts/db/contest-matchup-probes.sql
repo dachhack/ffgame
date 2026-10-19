@@ -92,4 +92,30 @@ begin
   r := contest_matchup(h, wk);
   perform assert_true((select count(*) from jsonb_array_elements(r -> 'matchup' -> 'home_entry') e where (e ->> 'sealed')::boolean) = 9, 'cr5 a player still sees the other squad sealed');
 end $$;
+-- ── 0513: ONE MATCHUP, FOR ANYONE WITH THE LINK ───────────────────────────────
+do $$
+declare r jsonb; h uuid; mid uuid; wk int := 42; other uuid;
+begin
+  select id into h from league where name = 'CM Referee' order by created_at desc limit 1;
+  select id into mid from matchup where league_id = h and week = wk limit 1;
+  update nfl_slate set kickoff = now() + interval '3 days' where season = '2026' and week = wk;
+  perform set_config('app.uid', '', false); perform set_config('app.email', '', false);   -- signed out
+  r := public_contest_matchup(mid);
+  perform assert_ok(r, 'pm1 a signed-out reader gets the matchup');
+  perform assert_true(r ->> 'home_team' = 'Ants' or r ->> 'away_team' = 'Ants', 'pm1b with its team names');
+  perform assert_true((select count(*) from jsonb_array_elements(r -> 'home_entry') e where (e ->> 'sealed')::boolean) = 9
+                  and (select count(*) from jsonb_array_elements(r -> 'away_entry') e where (e ->> 'sealed')::boolean) = 9
+                  and r -> 'names' = '{}'::jsonb, 'pm2 before kickoff every pick is sealed, and no name leaves');
+  update nfl_slate set kickoff = now() - interval '1 hour' where season = '2026' and week = wk and home = 'NYJ';
+  r := public_contest_matchup(mid);
+  perform assert_true((select count(*) from jsonb_array_elements(r -> 'home_entry') e where e ->> 'player_slug' = 'cm-wr1') = 1
+                  and (select count(*) from jsonb_array_elements(r -> 'home_entry') e where (e ->> 'sealed')::boolean) = 8
+                  and r -> 'names' -> 'cm-wr1' ->> 'name' = 'W One', 'pm3 a player turns at his kickoff, named');
+  perform assert_true(not exists (select 1 from jsonb_array_elements(coalesce(r -> 'state' -> 'slots', '[]'::jsonb)) x where x ? 'slug' or x ? 'player_slug'), 'pm4 the score rows carry no player id');
+  update league set settings_json = settings_json || '{"public_api": false}' where id = h;
+  perform assert_true(not coalesce((public_contest_matchup(mid) ->> 'ok')::boolean, false), 'pm5 a league that turned public reads off is not served');
+  update league set settings_json = settings_json - 'public_api' where id = h;
+  select m.id into other from matchup m join league l on l.id = m.league_id where not _is_contest(l) limit 1;
+  if other is not null then perform assert_true(not coalesce((public_contest_matchup(other) ->> 'ok')::boolean, false), 'pm6 only contest matchups'); end if;
+end $$;
 select 'ALL CONTEST-MATCHUP PROBES PASSED' as result;

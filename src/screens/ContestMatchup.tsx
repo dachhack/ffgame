@@ -14,7 +14,7 @@
 // the table walks the week's other matchups (every seat's squad on a
 // leaderboard); the week arrows live in the league frame.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot, weekGameFeeds } from '@drip/core/data/liveApi';
+import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot, weekGameFeeds , watchMatchupUrl } from '@drip/core/data/liveApi';
 import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestPlayById, contestRedeal, contestPlaysFor, contestPlayCap, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, contestPlayEffect, signedPts, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
@@ -85,6 +85,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   // ▦ FIELDS (v0.703.0, founder: "the all fields chip in the matchup screens for classic and weekly competitions"):
   // the week's feeds are installed when the board opens — this screen scores off the worker's state, not the feed.
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [shared, setShared] = useState(false);
   const [feedTick, setFeedTick] = useState(0);
   const loadFeeds = useCallback(() => weekGameFeeds(week).then((gf) => { setLiveGameFeed(week, feedRowsToWeek(gf)); setFeedTick((n) => n + 1); }).catch(() => {}), [week]);
   useEffect(() => { if (fieldsOpen) void loadFeeds(); }, [fieldsOpen, loadFeeds]);
@@ -334,6 +335,9 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
       {/* ▦ FIELDS (v0.703.0): every game of the week, the live drive charts, from here as from the classic board */}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', alignItems: 'center', paddingBottom: 4 }}>
         <button onClick={() => setFieldsOpen(true)} className="mono" style={{ ...chip(false), flexShrink: 0, whiteSpace: 'nowrap' }}>▦ FIELDS</button>
+        {/* SHARE (v0.730.26, founder: "a link to show the one match up … for anyone not logged in"): the #/watch page (0513) */}
+        <button onClick={() => { void navigator.clipboard?.writeText(watchMatchupUrl(m.id)).then(() => setShared(true)).catch(() => window.prompt('Copy this link', watchMatchupUrl(m.id))); setTimeout(() => setShared(false), 1800); }}
+          title="a link anyone can open, signed in or not — picks show as each player kicks off" className="mono" style={{ ...chip(shared), flexShrink: 0, whiteSpace: 'nowrap' }}>{shared ? '✓ LINK COPIED' : 'SHARE'}</button>
         {(st.matchups?.length ?? 0) > 1 && (st.matchups ?? []).map((x) => (
             <button key={x.id} onClick={() => setPick(x.id === (st.matchups ?? []).find((y) => y.mine)?.id ? null : x.id)} className="mono" style={{ ...chip(x.id === m.id), flexShrink: 0, whiteSpace: 'nowrap' }}>
               {x.home === x.away ? x.home_team : `${x.home_team} v ${x.away_team}`}
