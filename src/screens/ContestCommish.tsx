@@ -358,7 +358,7 @@ function SquadFixBox({ leagueId, week }: { leagueId: string; week: number }) {
   }, [findQ, leagueId, week]);
   useEffect(() => {
     if (rid == null) { setSq(null); return; }
-    Promise.all([commishContestSquad(leagueId, week, rid), podSalaries(week)]).then(([s, rows]) => {
+    Promise.all([commishContestSquad(leagueId, week, rid), podSalaries(week, '2026', leagueId)]).then(([s, rows]) => {
       if (!s.ok) { setMsg(s.error ?? 'could not load'); return; }
       setSq(s); setBoard(rows);
       setPicks(contestSquadOf(s.entry, classicSlotsFromSpec(s.slots ?? null) ?? []));

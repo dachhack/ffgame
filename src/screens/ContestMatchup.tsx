@@ -89,7 +89,7 @@ export function ContestMatchup({ leagueId, week }: { leagueId: string; week: num
   const [feedTick, setFeedTick] = useState(0);
   const loadFeeds = useCallback(() => weekGameFeeds(week).then((gf) => { setLiveGameFeed(week, feedRowsToWeek(gf)); setFeedTick((n) => n + 1); }).catch(() => {}), [week]);
   useEffect(() => { if (fieldsOpen) void loadFeeds(); }, [fieldsOpen, loadFeeds]);
-  useEffect(() => { podSalaries(week).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week]);
+  useEffect(() => { podSalaries(week, '2026', leagueId).then(setBoard).catch(() => setBoard([])); weekSlateByTeam(week).then(setSlate).catch(() => {}); }, [week, leagueId]);
   const bySlug = useMemo(() => new Map(board.map((r) => [r.slug, r])), [board]);
   const slots = useMemo(() => classicSlotsFromSpec(st?.slots ?? null) ?? [], [st?.slots]);
   const labels = useMemo(() => contestSlotLabels(slots), [slots]);

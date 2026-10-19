@@ -20,6 +20,7 @@ import { applyServerMarkFree, personalMarkFree, setMarkFree } from './markFree';
 import { setCollegeProjections } from '../engine/projScoring';
 import type { ProjStatLine } from './projStats2026';
 import { assignSealedRows } from '../engine/seatPicks';
+import { contestPriced, contestPriceAdjOf } from '../engine/contest';
 import type { Session } from '@supabase/supabase-js';
 import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
 import type { WaiverRunReport } from './txnChat';
@@ -607,13 +608,19 @@ export interface PodSalaryRow { slug: string; name: string; pos: string; team: s
   priced_proj?: number | null }
 
 /** The week's frozen salary board (public game data — priced weekly projections). */
-export async function podSalaries(week: number, season = '2026'): Promise<PodSalaryRow[]> {
-  const { data } = await (await client()).from('pod_salary')
-    .select('slug, name, pos, team, salary, proj, exp, priced_proj')
-    .eq('season', season).eq('week', week)
-    .order('salary', { ascending: false })
-    .range(0, 4999);   // every position a contest league can start (0466) — past PostgREST's 1000-row page
-  return (data ?? []) as PodSalaryRow[];
+export async function podSalaries(week: number, season = '2026', leagueId?: string | null): Promise<PodSalaryRow[]> {
+  const c = await client();
+  const [{ data }, adj] = await Promise.all([
+    c.from('pod_salary')
+      .select('slug, name, pos, team, salary, proj, exp, priced_proj')
+      .eq('season', season).eq('week', week)
+      .order('salary', { ascending: false })
+      .range(0, 4999),   // every position a contest league can start (0466) — past PostgREST's 1000-row page
+    // THE LEAGUE'S PRICES (0518): a contest league's own cut or markup by position
+    leagueId ? c.rpc('contest_price_adj', { p_league: leagueId }).then((r) => contestPriceAdjOf(r.data), () => ({})) : Promise.resolve({}),
+  ]);
+  const rows = contestPriced((data ?? []) as PodSalaryRow[], adj);
+  return Object.keys(adj).length ? [...rows].sort((a, b) => b.salary - a.salary) : rows;
 }
 
 /** Load the live NFL injury report into core's cache for `week`.
