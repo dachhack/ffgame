@@ -40,8 +40,8 @@ pass on scratch.
 
 0516 clears Monday Showdown's week-6 squads and cuts its budget (founder: "unset
 all spots and decrease the salary to 20k or 25k"). An 8-spot squad at the
-$3,000 player floor can't fit $20k, so the founder chose "the tightest that
-fits": $25k if the cheapest legal WAS/SF squad fits, else that squad's cost
+$3,000 player floor can't fit $20k, so the founder chose $30k ("Or 30k"),
+if the cheapest legal WAS/SF squad fits, else that squad's cost
 plus $5k, rounded up to $1k. It never raises the budget. It posts a note to the
 league chat. Tried on scratch against three boards (tight, near the floor,
 too dear).

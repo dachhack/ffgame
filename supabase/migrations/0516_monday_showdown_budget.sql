@@ -5,8 +5,8 @@
 -- game on the board, the $50,000 cap lets both seats take everyone good.
 --
 -- Each seat has 8 spots and every player costs at least $3,000, so $20,000
--- can't hold a squad. The founder chose "the tightest that fits": $25,000 if
--- the cheapest legal squad from WAS and SF fits under it, else that squad's
+-- can't hold a squad. The founder then chose $30,000 ("Or 30k"), if the
+-- cheapest legal squad from WAS and SF fits under it, else that squad's
 -- cost plus $5,000, rounded up to the next $1,000. If no legal squad exists,
 -- the budget is left alone (a notice says why), and it is never raised. A
 -- minimum spend above the new cap is cleared. Both week-6 squads are deleted
@@ -35,7 +35,7 @@ begin
     if pick.slug is null then cheapest := null; exit; end if;
     used := array_append(used, pick.slug); cheapest := cheapest + pick.salary;
   end loop;
-  cap := case when cheapest is null then null when cheapest <= 25000 then 25000 else ((cheapest + 5000 + 999) / 1000) * 1000 end;
+  cap := case when cheapest is null then null when cheapest <= 30000 then 30000 else ((cheapest + 5000 + 999) / 1000) * 1000 end;
   raise notice 'Monday Showdown: % spots, cheapest WAS/SF squad $%, new budget %', jsonb_array_length(spots), cheapest, coalesce('$' || cap, 'unchanged');
   -- never a raise; with no cut (or no legal squad) the squads are still cleared
   if cap >= _contest_budget(lg) then cap := null; end if;
