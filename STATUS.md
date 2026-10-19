@@ -22,6 +22,16 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.33 — Monday Showdown's QBs, $2,000 off
+
+> - In Monday Showdown, QBs are $2,000 off tonight. The cap is now $32,000, which works out the same because every squad has exactly one QB.
+
+Founder: "Let's discount QBs in this league by $2000". The board is shared, and
+there's no per-league price adjustment. With one QB-only spot and no flex, a
+QB discount is exactly a cap raise, so 0518 sets the cap from $30k to $32k,
+guarded on WAS@SF's kickoff and on the cap still being $30k. Tried on scratch:
+the first run applies, and a re-run changes nothing and posts no second note.
+
 ### v0.730.32 — Monday Showdown's budget cut, take two
 
 > - Monday Showdown's budget is now $30,000 and both squads are cleared, ready to rebuild before kickoff.
