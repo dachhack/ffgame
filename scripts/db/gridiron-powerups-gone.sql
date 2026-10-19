@@ -3,6 +3,7 @@
 -- Match. READ ONLY. Seats, players and ids only: no names, no team names, no
 -- messages (the log is public).
 \pset pager off
+set search_path = public;
 \set lg '798acff0-e0bb-4e11-9e1b-4a3bb29525bd'
 
 \echo '── 1. the league'
