@@ -3804,6 +3804,9 @@ export interface DmMessage {
   /** 0351. No editor name: a DM has no commissioner, so every edit is the
    *  author's own and every note reads "edited". */
   edited_at?: string | null;
+  /** 0509: 'computer' for Computer's reply to an @computer ask (no author;
+   *  `mine` is false for both people). Older rows read 'text'. */
+  kind?: 'text' | 'computer';
 }
 /** `caption` (0350) rides beside the body rather than inside it: the body of an
  *  image message stays the bare URL every client already renders inline. */

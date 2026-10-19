@@ -450,8 +450,9 @@ export async function sweepComputer() {
       );
       await db().from('computer_ask').update({ issue: n }).eq('source', a.source).eq('message_id', a.id);
       log('filed', `#${n}`, 'from', a.source, a.id);
-      // League chat gets the house reply in the thread it was asked in. A DM
-      // cannot: every DM line needs a human author, so the push is its receipt.
+      // The house reply goes where the ask was made: the league chat, the dev
+      // room, or (v0.730.20, 0509) the DM, as a line with no author. The push
+      // below is the receipt either way.
       if (a.source === 'league') {
         const { error: rErr } = await db().from('league_message').insert({
           league_id: a.league_id, author_id: null, kind: 'computer',
@@ -462,6 +463,12 @@ export async function sweepComputer() {
         const { error: rErr } = await db().from('dev_room_message').insert({
           room_id: a.room_id, author_id: null, kind: 'computer',
           body: `${snarkFor(a.id)} (#${n})`, mentions: [],
+        });
+        if (rErr) log('reply failed', a.id, rErr.message);
+      } else if (a.source === 'dm') {
+        const { error: rErr } = await db().from('dm_message').insert({
+          thread_id: a.thread_id, author_id: null, kind: 'computer',
+          body: `${snarkFor(a.id)} (#${n})`,
         });
         if (rErr) log('reply failed', a.id, rErr.message);
       }

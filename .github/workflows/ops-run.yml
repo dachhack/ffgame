@@ -28,6 +28,8 @@ name: Run committed ops requests
 #           through psql in a read-only session, like "Run a database query",
 #           which this integration cannot dispatch either. Seats, not names,
 #           in anything it prints: the log is public.
+#           v0.730.20: and never a DM table — scripts/check-probe-sql.mjs
+#           refuses the file (here and in CI, probe-guard.yml).
 # `restamp` still demands its confirm string — in the file, where a reviewer
 # reads it — because the gate is about intent, and intent is what a file is.
 #
@@ -80,6 +82,8 @@ jobs:
               case "$q" in scripts/db/*.sql) ;; *) echo "::error::a query runs a scripts/db/*.sql file, not $q"; exit 1;; esac
               case "$q" in *..*) echo "::error::no path climbing: $q"; exit 1;; esac
               [ -f "../$q" ] || { echo "::error::no such file: $q"; exit 1; }
+              # NO DMs (v0.730.20): a probe's output is public, so it may not name a DM table
+              node ../scripts/check-probe-sql.mjs "../$q"
               [ -n "${SUPABASE_DB_URL:-}" ] || { echo "::error::Set the SUPABASE_DB_URL repo secret."; exit 1; }
               psql --version >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
               PGOPTIONS='-c default_transaction_read_only=on' psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "../$q"
