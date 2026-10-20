@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/kickoff-1396-adds.sql",
+  "why": "#1396, Kickoff League chat: 'while all these adds on 10/18 shouldn't they be locked after games?' Read only: each add/claim since Sat with its kind, whether the worker made it, the player's team kickoff and whether the add came after it; the league's wire settings; seats as numbers."
+}
