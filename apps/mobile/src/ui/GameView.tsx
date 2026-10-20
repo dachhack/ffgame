@@ -13,9 +13,9 @@
 // A BODY, not a sheet: the surfaces that open it are already sheets
 // (stacked Modals are flaky on Android), so they swap this in.
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { gameFeedFor, weekBoxGames, latestPlay, feedScore, type GamePlay } from '@drip/core/data/gameFeed';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel, timeoutsLeft, playKey } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, clockLabelFor, shortClockLabel, stoppageLabel, gameLog, eventLabel, timeoutsLeft, playKey, filterGameLog, PLAY_FILTERS, type PlayFilterKind } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
@@ -29,6 +29,7 @@ import { ReaderBar } from './ReaderBar';
 import { appVoice } from './voice';
 import { openPlayerCard } from './PlayerCardSheet';
 import { playerHelmetFace } from './HelmetFace';
+import { InfoChip } from './InfoChip';
 
 const fullName = (slug: string) => stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 const shortName = (full: string) => { const w = full.split(' '); return w.length > 1 ? `${w[0][0]}. ${w.slice(1).join(' ')}` : full; };
@@ -65,6 +66,12 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
   const [shown, setShown] = useState<string | null>(null);
   useEffect(() => { setJump(null); setShown(null); }, [game?.key]);
   const [statTab, setStatTab] = useState<'off' | 'def'>('off');
+  // SEARCH THE PLAYS (v0.731.0): a kind chip and a search box over the log.
+  const [kind, setKind] = useState<PlayFilterKind>('all');
+  const [q, setQ] = useState('');
+  const namesOf = (p: GamePlay) => playNames(p.txt).map((a) => personOf(a)?.full).filter((x): x is string => !!x);
+  const shownLog = filterGameLog(gameLog(feed ?? { plays }), kind, q, namesOf);
+  const filtering = kind !== 'all' || !!q.trim();
   const drive = feed ? driveSummary(feed) : null;
   const sit = last ? situationLabel(last, home, away) : null;
   const ballTm = last ? (last.tm2 ?? last.tm) : null;
@@ -199,10 +206,37 @@ export function GameViewBody({ week, initialKey, showStrip = true, onBack }: {
             {tab === 'live' && (
               <View style={{ paddingHorizontal: 12 }}>
                 {plays.length === 0 && <Text style={{ fontFamily: MONO, fontSize: fs(10.5), color: t.faint, textAlign: 'center', padding: 16 }}>— no plays yet —</Text>}
+                {plays.length > 0 && (
+                  <View style={{ marginTop: 8, marginBottom: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <TextInput value={q} onChangeText={setQ} placeholder="🔍 a player, or “interceptions”" placeholderTextColor={t.faint}
+                        autoCorrect={false} autoCapitalize="none" returnKeyType="search" accessibilityLabel="Search the plays"
+                        style={{ flex: 1, fontSize: fs(12.5), paddingVertical: 7, paddingHorizontal: 9, borderRadius: 6, borderWidth: 1, borderColor: q ? t.you : t.bd, backgroundColor: t.bg, color: t.text }} />
+                      {filtering && (
+                        <Pressable hitSlop={10} accessibilityLabel="Clear the search" onPress={() => { setQ(''); setKind('all'); }}>
+                          <Text style={{ fontFamily: MONO, fontSize: fs(13), fontWeight: '700', color: t.dim }}>✕</Text>
+                        </Pressable>
+                      )}
+                      <InfoChip title="Search the plays">
+                        <Text style={{ fontSize: fs(13), lineHeight: fs(13) * 1.4, color: t.text }}>Type a name (“Zay Flowers”, “Flowers”), a team, or a kind of play: interceptions, sacks, fumbles, turnovers, TDs, scores, penalties, FGs, punts. Words combine: “Flowers td”. The chips narrow it to one kind.</Text>
+                      </InfoChip>
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingTop: 7 }}>
+                      {PLAY_FILTERS.map((f) => (
+                        <Pressable key={f.id} onPress={() => setKind(f.id)}
+                          style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: kind === f.id ? t.you : t.bd, backgroundColor: kind === f.id ? alpha(t.you, 14) : 'transparent' }}>
+                          <Text style={{ fontFamily: MONO, fontSize: fs(9.5), fontWeight: '700', letterSpacing: 0.8, color: kind === f.id ? t.you : t.dim }}>{f.label}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                    {filtering && <Text style={{ fontFamily: MONO, fontSize: fs(9), color: t.dim, marginTop: 6 }}>{shownLog.length} of {plays.length} plays</Text>}
+                  </View>
+                )}
+                {filtering && shownLog.length === 0 && <Text style={{ fontFamily: MONO, fontSize: fs(10.5), color: t.faint, textAlign: 'center', padding: 16 }}>— no plays match —</Text>}
                 {/* THE STOPPAGES ARE IN THE LOG (v0.434.3): a timeout, the
                     two-minute warning, the end of a quarter, halftime, the
                     final — each a divider at its clock between the plays. */}
-                {[...gameLog(feed ?? { plays })].reverse().map((row, i) => {
+                {[...shownLog].reverse().map((row, i) => {
                   if (row.kind === 'event') {
                     return (
                       <View key={`ev-${row.c}-${i}`} style={{ paddingVertical: 8, alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: alpha(t.bd, 0.6) }}>

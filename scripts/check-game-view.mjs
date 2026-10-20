@@ -4,7 +4,7 @@
 // header, drive line and play rows are readings off the play feed; both
 // hosts' Game views take them from here, pinned against real week-1 lines.
 // Run: npx tsx scripts/check-game-view.mjs
-import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey } from '../packages/core/src/data/gameView.ts';
+import { qClock, spotLabel, situationLabel, driveSummary, playNames, ballCarrier, stripEligible, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey, gameLog, filterGameLog, playMatchesQuery, playIsKind } from '../packages/core/src/data/gameView.ts';
 import { teamMarkColor } from '../packages/core/src/data/teamColors.ts';
 import { namesFromSlugs, resolveGamebookPerson } from '../packages/core/src/engine/gameNames.ts';
 
@@ -107,6 +107,40 @@ ok(liveSituationChip(null) === null && liveSituationChip({ sit: { dd: '  ' } }) 
   for (const f of ['src/app/FieldView.tsx', 'apps/mobile/src/ui/FieldView.tsx']) {
     const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
     ok(src.includes('setTimeout(() => stepTo(pin + 1), REPLAY_MS)') && src.includes('⟲ REPLAY') && src.includes('replayModeLabel(replay)'), `${f}: ⟲ REPLAY starts at play 1, AUTO steps on REPLAY_MS, the chip toggles the mode`);
+  }
+}
+
+// ── SEARCH THE PLAYS (v0.731.0): "all interceptions or all plays by Zay Flowers"
+{
+  const { readFileSync } = await import('node:fs');
+  const P = (c, ty, txt, x = {}) => ({ c, drv: 0, tm: 'BAL', dn: 1, dist: 10, yl: 50, yl2: 50, ty, txt, hs: 0, as: 0, ...x });
+  const plays = [
+    P(10, 'Pass Reception', '(14:50) L.Jackson pass short right to Z.Flowers to BAL 40 for 12 yards (D.Ward).'),
+    P(40, 'Pass Interception Return', '(14:20) L.Jackson pass deep left intended for Z.Flowers INTERCEPTED by D.Ward at DEN 10. D.Ward to DEN 25 for 15 yards.', { to: 1 }),
+    P(70, 'Rush', '(13:50) D.Henry up the middle to DEN 30 for 4 yards (Z.Allen).'),
+    P(100, 'Sack', '(13:20) L.Jackson sacked at BAL 30 for -8 yards (N.Bonitto).'),
+    P(130, 'Passing Touchdown', '(12:50) L.Jackson pass short middle to Z.Flowers for 22 yards, TOUCHDOWN.', { sc: 1, as: 6 }),
+    P(160, 'Penalty', '(12:20) PENALTY on DEN-P.Surtain, Defensive Holding, 5 yards, enforced at DEN 30 - No Play.', { pen: 1 }),
+  ];
+  const log = gameLog({ plays, events: [{ c: 900, ty: 'End Period', txt: 'End of 1st Quarter' }] });
+  const full = { 'Z.Flowers': 'Zay Flowers', 'L.Jackson': 'Lamar Jackson', 'D.Ward': 'Denzel Ward', 'D.Henry': 'Derrick Henry' };
+  const namesOf = (p) => playNames(p.txt).map((a) => full[a]).filter(Boolean);
+  const ids = (rows) => rows.map((r) => r.c).join(',');
+  ok(filterGameLog(log, 'all', '  ') === log, 'no filter: the log as it was, stoppages and all');
+  ok(ids(filterGameLog(log, 'int', '')) === '40', 'INT: the interception only');
+  ok(ids(filterGameLog(log, 'all', 'interceptions')) === '40' && ids(filterGameLog(log, 'all', 'picks')) === '40', '"interceptions" / "picks" typed: the interception');
+  ok(ids(filterGameLog(log, 'all', 'int')) === '40', '"int" is the kind, not every play "intended" for someone');
+  ok(ids(filterGameLog(log, 'all', 'Zay Flowers', namesOf)) === '10,40,130', 'every play Zay Flowers is on, by his full name');
+  ok(ids(filterGameLog(log, 'all', 'zay', namesOf)) === '10,40,130' && ids(filterGameLog(log, 'all', 'flowers')) === '10,40,130', '"zay" via the name; "flowers" from the text alone');
+  ok(ids(filterGameLog(log, 'all', 'flowers td', namesOf)) === '130', 'words combine: Flowers and a TD');
+  ok(ids(filterGameLog(log, 'score', 'flowers')) === '130' && ids(filterGameLog(log, 'turnover', '')) === '40', 'a chip and a word together; TURNOVERS has the pick');
+  ok(ids(filterGameLog(log, 'sack', '')) === '100' && ids(filterGameLog(log, 'penalty', '')) === '160', 'SACKS and PENALTIES');
+  ok(filterGameLog(log, 'all', 'nobody').length === 0, 'nothing matches: nothing shown (no stray stoppages)');
+  ok(playMatchesQuery(P(1, 'Rush', 'J.Dobbins left end for 5 yards.'), 'Dobbins', ['J.K. Dobbins']) && playIsKind(P(1, 'Rush', 'x'), 'all'), 'case-insensitive; ALL is every play');
+  ok(playMatchesQuery(P(1, 'Rush', 'x'), 'perez', ['Ricardo Pérez']) && playMatchesQuery(P(1, 'Rush', 'x'), 'Pérez', ['Ricardo Perez']), 'accents fold: "perez" finds Pérez');
+  for (const f of ['src/app/FieldView.tsx', 'apps/mobile/src/ui/GameView.tsx']) {
+    const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(src.includes('filterGameLog(') && src.includes('[...shownLog].reverse()') && src.includes('PLAY_FILTERS.map('), `${f}: the plays tab lists the filtered log, with the search and the kind chips`);
   }
 }
 

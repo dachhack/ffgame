@@ -274,3 +274,74 @@ export function liveSituationChip(status: { sit?: { dd?: string | null; spot?: s
  *  id, else its clock. The play-by-play list hands this to the field to jump
  *  the replay to that play, and the field hands back the one it's showing. */
 export const playKey = (p: Pick<GamePlay, 'pid' | 'c'>): string => (p.pid != null ? String(p.pid) : `c${p.c}`);
+
+// ── SEARCH THE PLAYS (v0.731.0) ──────────────────────────────────────────
+// Founder: "search or filter in game play by play in the fields view. I'd love
+// to see all interceptions or all plays by Zay Flowers." One reading for both
+// game views: a kind chip (SCORES, TURNOVERS, INT, SACKS, PENALTIES) and a
+// search box. Each word typed must be a kind word the play is
+// ("interceptions", "sacks", "td") or be found in the play — its text, its
+// type, the team, or the full name of anyone the gamebook names on it ("Zay"
+// finds "Z.Flowers"). Stoppage rows drop out while a filter is on.
+
+export type PlayFilterKind = 'all' | 'score' | 'turnover' | 'int' | 'sack' | 'penalty';
+export const PLAY_FILTERS: { id: PlayFilterKind; label: string }[] = [
+  { id: 'all', label: 'ALL' },
+  { id: 'score', label: 'SCORES' },
+  { id: 'turnover', label: 'TURNOVERS' },
+  { id: 'int', label: 'INT' },
+  { id: 'sack', label: 'SACKS' },
+  { id: 'penalty', label: 'PENALTIES' },
+];
+
+type KindTest = Pick<GamePlay, 'txt' | 'ty' | 'sc' | 'to' | 'pen'>;
+const isInt = (p: KindTest) => /intercept/i.test(p.ty) || /\bINTERCEPTED\b/.test(p.txt);
+const isFumble = (p: KindTest) => /fumble/i.test(p.ty) || /\bFUMBLES\b/i.test(p.txt);
+const KIND: Record<string, (p: KindTest) => boolean> = {
+  score: (p) => !!p.sc,
+  td: (p) => /touchdown/i.test(p.ty) || /\bTOUCHDOWN\b/i.test(p.txt),
+  turnover: (p) => !!p.to || isInt(p),
+  int: isInt,
+  fumble: isFumble,
+  sack: (p) => /sack/i.test(p.ty) || /\bsacked\b/i.test(p.txt),
+  penalty: (p) => !!p.pen || /penalty/i.test(p.ty) || /\bPENALTY\b/.test(p.txt),
+  fg: (p) => /field goal/i.test(p.ty),
+  punt: (p) => /punt/i.test(p.ty),
+};
+/** Words that mean a kind of play, typed into the search. */
+const KIND_WORDS: Record<string, string> = {
+  int: 'int', ints: 'int', interception: 'int', interceptions: 'int', intercepted: 'int', pick: 'int', picks: 'int',
+  sack: 'sack', sacks: 'sack', sacked: 'sack',
+  fumble: 'fumble', fumbles: 'fumble',
+  turnover: 'turnover', turnovers: 'turnover', tos: 'turnover',
+  td: 'td', tds: 'td', touchdown: 'td', touchdowns: 'td',
+  score: 'score', scores: 'score', scoring: 'score',
+  penalty: 'penalty', penalties: 'penalty', flag: 'penalty', flags: 'penalty',
+  fg: 'fg', fgs: 'fg',
+  punt: 'punt', punts: 'punt',
+};
+
+/** Is this play of the chip's kind? `all` is every play. */
+export function playIsKind(p: KindTest, kind: PlayFilterKind): boolean {
+  return kind === 'all' || !!KIND[kind]?.(p);
+}
+
+const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Does the play answer the search? `fullNames` are the people the play
+ *  names, spelled out (the host resolves its gamebook tokens). Empty → yes. */
+export function playMatchesQuery(p: Pick<GamePlay, 'txt' | 'ty' | 'tm' | 'sc' | 'to' | 'pen'>, query: string, fullNames: string[] = []): boolean {
+  const words = fold(query).split(/[\s,]+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = fold([p.txt, p.ty, p.tm, ...fullNames].join(' '));
+  // A kind word means the kind only: "int" is in "intended" and "point".
+  return words.every((w) => (KIND_WORDS[w] != null ? !!KIND[KIND_WORDS[w]]?.(p) : hay.includes(w)));
+}
+
+/** The game log with the chip and the search applied. No filter → as given
+ *  (stoppages kept); a filter on → only the plays that pass. `namesOf` gives
+ *  the full names on a play; without it only the text is searched. */
+export function filterGameLog(rows: LogRow[], kind: PlayFilterKind, query: string, namesOf?: (p: GamePlay) => string[]): LogRow[] {
+  if (kind === 'all' && !query.trim()) return rows;
+  return rows.filter((r) => r.kind === 'play' && playIsKind(r.p, kind) && playMatchesQuery(r.p, query, namesOf ? namesOf(r.p) : []));
+}

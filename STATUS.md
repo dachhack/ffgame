@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.731.0 — Search the plays in the game view
+
+> - In a game's play-by-play (tap a field in ▦ FIELDS), search for a player ("Zay Flowers") or a kind of play ("interceptions"), or tap a chip: SCORES, TURNOVERS, INT, SACKS, PENALTIES.
+
+Founder: "make the ability to search or filter in game play by play in the
+fields view. I'd love to see all interceptions or all plays by Zay Flowers."
+New core `filterGameLog` / `playMatchesQuery` / `playIsKind` / `PLAY_FILTERS`
+(data/gameView), used by the web and phone game views' PLAYS tab. Every word
+typed must match: a kind word ("int", "picks", "sacks", "td", "penalties",
+"fg", "punts") means that kind only, so "int" doesn't hit "intended"; any other
+word is looked for in the play text, its type, the team, and the full names of
+the people on it (so "Zay" finds "Z.Flowers"), accents folded. Stoppage rows
+drop out while a filter is on; "N of M plays" shows inline, the how-to is in
+the ⓘ. Probes in `check:gameview`. Tried in Chromium on a sample game:
+"Flowers" 3 of 6, "interceptions" 1, SACKS 1. JS only, no iPhone build.
+
 ### v0.730.36 — Live projections in contest matchups
 
 > - A contest matchup's projected score now updates during the game: points so far plus what's left of each player's projection, instead of just matching the score.

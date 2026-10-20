@@ -17,7 +17,7 @@ import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
 import { weekTitle, kickoffLabel } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
-import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey, type ReplayMode } from '@drip/core/data/gameView';
+import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey, filterGameLog, PLAY_FILTERS, type PlayFilterKind, type ReplayMode } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
 import { gamePeople, resolveGamebookPerson, type GamePerson } from '@drip/core/engine/gameNames';
 import { playPath, playSide, playSideDy, targetMarkY } from '@drip/core/engine/playPath';
@@ -31,6 +31,7 @@ import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { teamColor, teamMarkColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 import { openPlayerCard } from './playerCard';
+import { InfoChip } from '../screens/adminUi';
 
 // Geometry (SVG user units). The 100-yd field spans FX..FX+FW; EZ = end zone.
 // The flat field is core's; fieldPerspective projects it into the VH-tall drawing.
@@ -896,6 +897,13 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
   const [jump, setJump] = useState<{ key: string; n: number } | null>(null);
   const [shown, setShown] = useState<string | null>(null);
   const [statTab, setStatTab] = useState<'off' | 'def'>('off');
+  // SEARCH THE PLAYS (v0.731.0): a kind chip and a search box over the log.
+  const [kind, setKind] = useState<PlayFilterKind>('all');
+  const [q, setQ] = useState('');
+  const namesOf = (p: GamePlay) => playNames(p.txt).map((a) => personOf(a)?.full).filter((x): x is string => !!x);
+  const log = gameLog(feed);
+  const shownLog = filterGameLog(log, kind, q, namesOf);
+  const filtering = kind !== 'all' || !!q.trim();
   const drive = driveSummary(feed);
   const sit = last ? situationLabel(last, home, away) : null;
   const ballTm = last ? (last.tm2 ?? last.tm) : null;
@@ -960,13 +968,32 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
         {tabBtn('live', live ? '● LIVE' : 'PLAYS')}
         {tabBtn('stats', 'STATS')}
       </div>
+      {tab === 'live' && plays.length > 0 && (
+        <div style={{ margin: '8px 0 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 a player, or “interceptions”" aria-label="Search the plays"
+              style={{ flex: 1, minWidth: 0, fontSize: 12, padding: '6px 8px', borderRadius: 5, border: `1px solid ${q ? 'var(--you)' : 'var(--bd)'}`, background: 'var(--bg)', color: 'var(--text)' }} />
+            {filtering && <button onClick={() => { setQ(''); setKind('all'); }} aria-label="Clear the search" className="mono"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--dim)' }}>✕</button>}
+            <InfoChip title="Search the plays" info={'Type a name (“Zay Flowers”, “Flowers”), a team, or a kind of play: interceptions, sacks, fumbles, turnovers, TDs, scores, penalties, FGs, punts. Words combine: “Flowers td”. The chips narrow it to one kind.'} />
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+            {PLAY_FILTERS.map((f) => (
+              <button key={f.id} onClick={() => setKind(f.id)} className="mono"
+                style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', padding: '3px 8px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${kind === f.id ? 'var(--you)' : 'var(--bd)'}`, background: kind === f.id ? 'color-mix(in srgb, var(--you) 14%, transparent)' : 'transparent', color: kind === f.id ? 'var(--you)' : 'var(--dim)' }}>{f.label}</button>
+            ))}
+          </div>
+          {filtering && <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 5 }}>{shownLog.length} of {plays.length} plays</div>}
+        </div>
+      )}
       {tab === 'live' && (
         <div style={{ maxHeight: 420, overflowY: 'auto' }}>
           {plays.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: 16 }}>— no plays yet —</div>}
+          {filtering && shownLog.length === 0 && <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', textAlign: 'center', padding: 16 }}>— no plays match —</div>}
           {/* THE STOPPAGES ARE IN THE LOG (v0.434.3): timeouts, the two-minute
               warning, the end of a quarter, halftime, the final — dividers at
               their clock between the plays. */}
-          {[...gameLog(feed)].reverse().map((row, i) => {
+          {[...shownLog].reverse().map((row, i) => {
             if (row.kind === 'event') {
               return (
                 <div key={`ev-${row.c}-${i}`} className="mono" style={{ padding: '8px 4px', textAlign: 'center', borderBottom: '1px solid color-mix(in srgb, var(--bd) 60%, transparent)', fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--dim)' }}>
