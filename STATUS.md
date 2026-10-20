@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.35 — The shared matchup link works from other apps' chats
+
+> - A shared matchup link now opens the matchup even when tapped in another app's chat, such as Sleeper, instead of landing on the sign-up page.
+
+Novakaine12 (Sleeper chat): "I clicked that link to watch the shenanigans and it
+only took me to the home page to make an account." The #/watch link works in a
+signed-out browser (checked with Playwright against the live site). The likely
+cause is that Sleeper's in-app browser drops the fragment; that's unconfirmed,
+since it can't be tested from here. SHARE now hands out
+`dripfantasy.com/?watch=<id>`, and `bootRoute` starts on the watch page for it.
+The old #/watch links still work. Tried on a local build: ?watch=, #/watch and a
+bare visit (which still goes to the landing page).
+
 ### v0.730.34 — Monday Showdown's cap to $31,000
 
 > - Monday Showdown's cap is now $31,000, so a squad with Purdy and Kittle fits. QBs are still $2,000 off.

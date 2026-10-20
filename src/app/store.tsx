@@ -132,6 +132,13 @@ function bootRoute(): Route {
   // An auth callback (OAuth / magic link / recovery) lands with session tokens in
   // the hash — that's a return into Live mode, not a route.
   if (typeof window !== 'undefined' && hasAuthTokensInUrl()) return { name: 'live' };
+  // A SHARED MATCHUP WITHOUT THE HASH (v0.730.35): ?watch=<matchup id>. A
+  // member tapped the #/watch link in Sleeper's chat and landed on the
+  // sign-up page — an in-app browser can drop the fragment; a query survives.
+  try {
+    const w = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('watch') : null;
+    if (w && /^[0-9a-f-]{36}$/i.test(w)) return { name: 'watch', matchupId: w };
+  } catch { /* ignore */ }
   const r = hashToRoute(typeof window !== 'undefined' ? window.location.hash : '');
   if (r) return r;
   try { if (localStorage.getItem('dripLive') === '1') return { name: 'live' }; } catch { /* ignore */ }
