@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.36 — Live projections in contest matchups
+
+> - A contest matchup's projected score now updates during the game: points so far plus what's left of each player's projection, instead of just matching the score.
+
+Founder, an hour into Monday Showdown: "Projections look off". FarmerCasey read
+"31.2 PTS · proj 31.2". The team line put a player's points so far in place of
+his projection once he scored, and with every pick in one game the projection
+became the score. Tfraz52's 30.7 differed only because some of his players had
+no stat yet. New core `contestLiveProj` (points + projection × the share of his
+game left; a game is taken as 3 hours of wall time from kickoff, since the
+screen has no game clock) is used in both apps' team lines. New
+`check:contestliveproj`.
+
 ### v0.730.35 — The shared matchup link works from other apps' chats
 
 > - A shared matchup link now opens the matchup even when tapped in another app's chat, such as Sleeper, instead of landing on the sign-up page.

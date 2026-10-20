@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { contestMatchup, contestState, contestArmPlay, contestDisarmPlay, podSalaries, weekGameLocks, weekSlateByTeam, friendlyError, type ContestMatchupState, type ContestState, type ContestPlayRow, type PodSalaryRow, type SlateSpot , watchMatchupUrl } from '@drip/core/data/liveApi';
-import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal, contestPlayById, contestPlaysFor, contestPlayCap, contestPlayTarget, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, contestPlayEffect, signedPts, type ContestPlayId } from '@drip/core/engine/contest';
+import { contestSlotLabels, contestCard, contestTiebreak, contestScoreWord, contestRedeal, contestPlayById, contestPlaysFor, contestPlayCap, contestPlayTarget, contestSpotOpen, contestHandCard, contestSpotPlayShown, contestSquadPlaysShown, contestGhostShown, contestPlayEffect, signedPts, contestLiveProj, type ContestPlayId } from '@drip/core/engine/contest';
 import { GHOST_PLAYER } from '@drip/core/engine/sim';
 import { GHOST_CARD } from '@drip/core/data/ghostCard';
 import { ringScore } from '@drip/core/engine/bullseye';
@@ -266,7 +266,8 @@ export function ContestMatchup({ leagueId, week, header }: { leagueId: string; w
       if (score != null) pts += score;
       if (st.started && (r.sealed || (r.slug && score == null))) toPlay++;
       if (r.sealed) { known = false; continue; }
-      const v = score ?? (r.slug ? projOf(r.slug) : null) ?? 0;
+      // LIVE (v0.730.36): points so far + his projection for what's left of his game, not the points alone
+      const v = r.slug ? contestLiveProj(score, projOf(r.slug), slate.get(bySlug.get(r.slug)?.team ?? '')?.kickoff, now) : (score ?? 0);
       proj += v;
       if (bull && !isTotal) { const tg = theCard?.targets[r.slot]; if (tg != null) ringProj += ringScore(v, tg, radius); }
     }
