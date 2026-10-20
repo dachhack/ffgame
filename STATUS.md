@@ -22,6 +22,32 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.730.36 — Live projections in contest matchups
+
+> - A contest matchup's projected score now updates during the game: points so far plus what's left of each player's projection, instead of just matching the score.
+
+Founder, an hour into Monday Showdown: "Projections look off". FarmerCasey read
+"31.2 PTS · proj 31.2". The team line put a player's points so far in place of
+his projection once he scored, and with every pick in one game the projection
+became the score. Tfraz52's 30.7 differed only because some of his players had
+no stat yet. New core `contestLiveProj` (points + projection × the share of his
+game left; a game is taken as 3 hours of wall time from kickoff, since the
+screen has no game clock) is used in both apps' team lines. New
+`check:contestliveproj`.
+
+### v0.730.35 — The shared matchup link works from other apps' chats
+
+> - A shared matchup link now opens the matchup even when tapped in another app's chat, such as Sleeper, instead of landing on the sign-up page.
+
+Novakaine12 (Sleeper chat): "I clicked that link to watch the shenanigans and it
+only took me to the home page to make an account." The #/watch link works in a
+signed-out browser (checked with Playwright against the live site). The likely
+cause is that Sleeper's in-app browser drops the fragment; that's unconfirmed,
+since it can't be tested from here. SHARE now hands out
+`dripfantasy.com/?watch=<id>`, and `bootRoute` starts on the watch page for it.
+The old #/watch links still work. Tried on a local build: ?watch=, #/watch and a
+bare visit (which still goes to the landing page).
+
 ### v0.730.34 — Monday Showdown's cap to $31,000
 
 > - Monday Showdown's cap is now $31,000, so a squad with Purdy and Kittle fits. QBs are still $2,000 off.

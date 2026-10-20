@@ -209,6 +209,21 @@ export function contestCard(leagueId: string, week: number, slots: ClassicSlotDe
   return dealBullseyeCard(leagueId, week, slots.map((d) => ({ slot: d.slot, type: d.type, pos: [...d.pos] })), catalog);
 }
 
+/** THE LIVE PROJECTION (v0.730.36). Founder, an hour into Monday Showdown:
+ *  "Projections look off" — a side read "31.2 PTS · proj 31.2": the team line
+ *  put a player's points so far IN PLACE of his projection the moment he
+ *  scored, so with every pick in one game the projection was just the score.
+ *  Now: points so far plus his projection for the share of his game still to
+ *  play — the whole projection at kickoff, the score at the end. The screen
+ *  has the kickoff, not the game clock, so a game is taken as three hours of
+ *  wall time. */
+export const CONTEST_GAME_MS = 3 * 3600 * 1000;
+export function contestLiveProj(score: number | null, proj: number | null, kickoffMs: number | null | undefined, now: number): number {
+  if (kickoffMs == null || !Number.isFinite(kickoffMs) || now < kickoffMs) return score ?? proj ?? 0;
+  const left = Math.max(0, Math.min(1, 1 - (now - kickoffMs) / CONTEST_GAME_MS));
+  return (score ?? 0) + (proj ?? 0) * left;
+}
+
 /** THE LEAGUE'S PRICES (0518): a contest league's own adjustment to the
  *  shared board, by position (settings_json.price_adj, e.g. { QB: -2000 }).
  *  Never below $0. The server's squad check prices the same way

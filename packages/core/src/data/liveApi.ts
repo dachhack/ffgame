@@ -973,7 +973,9 @@ export interface PublicContestMatchup {
 }
 export const publicContestMatchup = (matchupId: string) => rpcOk<PublicContestMatchup>('public_contest_matchup', { p_matchup: matchupId });
 /** The link to it (v0.730.26): the site's #/watch page. */
-export const watchMatchupUrl = (matchupId: string) => `https://dripfantasy.com/#/watch/${matchupId}`;
+// No hash (v0.730.35): an in-app browser (Sleeper's chat) can drop the
+// fragment and land on the sign-up page; App.tsx turns ?watch= into #/watch.
+export const watchMatchupUrl = (matchupId: string) => `https://dripfantasy.com/?watch=${matchupId}`;
 export const bullseyeContest = (season = '2026') => rpcOk<BullseyeContest>('bullseye_contest', { p_season: season });
 export const joinBullseyeContest = (teamName?: string | null, season = '2026') =>
   rpcOk<{ ok: boolean; error?: string; league_id?: string; week?: number; roster_id?: number; already?: boolean }>('join_bullseye_contest', { p_team_name: teamName ?? null, p_season: season });
