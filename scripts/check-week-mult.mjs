@@ -16,7 +16,7 @@
 // feed is checked by `npm run validate:weekmult`.
 import { readFileSync } from 'node:fs';
 import { statheadRows, defVsPosTable } from '../server/src/poll/projections.js';
-import { weekPointsFor, matchupGrade, matchupGradeLabel, matchupBand } from '../packages/core/src/data/weekProj.ts';
+import { weekPointsFor, matchupGrade, matchupGradeLabel, matchupBand, opponentMatchupGrade } from '../packages/core/src/data/weekProj.ts';
 import { setLeagueProjScoring, projectedPoints } from '../packages/core/src/engine/projScoring.ts';
 import { PROJ_2026 } from '../packages/core/src/data/proj2026.ts';
 import { slugMeta } from '../packages/core/src/data/slugMeta.ts';
@@ -151,6 +151,23 @@ ok(tbl.CHI.QB === 1.009 && tbl.CHI.RB === 0.957, 'numeric cells are kept, string
 ok(!('TE' in tbl.CHI) && !('K' in tbl.CHI), 'a non-number or a zero is dropped, not guessed');
 ok(!('KC' in tbl) && !('LA' in tbl), 'a team with nothing numeric is absent');
 ok(Object.keys(defVsPosTable({})).length === 0 && Object.keys(defVsPosTable(null)).length === 0, 'no table, empty — never a throw');
+
+
+// ── THE CONTEST CARD'S MATCHUP (v0.732.0): graded straight from the slate's opponent
+{
+  const tbl = { NO: { RB: 1.12, WR: 0.9, DST: 1.05 }, LAR: { QB: 0.95 }, KC: { TE: 1.0 } };
+  const g1 = opponentMatchupGrade('NO', 'RB', tbl);
+  ok(g1?.band === 5 && g1.pct === 12 && g1.basis === 'def', 'a contest card grades from the opponent alone: NO vs RBs is soft, +12%');
+  ok(opponentMatchupGrade('NO', 'WR', tbl)?.band === 1 && opponentMatchupGrade('NO', 'DEF', tbl)?.pct === 5, 'the WR column; our DEF is the table\'s DST');
+  ok(opponentMatchupGrade('LA', 'QB', tbl)?.pct === -5, 'the slate\'s LA finds the table\'s LAR (#1095)');
+  ok(opponentMatchupGrade('KC', 'TE', tbl)?.band === 3, 'a factor of 1.0 is even');
+  ok(opponentMatchupGrade(null, 'RB', tbl) === null && opponentMatchupGrade('NO', 'HC', tbl) === null && opponentMatchupGrade('NO', 'RB', {}) === null && opponentMatchupGrade('NO', 'RB', null) === null, 'no grade for a bye, a coach, or no table');
+  const { readFileSync } = await import('node:fs');
+  for (const f of ['src/screens/ContestSquad.tsx', 'apps/mobile/src/screens/ContestSquad.tsx']) {
+    const src = readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    ok(src.includes('<MatchupLine team={p.team} pos={p.pos} slate={slate} dvp={dvp} />') && src.includes('leagueWeekProjections(leagueId, s.week)') && src.includes('MATCHUP_GRADE_INFO'), `${f}: each pick card shows the opponent and the grade, with the ⓘ`);
+  }
+}
 
 console.log(fails === 0 ? '\nALL WEEK-MULT ASSERTIONS PASSED' : `\n${fails} FAILED`);
 process.exit(fails === 0 ? 0 : 1);

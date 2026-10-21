@@ -14,9 +14,10 @@ import { Alert, PanResponder, Pressable, RefreshControl, ScrollView, Share, Text
 import { contestCardMove, contestApplyCardMove, type ContestCardMove } from '@drip/core/engine/contest';
 import {
   contestState, addContestEntry, contestBuyPlay, type ContestPlayRow, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
-  contestSwaps, contestBoard, contestLeague, type SwapRow,
+  contestSwaps, contestBoard, contestLeague, type SwapRow, leagueWeekProjections,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
+import { opponentMatchupGrade, matchupGradeLabel, MATCHUP_BAND_COLOR, MATCHUP_BAND_WORD, MATCHUP_GRADE_INFO } from '@drip/core/data/weekProj';
 import { injuryFor } from '@drip/core/data/injuries';
 import { squadCardText } from '@drip/core/data/squadCard';
 import { SITE_ORIGIN } from '@drip/core/data/invite';
@@ -83,6 +84,23 @@ export function gameLine(team: string, slate: Map<string, SlateSpot>): string {
   return `${g.home ? 'vs' : '@'} ${g.opp}${when ? ` · ${when}` : ''}`;
 }
 
+/** "@ KC" and the matchup pill under a card (v0.732.0); a bye says so. */
+function MatchupLine({ team, pos, slate, dvp }: { team: string; pos: string; slate: Map<string, SlateSpot>; dvp: Record<string, Record<string, number>> }) {
+  const t = useTheme();
+  if (!slate.size) return null;
+  const g = slate.get(team);
+  if (!g) return <Text style={{ fontFamily: MONO, fontSize: fs(8), fontWeight: '700', color: t.warn }}>BYE</Text>;
+  const mg = opponentMatchupGrade(g.opp, pos, dvp);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+      <Text style={{ fontFamily: MONO, fontSize: fs(8.5), fontWeight: '700', color: t.text }}>{`${g.home ? 'vs' : '@'} ${g.opp}`}</Text>
+      {mg && (
+        <Text accessibilityLabel={`${MATCHUP_BAND_WORD[mg.band]} matchup`} style={{ fontFamily: MONO, fontSize: fs(7.5), fontWeight: '700', color: MATCHUP_BAND_COLOR[mg.band], borderWidth: 1, borderColor: MATCHUP_BAND_COLOR[mg.band], borderRadius: 4, paddingHorizontal: 3 }}>{matchupGradeLabel(mg)}</Text>
+      )}
+    </View>
+  );
+}
+
 function InjuryTag({ week, slug }: { week: number; slug: string }) {
   const t = useTheme();
   const s = injuryFor(week, slug);
@@ -117,6 +135,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
   const [note, setNote] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [injTick, setInjTick] = useState(0);
+  // THE MATCHUP ON EACH CARD (v0.732.0): the season's defense-vs-position table, read once a week.
+  const [dvp, setDvp] = useState<Record<string, Record<string, number>>>({});
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
   // MY SEATS (v0.682.0): which of my seats the builder is on; null = my first.
@@ -138,6 +158,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
     setPicks(mine); setSaved(mine);
     const [rows, lk, sl] = await Promise.all([podSalaries(s.week, '2026', leagueId).catch(() => []), weekGameLocks(s.week, '2026', 0).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
     setBoard(rows); setLocks(lk); setSlate(sl);
+    void leagueWeekProjections(leagueId, s.week).then((r) => setDvp(r?.def_vs_pos ?? {})).catch(() => setDvp({}));
     void loadLiveInjuries(s.week).then(() => setInjTick((n) => n + 1));
   }, [leagueId, weekProp, rosterId]);
   useEffect(() => { void load().catch((e) => setNote(friendlyError(e))); }, [load]);
@@ -618,6 +639,12 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
               <Chip small on={!team} label="ALL TEAMS" onPress={() => setTeam('')} />
               {teams.map((tm) => <Chip key={tm} small on={team === tm} label={tm} onPress={() => setTeam(tm)} />)}
             </ChipStrip>
+            {slate.size > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Mono size={9} tone="faint">MATCHUP</Mono>
+                <InfoChip title="Matchup"><Text style={{ fontSize: fs(13), lineHeight: fs(13) * 1.4, color: t.text }}>{MATCHUP_GRADE_INFO}</Text></InfoChip>
+              </View>
+            )}
             <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
               {/* the players, dealt as cards (v0.681.0): the price on each; tap to buy */}
               {rows.length > 0 && (
@@ -632,10 +659,13 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                           // Select (or swap in for whoever holds the spot) — or, for a card that can't go in, just his log.
                           const holder = slot && picks[slot] && picks[slot] !== p.slug ? byPlayer.get(picks[slot]!) : null;
                           const reason = lock ? 'His game has locked' : taken ? `Already in ${labels[taken]}` : why ?? (fits && !afford ? `Over budget by ${fmt$(over)}` : undefined);
-                          askCard(p, ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason,
+                          const mg = opponentMatchupGrade(slate.get(p.team)?.opp, p.pos, dvp);
+                          const vs = [gameLine(p.team, slate), mg ? `${MATCHUP_BAND_WORD[mg.band]} matchup ${matchupGradeLabel(mg)}` : ''].filter(Boolean).join(' · ');
+                          askCard(p, [ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason, vs].filter(Boolean).join('\n') || undefined,
                             ok ? { label: holder ? `Swap in for ${holder.name}` : `Add${land ? ` to ${land}` : ''}`, run: () => put(p.slug, slot) } : null);
                         }} style={{ width: tableCardSize().w, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
                           <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} mine locked={lock} foot={fmt$(p.salary)} />
+                          <MatchupLine team={p.team} pos={p.pos} slate={slate} dvp={dvp} />
                           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
                             <Text numberOfLines={2} style={{ fontFamily: MONO, fontSize: fs(7.5), color: alpha(t.text, 75), textAlign: 'center', lineHeight: fs(10), maxWidth: tableCardSize().w }}>
                               {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? (fits && !afford ? `over budget by ${fmt$(over)}` : `proj ${projWord(p)} · ${value.toFixed(2)}/$1k${bull && !isTotal && dist != null ? ` · ${dist.toFixed(1)} off` : ''}`)}

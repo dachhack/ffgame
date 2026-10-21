@@ -21,9 +21,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { contestCardMove, contestApplyCardMove, type ContestCardMove } from '@drip/core/engine/contest';
 import {
   contestState, addContestEntry, contestBuyPlay, type ContestPlayRow, saveContestEntry, podSalaries, weekGameLocks, weekSlateByTeam, seatPlayerRules, leagueGameMode, loadLiveInjuries, friendlyError,
-  contestSwaps, contestBoard, contestLeague, type SwapRow,
+  contestSwaps, contestBoard, contestLeague, type SwapRow, leagueWeekProjections,
   type ContestState, type PodSalaryRow, type SlateSpot,
 } from '@drip/core/data/liveApi';
+import { opponentMatchupGrade, matchupGradeLabel, MATCHUP_BAND_COLOR, MATCHUP_BAND_WORD, MATCHUP_GRADE_INFO } from '@drip/core/data/weekProj';
 import { injuryFor } from '@drip/core/data/injuries';
 import { type SeatRule, seatRuleText } from '@drip/core/data/seatRules';
 import { contestPlaysFor, contestPlayAsPowerup, contestRedeal, contestPlayById, contestPlayCap, GHOST_POINTS,
@@ -103,6 +104,21 @@ export function gameLine(team: string, slate: Map<string, SlateSpot>): string {
   return `${g.home ? 'vs' : '@'} ${g.opp}${when ? ` · ${when}` : ''}`;
 }
 
+/** "@ KC" and the matchup pill under a card (v0.732.0); a bye says so. */
+function MatchupLine({ team, pos, slate, dvp }: { team: string; pos: string; slate: Map<string, SlateSpot>; dvp: Record<string, Record<string, number>> }) {
+  if (!slate.size) return null;
+  const g = slate.get(team);
+  if (!g) return <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--warn, #c66)' }}>BYE</span>;
+  const mg = opponentMatchupGrade(g.opp, pos, dvp);
+  return (
+    <span className="mono" title={mg ? `${MATCHUP_BAND_WORD[mg.band]} matchup — what ${g.opp} gives up to ${pos === 'DEF' ? 'DST' : pos}s vs the league average` : undefined}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontWeight: 700, color: 'var(--text)' }}>
+      {`${g.home ? 'vs' : '@'} ${g.opp}`}
+      {mg && <span style={{ fontSize: 8, color: MATCHUP_BAND_COLOR[mg.band], border: `1px solid ${MATCHUP_BAND_COLOR[mg.band]}`, borderRadius: 4, padding: '0 4px' }}>{matchupGradeLabel(mg)}</span>}
+    </span>
+  );
+}
+
 function InjuryTag({ week, slug }: { week: number; slug: string }) {
   const s = injuryFor(week, slug);
   if (!s) return null;
@@ -135,6 +151,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [injTick, setInjTick] = useState(0);
+  // THE MATCHUP ON EACH CARD (v0.732.0): the season's defense-vs-position table, read once a week.
+  const [dvp, setDvp] = useState<Record<string, Record<string, number>>>({});
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
   // MY SEATS (v0.682.0): which of my seats the builder is on; null = my first.
@@ -157,6 +175,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
     setPicks(mine); setSaved(mine);
     const [rows, lk, sl] = await Promise.all([podSalaries(s.week, '2026', leagueId).catch(() => []), weekGameLocks(s.week, '2026', 0).catch(() => new Map<string, number>()), weekSlateByTeam(s.week).catch(() => new Map<string, SlateSpot>())]);
     setBoard(rows); setLocks(lk); setSlate(sl);
+    void leagueWeekProjections(leagueId, s.week).then((r) => setDvp(r?.def_vs_pos ?? {})).catch(() => setDvp({}));
     void loadLiveInjuries(s.week).then(() => setInjTick((n) => n + 1));
   }, [leagueId, weekProp, rosterId]);
   useEffect(() => { void load().catch((e) => setNote(friendlyError(e))); }, [load]);
@@ -682,6 +701,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
             <div className="mono" style={small}>
               {activeDef ? `Picking ${labels[activeDef.slot]}${bull && !isTotal && theCard ? ` · aim at ${theCard.targets[activeDef.slot]}` : ''} · room ${fmt$(Math.max(0, roomFor(ctx, activeDef.slot, salaryOf)))}` : 'Any spot: each player lands in the tightest open spot that takes him.'}
               {` · ${rows.length} shown`}
+              {slate.size > 0 && <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}>· matchup <InfoChip title="Matchup" info={MATCHUP_GRADE_INFO} /></span>}
             </div>
             {/* the players, dealt as cards (v0.681.0): the price under each; tap to buy */}
             <div style={{ overflowY: 'auto' }}>
@@ -695,12 +715,15 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, embedded, onMat
                         // Select (or swap in for whoever holds the spot) — or, for a card that can't go in, just his log.
                         const holder = slot && picks[slot] && picks[slot] !== p.slug ? bySlug.get(picks[slot]!) : null;
                         const reason = lock ? 'His game has locked' : taken ? `Already in ${labels[taken]}` : why ?? (fits && !afford ? `Over budget by ${fmt$(over)}` : undefined);
-                        setAsk({ p, sub: ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason,
+                        const mg = opponentMatchupGrade(slate.get(p.team)?.opp, p.pos, dvp);
+                        const vs = [gameLine(p.team, slate), mg ? `${MATCHUP_BAND_WORD[mg.band]} matchup ${matchupGradeLabel(mg)}` : ''].filter(Boolean).join(' · ');
+                        setAsk({ p, sub: [ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason, vs].filter(Boolean).join(' · ') || undefined,
                           act: ok ? { label: holder ? `Swap in for ${holder.name}` : `Add${land ? ` to ${land}` : ''}`, run: () => put(p.slug, slot) } : null });
                       }} title={`${p.name} · ${p.pos} · ${p.team} ${gameLine(p.team, slate)}`}
                         style={{ width: 104, display: 'grid', gap: 3, justifyItems: 'center', alignContent: 'start', opacity: ok ? 1 : 0.45, cursor: 'pointer' }}>
                         <PlayerCard slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} idx={Math.min(i, 12)} locked={lock} />
                         <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: ok ? 'var(--you)' : 'color-mix(in srgb, var(--text) 60%, transparent)' }}>{fmt$(p.salary)}<InjuryTag key={injTick} week={week} slug={p.slug} /></span>
+                        <MatchupLine team={p.team} pos={p.pos} slate={slate} dvp={dvp} />
                         <span className="mono" style={{ fontSize: 9, color: 'color-mix(in srgb, var(--text) 70%, transparent)', textAlign: 'center', lineHeight: 1.3 }}>
                           {lock ? '🔒 his game has locked' : taken ? `already in ${labels[taken]}` : why ?? (fits && !afford ? `over budget by ${fmt$(over)}` : `proj ${projWord(p)} · ${value.toFixed(2)}/$1k${bull && !isTotal && dist != null ? ` · ${dist.toFixed(1)} off` : ''}`)}
                         </span>
