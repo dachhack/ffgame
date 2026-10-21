@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.0 — Opponent and matchup on contest pick cards
+
+> - When you pick players for a weekly contest, each card now shows who he plays ("@ KC") and a coloured matchup pill: red is a tough matchup, green a soft one. Tap ⓘ by MATCHUP for what it means.
+
+Founder: "get current opposing team and matchup strength on player cards when
+you are making your picks in weekly contests." The pick sheet's cards only had
+the opponent in a hover title. Each card now carries "vs/@ OPP" (BYE in red)
+and the classic picker's grade pill: the season's defense-vs-position factor
+for his position, in the same five bands and colours (v0.639.1). New core
+`opponentMatchupGrade` grades from the slate's opponent (contests have no
+week-projection rows) and matches the table's team keys through `normTeam`,
+so the slate's LA finds a LAR key. The table comes from
+`league_week_projections`' `def_vs_pos`, read once per week; a miss just hides
+the pill. Tapping a card adds the game time and "soft matchup +12%" to its
+sheet. Both apps. Probes in `check:weekmult`. Not tried against a live contest
+from here (the pick sheet needs a signed-in seat).
+
 ### v0.731.0 — Search the plays in the game view
 
 > - In a game's play-by-play (tap a field in ▦ FIELDS), search for a player ("Zay Flowers") or a kind of play ("interceptions"), or tap a chip: SCORES, TURNOVERS, INT, SACKS, PENALTIES.

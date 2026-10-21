@@ -30,6 +30,7 @@
 // quietly implying the league's rules were applied.
 import { projectedPoints } from '../engine/projScoring';
 import type { WeekProjRow } from './liveApi';
+import { normTeam } from './teamCodes';
 
 export interface WeekPoints {
   /** Points for the week. */
@@ -134,3 +135,26 @@ export function matchupGrade(
 /** "+12%" / "−8%" / "0%" — the pill's text. */
 export const matchupGradeLabel = (g: MatchupGrade): string =>
   g.pct === 0 ? '0%' : `${g.pct > 0 ? '+' : '\u2212'}${Math.abs(g.pct)}%`;
+
+/** THE CONTEST CARD'S MATCHUP (v0.732.0). Founder: "get current opposing team
+ *  and matchup strength on player cards when you are making your picks in
+ *  weekly contests." A contest's pick sheet knows each player's opponent from
+ *  the slate, not from a week-projection row, so this grades straight from the
+ *  opponent: the same defense-vs-position factor and bands as `matchupGrade`.
+ *  The table is keyed the feed's way, so the opponent is matched through
+ *  `normTeam` (the slate's LA is the table's LAR — #1095's lesson). Null for a
+ *  bye, a position the table has no column for (HC), or no table. */
+export function opponentMatchupGrade(
+  opp: string | null | undefined,
+  pos: string,
+  defVsPos?: Record<string, Record<string, number>> | null,
+): MatchupGrade | null {
+  if (!opp || !defVsPos) return null;
+  const want = normTeam(opp);
+  const byPos = defVsPos[opp] ?? Object.entries(defVsPos).find(([k]) => normTeam(k) === want)?.[1];
+  const f = Number(byPos?.[defPos(pos)]);
+  if (!Number.isFinite(f) || f <= 0) return null;
+  return { band: matchupBand(f), pct: Math.round((f - 1) * 100), basis: 'def' };
+}
+/** The ⓘ's words for the grade on a contest card — one text for both apps. */
+export const MATCHUP_GRADE_INFO = 'Who he plays this week, and how hard that is. The pill is what that defense gives up to his position against the league average, this season and last: red tough, orange hard, yellow even, yellow-green good, green soft. +12% means 12% more than average. No pill: a bye, a coach, or no number for that defense yet.';
