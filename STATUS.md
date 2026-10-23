@@ -22,6 +22,14 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.6 — This week's bye spots open again, for good
+
+> - If a player on bye was stuck in your lineup this week, his spot is open again.
+
+Migration 0521 runs 0520's `_reopen_sealed_byes()` once more, after the
+v0.732.5 worker (which reads every pool page) is live; the old worker had
+re-sealed 0520's reopened spots on its next tick.
+
 ### v0.732.5 — The bye fix reads the whole player pool
 
 > - Players on bye can really be moved out of the lineup now: the fix from earlier today was being undone a few seconds after it ran.
