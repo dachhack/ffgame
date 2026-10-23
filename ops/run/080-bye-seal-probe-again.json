@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/bye-seal-1403.sql",
+  "why": "Test Wedding, week 7: still stuck after 0521 reopened 11 bye spots at 21:05:42 UTC under the v0.732.5 worker. Read only, the same probe as 079: are Allen / Croskey-Merritt's spots sealed again, and when (revealed_at after 21:05:42 = re-sealed by something still)? Seats as numbers."
+}
