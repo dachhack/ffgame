@@ -17,8 +17,8 @@ const ok = (name, cond, got) => {
 
 // A one-play game. `off`/`def` are the ESPN participants; `people` are
 // { name, team, cat } boxscore entries (cat: passing/rushing/receiving/defensive).
-const TEAMS = { NE: '1', PIT: '2', MIA: '3', CIN: '4', MIN: '5', KC: '6', LAC: '7', ATL: '8' };
-function game({ type, text, off, def, start = off, down = 1, dist = 10, yds = 0, turnover = false, scoring = false, people }) {
+const TEAMS = { NE: '1', PIT: '2', MIA: '3', CIN: '4', MIN: '5', KC: '6', LAC: '7', ATL: '8', CHI: '9', BAL: '10' };
+function game({ type, text, off, def, start = off, spot, down = 1, dist = 10, yds = 0, turnover = false, scoring = false, people }) {
   const byTeam = {};
   for (const p of people) (byTeam[p.team] ||= []).push(p);
   return gameToRealPlays({
@@ -31,7 +31,7 @@ function game({ type, text, off, def, start = off, down = 1, dist = 10, yds = 0,
     })) },
     drives: { previous: [{ plays: [{
       id: '91', type: { text: type }, text, period: { number: 2 }, clock: { displayValue: '5:00' },
-      start: { team: { id: TEAMS[start] }, down, distance: dist }, statYardage: yds, isTurnover: turnover, scoringPlay: scoring,
+      start: { team: { id: TEAMS[start] }, down, distance: dist, ...(spot ? { possessionText: spot } : {}) }, statYardage: yds, isTurnover: turnover, scoringPlay: scoring,
       teamParticipants: [{ type: 'offense', id: TEAMS[off] }, { type: 'defense', id: TEAMS[def] }],
     }] }] },
   });
@@ -137,6 +137,31 @@ const rowOf = (pbp, slug, k) => (pbp[slug] ?? []).find((r) => r.k === k);
     text: '(Shotgun) P.Mahomes pass incomplete short right to T.Kelce [K.Mack].PENALTY on LAC-D.James, Illegal Contact, 5 yards, enforced at KC 31 - No Play.',
     people: [{ name: 'Patrick Mahomes', team: 'KC', cat: 'passing' }, { name: 'Travis Kelce', team: 'KC', cat: 'receiving' }, { name: 'Derwin James', team: 'LAC', cat: 'defensive' }, { name: 'Khalil Mack', team: 'LAC', cat: 'defensive' }] });
   ok('nothing on a play wiped out by a penalty', !kinds(nul, 'khalil-mack').includes('qbhit'), nul['khalil-mack']);
+}
+// ── a penalty's yards are not the runner's (v0.732.2) ─────────────────────
+// Founder, NE@CHI 2026 wk 7: "Roschon Johnson with negative yards on two
+// carries". ESPN's statYardage is the play's net, the penalty included.
+{
+  const rj = [{ name: 'Roschon Johnson', team: 'CHI', cat: 'rushing' }];
+  const hold = game({ type: 'Rush', off: 'CHI', def: 'NE', spot: 'CHI 31', yds: -11,
+    text: '(Shotgun) R.Johnson left end ran ob at CHI 43 for 12 yards (C.Woodson).PENALTY on CHI-Z.Thomas, Offensive Holding, 10 yards, enforced at CHI 40.',
+    people: rj });
+  ok('an offensive hold beyond the line: the runner keeps his yards to the spot of the foul (9, not −11)', rowOf(hold, 'roschon-johnson', 'rush')?.y === 9, hold['roschon-johnson']);
+  const rough = game({ type: 'Pass Reception', off: 'CHI', def: 'MIN', spot: 'CHI 40', yds: 5,
+    text: 'C.Williams pass short right to K.Raymond to CHI 45 for 5 yards (B.Murphy).PENALTY on MIN-D.Turner, Roughing the Passer, 15 yards, enforced at CHI 45.',
+    people: [{ name: 'Caleb Williams', team: 'CHI', cat: 'passing' }, { name: 'Kalif Raymond', team: 'CHI', cat: 'receiving' }] });
+  ok('a defensive foul\'s yards are the team\'s: the catch is its own 5', rowOf(rough, 'kalif-raymond', 'rec')?.y === 5 && rowOf(rough, 'caleb-williams', 'pass')?.y === 5, rough);
+  const noPlay = game({ type: 'Rush', off: 'CHI', def: 'NE', spot: 'CHI 18', yds: -10,
+    text: 'R.Johnson right end to CHI 21 for 3 yards (A.Thomas).PENALTY on CHI-J.Monk, Offensive Holding, 10 yards, enforced at CHI 18 - No Play.',
+    people: rj });
+  ok('a carry wiped out ("No Play") is worth nothing, not the penalty', rowOf(noPlay, 'roschon-johnson', 'rush')?.y === 0, noPlay['roschon-johnson']);
+  const blt = game({ type: 'Rush', off: 'BAL', def: 'NE', spot: 'BAL 36', yds: -18,
+    text: '(Shotgun) D.Henry left tackle to BLT 44 for 8 yards (C.Bynum).PENALTY on BLT-O.Ioane, Offensive Holding, 10 yards, enforced at BLT 38.',
+    people: [{ name: 'Derrick Henry', team: 'BAL', cat: 'rushing' }] });
+  ok('the gamebook\'s own codes (BLT) still name the offense: 2 yards to the foul', rowOf(blt, 'derrick-henry', 'rush')?.y === 2, blt['derrick-henry']);
+  const clean = game({ type: 'Rush', off: 'CHI', def: 'NE', spot: 'NE 47', yds: 4,
+    text: 'R.Johnson right end to NE 43 for 4 yards (C.Elliss).', people: rj });
+  ok('no penalty: ESPN\'s yards stand', rowOf(clean, 'roschon-johnson', 'rush')?.y === 4, clean['roschon-johnson']);
 }
 const plays = readFileSync(new URL('../server/src/poll/plays.js', import.meta.url), 'utf8');
 const trueup = readFileSync(new URL('../server/src/poll/trueup.js', import.meta.url), 'utf8');

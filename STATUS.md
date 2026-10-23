@@ -22,6 +22,31 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.2 — Penalties no longer eat a runner's yards
+
+> - A run or catch with an offensive penalty on it no longer takes the penalty's yards off the player: Roschon Johnson's 12-yard run with a hold now counts 9 yards, as the official stats have it, not −11.
+
+Founder, NE@CHI (2026 wk 7) box score: Roschon Johnson "2 car · −7 yd", but
+he ran twice for positive yards (ESPN's box: 2 for 13). Cause, confirmed
+against ESPN's play: `scripts/espn/espnAdapter.mjs` credited every run and catch
+with `statYardage`, which is the play's NET, penalty included — "for 12 yards.
+PENALTY on CHI-Z.Thomas, Offensive Holding, 10 yards, enforced at CHI 40" is
+−11. New `creditedYards`: with a penalty in the text, the credit is the text's
+own "for N yards", capped at the enforcement spot of any foul on the offense
+(the books' rule), and 0 on a "No Play". The penalty text speaks gamebook codes
+(BLT, CLV, HST, ARZ), mapped locally (TEAM_FIX untouched).
+
+- Measured over every 2026 game through Thursday of week 7 (94): 138 of 2,262
+  rushing/receiving lines differed from ESPN's box score; 64 now, none newly
+  wrong. The rest are name resolution (Bam Knight resolves to nobody) and a
+  few yards of ESPN credit no rule reproduces.
+- `validate.mjs 1` (2025 vs nflverse): pts 90.3% → 91.3%, attr 98.9% → 99.5%.
+- `check:feedingest` +5 cases from the real plays (3 fail on the old adapter).
+- Stored plays keep the old yards until re-polled: NE@CHI (week 7) needs an
+  ops `repoll` of week 7 before the week finals, and **weeks 1–6 are settled
+  with the old yards** (Swift −20 in wk 1, Henry −20, Barkley −20…): a repoll
+  + restamp per week would move finals. Both founder's call.
+
 ### v0.732.1 — Projected scores fit on one line
 
 > - The projected scores on the matchup board, like (21.1), no longer wrap onto two lines.

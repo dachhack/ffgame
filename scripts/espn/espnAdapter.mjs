@@ -202,6 +202,7 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   const fd = dn > 0 && dist > 0 && yds >= dist && !p?.isTurnover ? { fd: 1 } : undefined;
   const offTeam = fixTeam(offenseAbbr(p, summaryTeamCache));
   const defTeam = fixTeam(defenseAbbr(p, summaryTeamCache));
+  const gain = creditedYards(p, text, yds, offTeam);
   // ON A KICKOFF ESPN's "start" team and its "defense" participant are BOTH
   // the kicking team; the receiving team is the "offense" participant
   // (v0.533.0). A kickoff-return TD was credited to the defense that got
@@ -305,12 +306,12 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // so cp/ic/sk are exact: exactly one of them on every flag-aware dropback.
   if (typeText === 'Rush' || typeText === 'Rushing Touchdown') {
     const r = names[0] && resolve(names[0].abbr, offTeam, 'off'); // ball-carrier is the first name
-    if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', yds, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === r.slug ? 1 : 0, fd) });
+    if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', gain, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === r.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Reception' || typeText === 'Passing Touchdown') {
     const passer = nameBefore(' pass', offTeam, 'off');
     const recv = nameAfter(' to ', offTeam, 'off');
-    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', yds, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === passer.slug ? 1 : 0, { cp: 1, ...fd }) });
-    if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', yds, isTD ? 1 : 0, 1, 1, p?.isTurnover && fumbler === recv.slug ? 1 : 0, fd) });
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', gain, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === passer.slug ? 1 : 0, { cp: 1, ...fd }) });
+    if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', gain, isTD ? 1 : 0, 1, 1, p?.isTurnover && fumbler === recv.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Incompletion') {
     const passer = nameBefore(' pass', offTeam, 'off');
     const recv = nameAfter(' to ', offTeam, 'off'); // absent on a throwaway
@@ -637,6 +638,45 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     if (dd) out.push({ slug: dd.slug, play: row(c, ride, 'frtd', 0, 0, 0, 0, 0) });
   }
   return out;
+}
+
+/** THE RUNNER'S YARDS, NOT THE PLAY'S (v0.732.2, founder, NE@CHI box score:
+ *  "Roschon Johnson with negative yards on two carries"). ESPN's statYardage
+ *  is the play's NET, penalty included: "R.Johnson left end … for 12 yards.
+ *  PENALTY on CHI-Z.Thomas, Offensive Holding, 10 yards, enforced at CHI 40"
+ *  carries −11, and that −11 was his carry. The books credit the ball carrier
+ *  his run — capped at the spot of an OFFENSIVE foul enforced behind where he
+ *  got to (the 9 yards to CHI 40 here) — and a defensive foul's yards are the
+ *  team's, never his. So on a play with an accepted penalty the credit is the
+ *  text's own "for N yards", cut back to the enforcement spot of any foul on
+ *  the offense. Without a penalty, or a text we cannot read, statYardage
+ *  stands. 2026 weeks 1–7: 138 of 2,262 rushing/receiving lines differed from
+ *  ESPN's box score before this. */
+const BOOK_TEAM = { ARZ: 'ARI', BLT: 'BAL', CLV: 'CLE', HST: 'HOU' };
+export function creditedYards(p, text, yds, offTeam) {
+  const at = text.indexOf('PENALTY on');
+  if (at < 0) return yds;
+  // "… enforced at BLT 38 - No Play": the snap never happened in the books.
+  if (/\bNo Play\b/.test(text.slice(at))) return 0;
+  // The penalty text speaks the GAMEBOOK's codes (BLT, CLV, HST, ARZ), not
+  // ESPN's; the Ravens' fouls went unrecognised as the offense's without this.
+  const team = (t) => fixTeam(BOOK_TEAM[t] ?? t);
+  const pre = text.slice(0, at);
+  const m = [...pre.matchAll(/\bfor (-?\d+) yards?/g)].pop();
+  let gain = /\bfor no gain\b/.test(pre) && !m ? 0 : m ? Number(m[1]) : null;
+  if (gain == null) return yds;
+  // The spot the play started from, yards to the offense's goal: the
+  // broadcast spot ("CHI 31") first, ESPN's number when that won't parse.
+  const yteOfSpot = (tm, n) => (tm == null ? 50 : team(tm) === offTeam ? 100 - n : n);
+  const ps = /^([A-Z]{2,4})\s+(\d{1,2})$/.exec(String(p?.start?.possessionText ?? '').trim());
+  const startYte = String(p?.start?.possessionText ?? '').trim() === '50' ? 50
+    : ps ? yteOfSpot(ps[1], Number(ps[2])) : Number(p?.start?.yardsToEndzone);
+  if (!Number.isFinite(startYte)) return gain;
+  for (const f of text.slice(at).matchAll(/PENALTY on ([A-Z]{2,4})-[^,]*,[^,]*,\s*-?\d+ yards?, enforced at (?:([A-Z]{2,4}) )?(\d{1,2})/g)) {
+    if (team(f[1]) !== offTeam) continue;
+    gain = Math.min(gain, startYte - yteOfSpot(f[2] ?? null, Number(f[3])));
+  }
+  return gain;
 }
 
 function row(c, ride, k, y, td, ca, tg, to, fl) {
