@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/bye-seal-1403.sql",
+  "why": "Test Wedding, week 7: 'Still can't move them' after 0520 reopened 11 bye spots. Read only: Allen / Croskey-Merritt's week-7 spots (locked, when sealed, pool team, classic_pick_lock), every sealed bye spot and when it sealed, and the classic leagues' league_pool row count (the worker's pool select is capped at 1000). Seats as numbers."
+}

@@ -7,7 +7,7 @@
 // The DB-side enforce_window_lock trigger (migration 0058) rejects client writes
 // into an already-kicked-off window, so the sweep's tick cadence is never an
 // integrity window.
-import { db } from './supabase.js';
+import { db, allRows } from './supabase.js';
 import { PLAYER_BIO } from '../../packages/core/src/data/playerBio.ts';
 import { autoSlotPlan, leagueSlotDefs, leagueBestball, leagueGolfZeroPtsOf, slateAwareProj, CLASSIC_WIN } from '../../packages/core/src/engine/classic.ts';
 import { setLeagueGolf, clearLeagueGolf } from '../../packages/core/src/engine/golf.ts';
@@ -259,9 +259,22 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
   if (!picks?.length) return 0;
 
   const leagueOf = new Map(mine.map((m) => [m.id, m.league_id]));
-  const { data: pool } = await db().from('league_pool')
-    .select('league_id,slug,team').in('league_id', [...classicLeagues]);
-  const poolTeam = new Map((pool ?? []).map((r) => [`${r.league_id}:${r.slug}`, r.team]));
+  // EVERY POOL ROW THESE PICKS NAME, PAGED (v0.732.5). One select over every
+  // classic league's whole pool hit PostgREST's silent 1000-row cap, so most
+  // players read as "not in the pool": harmless while the team fell back to
+  // the bio, but since v0.732.3 a bye's seal turns on pooled-or-not, and a
+  // dropped row sealed him at Thursday's kickoff, again, the tick after 0520
+  // reopened him (founder: "Still can't move them").
+  // Slugs go in batches of 150 so the filter never outgrows a request URL.
+  const pickSlugs = [...new Set(picks.map((p) => p.player_slug).filter(Boolean))];
+  const pool = [];
+  for (let i = 0; i < pickSlugs.length; i += 150) {
+    const batch = pickSlugs.slice(i, i + 150);
+    pool.push(...await allRows((from, to) => db().from('league_pool')
+      .select('league_id,slug,team').in('league_id', [...classicLeagues]).in('slug', batch)
+      .order('league_id').order('slug').range(from, to)));
+  }
+  const poolTeam = new Map(pool.map((r) => [`${r.league_id}:${r.slug}`, r.team]));
   const teamOf = (leagueId, slug) => {
     const fromPool = poolTeam.get(`${leagueId}:${slug}`);
     if (fromPool) return normTeam(String(fromPool));
