@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.5 — The bye fix reads the whole player pool
+
+> - Players on bye can really be moved out of the lineup now: the fix from earlier today was being undone a few seconds after it ran.
+
+Founder, Test Wedding after 0520: "Still can't move them" (Allen and
+Croskey-Merritt, no ⇄). Suspected cause: `sealDueClassicPicks` read
+`league_pool` for every classic league in ONE select, and PostgREST answers at
+most 1000 rows, silently. A bye whose row fell past the cap read as "not
+pooled" — v0.732.3 seals those at the week's first kickoff — so the worker
+re-sealed 0520's reopened spots on its next tick. The pool read is now only
+the slugs in the picks being checked, 150 per filter, every page (`allRows`).
+ops 079 is a read-only probe of the spots, their `revealed_at` (after 0520's
+20:46:44 UTC = re-sealed by the worker) and the pool's row count; a follow-up
+migration reopens the spots again once this worker is live.
+
 ### v0.732.4 — This week's bye spots open again
 
 > - If a player on bye was stuck in your lineup this week, his spot is open again: you can bench him until the last game of the week kicks off.
