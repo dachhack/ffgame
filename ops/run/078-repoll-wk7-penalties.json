@@ -1,0 +1,6 @@
+{
+  "mode": "repoll",
+  "week": 7,
+  "season": "2026",
+  "why": "Founder, NE@CHI box score: Roschon Johnson showed 2 car, -7 yd; ESPN's box has 2 for 13. The adapter credited a run or catch with ESPN's statYardage, the play's net INCLUDING an offensive penalty (his 12-yard run with a hold enforced at CHI 40 carried -11). v0.732.2 credits the text's yards, cut back to the spot of an offensive foul, and 0 on a No Play. Founder: \"add the week 7 repoll\". Re-ingests week 7 (still live) so Thursday's game is right before the week finals. Play data only; no finals rewritten."
+}

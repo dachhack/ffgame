@@ -42,10 +42,10 @@ own "for N yards", capped at the enforcement spot of any foul on the offense
   few yards of ESPN credit no rule reproduces.
 - `validate.mjs 1` (2025 vs nflverse): pts 90.3% → 91.3%, attr 98.9% → 99.5%.
 - `check:feedingest` +5 cases from the real plays (3 fail on the old adapter).
-- Stored plays keep the old yards until re-polled: NE@CHI (week 7) needs an
-  ops `repoll` of week 7 before the week finals, and **weeks 1–6 are settled
-  with the old yards** (Swift −20 in wk 1, Henry −20, Barkley −20…): a repoll
-  + restamp per week would move finals. Both founder's call.
+- ops 078 re-polls week 7 (founder asked) so NE@CHI is right before the week
+  finals. **Weeks 1–6 are settled with the old yards** (Swift −20 in wk 1,
+  Henry −20, Barkley −20…): a repoll + restamp per week would move finals;
+  founder's call, not done.
 
 ### v0.732.1 — Projected scores fit on one line
 
