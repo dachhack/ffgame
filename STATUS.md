@@ -22,6 +22,15 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.4 — This week's bye spots open again
+
+> - If a player on bye was stuck in your lineup this week, his spot is open again: you can bench him until the last game of the week kicks off.
+
+Follow-up to v0.732.3. Migration 0520 reopens this week's sealed classic spots
+holding a pooled bye (`classic_pick_lock` NULL), on live matchups, while the
+week's last game is still ahead; college slugs are left to 0372's rule. Landed
+after the v0.732.3 worker was live, since the old one re-sealed every tick.
+
 ### v0.732.3 — Players on bye can be moved out of the lineup
 
 > - A player on bye no longer locks into his lineup spot after Thursday night's game: you can bench him and start someone else until that player's game kicks off.
