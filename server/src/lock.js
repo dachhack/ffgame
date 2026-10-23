@@ -219,14 +219,24 @@ export function teamKickoffs(slate) {
  *     database (classic_pick_lock, 0178) has always allowed that write. It used
  *     to take the week-wide rule below, which sealed an emptied spot at
  *     Thursday's kickoff and left a Friday pickup nowhere to go (#1028).
- *   • No team resolved (unknown slug) or no game this week (BYE) → the old
- *     week-wide rule, the week's FIRST kickoff.
+ *   • A BYE the league's own pool vouches for (`pooled`: his team came from
+ *     league_pool, and it has no game this week) → the week's LAST kickoff,
+ *     like an empty spot (v0.732.3, founder: "Why can't I move guys on bye out
+ *     of roster spots?"). It used to take the week-wide rule below, which
+ *     sealed every bye at Thursday's kickoff and froze Josh Allen in a Sunday
+ *     lineup. The database (classic_pick_lock, 0178) has always called a
+ *     pooled bye "never locked"; this is the worker agreeing with it. A team
+ *     known only from the baked bio is NOT a bye here, because the database
+ *     can't see it and still holds that slug to Thursday.
+ *   • No team resolved (unknown slug), or a bye the pool can't vouch for → the
+ *     old week-wide rule, the week's FIRST kickoff.
  *   • Otherwise his own team's kickoff. */
-export function classicSealAt(slug, team, teamKicks) {
+export function classicSealAt(slug, team, teamKicks, pooled = false) {
   const kicks = Object.values(teamKicks).filter(Number.isFinite);
   if (!slug) return Math.max(...kicks);
   const k = team != null ? normTeam(String(team)) : null;
-  return k && Number.isFinite(teamKicks[k]) ? teamKicks[k] : Math.min(...kicks);
+  if (k && Number.isFinite(teamKicks[k])) return teamKicks[k];
+  return k && pooled ? Math.max(...kicks) : Math.min(...kicks);
 }
 
 export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
@@ -266,7 +276,8 @@ export async function sealDueClassicPicks(week, teamKicks, now = new Date()) {
     // kickoff, a Thursday-night lock on a Saturday game.
     if (p.player_slug && /^c-\d+$/.test(p.player_slug)) continue;
     const team = p.player_slug ? teamOf(leagueOf.get(p.matchup_id), p.player_slug) : null;
-    if (classicSealAt(p.player_slug, team, teamKicks) <= t) dueIds.push(p.id);
+    const pooled = !!p.player_slug && !!poolTeam.get(`${leagueOf.get(p.matchup_id)}:${p.player_slug}`);
+    if (classicSealAt(p.player_slug, team, teamKicks, pooled) <= t) dueIds.push(p.id);
   }
   if (!dueIds.length) return 0;
   const iso = now.toISOString();
