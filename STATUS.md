@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.3 — Players on bye can be moved out of the lineup
+
+> - A player on bye no longer locks into his lineup spot after Thursday night's game: you can bench him and start someone else until that player's game kicks off.
+
+Founder, Test Wedding (week 7, Friday): "Why can't I move guys on bye out of
+roster spots?" — J. Allen and J. Croskey-Merritt, both on bye, had no ⇄. The
+worker's `classicSealAt` (`server/src/lock.js`) sealed a bye at the week's
+FIRST kickoff, the rule kept for slugs it can't place, so every bye spot
+sealed at NE@CHI Thursday night, and a sealed row is un-writable by its
+manager (sealed_pick RLS). The database never agreed: `classic_pick_lock`
+(0178) calls a bye the league pool knows "never locked, same as an empty
+spot". The worker now seals a pooled bye at the week's LAST kickoff (as it
+does an empty spot); a bye known only from the baked bio keeps Thursday,
+since the database can't see that team either. `server/test/classic-seal.mjs`
+covers both.
+
+- Spots sealed before this deploy stay sealed: a follow-up migration reopens
+  this week's pooled-bye spots once the new worker is live (merged together,
+  the old worker would re-seal them on its next 25-second tick).
+
 ### v0.732.2 — Penalties no longer eat a runner's yards
 
 > - A run or catch with an offensive penalty on it no longer takes the penalty's yards off the player: Roschon Johnson's 12-yard run with a hold now counts 9 yards, as the official stats have it, not −11.

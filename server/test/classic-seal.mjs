@@ -17,9 +17,15 @@ assert.ok(classicSealAt(null, null, kicks) > THU, 'not at Thursday');
 // A player seals at his own team's kickoff.
 assert.strictEqual(classicSealAt('some-chief', 'KC', kicks), SUN, 'a Sunday player seals Sunday');
 assert.strictEqual(classicSealAt('some-packer', 'GB', kicks), THU, 'a Thursday player seals Thursday');
-// Unknown team or a bye keeps the stricter week-wide rule.
+// Unknown team keeps the stricter week-wide rule.
 assert.strictEqual(classicSealAt('mystery', null, kicks), THU, 'an unplaceable slug seals at the first kickoff');
-assert.strictEqual(classicSealAt('bye-guy', 'DAL', kicks), THU, 'a bye seals at the first kickoff');
+// A BYE the league's pool knows has no kickoff to be late for (v0.732.3,
+// founder: "Why can't I move guys on bye out of roster spots?"): open to the
+// last kickoff, as the database's classic_pick_lock always had it.
+assert.strictEqual(classicSealAt('bye-guy', 'DAL', kicks, true), MNF, 'a pooled bye seals at the last kickoff, not Thursday');
+// …but a bye known only from the baked bio is invisible to the database,
+// which still holds it to Thursday — so the worker does too.
+assert.strictEqual(classicSealAt('bye-guy', 'DAL', kicks), THU, 'an unpooled bye seals at the first kickoff');
 
 // #1095 (v0.597.0): the slate says LA, the pool (Sleeper) says LAR. Stafford
 // sealed at Thursday's kickoff for a Sunday game two weeks running.
