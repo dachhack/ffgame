@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.1 — Projected scores fit on one line
+
+> - The projected scores on the matchup board, like (21.1), no longer wrap onto two lines.
+
+Founder's screenshot (v0.732.0, Test Wedding): since v0.730.22 a projection reads
+"(21.1)", six mono chars, but the phone board's score columns were still the
+42px sized for "21.40" in v0.368.1, so every projection broke after the number.
+`apps/mobile/src/ui/ClassicBoard.tsx`: one `SCORE_W = 52` for the starters and
+bench score columns (12.5 → ~13.5 after fs, ~8px a char in mono), plus
+`numberOfLines={1}`. Each name cell gives up 10px. JS only, no iPhone build.
+
 ### v0.732.0 — Opponent and matchup on contest pick cards
 
 > - When you pick players for a weekly contest, each card now shows who he plays ("@ KC") and a coloured matchup pill: red is a tough matchup, green a soft one. Tap ⓘ by MATCHUP for what it means.

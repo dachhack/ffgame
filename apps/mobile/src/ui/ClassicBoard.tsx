@@ -379,6 +379,10 @@ function scoreOf(e: BoardEntry | null): string {
   return e.state === 'pre' ? projFigure(e.proj) : e.live.toFixed(2);
 }
 
+/** The row score column: six mono chars, "(21.1)" or "21.40", at 12.5
+ *  (~13.5 after fs) with a little air — 42 wrapped the projection. */
+const SCORE_W = 52;
+
 const ZERO = { games: 1, passYds: 0, passTds: 0, ints: 0, carries: 0, rushYds: 0, rushTds: 0, targets: 0, receptions: 0, recYds: 0, recTds: 0, ppr: 0 };
 const mkPlayer = (slug: string) => {
   const m = slugMeta(slug);
@@ -2141,12 +2145,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
                       </Pressable>
                     )}
                   </View>
-                  {/* 12.5 in a 42px box (v0.368.1, founder: "room to make the
-                      points larger?"). A per-player score is at most 5 mono
-                      chars ("21.40"), so the bump costs each name cell 2px —
-                      nothing v0.323.1's name-width work misses. */}
-                  <View style={{ width: 42, alignItems: 'flex-end' }}>
-                    <Mono size={12.5} weight="700" tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ textAlign: 'right' }}>
+                  {/* 12.5 in a SCORE_W box (v0.368.1, founder: "room to make
+                      the points larger?"; widened v0.732.1 for the six-char
+                      "(21.1)" projection, which wrapped in the old 42px). */}
+                  <View style={{ width: SCORE_W, alignItems: 'flex-end' }}>
+                    <Mono size={12.5} weight="700" numberOfLines={1} tone={row.home && row.home.state === 'pre' ? 'faint' : 'text'} style={{ textAlign: 'right' }}>
                       {scoreOf(row.home)}
                     </Mono>
                     {/* THE ZERO PENALTY (v0.648.0): a no-show costs the radius. */}
@@ -2165,8 +2168,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
                       </Mono>
                     )}
                   </View>
-                  <View style={{ width: 42, alignItems: 'flex-start' }}>
-                    <Mono size={12.5} weight="700" tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'}>
+                  <View style={{ width: SCORE_W, alignItems: 'flex-start' }}>
+                    <Mono size={12.5} weight="700" numberOfLines={1} tone={row.away && row.away.state === 'pre' ? 'faint' : 'dim'}>
                       {scoreOf(row.away)}
                     </Mono>
                     {!!row.penalty?.away && <Mono size={8} tone="opp" weight="700" numberOfLines={1}>{`🚫 −${row.penalty.points}`}</Mono>}
@@ -2213,11 +2216,11 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
                           </Pressable>
                         )}
                       </View>
-                      <Mono size={12.5} weight="700" tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42, textAlign: 'right' }}>
+                      <Mono size={12.5} weight="700" numberOfLines={1} tone={h && h.state === 'pre' ? 'faint' : 'dim'} style={{ width: SCORE_W, textAlign: 'right' }}>
                         {h ? (k === 'ir' && onIr.has(h.slug) && h.state === 'pre' ? '—' : scoreOf(h)) : ''}
                       </Mono>
                       <Mono size={8} tone="faint" weight="700">{k === 'bench' ? 'BN' : onIr.has((h ?? a)!.slug) ? 'IR' : 'TX'}</Mono>
-                      <Mono size={12.5} weight="700" tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: 42 }}>
+                      <Mono size={12.5} weight="700" numberOfLines={1} tone={a && a.state === 'pre' ? 'faint' : 'dim'} style={{ width: SCORE_W }}>
                         {a ? (k === 'ir' && onIr.has(a.slug) && a.state === 'pre' ? '—' : scoreOf(a)) : ''}
                       </Mono>
                       {a ? <BoardCell e={a} align="right" onGame={gameOpener(a)}
