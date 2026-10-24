@@ -2523,15 +2523,6 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 4 }}>Already included in each player's points above.</div>
         </div>
       )}
-
-      <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.6 }}>
-        CLASSIC MODE — standard scoring across every stat ({ppr === 1 ? '1 pt' : ppr === 0.5 ? '½ pt' : 'no points'} per catch), live play by play.
-        LINEUPS ARE OPEN: everyone in the league can see them, and each spot locks when THAT player's game {vocab.starts} —
-        {sport === 'nfl' ? 'so a Thursday game never freezes your Sunday picks.' : 'so an early game never freezes the rest of your night.'} No windows, no power-ups, no bonuses.
-        {bb.size > 0 && (bb.size >= slotDefs.length
-          ? ' FULL BEST BALL: every slot takes your highest scorer automatically — nothing to set.'
-          : ' 🎯 slots are BEST BALL: they automatically take your highest-scoring player who isn\'t already started.')}
-      </div>
     </div>
   );
 }

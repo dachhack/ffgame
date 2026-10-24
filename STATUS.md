@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.7 — No rules paragraph under the classic matchup
+
+> - The paragraph of rules at the bottom of the classic matchup screen is gone.
+
+Founder, Kickoff League matchup: "We don't need this wall of text at the
+bottom of the classic matchup." The CLASSIC MODE footer (scoring, open
+lineups, per-player locks, best ball) is removed from both boards
+(`apps/mobile/src/ui/ClassicBoard.tsx`, `src/screens/ClassicBoard.tsx`), per the
+info-chips standard. Best-ball spots still say so in the spot (🎯 BEST BALL /
+🎯 AUTO). JS only.
+
 ### v0.732.6 — This week's bye spots open again, for good
 
 > - If a player on bye was stuck in your lineup this week, his spot is open again.
