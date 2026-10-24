@@ -8,12 +8,12 @@
 // week's slate and game feeds itself, and lists every game in schedule
 // order. Pull to refresh, and a 30s tick while open, keep the drives live.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { liveSlate, slateWeeks, weekGameFeeds, weekLivePlays, loadCollegeLogos, type GameFeedRow } from '@drip/core/data/liveApi';
 import { setRuntimeSlate, windowsForWeek, windowForTeam, weekLabel } from '@drip/core/data/nflSlate';
 import type { WindowId } from '@drip/core/types';
 import { setLiveGameFeed, feedRowsToWeek, groupFieldGames, type ScheduledGame } from '@drip/core/data/gameFeed';
-import { fieldsWeekFrom, type FieldsLevel } from '@drip/core/data/fieldsWeek';
+import { fieldsWeekFrom, slateWeekOrder, type FieldsLevel } from '@drip/core/data/fieldsWeek';
 import { LIVE_SEASON, setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { useTheme } from '../theme.native';
 import { Chip, Mono } from './prims';
@@ -34,16 +34,22 @@ export function AllFieldsSheet({ visible, onClose, week: weekProp }: { visible: 
   // and NFL games … in the all fields view"). Each is its own calendar, so a
   // switch forgets the week and asks the slate again.
   const [level, setLevel] = useState<FieldsLevel>('nfl');
-  const pickLevel = (l: FieldsLevel) => { if (l === level) return; levelRef.current = l; setLevel(l); setWeek(null); setFeeds(null); setScheduled([]); };
+  const pickLevel = (l: FieldsLevel) => { if (l === level) return; levelRef.current = l; setLevel(l); setWeek(null); setFeeds(null); setScheduled([]); setOrder([]); };
+  // ‹ WEEK › (v0.733.0, founder: "a week selector on all fields so we can look
+  // at previous games and future schedules"). The level's weeks in the order
+  // they are played; a past week draws its stored drives, a future one its
+  // kickoff cards off the slate.
+  const [order, setOrder] = useState<number[]>([]);
   // A read started for the other level must not land after a switch.
   const levelRef = useRef(level);
 
   const load = useCallback(async (wk?: number | null) => {
     let w = wk ?? week ?? (level === 'nfl' ? weekProp ?? null : null);
-    if (w == null) {
+    if (w == null || !order.length) {
       const rows = await slateWeeks(String(LIVE_SEASON)).catch(() => []);
-      w = fieldsWeekFrom(rows, Date.now(), level);
       if (levelRef.current !== level) return;
+      setOrder(slateWeekOrder(rows, level));
+      w = w ?? fieldsWeekFrom(rows, Date.now(), level);
       if (w == null) { setFeeds([]); return; }
     }
     if (week !== w) {
@@ -62,7 +68,7 @@ export function AllFieldsSheet({ visible, onClose, week: weekProp }: { visible: 
     setLiveGameFeed(w, feedRowsToWeek(gf));
     if (lp.length) setLivePlays(w, liveRowsToPbp(lp));
     setFeeds(gf);
-  }, [week, level, weekProp]);
+  }, [week, level, weekProp, order.length]);
 
   useEffect(() => {
     if (!visible) return;
@@ -72,6 +78,8 @@ export function AllFieldsSheet({ visible, onClose, week: weekProp }: { visible: 
   }, [visible, load]);
 
   const onPull = async () => { setRefreshing(true); try { await load(); } finally { setRefreshing(false); } };
+  const at = week != null ? order.indexOf(week) : -1;
+  const step = (d: -1 | 1) => { const w = order[at + d]; if (w != null) { setFeeds(null); void load(w); } };
   const wins = week != null ? windowsForWeek(week) : [];
   const winLabelFor = (id: string) => wins.find((w) => String(w.id) === id)?.label ?? id.toUpperCase();
   const games = week != null && feeds ? groupFieldGames(week, [], scheduled).map((g) => ({
@@ -91,6 +99,17 @@ export function AllFieldsSheet({ visible, onClose, week: weekProp }: { visible: 
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <Chip label="NFL" on={level === 'nfl'} onPress={() => pickLevel('nfl')} a11y="NFL games" />
           <Chip label="CFB" on={level === 'cfb'} onPress={() => pickLevel('cfb')} a11y="College games" />
+          {week != null && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+              <Pressable onPress={() => step(-1)} disabled={at <= 0} hitSlop={8} accessibilityLabel="Previous week" style={{ paddingHorizontal: 6, opacity: at <= 0 ? 0.3 : 1 }}>
+                <Mono size={13} weight="700" tone="you">‹</Mono>
+              </Pressable>
+              <Mono size={10} weight="700" track={0.08} tone="text">{weekLabel(week).toUpperCase()}</Mono>
+              <Pressable onPress={() => step(1)} disabled={at < 0 || at >= order.length - 1} hitSlop={8} accessibilityLabel="Next week" style={{ paddingHorizontal: 6, opacity: at < 0 || at >= order.length - 1 ? 0.3 : 1 }}>
+                <Mono size={13} weight="700" tone="you">›</Mono>
+              </Pressable>
+            </View>
+          )}
         </View>
         {feeds == null && <Mono size={10.5} tone="dim" style={{ textAlign: 'center', paddingVertical: 16 }}>Loading the week…</Mono>}
         {week != null && feeds != null && <FieldsList week={week} games={games} empty={level === 'cfb' ? 'No college games on the live feed yet.' : 'No games on the live feed yet.'} />}

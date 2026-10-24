@@ -27,10 +27,10 @@ import { crestFor } from '@drip/core/data/crest';
 import { taglineFor, joinDoorFor } from '@drip/core/data/leagueTagline';
 import { isPreseasonWeek, weekTitle } from '@drip/core/data/nflSlate';
 import { FieldBoard } from '../app/FieldView';
-import { fieldsWeekFrom } from '@drip/core/data/fieldsWeek';
-import { slateWeeks, weekGameFeeds, weekLivePlays, devRoomJoin, setDfsBullseye } from '@drip/core/data/liveApi';
+import { fieldsWeekFrom, slateWeekOrder } from '@drip/core/data/fieldsWeek';
+import { slateWeeks, liveSlate, weekGameFeeds, weekLivePlays, devRoomJoin, setDfsBullseye } from '@drip/core/data/liveApi';
 import { APK_ZIP_URL, IOS_TESTFLIGHT_URL } from '@drip/core/data/changelog';
-import { setLiveGameFeed, feedRowsToWeek } from '@drip/core/data/gameFeed';
+import { setLiveGameFeed, feedRowsToWeek, type ScheduledGame } from '@drip/core/data/gameFeed';
 import { setLivePlays, liveRowsToPbp } from '@drip/core/data/realPbp';
 import { AdminPage, type LeagueTab } from './AdminPage';
 import { CommishDash } from './CommishDash';
@@ -177,13 +177,26 @@ export function LiveOnboard() {
     setLiveGameFeed(w, feedRowsToWeek(gf));
     if (lp.length) setLivePlays(w, liveRowsToPbp(lp));
   };
+  // ‹ WEEK › (v0.733.0, founder: "a week selector on all fields so we can look
+  // at previous games and future schedules"): the slate's weeks in the order
+  // they are played, and each week's fixtures so a future week shows its
+  // kickoff cards.
+  const [fieldsOrder, setFieldsOrder] = useState<number[]>([]);
+  const [fieldsSched, setFieldsSched] = useState<ScheduledGame[]>([]);
+  const showFieldsWeek = async (w: number) => {
+    const [, slate] = await Promise.all([loadFieldsWeek(w), liveSlate(w, '2026').catch(() => [])]);
+    setFieldsSched(slate.map((g) => ({ away: g.away, home: g.home, kickoff: g.kickoff ?? null })));
+    setFieldsWeek(w);
+  };
   const openFields = async () => {
     const rows = await slateWeeks('2026').catch(() => []);
     const w = fieldsWeekFrom(rows, Date.now());
     if (w == null) return;
-    await loadFieldsWeek(w);
-    setFieldsWeek(w);
+    setFieldsOrder(slateWeekOrder(rows));
+    await showFieldsWeek(w);
   };
+  const fieldsAt = fieldsWeek != null ? fieldsOrder.indexOf(fieldsWeek) : -1;
+  const stepFields = (d: -1 | 1) => { const w = fieldsOrder[fieldsAt + d]; if (w != null) void showFieldsWeek(w); };
   useEffect(() => {
     if (fieldsWeek == null) return;
     const id = setInterval(() => { void loadFieldsWeek(fieldsWeek); }, 30_000);
@@ -211,7 +224,8 @@ export function LiveOnboard() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {fieldsWeek != null && <FieldBoard week={fieldsWeek} entries={[]} onClose={() => setFieldsWeek(null)} />}
+      {fieldsWeek != null && <FieldBoard week={fieldsWeek} entries={[]} scheduled={fieldsSched} onClose={() => setFieldsWeek(null)}
+        weekNav={{ prev: fieldsAt > 0 ? () => stepFields(-1) : undefined, next: fieldsAt >= 0 && fieldsAt < fieldsOrder.length - 1 ? () => stepFields(1) : undefined }} />}
       {/* THE HEADER (v0.356.9, founder: the app's shape) — exit chip on the
           left without the arrow, the wordmark absolutely centered with no
           mark and no "LIVE", the gear on the right. Who you are and the way
