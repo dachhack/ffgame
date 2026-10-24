@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.733.0 — Step through weeks on All fields
+
+> - All fields now has ‹ › arrows beside the week: go back to see past weeks' games, or forward to see upcoming schedules with kickoff times.
+
+Founder: "Can we get a week selector on all fields so we can look at previous
+games and future schedules?" The standalone All fields sheet (phone:
+`apps/mobile/src/ui/AllFieldsSheet.tsx`, opened from the league tools bar and
+contest matchups) and the web's My Leagues ▦ ALL FIELDS board
+(`src/screens/LiveOnboard.tsx` → `FieldBoard`'s new optional `weekNav`) step
+through core's `slateWeekOrder` for the chosen level (NFL/CFB on the phone).
+A past week draws its stored drives; a future week its kickoff cards from the
+slate (the web board now gets the week's `scheduled` fixtures too). The
+boards' own ▦ FIELDS overlays keep following the board's week, which already
+has arrows. JS only.
+
 ### v0.732.9 — CPU-vs-CPU matchups show each team's own lineup
 
 > - When two CPU teams play each other, the matchup screen now shows each team's own starters. One team's locked players were showing up on the other side as OFF ROSTER.

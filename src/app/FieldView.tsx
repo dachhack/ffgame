@@ -122,8 +122,10 @@ export function SlotFieldViews({ week, youTeam, theirTeam, youClock, theirClock 
 // its side is sampled at (mirrors the slot rows), and those outcome pids.
 export interface FieldBoardEntry { playerId: string; team?: string | null; side: 'you' | 'their'; clock: number; pids?: number[]; }
 
-export function FieldBoard({ week, entries, scheduled, onClose, onRefresh }: {
+export function FieldBoard({ week, entries, scheduled, onClose, onRefresh, weekNav }: {
   week: number; entries: FieldBoardEntry[]; onClose: () => void;
+  /** ‹ WEEK › (v0.733.0): the opener steps the week; a missing side is the end of the slate. */
+  weekNav?: { prev?: () => void; next?: () => void };
   /** The week's fixtures (v0.413.0, founder: "on a non-existing feed, just open
    *  the fields with a kick off time and no data"). A feed only exists once a
    *  play has been ingested, so before the first whistle this screen had
@@ -223,7 +225,14 @@ export function FieldBoard({ week, entries, scheduled, onClose, onRefresh }: {
       )}
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-          <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>▦ ALL GAMES · {weekTitle(week)}</span>
+          <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'var(--text)' }}>
+            ▦ ALL GAMES ·
+            {weekNav && <button onClick={weekNav.prev} disabled={!weekNav.prev} aria-label="Previous week" className="mono"
+              style={{ fontSize: 13, fontWeight: 700, color: 'var(--you)', background: 'none', border: 'none', padding: '0 4px', cursor: weekNav.prev ? 'pointer' : 'default', opacity: weekNav.prev ? 1 : 0.3 }}>‹</button>}
+            {weekTitle(week)}
+            {weekNav && <button onClick={weekNav.next} disabled={!weekNav.next} aria-label="Next week" className="mono"
+              style={{ fontSize: 13, fontWeight: 700, color: 'var(--you)', background: 'none', border: 'none', padding: '0 4px', cursor: weekNav.next ? 'pointer' : 'default', opacity: weekNav.next ? 1 : 0.3 }}>›</button>}
+          </span>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <button onClick={toggleFollow} className="mono" aria-pressed={follow}
               title="auto-scroll to the field where the newest play just landed"
