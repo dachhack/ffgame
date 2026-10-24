@@ -312,6 +312,36 @@ export async function installCollegeMetaFor(slugs) {
   return Object.keys(data).length;
 }
 
+/** When a player's game kicks off (ms), for the AI's late-swap rails.
+ *  ON A COLLEGE WEEK (board week 201+) A COLLEGE PLAYER'S GAME IS HIS SCHOOL'S
+ *  (v0.732.8, founder, Devy Test 1: "CPU managers playing out players?"). His
+ *  pool `team` is blank on purpose (school codes collide with NFL ones), so
+ *  this used to fall to the week's FIRST college kickoff: from the first
+ *  midweek game on, every college player read as already playing, so an AI
+ *  seat could neither bench an Out back nor drop a player it no longer held
+ *  from its lineup, and that player scored for two teams. `schoolOf` is
+ *  college_player's school_abbr, the column classic_kickoff_for (0414) joins
+ *  the slate on, so the worker and the database agree. Unknown (no team, no
+ *  school, no game this week) keeps the stricter week-wide answer. Pure. */
+export function playerKickoff(slug, team, teamKicks, firstKick, schoolOf, week) {
+  const own = week > 200 && /^c-\d+$/.test(String(slug ?? '')) ? schoolOf?.get(slug) : team;
+  const t = own ? normTeam(String(own)) : null;
+  return t && Number.isFinite(teamKicks[t]) ? teamKicks[t] : firstKick;
+}
+
+/** College players' schools (college_player.school_abbr), on a college week. */
+async function collegeSchoolsFor(week, slugs) {
+  const ids = [...new Set(slugs)].filter((s) => /^c-\d+$/.test(s)).map((s) => s.slice(2));
+  if (week <= 200 || !ids.length) return new Map();
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data, error } = await db().from('college_player').select('espn_id,school_abbr').in('espn_id', ids.slice(i, i + 150));
+    if (error) throw new Error(error.message);
+    for (const r of data ?? []) if (r.school_abbr) out.set(`c-${r.espn_id}`, r.school_abbr);
+  }
+  return out;
+}
+
 /** AUTO-SLOT (v0.247.0): give every classic team the best projected lineup its
  *  roster can field, for this week, before anyone touches it.
  *
@@ -356,11 +386,9 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
   // Has this player's game started? The same rule the seal applies: his
   // team's kickoff, or the week's first when he cannot be placed (unknown
   // team, or a bye) — unknown falls to the stricter answer, as it does there.
-  const kickedOff = (team) => {
-    const t = team ? normTeam(String(team)) : null;
-    const kick = t && Number.isFinite(teamKicks[t]) ? teamKicks[t] : firstKick;
-    return kick <= nowMs;
-  };
+  // A college player's own school, per league below (v0.732.8).
+  let schoolOf = new Map();
+  const kickedOff = (slug, team) => playerKickoff(slug, team, teamKicks, firstKick, schoolOf, week) <= nowMs;
   // SLATE-AWARE VALUES (v0.252.0). PROJ_2026 is a season constant that knows
   // neither byes nor Friday's injury report, so ranking by it raw seats a
   // 20-point projection who is guaranteed to score zero. The tick's slate
@@ -444,6 +472,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
       .select('roster_id,slug').eq('league_id', leagueId).eq('spot', 'active')   // taxi/IR never start (0164)
       .in('roster_id', rosterIds);
     if (!ros?.length) continue;   // undrafted — nothing to slot yet, and no rows written, so the next tick retries
+    schoolOf = await collegeSchoolsFor(week, ros.map((r) => r.slug));
 
     // no_start (0144) binds the auto-fill: the sealed_pick trigger exempts the
     // server, so the exclusion has to happen here. autoSlotPlan checks the
@@ -535,7 +564,7 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
           // roster and the human had nothing all week while the CPU seats were filled. One first fill, on the
           // agent path's rails — only players whose games have not started — and never again once rows exist.
           if (live && Object.keys(stored).length) continue;
-          const cands = live ? roster.filter((p) => !kickedOff(p.team)) : roster;
+          const cands = live ? roster.filter((p) => !kickedOff(p.id, p.team)) : roster;
           setBullseyeRoster(rosterId);   // per-team deal: this seat's card
           for (const p of autoSlotPlan(slots, bestball, stored, cands, valueOf)) {
             humanPayload.push({
@@ -569,9 +598,9 @@ export async function autoSlotClassicLineups(week, slate = null, now = new Date(
         let cands = roster;
         if (live) {
           for (const [slot, slug] of Object.entries(current)) {
-            if (slug && lockedMap[slot] == null && kickedOff(meta.get(slug)?.team)) lockedMap[slot] = slug;
+            if (slug && lockedMap[slot] == null && kickedOff(slug, meta.get(slug)?.team)) lockedMap[slot] = slug;
           }
-          cands = roster.filter((p) => !kickedOff(p.team));
+          cands = roster.filter((p) => !kickedOff(p.id, p.team));
         }
         setBullseyeRoster(rosterId);   // per-team deal: this seat's card
         for (const p of autoSlotPlan(slots, bestball, lockedMap, cands, aiValueOf)) {
