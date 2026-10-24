@@ -4,7 +4,7 @@
 // have allowed the write, but a sealed row is un-writable. Run from server/:
 //   npx tsx test/classic-seal.mjs
 import assert from 'node:assert';
-import { classicSealAt, teamKickoffs } from '../src/lock.js';
+import { classicSealAt, teamKickoffs, playerKickoff } from '../src/lock.js';
 
 const THU = Date.UTC(2026, 8, 25, 0, 15);
 const SUN = Date.UTC(2026, 8, 27, 17, 0);
@@ -39,5 +39,19 @@ assert.strictEqual(classicSealAt('matthew-stafford', 'LAR', wk4), RAMS, 'a Rams 
 assert.strictEqual(classicSealAt('puka-nacua', 'LA', wk4), RAMS, '…and so does LA');
 assert.strictEqual(classicSealAt('some-commander', 'WSH', wk4), Date.parse('2026-10-04T13:30:00Z'), 'WSH finds WAS');
 assert.strictEqual(teamKickoffs([{ home: 'LAR', away: 'SF', kickoff: '2026-10-04T20:05:00Z' }]).LA, Date.parse('2026-10-04T20:05:00Z'), 'a slate that says LAR keys as LA');
+
+// THE AI'S RAILS ON A COLLEGE WEEK (v0.732.8, Devy Test 1: "CPU managers
+// playing out players?"). A college player's pool team is blank; his game is
+// his school's, not the week's first (a Tuesday MAC game).
+const TUE = Date.UTC(2026, 9, 20, 23, 0);
+const SAT = Date.UTC(2026, 9, 24, 19, 30);
+const cfb = { TOL: TUE, AUB: SAT, UTAH: SAT };
+const schools = new Map([['c-111', 'AUB'], ['c-222', 'TOL']]);
+assert.strictEqual(playerKickoff('c-111', '', cfb, TUE, schools, 208), SAT, 'an Auburn player kicks off with Auburn, Saturday');
+assert.strictEqual(playerKickoff('c-222', '', cfb, TUE, schools, 208), TUE, 'a Toledo player kicks off Tuesday');
+assert.strictEqual(playerKickoff('c-999', '', cfb, TUE, schools, 208), TUE, 'a school we cannot place keeps the first kickoff');
+// An NFL week never reads a school (codes collide: Houston vs the Texans).
+assert.strictEqual(playerKickoff('c-111', '', { AUB: SAT }, TUE, schools, 7), TUE, 'NFL week: the school is not the team');
+assert.strictEqual(playerKickoff('josh-allen', 'BUF', { BUF: SUN }, THU, schools, 7), SUN, 'an NFL player is his team, as before');
 
 console.log('PASS — classic picks seal at the right kickoff.');

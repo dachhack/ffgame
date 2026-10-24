@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.8 — CPU teams manage college lineups all week
+
+> - In college leagues, CPU teams now bench a player ruled Out and stop starting players they no longer have, right up to each player's own kickoff.
+
+Founder, Devy Test 1 (college week of 10/19): "CPU managers playing out
+players?" Team 4 (CPU) started E. Dickens (O) and held B. Brown, J. Buckley
+and A. Dabbs OFF ROSTER while Team 6 started the same three. Suspected cause:
+`autoSlotClassicLineups`' late-swap rails ask "has his game started?" by the
+player's pool `team`, which is blank for a college player on purpose, so on a
+college week every college player fell to the week's FIRST college kickoff (a
+midweek game). From then on an AI seat stood every stored player and seated
+nobody: no benching an Out player, no re-planning out a player it had dropped.
+New pure `playerKickoff` uses his school (`college_player.school_abbr`, the
+column `classic_kickoff_for` joins on) on a college week; NFL weeks unchanged.
+`server/test/classic-seal.mjs` covers it. ops 081 probes the matchup (read only).
+
 ### v0.732.7 — No rules paragraph under the classic matchup
 
 > - The paragraph of rules at the bottom of the classic matchup screen is gone.
