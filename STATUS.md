@@ -22,6 +22,26 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.732.9 — CPU-vs-CPU matchups show each team's own lineup
+
+> - When two CPU teams play each other, the matchup screen now shows each team's own starters. One team's locked players were showing up on the other side as OFF ROSTER.
+
+Founder, Devy Test 1 (college week of 10/19): Team 4 showed B. Brown, J.
+Buckley and A. Dabbs, Team 6's starters, as OFF ROSTER. Confirmed by ops 081:
+Team 4's picks were Avery Johnson, Darius Taylor and Collin Dixon in those
+spots; both seats are seat agents. Cause: `getRevealedPicks` split a matchup's
+rows by `league_membership.app_user_id`, NULL for an agent seat, so with CPU on
+both sides every row came back unsplit and the board read them all as the
+opponent's, last row per spot winning (Team 6's locked rows). A browsed CPU
+seat also had no uid to read its own picks by. New migration 0522
+`matchup_seat_users` (member, else agent; league members only) feeds both;
+the membership read stays as the fallback. `check:seatusers` covers it.
+Display only: the resolver already knew the agents.
+
+ops 081 also confirmed v0.732.8's cause: Team 4 still started E. Dickens and
+D. Scudero (both O, both unlocked) because every college player had read as
+kicked off since the week's first college game (Oct 20, 23:00 UTC).
+
 ### v0.732.8 — CPU teams manage college lineups all week
 
 > - In college leagues, CPU teams now bench a player ruled Out and stop starting players they no longer have, right up to each player's own kickoff.
