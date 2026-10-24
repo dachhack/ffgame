@@ -1872,6 +1872,22 @@ export async function matchupTeams(leagueId: string, rosterIds: number[]): Promi
  *  orphans are dropped rather than rendered as if they will score. What
  *  members watch is what the worker fields. If the matchup/membership read
  *  fails (offline blip), return unfiltered rather than blank the board. */
+/** EACH SEAT'S SPEAKING ACCOUNT (0522, v0.732.9): its member, else its seat
+ *  agent (0180). A CPU seat's lineup rows are written under its agent's uid,
+ *  which league_membership doesn't carry, and seat_agent is server-only. Null
+ *  when the RPC isn't there yet or the read fails. */
+export interface MatchupSeatUsers { home_roster_id: number; away_roster_id: number; home_user: string | null; away_user: string | null }
+export async function matchupSeatUsers(matchupId: string): Promise<MatchupSeatUsers | null> {
+  try {
+    const { data, error } = await (await client()).rpc('matchup_seat_users', { p_matchup: matchupId });
+    return error || !data ? null : (data as MatchupSeatUsers);
+  } catch { return null; }
+}
+
+/** One seat's speaking account out of matchupSeatUsers' answer. */
+export const seatUserIn = (su: MatchupSeatUsers | null, rosterId: number): string | null =>
+  !su ? null : su.home_roster_id === rosterId ? su.home_user : su.away_roster_id === rosterId ? su.away_user : null;
+
 export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[]> {
   const c = await client();
   const { data } = await c.from('sealed_pick')
@@ -1879,15 +1895,24 @@ export async function getRevealedPicks(matchupId: string): Promise<RevealedPick[
   const rows = (data ?? []) as RevealedPick[];
   if (!rows.length) return rows;
   try {
-    const { data: m } = await c.from('matchup')
-      .select('league_id, home_roster_id, away_roster_id').eq('id', matchupId).maybeSingle();
-    if (!m) return rows;
-    const { data: mems } = await c.from('league_membership').select('sleeper_roster_id, app_user_id')
-      .eq('league_id', m.league_id).in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]);
-    const userOf = (rid: number) =>
-      (mems ?? []).find((x: { sleeper_roster_id: number; app_user_id: string | null }) => x.sleeper_roster_id === rid)?.app_user_id ?? null;
-    const homeUser = userOf(m.home_roster_id);
-    const awayUser = userOf(m.away_roster_id);
+    // CPU SEATS COUNT AS SEATS (v0.732.9, Devy Test 1): with an agent on both
+    // sides neither seat has a membership uid, so every row went back unsplit
+    // and the board drew Team 6's locked starters in Team 4's lineup. The
+    // seat-user RPC answers agents too; the membership read is the fallback.
+    const su = await matchupSeatUsers(matchupId);
+    let homeUser = su?.home_user ?? null;
+    let awayUser = su?.away_user ?? null;
+    if (!su) {
+      const { data: m } = await c.from('matchup')
+        .select('league_id, home_roster_id, away_roster_id').eq('id', matchupId).maybeSingle();
+      if (!m) return rows;
+      const { data: mems } = await c.from('league_membership').select('sleeper_roster_id, app_user_id')
+        .eq('league_id', m.league_id).in('sleeper_roster_id', [m.home_roster_id, m.away_roster_id]);
+      const userOf = (rid: number) =>
+        (mems ?? []).find((x: { sleeper_roster_id: number; app_user_id: string | null }) => x.sleeper_roster_id === rid)?.app_user_id ?? null;
+      homeUser = userOf(m.home_roster_id);
+      awayUser = userOf(m.away_roster_id);
+    }
     if (homeUser == null && awayUser == null) return rows; // memberships unreadable — leave the board alone
     const { home, away } = assignSealedRows(rows, homeUser, awayUser);
     const rehome = (rs: RevealedPick[], uid: string | null) =>

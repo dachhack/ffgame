@@ -57,7 +57,7 @@ import { VampireCard } from './LeagueExtras';
 import { FieldView } from './FieldView';
 import { FieldsList } from './FieldsList';
 import { openPlayerCard } from './PlayerCardSheet';
-import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, leaguePlayerAdjustments, leagueRosterIssues, leagueWeekProjections, type MatchupResult, type PlayerAdjustment, type WeekProjRow } from '@drip/core/data/liveApi';
+import { ensureCollegeNames, collegeGamesInNflWeek, weekMatchups, getRevealedPicks as revealedPicksOf, matchupSeatUsers, seatUserIn, leaguePlayerAdjustments, leagueRosterIssues, leagueWeekProjections, type MatchupResult, type PlayerAdjustment, type WeekProjRow } from '@drip/core/data/liveApi';
 import { matchupGrade, matchupGradeLabel, MATCHUP_BAND_COLOR, MATCHUP_BAND_WORD } from '@drip/core/data/weekProj';
 import { matchupOrdinal, orderMatchups } from '@drip/core/data/matchupBrowse';
 import { playerHelmetFace, helmetSize } from './HelmetFace';
@@ -705,7 +705,9 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
         // A browsed seat's lineup comes off the league-readable classic picks
         // (0178), keyed by the account in that seat; mine still comes from
         // myPicks, which also carries the per-spot seal.
-        const vu = browsing ? ((await teamsP.catch(() => ({} as Record<number, TeamInfo>)))[seat]?.user_id ?? null) : userId;
+        // A CPU seat has no member account; its rows are its agent's (0522).
+        const vu = browsing ? ((await teamsP.catch(() => ({} as Record<number, TeamInfo>)))[seat]?.user_id
+          ?? seatUserIn(await matchupSeatUsers(m.id), seat)) : userId;
         setSeatUser(vu);
         const [pl, pk] = await Promise.all([myPool(leagueId, m.week, seat),
           browsing ? revealedPicksOf(m.id).then((rows) => rows.filter((p) => vu != null && p.app_user_id === vu)) : myPicks(m.id, userId)]);
