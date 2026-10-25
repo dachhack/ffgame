@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/kickoff-illegal-roster.sql",
+  "why": "Kickoff League, week 7: 'How did Mooney get an illegal roster?' Read only: the seat's roster_illegal_reason, every seat's reason, the league's shape and IR/OUT tags, the seat's roster by spot with injury designations, and its moves since Oct 15. Seats as numbers; the seat is matched by team name, which is not printed."
+}
