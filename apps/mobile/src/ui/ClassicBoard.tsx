@@ -937,6 +937,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
   // THE ROSTER HAS TO BE LEGAL (0360) — the web twin's comment applies: which
   // teams are illegal right now, refreshed every minute.
   const [issues, setIssues] = useState<Record<string, string>>({});
+  // BEST BALL GOES OFF ONLY FOR A REAL OVERFLOW (0523, v0.733.1): a stash
+  // problem (a healed IR player) still freezes the lineup, but best ball keeps
+  // filling from the active roster. Falls back to `issues` before 0523.
+  const [bbOff, setBbOff] = useState<Record<string, unknown>>({});
   // RE-ASKED ON DEMAND (v0.563.1, founder: "have that fix on a legal roster
   // when you pull to refresh or revisit the matchup view"). The matchup view
   // remounts on a revisit, so it asks on mount; a pull-to-refresh asks again
@@ -944,7 +948,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
   // manager who just fixed the roster on MY TEAM shouldn't wait out the minute.
   useEffect(() => {
     let alive = true;
-    const get = () => leagueRosterIssues(leagueId).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); }).catch(() => {});
+    const get = () => leagueRosterIssues(leagueId).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); setBbOff(r.bestball_off ?? r.issues ?? {}); }).catch(() => {});
     void get();
     issuesRef.current = get;
     const id = setInterval(get, 60_000);
@@ -1118,7 +1122,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
     void playsAt;
     // Judged while the week is being scored (0360); a stamped week keeps the
     // fill it was scored with.
-    const off = (rid: number | undefined) => rid != null && matchup?.status !== 'final' && !!issues[String(rid)];
+    const off = (rid: number | undefined) => rid != null && matchup?.status !== 'final' && !!bbOff[String(rid)];
     const oppRid = matchup ? (matchup.home_roster_id === seat ? matchup.away_roster_id : matchup.home_roster_id) : undefined;
     const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[], bbOff = false) => {
       const out: Record<string, string | null> = {};
@@ -1188,7 +1192,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
     const theirsFx = build(theirs, oppPool.filter((p) => heldNow(heldBy, oppRid, p.slug)).map((p) => p.slug), off(oppRid));
     setBullseyeRoster(null);
     return { mine: mineFx, theirs: theirsFx };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, heldBy, expMap, fillValue, entryFor, issues, seat, sport, bullseye]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, heldBy, expMap, fillValue, entryFor, issues, bbOff, seat, sport, bullseye]);
 
   const board = useMemo(() => {
     if (!matchup) return null;
@@ -2104,8 +2108,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, variant = 'match', fa
               // warning in the bestball spots"). An illegal roster (0360)
               // keeps its best-ball spots empty; the banner says why, but the
               // spot itself just read "🎯 BEST BALL". Either side.
-              const homeWhy = auto && !row.home ? issues[String(board.home.rosterId)] : undefined;
-              const awayWhy = auto && !row.away ? issues[String(board.away.rosterId)] : undefined;
+              const homeWhy = auto && !row.home && bbOff[String(board.home.rosterId)] ? issues[String(board.home.rosterId)] ?? 'too many active players' : undefined;
+              const awayWhy = auto && !row.away && bbOff[String(board.away.rosterId)] ? issues[String(board.away.rosterId)] ?? 'too many active players' : undefined;
               const offNote = (why: string, alignRight: boolean) => (
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Mono size={10} tone="warn" weight="700" style={{ textAlign: alignRight ? 'right' : 'left' }}>🎯 BEST BALL — OFF</Mono>

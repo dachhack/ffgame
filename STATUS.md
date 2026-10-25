@@ -22,6 +22,24 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.733.1 — A healthy player on IR no longer switches best ball off
+
+> - A player who gets healthy while on IR no longer turns off your best-ball spots. You still need to move him off IR (or drop someone) before you can make other moves, but your best-ball spots keep scoring.
+
+Founder, Kickoff League week 7: Mooney's K, D/ST and Rookie Only Bestball
+read "BEST BALL — OFF" because Tank Dell healed on IR (ops 082). "Healthy
+guys in IR shouldn't block the best ball action … The whole point of the rule
+is to not allow people to have more spots than allotted to choose from when
+making the best ball calculations." A stashed player is never a best-ball
+candidate, so migration 0523 adds `roster_bestball_off`: best ball goes off
+only when the active roster is over its seats (0360's formula) or a college
+player stands outside the devy spots (0366). `league_illegal_rosters` (the
+worker's best-ball read) lists only those seats; `league_roster_issues` adds
+`bestball_off` beside every seat's reason, and both boards fill and label best
+ball from it (falling back to `issues` before 0523). `roster_illegal_reason`
+is unchanged: any problem still freezes adds and lineup changes.
+`check:bblegal` covers it.
+
 ### v0.733.0 — Step through weeks on All fields
 
 > - All fields now has ‹ › arrows beside the week: go back to see past weeks' games, or forward to see upcoming schedules with kickoff times.

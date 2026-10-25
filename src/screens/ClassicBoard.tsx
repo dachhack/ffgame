@@ -1078,6 +1078,10 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
   // in the worker, so the board says so rather than drawing a fill that won't
   // score. Refreshed every minute: a drop fixes it mid-week.
   const [issues, setIssues] = useState<Record<string, string>>({});
+  // BEST BALL GOES OFF ONLY FOR A REAL OVERFLOW (0523, v0.733.1): a stash
+  // problem (a healed IR player) still freezes the lineup, but best ball keeps
+  // filling from the active roster. Falls back to `issues` before 0523.
+  const [bbOff, setBbOff] = useState<Record<string, unknown>>({});
   // RE-ASKED ON DEMAND (v0.563.1, founder: "have that fix on a legal roster
   // when you pull to refresh or revisit the matchup view"). The board is its
   // own route, so a revisit remounts and asks on mount; a pull-to-refresh
@@ -1087,7 +1091,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     const lid = ros?.leagueId;
     if (!lid) return;
     let alive = true;
-    const get = () => leagueRosterIssues(lid).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); }).catch(() => {});
+    const get = () => leagueRosterIssues(lid).then((r) => { if (alive && r?.ok) setIssues(r.issues ?? {}); setBbOff(r.bestball_off ?? r.issues ?? {}); }).catch(() => {});
     void get();
     const id = window.setInterval(get, 60_000);
     const onVis = () => { if (document.visibilityState === 'visible') void get(); };
@@ -1267,7 +1271,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     void playsAt;
     // The worker judges legality while the week is being scored (0360); a
     // stamped week keeps the fill it was scored with.
-    const off = (rid: number | undefined) => rid != null && matchup?.status !== 'final' && !!issues[String(rid)];
+    const off = (rid: number | undefined) => rid != null && matchup?.status !== 'final' && !!bbOff[String(rid)];
     const myRid = ros?.rosterId;
     const oppRid = matchup && myRid != null ? (matchup.home_roster_id === myRid ? matchup.away_roster_id : matchup.home_roster_id) : undefined;
     const build = (manual: Record<string, string | null | undefined>, rosterSlugs: string[], bbOff = false) => {
@@ -1339,7 +1343,7 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
     const theirsFx = build(theirs, oppPool.filter((p) => heldNow(heldBy, oppRid, p.slug)).map((p) => p.slug), off(oppRid));
     setBullseyeRoster(null);
     return { mine: mineFx, theirs: theirsFx };
-  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, heldBy, expMap, fillValue, entryFor, issues, ros?.rosterId, sport, bullseye]);
+  }, [mine, theirs, pool, oppPool, bb, bestball, locked, matchup, sc, slotDefs, playsAt, flagsVer, stashed, heldBy, expMap, fillValue, entryFor, issues, bbOff, ros?.rosterId, sport, bullseye]);
 
   const board = useMemo(() => {
     if (!matchup || !ros) return null;
@@ -2302,8 +2306,8 @@ export function ClassicBoard({ userId, leagueId, rosterId, onBack, hideBack, swi
               // keeps its best-ball spots empty; the banner above says why,
               // but the spot itself read "nobody eligible yet" — which is
               // not the reason. Either side.
-              const homeWhy = auto && !row.home ? issues[String(board.home.rosterId)] : undefined;
-              const awayWhy = auto && !row.away ? issues[String(board.away.rosterId)] : undefined;
+              const homeWhy = auto && !row.home && bbOff[String(board.home.rosterId)] ? issues[String(board.home.rosterId)] ?? 'too many active players' : undefined;
+              const awayWhy = auto && !row.away && bbOff[String(board.away.rosterId)] ? issues[String(board.away.rosterId)] ?? 'too many active players' : undefined;
               const offNote = (why: string, alignRight: boolean) => (
                 <div className="mono" style={{ minWidth: 0, textAlign: alignRight ? 'right' : 'left' }}>
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn)' }}>🎯 BEST BALL — OFF</div>
