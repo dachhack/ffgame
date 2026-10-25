@@ -541,8 +541,13 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
           The tilt used to be a CSS 3D transform that laid everything flat; core's
           fieldPerspective now projects the field's points (the app draws the
           same numbers), and the posts, the ball badge and the carrier's pin
-          stand upright at their projected spots. */}
-      <div style={{ position: 'relative' }}>
+          stand upright at their projected spots.
+          A DESKTOP-WIDE CARD DOESN'T STRETCH IT (v0.733.3, founder: "On
+          desktop, the field visuals need some help"): the drawing scales with
+          its box and the strip, buttons and play text don't, so at 2000px the
+          field went giant under 9px text with posts and badges to match. It
+          stops at the enlarged tile's 900px and centers. */}
+      <div style={{ position: 'relative', maxWidth: 900, margin: '0 auto' }}>
         <svg viewBox={`0 0 ${W} ${VH}`} style={{ display: 'block', width: '100%', overflow: 'visible' }}>
           {/* turf, its ten-yard bands, end zones in each team's brand paint (sides swap with ↔ flip) */}
           <polygon points={fieldQuad(FX, TOP, FX + FW, BOT)} fill="color-mix(in srgb, var(--you) 5%, var(--surface))" stroke="color-mix(in srgb, var(--dim) 45%, transparent)" strokeWidth={1} />

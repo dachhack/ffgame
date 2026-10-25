@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.733.3 — The field keeps its shape on a wide screen
+
+> - On a desktop browser the game field no longer stretches across the whole screen: it stays a sensible size, centered, with the score and play text in proportion.
+
+Founder (desktop screenshot): "On desktop, the field visuals need some help."
+The web field (`src/app/FieldView.tsx`) is an SVG at width 100%, so on a
+2000px card the drawing went giant (posts, team badges, empty air above)
+while the strip, buttons and play text stayed small. The drawing now stops at
+900px, the enlarged fields-board tile's width, and centers. Checked in a local
+harness on a baked 2025 game at 2000, 1280 and 390px. Web only.
+
 ### v0.733.2 — Read a power-up before you buy it
 
 > - In the power-up shop, tapping a card now opens its full description instead of buying it. To buy, tap the price, then tap it again to confirm.
