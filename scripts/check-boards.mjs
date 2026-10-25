@@ -4,9 +4,9 @@
 //
 // THE DYNASTY RESCALE has to be the upstream's rule and not something near
 // it: per-player ratio above the floor, positional median below it, and
-// UNSUPPORTED POSITIONS UNTOUCHED — which is the clause that carries the
-// rookie-pick rows through at their raw value. Get that last one wrong and
-// every pick in the app is priced at 40% of the market.
+// rookie picks on the MEAN positional ratio, in tens (StatHead's Oct 1 2026
+// rule — no raw third-party value is ever shown). Until v0.572.0 picks passed
+// through raw, ~2.9× the scale of the rescaled players beside them.
 //
 // THE SEASON RATE must stay a LEVEL. `projectedPoints` scores a baked
 // component line under each league's own catalog; the live number replaces
@@ -41,10 +41,11 @@ const unknown = { playerID: 5, playerName: 'Nobody', position: 'TE', value: 1000
 ok(rescaledValue(unknown, snap, '1qb') === 390, 'a player with no per-player ratio takes his position\'s');
 // THE CLAUSE THAT MATTERS MOST
 const pick = { playerID: 7, playerName: '2027 Early 1st', position: 'RDP', value: 7174, superflexValue: 6944 };
-ok(rescaledValue(pick, snap, '1qb') === 7174 && rescaledValue(pick, snap, 'sf') === 6944,
-  'an unsupported position — a rookie pick — keeps its RAW value, unrescaled');
-const kicker = { playerID: 8, playerName: 'A Kicker', position: 'K', value: 500, superflexValue: 500 };
-ok(rescaledValue(kicker, snap, '1qb') === 500, 'and so does a kicker');
+// mean 1QB ratio (0.4 + 0.42 + 0.39 + 0.39) / 4 = 0.4 → 2869.6 → 2870; sf (0.62 + 0.48 + 0.48 + 0.5) / 4 = 0.52 → 3610.9 → 3610
+ok(rescaledValue(pick, snap, '1qb') === 2870 && rescaledValue(pick, snap, 'sf') === 3610,
+  `a rookie pick takes the MEAN positional ratio, in tens (${rescaledValue(pick, snap, '1qb')}, ${rescaledValue(pick, snap, 'sf')})`);
+ok(rescaledValue(pick, { ...snap, positional: { QB: snap.positional.QB } }, '1qb') === null,
+  'and with no ratios to read, a pick is unpriced — never its raw value');
 
 // ── rows: players keyed by id, picks by the market's own label ────────────
 const xwalk = { players: [

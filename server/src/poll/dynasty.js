@@ -17,7 +17,8 @@
 // The rule below is the upstream's own, transcribed from the client they
 // publish (stathead/dynasty.py, itself mirroring src/lib/valueRescale.ts):
 // ratio = per-player where the KTC value clears the floor, else the
-// positional median; value = round(ktc × ratio); UNSUPPORTED POSITIONS KEEP
+// positional median; value = round(ktc × ratio); (picks: see RESCALED below —
+// v0.572.0 replaced the old rule that UNSUPPORTED POSITIONS KEEP
 // THEIR RAW VALUE, which is how the pick rows pass through untouched. This is
 // running their model, not approximating it.
 //
@@ -39,8 +40,12 @@ const SH_BASE = process.env.STATHEAD_RAW || 'https://raw.githubusercontent.com/d
 const SH_REF = process.env.STATHEAD_REF || 'claude/nfl-fantasy-workbench-6D1yd';
 const file = (p) => `${SH_BASE}/${SH_REF}/public/data/${p}`;
 
-/** Positions the rescale applies to. Everything else — kickers, and the
- *  rookie picks — keeps its raw KTC value, per the upstream's rule. */
+/** Positions with their own ratios. Everything else — the rookie picks —
+ *  takes the MEAN of the four positional ratios and is shown in tens:
+ *  StatHead's rule from Oct 1 2026 (src/lib/valueRescale.ts), under which no
+ *  raw third-party value is ever shown. Before it, picks passed through at
+ *  KTC's raw value — ~2.9× the scale of the rescaled player values beside
+ *  them in a trade grade. */
 const RESCALED = new Set(['QB', 'RB', 'WR', 'TE']);
 
 /** The upstream's ratio rule, verbatim: per-player above the floor, else the
@@ -48,7 +53,12 @@ const RESCALED = new Set(['QB', 'RB', 'WR', 'TE']);
 export function rescaledValue(row, snap, fmt) {
   const raw = Number(fmt === 'sf' ? row.superflexValue : row.value);
   if (!Number.isFinite(raw)) return null;
-  if (!RESCALED.has(row.position)) return Math.round(raw);
+  if (!RESCALED.has(row.position)) {
+    const key = fmt === 'sf' ? 'sf' : 'oneQB';
+    const rs = [...RESCALED].map((p) => Number(snap?.positional?.[p]?.[key]));
+    if (rs.some((r) => !Number.isFinite(r))) return null;   // never the raw value
+    return Math.round((raw * rs.reduce((a, b) => a + b, 0) / rs.length) / 10) * 10;
+  }
   const key = fmt === 'sf' ? 'sf' : 'oneQB';
   const floor = Number(snap?.floor ?? 500);
   const per = snap?.perPlayer?.[String(row.playerID)];
