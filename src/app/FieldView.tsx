@@ -350,7 +350,6 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
   useEffect(() => { onShown?.(pin != null && cur ? playKey(cur) : null); }, [pin, cur?.pid, cur?.c]); // eslint-disable-line react-hooks/exhaustive-deps
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
-  const carrierImg = carrier ? headshot(carrier.slug) : null;
   // Final play shown. "No next play yet" alone reads a live halftime as game
   // over — trust the real game state when the live feed carries it, else
   // require the shown play to sit in late Q4 (baked replays always do).
@@ -364,6 +363,9 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
   // Ball spot after the current play: the next play's start situation when we
   // have it (authoritative — penalties, spots), else the current play's end.
   const ballTm = nxt ? nxt.tm : cur ? (cur.tm2 ?? cur.tm) : null;
+  // No headshot: the team's logo fills the ring, never an empty circle
+  // (v0.733.3, founder's phone screenshot: G. Bernard's pin drew blank).
+  const carrierImg = carrier ? headshot(carrier.slug) ?? (ballTm ? teamLogo(ballTm, { week }) : null) : null;
   const ballX = nxt ? xOf(nxt.yl, nxt.tm) : cur ? xOf(cur.yl2, cur.tm2 ?? cur.tm) : null;
   const attacksRight = ballTm === away;
   // First-down target line (only when a normal down is coming up).
@@ -664,8 +666,9 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
                       <path d={`M -5 ${yMid - 14} L 5 ${yMid - 14} L 0 ${yMid - 3} Z`} fill={ballCol?.c ?? 'var(--dimstrong)'} />
                       <circle cx={0} cy={yMid - 25} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
                       {carrierImg && <image href={carrierImg} x={-11} y={yMid - 36} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvc-${feed.key})`} />}
-                      <rect x={-38} y={yMid + 2} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
-                      <text x={0} y={yMid + 12} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier!.name}</text>
+                      {/* the name ABOVE the ring (v0.733.3): under the spot it sat on the yard numbers */}
+                      <rect x={-38} y={yMid - 53} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
+                      <text x={0} y={yMid - 43} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier!.name}</text>
                     </g>
                   )}
                 </g>
