@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.733.2 — Read a power-up before you buy it
+
+> - In the power-up shop, tapping a card now opens its full description instead of buying it. To buy, tap the price, then tap it again to confirm.
+
+Mooney, Weekly Cointest: "Some of the descriptions are too long and when I
+tapped to try and see if it opened up to see more it bought it immediately
+so now I have two power ups of something." The phone's shop card was one buy
+button with the description cut at four lines (`apps/mobile/src/ui/ShopModal.tsx`):
+a tap on the card now opens the whole description, and only the ◈ price buys,
+on a second tap while it reads TAP AGAIN (4 s). The web shop
+(`src/screens/LeagueOverview.tsx` `ShopModal`, list and card table) asks for
+the same second tap. Migration 0524 refunds the misclick (ops 083: two Jinx
+buys three seconds apart, seat 3): ◈55 back and one Jinx out of the hand,
+guarded and idempotent.
+
 ### v0.733.1 — A healthy player on IR no longer switches best ball off
 
 > - A player who gets healthy while on IR no longer turns off your best-ball spots. You still need to move him off IR (or drop someone) before you can make other moves, but your best-ball spots keep scoring.
