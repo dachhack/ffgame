@@ -191,6 +191,8 @@ function Field({ feed, clock, side, week, carrierOf, bleed, jump, onShown }: { f
   const xOf = (yte: number, tm: string) => FX + ((tm === away ? 100 - yte : yte) / 100) * FW;
 
   const ballTm = nxt ? nxt.tm : cur ? (cur.tm2 ?? cur.tm) : null;
+  // The carrier's pin picture: his headshot, else his team's logo (v0.733.3).
+  const carrierPic = carrier ? headshot(carrier.slug) ?? (ballTm ? teamLogo(ballTm, { week }) : null) : null;
   const ballX = nxt ? xOf(nxt.yl, nxt.tm) : cur ? xOf(cur.yl2, cur.tm2 ?? cur.tm) : null;
   const attacksRight = ballTm === away;
   const fdX = nxt && nxt.dn > 0 && nxt.dist > 0 && nxt.dist < nxt.yl ? xOf(nxt.yl - nxt.dist, nxt.tm) : null;
@@ -470,9 +472,12 @@ function Field({ feed, clock, side, week, carrierOf, bleed, jump, onShown }: { f
                 <G>
                   <Path d={`M -5 ${yMid - 14} L 5 ${yMid - 14} L 0 ${yMid - 3} Z`} fill={ballCol?.c ?? t.dimstrong} />
                   <Circle cx={0} cy={yMid - 25} r={12} fill={t.surface} stroke={ballCol?.c ?? t.dimstrong} strokeWidth={1.4} />
-                  {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={yMid - 36} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
-                  <Rect x={-38} y={yMid + 2} width={76} height={13} rx={2} fill={alpha('#000000', 60)} />
-                  <SvgText x={0} y={yMid + 12} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
+                  {/* No headshot: the team's logo, never an empty ring (v0.733.3, founder:
+                      "a lot of label and chip collision on the field view"). */}
+                  {carrierPic && <SvgImage href={{ uri: carrierPic }} x={-11} y={yMid - 36} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
+                  {/* the name ABOVE the ring: under the spot it sat on the yard numbers */}
+                  <Rect x={-38} y={yMid - 53} width={76} height={13} rx={2} fill={alpha('#000000', 60)} />
+                  <SvgText x={0} y={yMid - 43} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
                 </G>
               )}
             </AnimatedG>
@@ -486,7 +491,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed, jump, onShown }: { f
           return (
             <G transform={`translate(${Math.min(W - 38, Math.max(38, playEnd.x))} 0)`}>
               <Circle cx={0} cy={ringY} r={12} fill={t.surface} stroke={ring} strokeWidth={1.4} />
-              {headshot(carrier.slug) && <SvgImage href={{ uri: headshot(carrier.slug)! }} x={-11} y={ringY - 11} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
+              {carrierPic && <SvgImage href={{ uri: carrierPic }} x={-11} y={ringY - 11} width={22} height={22} preserveAspectRatio="xMidYMid slice" />}
               <Rect x={-38} y={plateY} width={76} height={13} rx={2} fill={alpha('#000000', 60)} />
               <SvgText x={0} y={plateY + 10} fill="#FFFFFF" fontSize={9.5} fontWeight="700" textAnchor="middle">{carrier.name}</SvgText>
             </G>

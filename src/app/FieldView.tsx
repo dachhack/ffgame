@@ -350,7 +350,6 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
   useEffect(() => { onShown?.(pin != null && cur ? playKey(cur) : null); }, [pin, cur?.pid, cur?.c]); // eslint-disable-line react-hooks/exhaustive-deps
   const nxt: GamePlay | null = idx + 1 < plays.length ? plays[idx + 1] : null;
   const carrier: Carrier = cur && carrierOf ? carrierOf(cur) : null;
-  const carrierImg = carrier ? headshot(carrier.slug) : null;
   // Final play shown. "No next play yet" alone reads a live halftime as game
   // over — trust the real game state when the live feed carries it, else
   // require the shown play to sit in late Q4 (baked replays always do).
@@ -364,6 +363,9 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
   // Ball spot after the current play: the next play's start situation when we
   // have it (authoritative — penalties, spots), else the current play's end.
   const ballTm = nxt ? nxt.tm : cur ? (cur.tm2 ?? cur.tm) : null;
+  // No headshot: the team's logo fills the ring, never an empty circle
+  // (v0.733.3, founder's phone screenshot: G. Bernard's pin drew blank).
+  const carrierImg = carrier ? headshot(carrier.slug) ?? (ballTm ? teamLogo(ballTm, { week }) : null) : null;
   const ballX = nxt ? xOf(nxt.yl, nxt.tm) : cur ? xOf(cur.yl2, cur.tm2 ?? cur.tm) : null;
   const attacksRight = ballTm === away;
   // First-down target line (only when a normal down is coming up).
@@ -541,8 +543,13 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
           The tilt used to be a CSS 3D transform that laid everything flat; core's
           fieldPerspective now projects the field's points (the app draws the
           same numbers), and the posts, the ball badge and the carrier's pin
-          stand upright at their projected spots. */}
-      <div style={{ position: 'relative' }}>
+          stand upright at their projected spots.
+          A DESKTOP-WIDE CARD DOESN'T STRETCH IT (v0.733.3, founder: "On
+          desktop, the field visuals need some help"): the drawing scales with
+          its box and the strip, buttons and play text don't, so at 2000px the
+          field went giant under 9px text with posts and badges to match. It
+          stops at the enlarged tile's 900px and centers. */}
+      <div style={{ position: 'relative', maxWidth: 900, margin: '0 auto' }}>
         <svg viewBox={`0 0 ${W} ${VH}`} style={{ display: 'block', width: '100%', overflow: 'visible' }}>
           {/* turf, its ten-yard bands, end zones in each team's brand paint (sides swap with ↔ flip) */}
           <polygon points={fieldQuad(FX, TOP, FX + FW, BOT)} fill="color-mix(in srgb, var(--you) 5%, var(--surface))" stroke="color-mix(in srgb, var(--dim) 45%, transparent)" strokeWidth={1} />
@@ -552,11 +559,16 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
           {(() => {
             const ezAwayX = flip ? W - EZ : 0, ezHomeX = flip ? 0 : W - EZ;
             // the name runs along its end zone's slant, sized to fit it (v0.730.7)
+            // THE BADGE WINS NEAR THE GOAL LINE (v0.733.3, founder's desktop
+            // screenshots): a ball spotted inside the 10 put its team badge on
+            // top of that end zone's name, so the name fades while it's there.
+            const bx = ballX != null ? mx(ballX) : null;
+            const near = (x: number) => bx != null && bx > x - FW / 10 && bx < x + EZ + FW / 10;
             const label = (x: number, tc: ReturnType<typeof teamColor>, abbr: string) => {
               const l = endZoneLabel(x, abbr.length, 0.2);
               return (
-                <text x={0} y={l.size * 0.35} fill={ezText(tc)} fontSize={l.size} fontWeight={800} textAnchor="middle"
-                  transform={`translate(${l.x} ${l.y}) rotate(${l.rot})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
+                <text x={0} y={l.size * 0.35} fill={ezText(tc)} fontSize={l.size} fontWeight={800} textAnchor="middle" opacity={near(x) ? 0.25 : 1}
+                  transform={`translate(${l.x} ${l.y}) rotate(${l.rot})`} style={{ letterSpacing: '0.2em', transition: 'opacity .3s ease' }}>{abbr}</text>
               );
             };
             const rz = (flip ? !attacksRight : attacksRight) ? W - EZ : 0;
@@ -654,8 +666,9 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
                       <path d={`M -5 ${yMid - 14} L 5 ${yMid - 14} L 0 ${yMid - 3} Z`} fill={ballCol?.c ?? 'var(--dimstrong)'} />
                       <circle cx={0} cy={yMid - 25} r={12} fill="var(--surface)" stroke={ballCol?.c ?? 'var(--dimstrong)'} strokeWidth={1.4} />
                       {carrierImg && <image href={carrierImg} x={-11} y={yMid - 36} width={22} height={22} preserveAspectRatio="xMidYMid slice" clipPath={`url(#fvc-${feed.key})`} />}
-                      <rect x={-38} y={yMid + 2} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
-                      <text x={0} y={yMid + 12} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier!.name}</text>
+                      {/* the name ABOVE the ring (v0.733.3): under the spot it sat on the yard numbers */}
+                      <rect x={-38} y={yMid - 53} width={76} height={13} rx={2} fill="rgba(0,0,0,0.6)" />
+                      <text x={0} y={yMid - 43} fill="#fff" fontSize={9.5} fontWeight={700} textAnchor="middle" className="mono">{carrier!.name}</text>
                     </g>
                   )}
                 </g>

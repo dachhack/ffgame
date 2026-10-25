@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.733.3 — Cleaner field views
+
+> - On a desktop browser the game field no longer stretches across the whole screen.
+> - The ball carrier's name now sits above his picture instead of on top of the yard numbers, and a player with no photo shows his team's logo.
+
+Founder (desktop screenshot): "On desktop, the field visuals need some help."
+The web field (`src/app/FieldView.tsx`) is an SVG at width 100%, so on a
+2000px card the drawing went giant (posts, team badges, empty air above)
+while the strip, buttons and play text stayed small. The drawing now stops at
+900px, the enlarged fields-board tile's width, and centers. Checked in a local
+harness on a baked 2025 game at 2000, 1280 and 390px. And with the ball
+inside an opponent's 10 (founder's second screenshot, Kamara at PIT 2), that
+end zone's name fades so the ball badge on top of it reads.
+
+Phone (founder: "On the app a lot of label and chip collision on the field
+view", PIT–NO, G. Bernard): the ball carrier's name tag hung under the spot,
+on the yard numbers, and a carrier with no headshot drew an empty ring above
+the field. Both fields (`apps/mobile/src/ui/FieldView.tsx`, `src/app/FieldView.tsx`)
+now put the name above the ring (the room `targetMarkY` already uses) and
+fill a missing headshot with the team's logo. JS only, no iPhone build.
+
 ### v0.733.2 — Read a power-up before you buy it
 
 > - In the power-up shop, tapping a card now opens its full description instead of buying it. To buy, tap the price, then tap it again to confirm.
