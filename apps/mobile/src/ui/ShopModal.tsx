@@ -77,6 +77,18 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // READ FIRST, THEN BUY (v0.733.2, Mooney, Cointest: "Some of the
+  // descriptions are too long and when I tapped to try and see if it opened up
+  // to see more it bought it immediately"). The card used to be one buy
+  // button. Now a tap on the card opens its whole description; only the price
+  // buys, and only on a second tap while it reads TAP AGAIN.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [armed, setArmed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!armed) return;
+    const id = setTimeout(() => setArmed((a) => (a === armed ? null : a)), 4000);
+    return () => clearTimeout(id);
+  }, [armed]);
   // The countdowns tick by the minute while the sheet is up.
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -185,8 +197,8 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
             return (
               <Pressable
                 key={p.id}
-                onPress={() => buy(p.id, p.price)}
-                disabled={!!busy || gated || !afford}
+                onPress={() => setOpenId((o) => (o === p.id ? null : p.id))}
+                accessibilityHint="Shows the whole description"
                 style={{
                   width: '48%',
                   backgroundColor: lit ? alpha(t.you, 14) : '#241E15',
@@ -202,7 +214,7 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
 
                 <Text style={{ fontSize: 22, textAlign: 'center' }}>{p.icon}</Text>
                 <Text style={{ fontSize: 13, fontWeight: '800', color: '#F0E6CC', textAlign: 'center' }}>{p.name.toUpperCase()}</Text>
-                <Text numberOfLines={4} style={{ fontSize: 10.5, color: '#B3A88C', textAlign: 'center', lineHeight: 15 }}>{p.blurb}</Text>
+                <Text numberOfLines={openId === p.id ? undefined : 4} style={{ fontSize: 10.5, color: '#B3A88C', textAlign: 'center', lineHeight: 15 }}>{p.blurb}</Text>
 
                 {/* THE SIGN. Passed: a ⛔ line the eye can't miss. Open: the
                     countdown to the last lock it can still make. Live/waiting:
@@ -223,13 +235,19 @@ export function ShopModal({ visible, matchupId, balance, practice, unlockLocked,
                 {isUnlock && !passed && <Mono size={8.5} tone="faint" style={{ textAlign: 'center' }}>to your hand — use it from a slot&rsquo;s metric picker</Mono>}
                 {!afford && !gated && <Mono size={9} tone="faint" style={{ textAlign: 'center' }}>↳ need ◈{p.price}</Mono>}
 
-                <View style={{ alignSelf: 'center', marginTop: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: '#4A3F2A', borderRadius: 6, paddingHorizontal: 14, paddingVertical: 6, minWidth: 78, alignItems: 'center' }}>
+                <Pressable
+                  onPress={() => { if (armed === p.id) { setArmed(null); void buy(p.id, p.price); } else setArmed(p.id); }}
+                  disabled={!!busy || gated || !afford}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={armed === p.id ? `Confirm buying ${p.name} for ${p.price}` : `Buy ${p.name} for ${p.price}`}
+                  style={{ alignSelf: 'center', marginTop: 2, borderWidth: armed === p.id ? 1 : StyleSheet.hairlineWidth, borderColor: armed === p.id ? t.you : '#4A3F2A', backgroundColor: armed === p.id ? alpha(t.you, 14) : 'transparent', borderRadius: 6, paddingHorizontal: 14, paddingVertical: 6, minWidth: 78, alignItems: 'center' }}>
                   {busy === p.id
                     ? <ActivityIndicator size="small" color={t.you} />
-                    : <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', color: afford && !gated ? '#F0E6CC' : '#8A7F66' }}>
-                        {gated ? '🔒 PREMIUM' : `◈ ${p.price}`}
+                    : <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: '700', color: armed === p.id ? t.you : afford && !gated ? '#F0E6CC' : '#8A7F66' }}>
+                        {gated ? '🔒 PREMIUM' : armed === p.id ? `TAP AGAIN ◈ ${p.price}` : `◈ ${p.price}`}
                       </Text>}
-                </View>
+                </Pressable>
               </Pressable>
             );
           })}

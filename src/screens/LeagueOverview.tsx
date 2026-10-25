@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from '../app/store';
 import { Brand, Header, SiteSettings, UserChip, Avatar, PlayerImg, DemoControls } from '../app/ui';
 import { getTeam, teamRoster, gameForTeam, teamResults } from '@drip/core/data/league';
@@ -243,15 +243,29 @@ export function ShopModal({ onClose, coinsOverride, onBuy, cards = false, practi
   const canAfford = (price: number) => bal >= price;
   // onBuy/onDisarm resolve to `true` on success or an error STRING to surface —
   // the old boolean contract swallowed every server refusal into a silent no-op.
+  // A SECOND TAP BUYS (v0.733.2, Mooney, Cointest: a tap to read a long
+  // description bought the card). The first tap arms the card and says so;
+  // a second within 4s buys it.
+  const [armed, setArmed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!armed) return;
+    const t = window.setTimeout(() => setArmed((a) => (a === armed ? null : a)), 4000);
+    return () => window.clearTimeout(t);
+  }, [armed]);
   async function buy(id: string) {
     setErr(null);
+    if (armed !== id) { setArmed(id); return; }
+    setArmed(null);
     const r = onBuy ? await onBuy(id) : buyPowerup(id);
     if (r === true) { setFlash(id); setTimeout(() => setFlash((f) => (f === id ? null : f)), 600); }
     else if (typeof r === 'string') setErr(r);
   }
   const inv = inventoryOverride ?? inventory;
-  const errLine = err && (
-    <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--opp)', marginBottom: 8 }}>{err}</div>
+  const armedItem = armed ? (items ?? POWERUPS).find((p) => p.id === armed) : null;
+  const errLine = (err || armedItem) && (
+    <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, color: err ? 'var(--opp)' : 'var(--you)', marginBottom: 8 }}>
+      {err ?? `Tap ${armedItem!.name} again to buy it for ◈${armedItem!.price}`}
+    </div>
   );
   if (cards) {
     // Card-table leagues: the shop is a deck spread on the felt — tap a card to
