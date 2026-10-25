@@ -3635,7 +3635,7 @@ export const commishSetTxnLimits = (leagueId: string, addsWeek: number | null, a
  *  is illegal right now, roster id → the reason. While one is, its adds and
  *  lineup changes are refused and its best-ball spots stay empty. */
 export const leagueRosterIssues = (leagueId: string) =>
-  rpc<{ ok: boolean; error?: string; issues?: Record<string, string> }>('league_roster_issues', { p_league_id: leagueId });
+  rpc<{ ok: boolean; error?: string; issues?: Record<string, string>; bestball_off?: Record<string, true> }>('league_roster_issues', { p_league_id: leagueId });
 
 /** Commissioner override: put any pool player on any roster (clears waiver holds;
  *  position limits bypassed, roster size still enforced). */
