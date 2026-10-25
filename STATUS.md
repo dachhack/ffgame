@@ -31,7 +31,9 @@ The web field (`src/app/FieldView.tsx`) is an SVG at width 100%, so on a
 2000px card the drawing went giant (posts, team badges, empty air above)
 while the strip, buttons and play text stayed small. The drawing now stops at
 900px, the enlarged fields-board tile's width, and centers. Checked in a local
-harness on a baked 2025 game at 2000, 1280 and 390px. Web only.
+harness on a baked 2025 game at 2000, 1280 and 390px. And with the ball
+inside an opponent's 10 (founder's second screenshot, Kamara at PIT 2), that
+end zone's name fades so the ball badge on top of it reads. Web only.
 
 ### v0.733.2 — Read a power-up before you buy it
 

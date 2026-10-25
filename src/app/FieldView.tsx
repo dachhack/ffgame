@@ -557,11 +557,16 @@ function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed:
           {(() => {
             const ezAwayX = flip ? W - EZ : 0, ezHomeX = flip ? 0 : W - EZ;
             // the name runs along its end zone's slant, sized to fit it (v0.730.7)
+            // THE BADGE WINS NEAR THE GOAL LINE (v0.733.3, founder's desktop
+            // screenshots): a ball spotted inside the 10 put its team badge on
+            // top of that end zone's name, so the name fades while it's there.
+            const bx = ballX != null ? mx(ballX) : null;
+            const near = (x: number) => bx != null && bx > x - FW / 10 && bx < x + EZ + FW / 10;
             const label = (x: number, tc: ReturnType<typeof teamColor>, abbr: string) => {
               const l = endZoneLabel(x, abbr.length, 0.2);
               return (
-                <text x={0} y={l.size * 0.35} fill={ezText(tc)} fontSize={l.size} fontWeight={800} textAnchor="middle"
-                  transform={`translate(${l.x} ${l.y}) rotate(${l.rot})`} style={{ letterSpacing: '0.2em' }}>{abbr}</text>
+                <text x={0} y={l.size * 0.35} fill={ezText(tc)} fontSize={l.size} fontWeight={800} textAnchor="middle" opacity={near(x) ? 0.25 : 1}
+                  transform={`translate(${l.x} ${l.y}) rotate(${l.rot})`} style={{ letterSpacing: '0.2em', transition: 'opacity .3s ease' }}>{abbr}</text>
               );
             };
             const rz = (flip ? !attacksRight : attacksRight) ? W - EZ : 0;
