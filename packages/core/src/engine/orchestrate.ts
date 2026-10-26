@@ -183,6 +183,17 @@ function awardCredits<S>(slots: S[], me: PipelineSide<S>): void {
   }
 }
 
+/** The side with its DoN, clutch DoN and Grudge keys moved off each subbed
+ *  backup's slot onto the starter slot it covered. A key already on that
+ *  starter slot is not doubled up. Lead Change stays put: it reads the slot's
+ *  play timeline, which is the starter's, not the backup's. */
+function followBackups<S>(sd: PipelineSide<S>, moved: Map<string, string>): PipelineSide<S> {
+  if (!moved.size) return sd;
+  const to = (k: string) => moved.get(k) ?? k;
+  const list = (ks?: string[]) => ks && [...new Set(ks.map(to))];
+  return { ...sd, don: sd.don && to(sd.don), clutchDon: list(sd.clutchDon), grudge: list(sd.grudge) };
+}
+
 /** THE PIPELINE. Runs every post-slot effect in the canonical order, for both
  *  sides, mutating slot finals in place. Battles run after this, per engine. */
 export function applyPostSlotPipeline<S>(slots: S[], cfg: PipelineConfig<S>): void {
@@ -191,16 +202,28 @@ export function applyPostSlotPipeline<S>(slots: S[], cfg: PipelineConfig<S>): vo
   // own window or a later one, never one that already played.
   const order = windowsForWeek(cfg.week).map((w) => w.id);
   const winRank = (win: string) => order.indexOf(win);
-  bestBallBackups(slots, a.lens, a.backups ?? {}, { zeroed: a.hooks?.backupZeroed, subbed: a.hooks?.backupSubbed, winRank });
-  bestBallBackups(slots, b.lens, b.backups ?? {}, { zeroed: b.hooks?.backupZeroed, subbed: b.hooks?.backupSubbed, winRank });
+  // A backup's slot-targeted head-to-head stakes follow him into the slot he
+  // covers (v0.734.0). Gridiron Gang, week 7: Double or Nothing and Grudge on
+  // Caleb Williams' unopposed TNF spot did nothing, though his score subbed in
+  // for SNF. A stake on an unopposed slot can't settle; on the covered one it
+  // can, so the backup's key is remapped there before the stakes run.
+  const backup = (sd: PipelineSide<S>) => {
+    const moved = new Map<string, string>();
+    bestBallBackups(slots, sd.lens, sd.backups ?? {}, {
+      zeroed: sd.hooks?.backupZeroed, winRank,
+      subbed: (bk, st, score, from) => { moved.set(sd.lens.key(bk), sd.lens.key(st)); sd.hooks?.backupSubbed?.(bk, st, score, from); },
+    });
+    return followBackups(sd, moved);
+  };
+  const A = backup(a), B = backup(b);
   suppressHalving(slots, a.lens, b.suppress ?? 0, a.hooks?.suppressHalved);
   suppressHalving(slots, b.lens, a.suppress ?? 0, b.hooks?.suppressHalved);
   bankerCredit(slots, a.lens, a.banker ?? 0);
   bankerCredit(slots, b.lens, b.banker ?? 0);
-  if (a.don) settleStake(slots, a, b, a.don, 'double-or-nothing');
-  if (b.don) settleStake(slots, b, a, b.don, 'double-or-nothing');
-  for (const k of a.clutchDon ?? []) settleStake(slots, a, b, k, 'clutch-don');
-  for (const k of b.clutchDon ?? []) settleStake(slots, b, a, k, 'clutch-don');
+  if (A.don) settleStake(slots, A, B, A.don, 'double-or-nothing');
+  if (B.don) settleStake(slots, B, A, B.don, 'double-or-nothing');
+  for (const k of A.clutchDon ?? []) settleStake(slots, A, B, k, 'clutch-don');
+  for (const k of B.clutchDon ?? []) settleStake(slots, B, A, k, 'clutch-don');
   awardCredits(slots, a);
   awardCredits(slots, b);
   rivalrySiphon(slots, a, b);
@@ -209,6 +232,6 @@ export function applyPostSlotPipeline<S>(slots: S[], cfg: PipelineConfig<S>): vo
   redHerringCap(slots, b, a);
   leadChangeBonus(slots, a, b, cfg.eventsOf);
   leadChangeBonus(slots, b, a, cfg.eventsOf);
-  grudgeStake(slots, a, b);
-  grudgeStake(slots, b, a);
+  grudgeStake(slots, A, B);
+  grudgeStake(slots, B, A);
 }
