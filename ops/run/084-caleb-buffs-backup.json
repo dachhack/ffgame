@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/caleb-buffs-backup.sql",
+  "why": "League chat: 'do the buffs i apply to caleb not work if he gets subbed into another window?' Read only: the member's week-7 matchups with Caleb Williams in a pick, his window/slot, the member's applied_state payload (buffs, backup assignments) and whole lineup. Member matched by name, not printed; seats as numbers."
+}
