@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/caleb-buffs-settled.sql",
+  "why": "Verify v0.734.0 on the case that prompted it: Gridiron Gang week 7, seat 11. Read only: window and slot scores, so the SNF spot Caleb Williams covered shows Double or Nothing and Grudge settled (expected ~20.3 → 40.6 + 25). Seats as numbers, no names."
+}
