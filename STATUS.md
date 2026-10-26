@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.734.0 — A backup's buffs follow him
+
+> - Double or Nothing, Halftime Gamble and Grudge Match played on a backup now go with him when he subs into another spot, instead of doing nothing on the empty spot he left.
+
+League chat (Gridiron Gang): "do the buffs i apply to caleb not work if he
+gets subbed into another window?" Ops 084: seat 11 armed Double or Nothing
+and Grudge on Caleb Williams' TNF spot, which had no opponent, so he was a
+backup and covered the SNF spot. `settleStake` and `grudgeStake` need a
+head-to-head on the slot they're keyed to, so both stakes sat inert on TNF
+while his score moved to SNF. `applyPostSlotPipeline` now records each
+backup→starter sub and moves the side's DoN, clutch DoN and Grudge keys onto
+the covered slot before the stakes settle (engine/orchestrate.ts, shared by
+the web, the app and the worker). Lead Change stays on its slot: it reads
+that slot's play timeline, which is the starter's. Founder chose "fix now,
+buffs pay out": week 7 is live, so the worker re-scores it and the stakes
+settle on SNF (about +45 at the time); no refund on top. Ops 085 confirmed the
+cards were the two 0510 put back (no new buys). `check:backupstakes` pins it
+and fails on the old code.
+
 ### v0.733.3 — Cleaner field views
 
 > - On a desktop browser the game field no longer stretches across the whole screen.
