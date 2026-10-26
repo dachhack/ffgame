@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/caleb-buffs-paid.sql",
+  "why": "Founder on the Caleb buffs (ops 084): 'Make them follow the player, and refund them'. Read only: Gridiron Gang seat 11's week-7 buys of Double or Nothing and Grudge Match (price paid), its hand of them, and the matchup's TNF/SNF window scores, to size the refund and see what v0.734.0's re-score would do. Seats as numbers, no names."
+}
