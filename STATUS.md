@@ -22,6 +22,33 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.735.0 — Backups pick their own target
+
+> - In drip mode, a player in a window your opponent left empty now gets a backup target picked for him: a Field General QB first, then your lowest-projected starter.
+> - The pick shows under the player as "covering …" with an AUTO tag, and you can change it any time before that starter's game kicks off. The phone can now do this too.
+
+Founder: "It's really easy to miss that and the deadline. Let's have the game
+auto assign the player to another spot as a back up then the player can
+change it if they like. We need some good logic for auto picking a backup
+like low scoring players or players that don't score like field general QBs."
+Until now an unassigned backup was matched AT FINAL onto whichever starter
+ended lowest: hindsight no manual pick could equal, and invisible until then.
+The founder chose a blind pick instead (asked: keep best-at-final and show it,
+or pick blind). `scoringRules.autoBackupTargets` gives each unassigned backup
+a target from pre-game facts only: a starter who banks nothing himself
+(QB Field General, K Negation, DEF Suppress; their effect still runs) first,
+then the lowest `stockProjectedPoints` (stock PPR, no league catalog or live
+rate, so the worker and both boards agree), in his own window or later, never
+a target a manual assignment holds. It lands only if he outscores it, as
+before; no fallback. `backupPlanForBoard` (orchestrate.ts) is the boards'
+read of the same rule; a window still sealed counts as opposed unless
+opponent_empty_windows lists it, so the strip leaks nothing. Web: "⤴ backing
+up X · AUTO", ↻ CHANGE, and the menu's first row is now "Auto — the game picks"
+(clearing returns to auto; "take the 0" is gone). Phone: the strip under the
+spot in setup and live, an ⓘ, and a CHANGE sheet (set_backup_assign).
+Ops 087: every week through 7 is final, so no scored week changes, and no
+matchup held a manual assignment. `check:backupauto` pins it.
+
 ### v0.734.0 — A backup's buffs follow him
 
 > - Double or Nothing, Halftime Gamble and Grudge Match played on a backup now go with him when he subs into another spot, instead of doing nothing on the empty spot he left.

@@ -83,11 +83,12 @@ export interface SideLens<S> {
  *  place: each becomes a BACKUP whose would-be score can replace one of that
  *  side's lowest beatable starter scores. Manual assignments (keyed
  *  `win#slot` → `win#slot`) are honored first — only when the backup actually
- *  outscores the target — then the unassigned rest auto-maximize greedily
- *  (biggest backup into the smallest beatable starter). All-or-nothing: a
- *  backup that doesn't sub in stays 0. An assigned-but-invalid backup is left
- *  benched (the explicit choice is respected; it does not fall through to
- *  auto).
+ *  outscores the target — then each unassigned backup takes the blind
+ *  auto-pick (autoBackupTargets, v0.735.0; before it, the unassigned rest
+ *  auto-maximized at final, which is still the path without a blindRank).
+ *  All-or-nothing: a backup that doesn't sub in stays 0. An
+ *  assigned-but-invalid backup is left benched (the explicit choice is
+ *  respected; it does not fall through to auto).
  *
  *  THE WHOLE WINDOW, NOT THE SLOT (v0.434.0). Founder: "We should have
  *  players sub only if every opposing slot in their window is unopposed.
@@ -117,23 +118,37 @@ export function bestBallBackups<S>(slots: S[], lens: SideLens<S>, assign: Record
    *  absent rank) are unconstrained, so classic 'wk' rows and tests without a
    *  slate behave as before. */
   winRank?: (win: string) => number;
+  /** THE BLIND AUTO-PICK (v0.735.0): a pre-game rank of a slot as a backup
+   *  target, lower = covered first (see autoBackupTargets). With it, an
+   *  unassigned backup commits to that target like a manual assignment does;
+   *  without it, the old best-at-final pass runs (slate-less tests). */
+  blindRank?: (s: S) => number;
 }): void {
-  // A window is EMPTY for this side when no slot in it has an opponent.
-  const opposedWins = new Set(slots.filter((s) => lens.opp(s)).map((s) => lens.win(s)));
-  const backups = slots.filter((s) => lens.player(s) && !lens.opp(s) && !opposedWins.has(lens.win(s)));
+  const { backups, starters } = backupSides(slots, lens);
   if (!backups.length) return;
   const wouldBe = new Map<S, number>();
   for (const b of backups) { wouldBe.set(b, lens.get(b)); hooks?.zeroed?.(b, lens.get(b)); lens.set(b, 0); }
 
-  const starters = slots.filter((s) => lens.player(s) && lens.opp(s));
   const used = new Set<S>();
   const doSub = (b: S, st: S) => {
     hooks?.subbed?.(b, st, wouldBe.get(b)!, lens.get(st));
     lens.set(st, r1(wouldBe.get(b)!));
     used.add(st);
   };
-  const rank = (s: S) => hooks?.winRank?.(lens.win(s)) ?? -1;
-  const coverable = (b: S, st: S) => { const rb = rank(b), rs = rank(st); return rb < 0 || rs < 0 || rs >= rb; };
+  const coverable = coverRule(lens, hooks?.winRank);
+
+  if (hooks?.blindRank) {
+    // Every backup has a target chosen before a ball is snapped: his manual
+    // one, else the blind pick. Either lands only if he outscores it.
+    const byKey = new Map(starters.map((s) => [lens.key(s), s]));
+    const plan = { ...autoBackupTargets(slots, lens, assign, hooks.winRank, hooks.blindRank) };
+    for (const b of backups) {
+      const tk = assign[lens.key(b)] ?? plan[lens.key(b)];
+      const st = tk ? byKey.get(tk) : undefined;
+      if (st && !used.has(st) && coverable(b, st) && wouldBe.get(b)! > lens.get(st)) doSub(b, st);
+    }
+    return;
+  }
 
   const auto: S[] = [];
   for (const b of backups) {
@@ -153,6 +168,59 @@ export function bestBallBackups<S>(slots: S[], lens: SideLens<S>, assign: Record
     const st = remStarters.find((s) => !used.has(s) && coverable(b, s));
     if (st && wouldBe.get(b)! > lens.get(st)) doSub(b, st);
   }
+}
+
+/** One side's backups (a fielded slot in a window where no slot of this side
+ *  has an opponent) and starters (a fielded, opposed slot). */
+function backupSides<S>(slots: S[], lens: SideLens<S>): { backups: S[]; starters: S[] } {
+  const opposedWins = new Set(slots.filter((s) => lens.opp(s)).map((s) => lens.win(s)));
+  return {
+    backups: slots.filter((s) => lens.player(s) && !lens.opp(s) && !opposedWins.has(lens.win(s))),
+    starters: slots.filter((s) => lens.player(s) && lens.opp(s)),
+  };
+}
+
+/** A backup covers a starter in his own window or a later one (v0.388.3). */
+function coverRule<S>(lens: SideLens<S>, winRank?: (win: string) => number) {
+  const rank = (s: S) => winRank?.(lens.win(s)) ?? -1;
+  return (b: S, st: S) => { const rb = rank(b), rs = rank(st); return rb < 0 || rs < 0 || rs >= rb; };
+}
+
+/** THE BLIND AUTO-PICK (v0.735.0). Founder: "It's really easy to miss that
+ *  and the deadline. Let's have the game auto assign the player to another
+ *  spot as a back up then the player can change it if they like." Until now
+ *  an unassigned backup was matched AT FINAL onto whichever starter ended
+ *  lowest — hindsight no manual pick could equal, and invisible until then.
+ *  Now each unassigned backup is given a target from what is known before
+ *  kickoff, shown on the board as his assignment, and replaced by any manual
+ *  one the member makes (set_backup_assign, until that target kicks off).
+ *
+ *  `blindRank` orders the targets (lowest first): orchestrate puts the
+ *  starters who bank nothing themselves (a Field General QB, a Suppress or
+ *  Negation unit — covering one costs the side nothing, their effect still
+ *  runs) ahead of everyone, then the lowest stock projection. Backups pick in
+ *  slot order, each the best target still free in his own window or later,
+ *  skipping targets a manual assignment already holds; a backup who banks
+ *  nothing himself takes none. Returns backup key →
+ *  starter key, for the unassigned backups that found one. Uses no score, so
+ *  it is the same before the games, during them and at final. */
+export function autoBackupTargets<S>(slots: S[], lens: SideLens<S>, assign: Record<string, string>,
+  winRank: ((win: string) => number) | undefined, blindRank: (s: S) => number): Record<string, string> {
+  const { backups, starters } = backupSides(slots, lens);
+  const out: Record<string, string> = {};
+  if (!backups.length || !starters.length) return out;
+  const coverable = coverRule(lens, winRank);
+  const keys = new Set(starters.map((s) => lens.key(s)));
+  const held = new Set(backups.map((b) => assign[lens.key(b)]).filter((k): k is string => !!k && keys.has(k)));
+  const rankOf = new Map(starters.map((s) => [s, blindRank(s)]));
+  const order = [...starters].sort((a, b) => rankOf.get(a)! - rankOf.get(b)! || (lens.key(a) < lens.key(b) ? -1 : lens.key(a) > lens.key(b) ? 1 : 0));
+  for (const b of backups) {
+    // A backup who banks nothing himself (blindRank < 0) has nothing to give.
+    if (assign[lens.key(b)] || blindRank(b) < 0) continue;
+    const st = order.find((s) => !held.has(lens.key(s)) && coverable(b, s));
+    if (st) { out[lens.key(b)] = lens.key(st); held.add(lens.key(st)); }
+  }
+  return out;
 }
 
 // ── DEF suppress halving ───────────────────────────────────────────────────

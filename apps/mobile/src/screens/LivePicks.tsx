@@ -33,13 +33,14 @@ import {
   type WindowScore, type RevealedPick, type GameFeedRow,
   nativeTeamState, loadLiveInjuries, loadTeamOverrides, leaguePool,
   myEnrollments, type Enrollment, applyExtraSlotCard,
-  applyTargeted, applyUnderdog, useSpy as spyPeek,
+  applyTargeted, applyUnderdog, useSpy as spyPeek, opponentEmptyWindows, setBackupAssign,
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames, windowFeedClock } from '@drip/core/data/gameFeed';
 import { AIM_RULES, AIM_SELF_CONSUMING, CLUTCH_TRIGGER, aimPrompt, aimSpotOk, aimWindowOk, isAimed, isClutch, type AimPhase } from '@drip/core/data/aimRules';
 import { METRICS } from '@drip/core/data/metrics';
 import { projectedPoints } from '@drip/core/engine/projScoring';
+import { backupPlanForBoard } from '@drip/core/engine/orchestrate';
 import { BYE_STEAL_CAP, swapMetricFor, buffsForWindow, clutchOffersFor, clutchArmClock, type ClutchOffer } from '@drip/core/engine/matchup';
 import { setLivePlays, liveRowsToPbp, LIVE_SEASON } from '@drip/core/data/realPbp';
 import { statlineAt, metricDriver, realTimeAt, GHOST_POINTS } from '@drip/core/engine/sim';
@@ -63,6 +64,7 @@ import { FieldsList } from '../ui/FieldsList';
 import { PlayLog } from '../ui/PlayLog';
 import { liveDuelEvents } from '@drip/core/data/duelLog';
 import { Overlay } from '../ui/Overlay';
+import { InfoChip } from '../ui/InfoChip';
 import { CommishKit } from '../ui/CommishKit';
 import { ClassicBoard } from '../ui/ClassicBoard';
 import { clearLeagueFlags } from '@drip/core/data/commish';
@@ -259,6 +261,9 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [scoutWin, setScoutWin] = useState<GameWindow | null>(null);
   /** Which window's game slate is open — the real NFL games it covers. */
   const [slateWin, setSlateWin] = useState<GameWindow | null>(null);
+  /** The backup whose target sheet is open (`win#slot`, v0.735.0). */
+  const [backupSheet, setBackupSheet] = useState<string | null>(null);
+  const [emptyOppWins, setEmptyOppWins] = useState<string[]>([]);
   /** Which roster is expanded — one at a time, so the board stays reachable. */
   const [rosterOpen, setRosterOpen] = useState<'you' | 'their' | null>(null);
   const [fieldsOpen, setFieldsOpen] = useState(false); // ▦ all-fields overlay (web FieldBoard's sibling)
@@ -495,6 +500,17 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     }
     return out;
   }, [revealed, scores, youAreHome, userId]);
+
+  // Windows the opponent left empty (0312), from an hour before each locks:
+  // the backup strip's one look at a sealed lineup. Re-read every few minutes.
+  const emptyTick = Math.floor(nowTs / 180_000);
+  const matchupId = matchup?.id;
+  useEffect(() => {
+    if (!matchupId) { setEmptyOppWins([]); return; }
+    let alive = true;
+    opponentEmptyWindows(matchupId).then((w) => { if (alive) setEmptyOppWins(w); }).catch(() => {});
+    return () => { alive = false; };
+  }, [matchupId, emptyTick]);
 
   // The live duel log (0193): one engine run per open — resolveLiveMatchup
   // over the revealed picks with events captured. The plays are already in
@@ -1369,6 +1385,62 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const filled = slots.filter((s) => picks[s.key]?.player_slug && picks[s.key]?.metric_id).length;
   const handCount = hand.reduce((n, c) => n + c.qty, 0);
 
+  // BACKUPS ON THE PHONE (v0.735.0). Founder: "It's really easy to miss that
+  // and the deadline. Let's have the game auto assign the player to another
+  // spot as a back up then the player can change it if they like." A spot in
+  // a window the opponent left empty is a backup; the strip under it names
+  // the starter it covers (the blind auto-pick, or the member's own choice)
+  // and CHANGE opens the targets still open to it. Core backupPlanForBoard is
+  // the resolver's own rule, so the strip names what the worker scores. A
+  // window still sealed counts as opposed unless the server has said it is
+  // empty (opponent_empty_windows), so nothing hidden leaks into the pick.
+  const winKickedNow = (win: string) => { const ph = windowPhase(week, win as never, nowTs); return ph === 'live' || ph === 'final'; };
+  const backupRows = slots.map((s) => {
+    const mine = revealedAll.find((x) => x.app_user_id === userId && x.game_window === s.win && String(x.roster_slot) === s.slot && x.player_slug);
+    const slug = picks[s.key]?.player_slug ?? mine?.player_slug ?? null;
+    const metric = picks[s.key]?.metric_id ?? mine?.metric_id ?? null;
+    const theirRows = revealedAll.filter((x) => x.app_user_id !== userId && x.game_window === s.win && x.player_slug);
+    const opposed = emptyOppWins.includes(s.win) ? false
+      : winKickedNow(s.win) && theirRows.length ? theirRows.some((x) => String(x.roster_slot) === s.slot)
+      : true;
+    return { key: `${s.win}#${s.slot}`, win: s.win, slug, pos: slug ? playersBySlug[slug]?.pos ?? null : null, metric, opposed };
+  });
+  const backupPlan = matchup ? backupPlanForBoard(week, backupRows, targeted.backups ?? {}) : { backups: [], auto: {} };
+  const spotName = (key: string) => { const slug = backupRows.find((r) => r.key === key)?.slug; return slug ? playersBySlug[slug]?.name ?? slug : key; };
+  /** Starters a backup may still be pointed at: his own window or a later one, not yet kicked (0138). */
+  const backupOptions = (key: string) => {
+    const b = backupRows.find((r) => r.key === key);
+    if (!b) return [];
+    const rank = (w: string) => winsX.findIndex((x) => x.id === w);
+    return backupRows.filter((r) => r.slug && r.opposed && r.key !== key && rank(r.win) >= rank(b.win) && !winKickedNow(r.win));
+  };
+  const backupStrip = (win: string, slot: string) => {
+    const key = `${win}#${slot}`;
+    if (!backupPlan.backups.includes(key)) return null;
+    const manual = targeted.backups?.[key];
+    const tgt = manual ?? backupPlan.auto[key];
+    const canChange = backupOptions(key).length > 0;
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingHorizontal: 2 }}>
+        <Mono size={9.5} weight="700" tone={tgt ? 'you' : 'faint'}>⤴ BACKUP · {tgt ? `covering ${spotName(tgt)}` : 'nothing left to cover'}{tgt && !manual ? ' · AUTO' : ''}</Mono>
+        <InfoChip title="Backup">{'Your opponent left this window empty, so this player can\'t score here. He backs up one of your starters instead: at FINAL his score replaces that starter\'s if it\'s higher.\n\nThe game picks the starter for you: a Field General QB first (he scores nothing himself), then your lowest projection. Change it any time before that starter\'s game kicks off.'}</InfoChip>
+        {canChange && (
+          <Pressable hitSlop={8} onPress={() => { tap(); setBackupSheet(key); }}>
+            <Mono size={9.5} weight="700" tone="you" track={0.06}>CHANGE ›</Mono>
+          </Pressable>
+        )}
+      </View>
+    );
+  };
+  const pickBackup = async (key: string, target: string | null) => {
+    if (!matchup) return;
+    setBackupSheet(null);
+    const r = await setBackupAssign(matchup.id, key, target).catch((e) => ({ ok: false, error: friendlyError(e) } as { ok: boolean; error?: string; backups?: Record<string, string> }));
+    if (!r?.ok) { setErr(r?.error ?? 'Couldn’t change the backup'); return; }
+    commit();
+    setTargeted((tg) => ({ ...tg, backups: r.backups ?? {} }));
+  };
+
   return (
     <View style={{ flex: 1 }}>
     <ScrollView
@@ -1585,6 +1657,26 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           <Text style={{ fontSize: 11.5, color: t.dim, lineHeight: 17 }}>It shows on every spot it applies to (the ⚡ chip on the card). A played card stays played — there are no take-backs.</Text>
         </View>
       </Overlay>
+      {/* BACKUP → which starter it covers (v0.735.0). Clearing goes back to the auto-pick. */}
+      <Overlay visible={!!backupSheet} title={backupSheet ? `Backup · ${spotName(backupSheet)}` : ''} subtitle="COVERS ONE STARTER · SUBS IN AT FINAL IF HIGHER" onClose={() => setBackupSheet(null)}>
+        <View style={{ padding: 12, gap: 8 }}>
+          {backupSheet && [{ key: null as string | null, label: `Auto${backupPlan.auto[backupSheet] ? ` · ${spotName(backupPlan.auto[backupSheet])}` : ''}`, sub: 'the game picks' },
+            ...backupOptions(backupSheet).map((r) => ({ key: r.key as string | null, label: spotName(r.key), sub: winLabelFor(r.win) }))].map((o) => {
+            const sel = (targeted.backups?.[backupSheet] ?? null) === o.key;
+            return (
+              <Pressable key={o.key ?? 'auto'} onPress={() => { tap(); void pickBackup(backupSheet, o.key); }}
+                android_ripple={{ color: alpha(t.you, 16) }}
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.bg, opacity: pressed ? 0.8 : 1, borderWidth: StyleSheet.hairlineWidth, borderColor: sel ? t.you : t.bd, borderRadius: 8, padding: 12 })}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{o.label}</Text>
+                  <Mono size={9.5}>{o.sub}</Mono>
+                </View>
+                {sel && <Mono size={9} weight="700" tone="you">✓</Mono>}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Overlay>
       {/* EXTRA SLOT → which window (0305). Every window of the week is open
           while the matchup is still 'scheduled' (the card's whole clock). */}
       <Overlay visible={extraPick} title="Extra Slot · pick a window" subtitle="ADDS ONE SPOT TO THAT WINDOW · NO TAKE-BACKS" onClose={() => setExtraPick(false)}>
@@ -1766,8 +1858,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               appliedFor={(win, slot, pos, mid) => appliedFor(win, slot, pos, mid, false, buffsForWindow(buffs, targeted.buffsAt, week, win))}
               // Aimed cards on a locked or live window (v0.515.0).
               slotExtra={(win, slot) => {
-                const a = aimStrips(win, slot); const sp = spyLine(win, slot);
-                return a || sp ? <View style={{ gap: 6 }}>{a}{sp}</View> : null;
+                const a = aimStrips(win, slot); const sp = spyLine(win, slot); const bk = backupStrip(win, slot);
+                return a || sp || bk ? <View style={{ gap: 6 }}>{a}{sp}{bk}</View> : null;
               }}
               winExtra={aimWinStrip}
               myPhantom={myPhantoms}
@@ -1862,6 +1954,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                       card waits for its target, and what a Spy found here. */}
                   {aimStrips(s.win, s.slot)}
                   {spyLine(s.win, s.slot)}
+                  {backupStrip(s.win, s.slot)}
                   </View>
                 );
               })}

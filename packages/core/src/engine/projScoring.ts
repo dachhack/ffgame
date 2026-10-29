@@ -491,6 +491,17 @@ export function withPprProjections<T>(fn: () => T): T {
   }
 }
 export function leagueProjScoring(): ClassicScoring { return cat(); }
+/** STOCK PPR, NO LIVE RATE (v0.735.0) — the projection that reads the same on
+ *  every engine: no league catalog, no scoped bonus, and none of the week's
+ *  live rate a board installs and the worker doesn't. The blind backup pick
+ *  ranks starters by it (orchestrate.ts), and a number that differed between
+ *  the board and the worker would name two different targets. */
+export function stockProjectedPoints(player: { id: string; pos: string }): number {
+  const savedLive = liveProj;
+  liveProj = null;
+  try { return withPprProjections(() => projectedPoints({ id: player.id, pos: player.pos })); }
+  finally { liveProj = savedLive; }
+}
 
 /** THE CATALOG A LEAGUE ACTUALLY SCORES BY (v0.310.0). A league stores its
  *  adjustments in `scoring` and its per-reception value in `ppr`, SEPARATELY —
