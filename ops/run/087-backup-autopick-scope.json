@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/backup-autopick-scope.sql",
+  "why": "Founder: auto-assign drip backups blind ('the game auto assign the player ... then the player can change it'). v0.735.0 changes how the resolver scores an unassigned backup, so before it ships: which weeks' matchups are still not final (and so still re-scored), and how many hold a manual backup assignment. Read only, counts only."
+}
