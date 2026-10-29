@@ -10,6 +10,9 @@ import { leagueGameMode, myEnrollments, type Enrollment } from '@drip/core/data/
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
+// Metrics that bank no direct points (their value is purely an effect) — so an
+// unopposed player on one of these can never sub in as a best-ball backup.
+import { BANKS_NOTHING_METRICS as ZERO_BANK_METRICS, backupPlanForBoard } from '@drip/core/engine/orchestrate';
 import { avatarUrl, teamLogo } from '@drip/core/data/media';
 import { nflGameForTeam, gamesInWindow, windowDateLabel, weekDateRange, windowTimeLabel, windowKickoffSod, kickoffLabel, windowsForWeek, setTestTimeline, testTimelineOn, TEST_LOCK_LEAD_MS, isPreseasonWeek, weekLabel, windowLockMs, windowPhase, hasSlate, scheduledGamesFor } from '@drip/core/data/nflSlate';
 import { METRICS, metricById, isMetricSet, NO_METRIC_LABEL } from '@drip/core/data/metrics';
@@ -1304,6 +1307,18 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return !backupAssign[slotKey(s.win, s.slotIndex)];
   }), [resolved, backupAssign, liveCtx, liveWinState, emptyOppWins]);
 
+  // THE BLIND AUTO-PICK (v0.735.0): each backup without a manual assignment
+  // already has a target, the one the resolver will score (core
+  // backupPlanForBoard). A spot in a window still sealed counts as opposed
+  // unless the server has said that window is empty, so the pick learns
+  // nothing the sealed lineup hides.
+  const autoBackups = useMemo(() => backupPlanForBoard(week, resolved.windows.flatMap((w) => w.slots).filter((s) => s.you).map((s) => ({
+    key: slotKey(s.win, s.slotIndex), win: s.win, slug: s.you!.player.id, pos: s.you!.player.pos, metric: s.you!.metricId ?? null,
+    opposed: !!s.their || (!!liveCtx && liveWinState[s.win] !== 'live' && liveWinState[s.win] !== 'final' && !emptyOppWins.has(s.win)),
+  })), backupAssign).auto, [resolved, backupAssign, liveCtx, liveWinState, emptyOppWins, week]);
+  const shownBackups = useMemo(() => ({ ...autoBackups, ...backupAssign }), [autoBackups, backupAssign]);
+  const autoKeys = useMemo(() => new Set(Object.keys(autoBackups)), [autoBackups]);
+
   // Everything currently in effect, with a back-out where the store supports it.
   const activeEffects: { key: string; id?: string; icon: string; name: string; detail: string; onRemove?: () => void }[] = [];
   // NO TAKE-BACKS on an armed buff (v0.431.0, founder: "if you use a power up
@@ -1699,7 +1714,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 onClearSlot={() => {}} onOpenPicker={() => {}}
                 openPBP={openPBP} togglePBP={(k) => setOpenPBP((o) => ({ ...o, [k]: !o[k] }))}
                 youPools={youPools} inventory={inventory} onAssign={() => {}} turnoverCoin={turnoverCoin}
-                backups={backupAssign} slotName={slotName} armed={buffs} aw={aw}
+                backups={shownBackups} autoKeys={autoKeys} slotName={slotName} armed={buffs} aw={aw}
                 applyMode={null} onApplyToSpot={() => {}} onApplyToWindow={() => {}} onScout={() => {}}
                 lockPlayer
               />
@@ -1779,7 +1794,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
               inventory={inventory}
               onAssign={() => {}}
               turnoverCoin={turnoverCoin}
-              backups={backupAssign}
+              backups={shownBackups} autoKeys={autoKeys}
               slotName={slotName}
               armed={buffs}
               aw={aw}
@@ -2169,9 +2184,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                   const early = pendingBackups.filter((s) => liveWinState[s.win] !== 'live' && liveWinState[s.win] !== 'final' && emptyOppWins.has(s.win));
                   if (early.length) {
                     const labels = [...new Set(early.map((s) => windowsForWeek(week).find((w) => w.id === s.win)?.label ?? s.win))].join(' & ');
-                    return `opponent left ${labels} empty — ${early.length} ${early.length === 1 ? 'backup' : 'backups'} can sub · assign →`;
+                    return `opponent left ${labels} empty — ${early.length} ${early.length === 1 ? 'backup' : 'backups'} auto-assigned · change →`;
                   }
-                  return `${pendingBackups.length} ${pendingBackups.length === 1 ? 'backup' : 'backups'} auto-subbed for best score — reassign →`;
+                  return `${pendingBackups.length} ${pendingBackups.length === 1 ? 'backup' : 'backups'} auto-assigned — change →`;
                 })()}
               </button>
             )}
@@ -2232,7 +2247,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
                 comboOpen={comboOpen}
                 onAssign={assignFromRoster}
                 turnoverCoin={turnoverCoin}
-                backups={backupAssign}
+                backups={shownBackups} autoKeys={autoKeys}
                 slotName={slotName}
                 armed={buffs}
                 aw={aw}
@@ -2343,6 +2358,7 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             live={phase !== 'final'}
             required={backupMenu.required}
             current={backupAssign[backupMenu.key]}
+            autoName={autoBackups[backupMenu.key] ? slotName[autoBackups[backupMenu.key]] : undefined}
             starters={starters}
             onPick={(target) => { setBackupTarget(week, backupMenu.key, target); setBackupMenu(null); }}
             onClose={() => setBackupMenu(null)}
@@ -2603,8 +2619,10 @@ function EarningsModal({ earnings, weeklyBudget, onReset, onClose }: { earnings:
 }
 
 // ── Backup assignment menu (manual best-ball) ──
-function BackupMenu({ backupName, backupSlug, backupScore, live, required, current, starters, onPick, onClose }: {
+function BackupMenu({ backupName, backupSlug, backupScore, live, required, current, autoName, starters, onPick, onClose }: {
   backupName: string; backupSlug?: string; backupScore: number; live: boolean; required?: boolean; current?: string;
+  /** Who the blind auto-pick covers when no manual target is set (v0.735.0). */
+  autoName?: string;
   starters: { key: string; slug: string; name: string; score: number; win: WindowId }[];
   onPick: (target: string | null) => void; onClose: () => void;
 }) {
@@ -2615,16 +2633,16 @@ function BackupMenu({ backupName, backupSlug, backupScore, live, required, curre
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
             <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Backup · {backupName}<InjuryNow slug={backupSlug} style={{ marginLeft: 4, verticalAlign: 'middle' }} /> <span style={{ color: 'var(--warn)' }}>{backupScore.toFixed(1)}</span> <span className="mono" style={{ fontSize: 8, color: 'var(--faint)', fontWeight: 400 }}>{scoreTag}</span></div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{required ? 'UNOPPOSED — BANKS 0 UNLESS IT SUBS IN. CHALLENGE A STARTER, OR TAKE THE 0.' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM'}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>{required ? 'UNOPPOSED — BANKS 0 UNLESS IT SUBS IN. KEEP THE AUTO PICK OR CHOOSE A STARTER.' : 'CHALLENGE A STARTER — SUBS IN AT FINAL ONLY IF IT OUTSCORES THEM'}</div>
           </div>
           {!required && <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>}
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 360, overflow: 'auto' }}>
           <div className="mono" style={{ fontSize: 9, lineHeight: 1.55, color: 'var(--dim)', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', marginBottom: 4 }}>
-            <><b style={{ color: 'var(--warn)' }}>{backupName} banks 0 on its own</b> — unopposed points don't count. Point it at a starter and it'll <b style={{ color: 'var(--text)' }}>replace</b> that starter's score at FINAL, but only if it outscores them. It's a blind bet: numbers below are points {scoreTag}, not finals.</>
+            <><b style={{ color: 'var(--warn)' }}>{backupName} banks 0 on its own</b>. It <b style={{ color: 'var(--text)' }}>replaces</b> its target's score at FINAL if it outscores them. Auto picks a Field General QB first, then your lowest projection. Numbers are points {scoreTag}.</>
           </div>
           <button onClick={() => onPick(null)} className="mono" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, background: !current ? 'var(--sh)' : 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 4, padding: '8px 10px', color: 'var(--text)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700 }}>{`Take the 0 — ${backupName} doesn't sub`}</span>
+            <span style={{ fontSize: 11, fontWeight: 700 }}>{autoName ? `Auto — the game picks (${autoName})` : 'Auto — the game picks'}</span>
             {!current && <span style={{ fontSize: 9, color: 'var(--dim)' }}>✓</span>}
           </button>
           {starters.map((s) => {
@@ -2973,6 +2991,8 @@ function WindowSectionInner(props: {
   onAssign: (id: string) => void;
   turnoverCoin: number;
   backups: Record<string, string>;
+  /** Backups whose target is the blind auto-pick, not a manual choice. */
+  autoKeys?: Set<string>;
   slotName: Record<string, string>;
   aw?: { doubleOrNothing?: string; byeSteal?: { slotKey: string; playerId: string }; ghost?: string[]; emp?: Partial<Record<WindowId, number>>; leadChange?: string[]; grudge?: string[]; jinx?: string[]; redHerring?: string[]; underdog?: string[]; clutchDon?: string[]; clutchEncore?: Record<string, number>; clutchCounter?: Record<string, number>; buffsAt?: Record<string, number>; surge?: Record<string, number>; bunker?: Record<string, number> };
   onArmClutch: (o: ClutchOffer) => void;
@@ -2992,7 +3012,7 @@ function WindowSectionInner(props: {
    *  below still short-circuits idle windows. */
   potMatchupId?: string | null;
 }) {
-  const { rw, week, phase, hydrated, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, unlocks, comboOpen, turnoverCoin, backups, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
+  const { rw, week, phase, hydrated, realtime, clock, maxClock, wallClock, realClock, wallSeconds, playing, onTogglePlay, onReplay, onRemoveExtra, rivalryArmed, onAssignBackup, picks, selSlot, pickMetricFor, onClearSlot, onOpenPicker, openPBP, togglePBP, onAssign, inventory, unlocks, comboOpen, turnoverCoin, backups, autoKeys, slotName, armed, aw, applyMode, onApplyToSpot, onApplyToWindow, onScout, lockPlayer, onArmClutch, preKick, cards, potMatchupId } = props;
   const w = rw.window;
   // The resolver's per-slot scores, parsed ONCE per distinct payload. Keyed
   // both ways — `y#3` / `t#3` by roster slot and `y@josh-allen` by slug — so a
@@ -3284,7 +3304,7 @@ function WindowSectionInner(props: {
               ...(aw?.clutchCounter && key in aw.clutchCounter ? ['clutch-counter'] : [])];
             return ids.map((id) => ({ icon: powerupById(id)?.icon ?? '✦', name: powerupById(id)?.name ?? id }));
           })();
-          const row = <ScoreRow key={key} puChips={puChips} slot={s} week={week} youClock={youClock} theirClock={theirClock} srvYou={srvScore('y', s.slotIndex, s.you?.player.id)} srvTheir={srvScore('t', s.slotIndex, s.their?.player.id)} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} twinWindow={twinLinked.size >= 2} cards={cards} kicked={kicked} />;
+          const row = <ScoreRow key={key} puChips={puChips} slot={s} week={week} youClock={youClock} theirClock={theirClock} srvYou={srvScore('y', s.slotIndex, s.you?.player.id)} srvTheir={srvScore('t', s.slotIndex, s.their?.player.id)} open={!!openPBP[key]} onToggle={() => togglePBP(key)} phase={phase} done={done} onAssignBackup={() => onAssignBackup(key)} turnoverCoin={turnoverCoin} backups={backups} auto={!!autoKeys?.has(key)} slotName={slotName} realClock={realClock} kickoffSec={windowKickoffSod(week, w.id)} youTwin={twinLinked.has(key)} twinWindow={twinLinked.size >= 2} cards={cards} kicked={kicked} />;
           // CLUTCH offers: a conditional power-up unlocked by this slot's live
           // state (halftime lead / first-half TD / a nuke just landed), owned but
           // not yet armed, with the current clock inside its transient window.
@@ -3540,10 +3560,6 @@ function WindowBattleBar({ rw, week, clock, wallClock, done, potMatchupId, srvYo
 
 
 
-// Metrics that bank no direct points (their value is purely an effect) — so an
-// unopposed player on one of these can never sub in as a best-ball backup.
-const ZERO_BANK_METRICS = new Set(['QB:fg', 'K:neg', 'DEF:suppress']);
-
 // At FINAL, the scoring changes a side's armed powerups made to this spot —
 // each rendered as a chip. `vsOpp` entries (carry-wipe / counter-nuke) struck
 // points off the opponent; the rest added to your own bank. Double or Nothing
@@ -3574,7 +3590,7 @@ function BuffFxRow({ side, fx, stake }: { side: 'you' | 'their'; fx?: BuffFx[]; 
 }
 
 // ── Score row (live / final) ──
-function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, slotName, realClock, kickoffSec, youTwin, twinWindow, cards, kicked = true, puChips }: {
+function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, onToggle, phase, done, onAssignBackup, turnoverCoin, backups, auto = false, slotName, realClock, kickoffSec, youTwin, twinWindow, cards, kicked = true, puChips }: {
   slot: ReturnType<typeof buildMatchup>['windows'][number]['slots'][number];
   week: number; youClock: number; theirClock: number;
   /** The RESOLVER's score for this slot, per side — what the app's card shows
@@ -3583,7 +3599,7 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
   srvYou?: number | null; srvTheir?: number | null;
   open: boolean; onToggle: () => void; phase: Phase; done: boolean;
   onAssignBackup: () => void; turnoverCoin: number;
-  backups: Record<string, string>; slotName: Record<string, string>;
+  backups: Record<string, string>; auto?: boolean; slotName: Record<string, string>;
   realClock: boolean; kickoffSec: number; youTwin?: boolean;
   /** Your Field Generals are TWIN-STACKED in this window — so every slot they
    *  boosted carried the doubled multiplier, not just the two QBs. */
@@ -3730,11 +3746,11 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
             {preKick && (
               <button onClick={onAssignBackup} title="Choose which starter this backup challenges (locks at kickoff)" className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--warn)', background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 3, padding: '3px 6px' }}>
-                {backups[ownKey] ? '↻ REASSIGN' : '＋ ASSIGN BACKUP'}
+                {backups[ownKey] ? '↻ CHANGE' : '＋ ASSIGN BACKUP'}
               </button>
             )}
             {backups[ownKey] && slotName[backups[ownKey]] && (
-              <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)' }}>⤴ backing up {slotName[backups[ownKey]]}</span>
+              <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--you)' }}>⤴ backing up {slotName[backups[ownKey]]}{auto ? ' · AUTO' : ''}</span>
             )}
           </div>
         )}
@@ -3748,7 +3764,7 @@ function ScoreRow({ slot, week, youClock, theirClock, srvYou, srvTheir, open, on
             const tgt = backups[ownKey] && slotName[backups[ownKey]];
             txt = tgt
               ? `subs into ${tgt} at final if it wins, else 0`
-              : 'banks 0 unless you sub it in for a starter';
+              : 'banks 0 — no starter left for it to cover';
             col = 'var(--warn)';
           }
           return <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.03em', color: col, textAlign: 'center', marginTop: 4 }}>{txt}</div>;

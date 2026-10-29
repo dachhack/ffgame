@@ -23,10 +23,11 @@
 // Window battles stay in each engine (their output shapes differ), but they
 // run AFTER this pipeline on slot finals that already carry every effect —
 // which is what makes "published rows sum to the total" hold everywhere.
-import type { PbpEvent } from '../types';
+import type { PbpEvent, Player, Pos } from '../types';
 import {
-  bestBallBackups, suppressHalving, bankerCredit, type SideLens,
+  bestBallBackups, suppressHalving, bankerCredit, autoBackupTargets, type SideLens,
 } from './scoringRules';
+import { stockProjectedPoints } from './projScoring';
 import { windowsForWeek } from '../data/nflSlate';
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -194,6 +195,60 @@ function followBackups<S>(sd: PipelineSide<S>, moved: Map<string, string>): Pipe
   return { ...sd, don: sd.don && to(sd.don), clutchDon: list(sd.clutchDon), grudge: list(sd.grudge) };
 }
 
+/** Position:metric pairs that bank nothing themselves: their effect (Field
+ *  General's multiplier, Negation's shutdown, Suppress's bar) runs off the
+ *  player's plays whatever the slot's score, so a backup covering one costs
+ *  nothing, and one fielded as a backup has nothing to give. */
+export const BANKS_NOTHING_METRICS = new Set(['QB:fg', 'K:neg', 'DEF:suppress']);
+export const banksNothing = (pos: string | undefined, metric: string | null | undefined): boolean =>
+  BANKS_NOTHING_METRICS.has(`${pos ?? ''}:${metric ?? ''}`);
+
+/** The blind auto-pick's target order for one side (scoringRules
+ *  .autoBackupTargets): the slots that bank nothing first, then the lowest
+ *  stock projection. Pre-game facts only, the same on every engine. */
+export function blindBackupRank<S>(lens: SideLens<S>): (s: S) => number {
+  return (s) => {
+    const p = lens.player(s);
+    if (!p) return Number.POSITIVE_INFINITY;
+    if (banksNothing(p.pos, lens.metric(s))) return -1;
+    return stockProjectedPoints(p);
+  };
+}
+
+/** One of the viewer's spots as a board sees it, for the backup strip. */
+export interface BackupBoardRow {
+  /** `win#slot`. */
+  key: string;
+  win: string;
+  slug: string | null;
+  pos: string | null;
+  metric: string | null;
+  /** The opponent fields a player facing this spot. A board passes `true`
+   *  for a spot in a window still sealed unless the server has said the
+   *  opponent left that window empty (opponent_empty_windows), so the strip
+   *  learns nothing a sealed lineup hides. */
+  opposed: boolean;
+}
+
+/** THE BACKUP STRIP'S ANSWER (v0.735.0), the same rule the resolver scores:
+ *  which of the viewer's spots are backups, and the blind pick for each one
+ *  without a manual assignment. Both boards call this rather than running the
+ *  engine, so the strip names the target the worker will use. */
+export function backupPlanForBoard(week: number, rows: BackupBoardRow[], assign: Record<string, string>): { backups: string[]; auto: Record<string, string> } {
+  const order = windowsForWeek(week).map((w) => w.id);
+  const winRank = (win: string) => order.indexOf(win);
+  const OPP = { id: '', name: '', full: '', pos: 'WR', team: '', stats: {} } as unknown as Player;
+  const lens: SideLens<BackupBoardRow> = {
+    key: (r) => r.key, win: (r) => r.win,
+    player: (r) => (r.slug ? ({ ...OPP, id: r.slug, name: r.slug, full: r.slug, pos: (r.pos ?? 'WR') as Pos }) : undefined),
+    metric: (r) => r.metric, opp: (r) => (r.opposed ? OPP : undefined),
+    get: () => 0, set: () => {},
+  };
+  const opposedWins = new Set(rows.filter((r) => r.opposed).map((r) => r.win));
+  const backups = rows.filter((r) => r.slug && !r.opposed && !opposedWins.has(r.win) && !banksNothing(r.pos ?? undefined, r.metric)).map((r) => r.key);
+  return { backups, auto: autoBackupTargets(rows, lens, assign, winRank, blindBackupRank(lens)) };
+}
+
 /** THE PIPELINE. Runs every post-slot effect in the canonical order, for both
  *  sides, mutating slot finals in place. Battles run after this, per engine. */
 export function applyPostSlotPipeline<S>(slots: S[], cfg: PipelineConfig<S>): void {
@@ -210,7 +265,7 @@ export function applyPostSlotPipeline<S>(slots: S[], cfg: PipelineConfig<S>): vo
   const backup = (sd: PipelineSide<S>) => {
     const moved = new Map<string, string>();
     bestBallBackups(slots, sd.lens, sd.backups ?? {}, {
-      zeroed: sd.hooks?.backupZeroed, winRank,
+      zeroed: sd.hooks?.backupZeroed, winRank, blindRank: blindBackupRank(sd.lens),
       subbed: (bk, st, score, from) => { moved.set(sd.lens.key(bk), sd.lens.key(st)); sd.hooks?.backupSubbed?.(bk, st, score, from); },
     });
     return followBackups(sd, moved);
