@@ -22,6 +22,21 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.735.1 — Play power-ups after the week starts (app)
+
+> - On the app you can now play a power-up like Momentum after the week's first game has started. It counts only for the windows that haven't locked yet.
+
+Founder (Gridiron Gang week 8, Saturday, screenshot of Momentum dealt with a
+red ✕): "you should be able to play power ups after games have started, it
+just won't count for games that have already started." That has been the
+rule since 0259: hero_set_buffs stamps an arm made after the week's first
+kickoff, and buffsForWindow counts it only in windows locking after the
+stamp; the web always allowed it. The app's hand and armFromHand gated on
+`locked` (the week's first kickoff), so every whole-field card read "The week
+has started — arms are closed." They now gate on `allLocked` (every window
+locked), with the note "Counts only the windows still to lock." Extra Slot
+still plays only before the first lock.
+
 ### v0.735.0 — Backups pick their own target
 
 > - In drip mode, a player in a window your opponent left empty now gets a backup target picked for him: a Field General QB first, then your lowest-projected starter.
