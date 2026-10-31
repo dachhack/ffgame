@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/college-box-names.sql",
+  "why": "Founder: 'In all fields for CFB games. A lot of player IDs instead of names.' (FLA@UGA box score: C 5295814 ...). v0.735.3 reads names and positions from college_player; read only, confirms the directory holds the ids on that screen."
+}

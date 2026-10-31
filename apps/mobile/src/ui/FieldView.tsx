@@ -23,6 +23,8 @@
 import { stoppageLabel, liveClockLabel, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey, type ReplayMode } from '@drip/core/data/gameView';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
+import { collegeNameFor } from '@drip/core/data/college';
+import { loadCollegeNames } from '@drip/core/data/liveApi';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Ellipse, G, Image as SvgImage, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
@@ -592,8 +594,16 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   const cur = games.find((g) => g.key === sel) ?? games.find((g) => g.key === originKey) ?? games[0]
     ?? { key: originKey, away: normTeam(away), home: normTeam(home), kickoff: null, state: 'live' as const, feed: null };
   const effClock = cur.key === originKey ? clock : Number.MAX_SAFE_INTEGER;
+  // College names and positions from the directory (v0.735.3): a college
+  // box lists players no league holds, which printed as "C 5295814".
+  const [namesVer, setNamesVer] = useState(0);
   const box = useMemo(() => (visible ? gameBoxScore(week, cur.home, cur.away, effClock) : { home: [], away: [] }),
-    [visible, week, cur.home, cur.away, effClock, clock]);
+    [visible, week, cur.home, cur.away, effClock, clock, namesVer]);
+  useEffect(() => {
+    let alive = true;
+    loadCollegeNames([...box.home, ...box.away].map((r) => r.slug)).then((n) => { if (alive && n) setNamesVer((v) => v + 1); }).catch(() => {});
+    return () => { alive = false; };
+  }, [box]);
   const last = latestPlay(cur.feed?.plays);
   // BEFORE KICKOFF IT IS A PROJECTION (v0.413.0) — the web twin. gameBoxScore
   // accumulates from plays, so a game that has not started shows "— nothing
@@ -739,5 +749,9 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
 
 /** A slug as a readable name — the app's copy of the web's `boxName`. */
 function boxName(slug: string): string {
+  const cn = collegeNameFor(slug);
+  if (cn) return cn.full;
+  const hc = /^([a-z]{2,5})-hc$/.exec(slug);
+  if (hc) return `${hc[1].toUpperCase()} HC`;
   return stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 }

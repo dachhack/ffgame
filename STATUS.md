@@ -22,6 +22,23 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.735.3 — College box scores show names
+
+> - College game box scores (All fields) show players' names and positions instead of ID codes like "C 5295814", and a team's head coach reads "UGA HC".
+
+Founder (FLA@UGA box score on the phone): "In all fields for CFB games. A
+lot of player IDs instead of names." A college slug is an ESPN id
+(`c-5295814`), and its name was only ever installed from the league's own
+pool (ensureCollegeNames / leaguePool), so a box score, which lists everyone
+who touched the ball in any college game, printed the slug for every player
+no league holds, all of them as WR. New core `loadCollegeNames` reads the
+rest from college_player (0365, readable by any signed-in member), 150 ids a
+read, each once per session, and installs name and position (so defenders
+file on the DEFENSE tab). Both box sheets call it when a game's box opens and
+re-render; `boxName` asks collegeNameFor first and labels a `-hc` slug
+"UGA HC". The web game view's names use the same lookup. Ops 088 checks the
+directory holds the screenshot's ids.
+
 ### v0.735.2 — Power-up cards say when they count
 
 > - Momentum and the other whole-week power-ups now read "Counts in every window that locks after you play it" instead of "Arm before kickoff".

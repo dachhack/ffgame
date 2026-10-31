@@ -28,6 +28,8 @@ import {
 import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScore';
 import { projectedBox } from '@drip/core/engine/projectedBox';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
+import { collegeNameFor } from '@drip/core/data/college';
+import { loadCollegeNames } from '@drip/core/data/liveApi';
 import { teamColor, teamMarkColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 import { openPlayerCard } from './playerCard';
@@ -902,7 +904,7 @@ function PlayByPlayPanel({ feed, week }: { feed: TeamGameFeed; week: number }) {
  *  line, then LIVE (plays newest first with the people on each and their
  *  lines) and STATS (the box score). The reader bar stays on the board
  *  header, bound to this game. Readings are core's (data/gameView). */
-const fullName = (slug: string) => stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
+const fullName = (slug: string) => collegeNameFor(slug)?.full ?? stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
 const shortName = (full: string) => { const w = full.split(' '); return w.length > 1 ? `${w[0][0]}. ${w.slice(1).join(' ')}` : full; };
 export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; week: number; clock: number; pidSide?: (pid?: number) => PlaySide | null }) {
   const { plays, home, away } = feed;
@@ -1100,6 +1102,10 @@ export function GameView({ feed, week, clock, pidSide }: { feed: TeamGameFeed; w
 /** A slug as a readable name. Local rather than imported: ClassicBoard's copy
  *  leans on its own `shortName`, and a box-score row has room for the full one. */
 function boxName(slug: string): string {
+  const cn = collegeNameFor(slug);
+  if (cn) return cn.full;
+  const hc = /^([a-z]{2,5})-hc$/.exec(slug);
+  if (hc) return `${hc[1].toUpperCase()} HC`;
   if (slug.endsWith('-dst')) return `${slugMeta(slug).team} D/ST`;
   if (slug.endsWith('-k')) return `${slugMeta(slug).team} K`;
   return stripSlugTag(slug).split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
@@ -1124,7 +1130,15 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   // The origin game keeps the log's scrub position; every other game shows
   // its latest — a strip you browse is asking "where do things stand".
   const effClock = cur.key === originKey ? clock : Number.MAX_SAFE_INTEGER;
-  const box = useMemo(() => gameBoxScore(week, cur.home, cur.away, effClock), [week, cur.home, cur.away, effClock, clock]);
+  // College names and positions from the directory (v0.735.3): a college
+  // box lists players no league holds, which printed as "C 5295814".
+  const [namesVer, setNamesVer] = useState(0);
+  const box = useMemo(() => gameBoxScore(week, cur.home, cur.away, effClock), [week, cur.home, cur.away, effClock, clock, namesVer]);
+  useEffect(() => {
+    let alive = true;
+    loadCollegeNames([...box.home, ...box.away].map((r) => r.slug)).then((n) => { if (alive && n) setNamesVer((v) => v + 1); }).catch(() => {});
+    return () => { alive = false; };
+  }, [box]);
   const last = latestPlay(cur.feed?.plays);
   // BEFORE KICKOFF IT IS A PROJECTION (v0.413.0, founder: "the box score can
   // contain projected starters and fantasy projections until kick off").
