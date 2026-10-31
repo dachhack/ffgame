@@ -22,6 +22,17 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.735.4 — No NFL players in a college game's box
+
+> - Before kickoff, a college game's box score no longer lists NFL players as projected starters (Miami's showed the Dolphins).
+
+Founder (MIA@UNC box score, college week 10): "That's NFL not CFB."
+projectedBox finds candidates by team code among NFL players, and college
+codes collide with NFL ones, so Miami's side listed Malik Willis and Jaylen
+Wright while UNC (no NFL match) read empty. projectedBox and the widget's
+projectedSheet now return nothing on a college week (board week 201+); NFL
+weeks are unchanged. check:boxgame pins both, and fails on the old code.
+
 ### v0.735.3 — College box scores show names
 
 > - College game box scores (All fields) show players' names and positions instead of ID codes like "C 5295814", and a team's head coach reads "UGA HC".

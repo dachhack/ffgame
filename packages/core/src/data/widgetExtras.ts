@@ -22,7 +22,7 @@ import { currentSeason, addDays } from '../sports/league';
 import { sportToday } from '../sports/slate';
 import { SPORTS } from '../sports/index';
 import type { Sport } from '../sports/types';
-import { setRuntimeSlate } from './nflSlate';
+import { setRuntimeSlate, isCollegeWeek } from './nflSlate';
 import { setLiveGameFeed, feedRowsToWeek, weekBoxGames, latestPlay, feedScore, fmtQuarterClock, type WeekBoxGame, type GamePlay } from './gameFeed';
 import { fieldsWeekFrom, slateWeekOrder, type FieldsLevel } from './fieldsWeek';
 import { LIVE_SEASON } from './realPbp';
@@ -193,6 +193,8 @@ const sheetName = (slug: string, team: string): string =>
  *  already off it. STOCK PPR, whatever league was read last — the widget
  *  speaks for no league. Empty when neither side can be projected. */
 export function projectedSheet(away: string, home: string, week: number): ProjSlot[] {
+  // NFL players only: on the college calendar a shared code (MIA) is not the Dolphins (v0.735.4).
+  if (isCollegeWeek(week)) return [];
   return withPprProjections(() => {
     const side = (team: string) => {
       const rows = projectedStarters(team, week);
