@@ -799,10 +799,10 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
    *  Amplifier capacity is enforced here as well as server-side, so an
    *  impossible arm is refused before it spends a card. */
   const armFromHand = async (id: string) => {
-    if (!matchup || locked || buffBusy) return;
+    if (!matchup || allLocked || buffBusy) return;
     // Extra Slot is played on a WINDOW (0305); any other aimed card is not a
     // buff and must never be filed as one (v0.431.0).
-    if (id === 'extra-slot') { setExtraPick(true); return; }
+    if (id === 'extra-slot') { if (!locked) setExtraPick(true); return; }
     if (powerupById(id)?.target) { setErr('That card is aimed at a spot or window — play it on the web for now.'); return; }
     if (!liveBuffsOn) { setErr("Real-time power-ups are turned off in this league (commissioner's setting)."); return; }
     if (buffs.has(id)) return;
@@ -1189,14 +1189,22 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       // applies and say so, playable on the web meanwhile.
       const targeted = !!p.target && p.id !== 'extra-slot';
       const extra = p.id === 'extra-slot';
+      // MID-WEEK ARMS (v0.735.1, founder: "you should be able to play power
+      // ups after games have started, it just won't count for games that have
+      // already started"). The server has stamped a mid-week arm since 0259
+      // and the resolver counts it only in windows locking after the stamp
+      // (buffsForWindow); the web always allowed it. The app closed the hand
+      // at the week's first kickoff. It stays open until every window locks.
+      const extraShut = locked || (matchup?.status ?? 'scheduled') !== 'scheduled';
       return {
         id: p.id,
         qty: inventory[p.id] ?? 0,
         armed: false,
-        usable: !locked && pre && !targeted && !(extra && (matchup?.status ?? 'scheduled') !== 'scheduled'),
+        usable: !allLocked && pre && !targeted && !(extra && extraShut),
         note: targeted ? 'Aimed cards play on the web for now — coming to the app.'
-          : extra ? (locked || (matchup?.status ?? 'scheduled') !== 'scheduled' ? 'Extra Slot plays before the week’s first lock.' : 'ARM, then pick the window to widen.')
-          : locked ? 'The week has started — arms are closed.'
+          : extra ? (extraShut ? 'Extra Slot plays before the week’s first lock.' : 'ARM, then pick the window to widen.')
+          : allLocked ? 'Every window has locked — keeps for next week.'
+          : pre && locked ? 'Counts only the windows still to lock.'
           : pre ? undefined
           : 'Real-time card — playable once this window kicks off.',
       };
