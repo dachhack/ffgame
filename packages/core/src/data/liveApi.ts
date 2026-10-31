@@ -14,7 +14,7 @@ import { resolveUser } from './sleeper';
 import { supabaseUrl } from './liveConfig';
 import { isChatImageUrl } from './chatImage';
 import { PRESEASON_BOARD_WEEKS, PRESEASON_BASE, setCollegeWeekDates, weekName } from './nflSlate';
-import { setCollegeMeta, setCollegeNames, collegeNameFor, isCollegeSlug } from './college';
+import { setCollegeMeta, setCollegeNames, collegeNameFor, isCollegeSlug, collegeEspnId } from './college';
 import { setCollegeLogoIds } from './media';
 import { applyServerMarkFree, personalMarkFree, setMarkFree } from './markFree';
 import { setCollegeProjections } from '../engine/projScoring';
@@ -26,7 +26,7 @@ import { openWeekFrom, DEFAULT_TURNOVER, type WeekTurnover } from './openWeek';
 import type { WaiverRunReport } from './txnChat';
 import { TeamMap, TeamSet } from './teamCodes';
 import { LIVE_SEASON } from './realPbp';
-import { liveTeamFor } from './slugMeta';
+import { liveTeamFor, setSlugMetaOverrides } from './slugMeta';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -5201,6 +5201,33 @@ export async function ensureCollegeNames(leagueId: string, slugs: (string | null
   collegeNamesAsked.add(leagueId);
   try { await leaguePool(leagueId); return true; }
   catch { collegeNamesAsked.delete(leagueId); return false; }
+}
+/** COLLEGE NAMES FROM THE DIRECTORY (v0.735.3, founder: "In all fields for
+ *  CFB games. A lot of player IDs instead of names."). ensureCollegeNames
+ *  reads the LEAGUE's pool, so a box score of a college game, which lists
+ *  everyone who touched the ball, printed "C 5295814" for every player no
+ *  league holds. college_player (0365, readable by any signed-in member)
+ *  knows them all: this installs the name and the position (the box defaulted
+ *  an unknown to WR, so a defender sat on the offense tab) for the slugs
+ *  still missing one, 150 ids a read, each asked once per session. Resolves
+ *  the number installed, so the caller can re-render. */
+const collegeDirAsked = new Set<string>();
+export async function loadCollegeNames(slugs: (string | null | undefined)[]): Promise<number> {
+  const want = [...new Set(slugs)].filter((s): s is string => isCollegeSlug(s) && !collegeNameFor(s) && !collegeDirAsked.has(s!));
+  if (!want.length) return 0;
+  for (const s of want) collegeDirAsked.add(s);
+  const ids = want.map((s) => collegeEspnId(s)).filter((x): x is string => !!x);
+  const c = await client();
+  let n = 0;
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data, error } = await c.from('college_player').select('espn_id, full_name, pos, school_abbr').in('espn_id', ids.slice(i, i + 150));
+    if (error) { for (const id of ids.slice(i, i + 150)) collegeDirAsked.delete(`c-${id}`); continue; }
+    const rows = (data ?? []) as { espn_id: string; full_name: string | null; pos: string | null; school_abbr: string | null }[];
+    setCollegeNames(rows.map((r) => ({ slug: `c-${r.espn_id}`, full_name: r.full_name, school: r.school_abbr })));
+    setSlugMetaOverrides(rows.filter((r) => r.pos).map((r) => ({ slug: `c-${r.espn_id}`, pos: r.pos })));
+    n += rows.length;
+  }
+  return n;
 }
 /** Tenure by slug from the league's pool (0172) — per-slot filter checks at
  *  lineup time read this. Null exp = unknown (pre-0172 seed, or Sleeper doesn't
