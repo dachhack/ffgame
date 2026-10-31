@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.735.2 — Power-up cards say when they count
+
+> - Momentum and the other whole-week power-ups now read "Counts in every window that locks after you play it" instead of "Arm before kickoff".
+
+Founder, after v0.735.1 (the app's hand open mid-week): "Applies to all
+windows after use." Thirteen whole-field cards (Momentum, Garbage Time,
+Floodgates, Overtime, Overtime Shield, Twin Generals, Counter-Nuke, Insurance,
+Trick Play, Pick Six, Hail Mary, Ball Hawk, WR/TE Carries) opened "Arm before
+kickoff:" and several said "all week". The resolver has counted a mid-week
+play only in windows locking after it since 0259 (buffsForWindow: the window
+buffs, the awards and the turnover coin), so the copy now says that. Text
+only, in core's POWERUPS (shop, hand and card sheets on both apps).
+
 ### v0.735.1 — Play power-ups after the week starts (app)
 
 > - On the app you can now play a power-up like Momentum after the week's first game has started. It counts only for the windows that haven't locked yet.
