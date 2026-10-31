@@ -17,6 +17,8 @@ import { setLivePlays, clearLivePlays } from '../packages/core/src/data/realPbp.
 import { setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek, weekBoxGames } from '../packages/core/src/data/gameFeed.ts';
 import { setSlugMetaOverrides } from '../packages/core/src/data/slugMeta.ts';
 import { setTeamOverrides, clearTeamOverrides } from '../packages/core/src/data/playerTeam.ts';
+import { projectedBox } from '../packages/core/src/engine/projectedBox.ts';
+import { projectedSheet } from '../packages/core/src/data/widgetExtras.ts';
 
 let fails = 0;
 const ok = (cond, label) => {
@@ -172,6 +174,16 @@ ok(bare.home.some((r) => r.slug === 'ghost-dolphin'),
   'without a feed the team rule stands alone (the pre-feed behavior, unchanged)');
 ok(!bare.home.some((r) => r.slug === 'new-arrival'),
   'and without a feed a mis-tagged arrival cannot be claimed — no id evidence, no seat');
+
+// v0.735.4 (founder: "That's NFL not CFB"): a college week's pregame box
+// listed the Dolphins under Miami (MIA@UNC). No NFL projection on the college
+// calendar; an NFL week still projects.
+{
+  const cfb = projectedBox('UNC', 'MIA', 210);
+  ok(cfb.home.length === 0 && cfb.away.length === 0, `a college week projects no NFL starters (got ${cfb.away.map((r) => r.slug).join(', ') || 'none'})`);
+  ok(projectedSheet('MIA', 'UNC', 210).length === 0, 'and the widget sheet stays empty on a college week');
+  ok(projectedBox('BUF', 'MIA', 9).away.length > 0, 'an NFL week still projects MIA');
+}
 
 clearLivePlays();
 clearLiveGameFeeds();

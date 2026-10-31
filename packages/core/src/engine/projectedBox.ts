@@ -28,6 +28,7 @@ import { LIVE_SEASON } from '../data/realPbp';
 import { projFor } from '../data/poolSort';
 import { injuryFor, injuryNow, hasLiveInjuries, type InjuryStatus } from '../data/injuries';
 import { depthFor, depthForTeam } from '../data/playerDepth';
+import { isCollegeWeek } from '../data/nflSlate';
 
 export interface ProjectedRow {
   slug: string;
@@ -164,5 +165,11 @@ function byDepthThenProjection(a: ProjectedRow, b: ProjectedRow): number {
  *  both go through normTeam — the same fix gameBoxScore carries, for the same
  *  reason. */
 export function projectedBox(home: string, away: string, week?: number | null): ProjectedBox {
+  // NOT ON THE COLLEGE CALENDAR (v0.735.4, founder: "That's NFL not CFB").
+  // Every candidate here is an NFL player found by team code, and college
+  // codes collide with NFL ones: Miami's MIA@UNC box listed the Dolphins'
+  // Malik Willis and Jaylen Wright as projected starters. A college week
+  // (board week 201+) has no NFL players to project; both sides read empty.
+  if (week != null && isCollegeWeek(week)) return { home: [], away: [] };
   return { home: projectedStarters(home, week), away: projectedStarters(away, week) };
 }
