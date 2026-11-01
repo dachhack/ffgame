@@ -15,7 +15,7 @@ import { PlayReader, type ReaderState } from '@drip/core/data/playReader';
 import { spokenDown } from '@drip/core/data/spokenPlay';
 import { webVoice, hasVoice } from './voice';
 import { gameNameResolver } from '@drip/core/engine/gameNames';
-import { weekTitle, kickoffLabel } from '@drip/core/data/nflSlate';
+import { weekTitle, kickoffLabel, isCollegeWeek } from '@drip/core/data/nflSlate';
 import { teamLogo, headshot } from '@drip/core/data/media';
 import { qClock, situationLabel, driveSummary, playNames, ballCarrier, stoppageLabel, liveClockLabel, clockLabelFor, gameLog, eventLabel, timeoutsLeft, REPLAY_MS, replayModeLabel, parseReplayMode, liveSituationChip, playKey, filterGameLog, PLAY_FILTERS, type PlayFilterKind, type ReplayMode } from '@drip/core/data/gameView';
 import { clubNick } from '@drip/core/data/spokenPlay';
@@ -29,7 +29,7 @@ import { gameBoxScore, boxTabRows, type BoxRow } from '@drip/core/engine/boxScor
 import { projectedBox } from '@drip/core/engine/projectedBox';
 import { slugMeta, stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { collegeNameFor } from '@drip/core/data/college';
-import { loadCollegeNames } from '@drip/core/data/liveApi';
+import { loadCollegeNames, loadCollegeStarters } from '@drip/core/data/liveApi';
 import { teamColor, teamMarkColor } from '@drip/core/data/teamColors';
 import { useIsMobile, usePullRefresh, ModalBackdrop } from './ui';
 import { openPlayerCard } from './playerCard';
@@ -298,8 +298,23 @@ export function FieldBoard({ week, entries, scheduled, onClose, onRefresh, weekN
  *  and name (v0.390.3, Sleeper's K. Walker marker). Null = the plain badge. */
 export type Carrier = { slug: string; name: string } | null;
 
+/** COLLEGE PREGAME STARTERS (v0.736.0): on a college week, load the two
+ *  schools' projected starters (0526) for projectedBox; the number it returns
+ *  bumps a re-render once they land. A no-op on an NFL week. */
+function useCollegeStarters(week: number, a: string, b: string): number {
+  const [ver, setVer] = useState(0);
+  useEffect(() => {
+    if (!isCollegeWeek(week)) return;
+    let alive = true;
+    loadCollegeStarters([a, b]).then((n) => { if (alive && n) setVer((v) => v + 1); }).catch(() => {});
+    return () => { alive = false; };
+  }, [week, a, b]);
+  return ver;
+}
+
 function Field({ feed, clock, week, pidSide, carrierOf, jump, onShown }: { feed: TeamGameFeed; clock: number; week: number; pidSide?: (pid?: number) => PlaySide | null; carrierOf?: (p: GamePlay) => Carrier; jump?: { key: string; n: number } | null; onShown?: (key: string | null) => void }) {
   const { away, home, plays } = feed;
+  useCollegeStarters(week, home, away); // re-renders when they land; the strip reads projectedBox inline
   // ↔ mirror this game's field to match the viewer's TV broadcast — the feed
   // carries no camera orientation, so the default (away attacks right) is a
   // convention; the flip is remembered per game.
@@ -1150,7 +1165,8 @@ function BoxScoreCard({ week, home, away, clock, onClose }: {
   // feed can exist with an empty play list, and either way what we can honestly
   // show is the same.
   const notStarted = !cur.feed || cur.feed.plays.length === 0;
-  const proj = useMemo(() => (notStarted ? projectedBox(cur.home, cur.away, week) : null), [notStarted, cur.home, cur.away, week]);
+  const collegeVer = useCollegeStarters(week, cur.home, cur.away);
+  const proj = useMemo(() => (notStarted ? projectedBox(cur.home, cur.away, week) : null), [notStarted, cur.home, cur.away, week, collegeVer]);
   // OFFENSE / DEFENSE tabs (v0.365.1, founder) — matching the app's box sheet:
   // the single list ran long and "how did the defense do" meant scrolling past
   // every receiver. Membership is core's boxTabRows (stat-driven), so a two-way

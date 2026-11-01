@@ -707,6 +707,13 @@ function collegeProjected(player: { id: string; pos: string; team?: string | nul
   return Math.round((perGame * adj.mult + adj.pts + adj.td * (line.passTd + line.rushTd + line.recTd)) * 10) / 10;
 }
 
+/** A college per-game line (0379's estimate) through the installed league's
+ *  scoring, for a player no league pool holds: the college pregame box's
+ *  projected starters (v0.736.0). Leaves the pool's installed lines alone. */
+export function collegeLinePoints(line: ProjStatLine, pos: string): number {
+  return Math.round(scoreProjLine(line, pos, scoringFor(cat(), pos)) * 10) / 10;
+}
+
 /** Convenience for callers that hold a slug and a position rather than a
  *  player object — the draft board's PROJ column. */
 export const projectedFor = (slug: string, pos: string, sleeperId?: string | null): number =>
