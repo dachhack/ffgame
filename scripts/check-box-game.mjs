@@ -17,7 +17,7 @@ import { setLivePlays, clearLivePlays } from '../packages/core/src/data/realPbp.
 import { setLiveGameFeed, clearLiveGameFeeds, feedRowsToWeek, weekBoxGames } from '../packages/core/src/data/gameFeed.ts';
 import { setSlugMetaOverrides } from '../packages/core/src/data/slugMeta.ts';
 import { setTeamOverrides, clearTeamOverrides } from '../packages/core/src/data/playerTeam.ts';
-import { projectedBox } from '../packages/core/src/engine/projectedBox.ts';
+import { projectedBox, setCollegeStarters } from '../packages/core/src/engine/projectedBox.ts';
 import { projectedSheet } from '../packages/core/src/data/widgetExtras.ts';
 
 let fails = 0;
@@ -183,6 +183,16 @@ ok(!bare.home.some((r) => r.slug === 'new-arrival'),
   ok(cfb.home.length === 0 && cfb.away.length === 0, `a college week projects no NFL starters (got ${cfb.away.map((r) => r.slug).join(', ') || 'none'})`);
   ok(projectedSheet('MIA', 'UNC', 210).length === 0, 'and the widget sheet stays empty on a college week');
   ok(projectedBox('BUF', 'MIA', 9).away.length > 0, 'an NFL week still projects MIA');
+  // v0.736.0: the college estimate fills it once the schools are loaded (0526).
+  setCollegeStarters(['MIA', 'UNC'], [
+    { slug: 'c-1', pos: 'QB', school: 'MIA', line: { passYd: 300, passTd: 2.5, int: 0.6, rushYd: 12, rushTd: 0.25, rec: 0, recYd: 0, recTd: 0 } },
+    { slug: 'c-3', pos: 'RB', school: 'mia', line: { passYd: 0, passTd: 0, int: 0, rushYd: 100, rushTd: 1, rec: 1.2, recYd: 10, recTd: 0 } },
+  ]);
+  const got = projectedBox('UNC', 'MIA', 210);
+  ok(got.away.map((r) => r.slug).join() === 'c-1,c-3' && got.away.every((r) => (r.proj ?? 0) > 0),
+    `a college week projects the school's own players, scored (${got.away.map((r) => `${r.slug}:${r.proj}`).join(', ')})`);
+  ok(got.home.length === 0, 'a school with no lines still reads empty');
+  ok(!projectedBox('BUF', 'MIA', 9).away.some((r) => r.slug.startsWith('c-')), 'and an NFL week never reads them');
 }
 
 clearLivePlays();

@@ -22,6 +22,25 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.736.0 — College projected starters
+
+> - Before kickoff, a college game's box score and field now show each school's projected starters (QB, 2 RB, 3 WR, TE) with projected points, from our college estimate.
+
+Founder: "We have projections for college players in the app. Where do we
+get those?" then "Build it". The estimate is 0379's _college_proj (ESPN
+season lines, this season blended with last at half weight, 3+ effective
+games), which reached only players in a league's pool. 0526
+college_projected_starters(schools) serves each school's top-projected active
+QB, 2 RB, 3 WR and TE with that per-game line (offense only; up to 40
+schools a call). Core: liveApi loadCollegeStarters installs rows, names and
+positions (one read per school per session, concurrent callers share it,
+a failed read retries); projectedBox on a college week reads them, scored by
+the league's rules when read (projScoring.collegeLinePoints). Both apps' box
+sheet and pregame field strip load the two schools (useCollegeStarters).
+K/DEF and the widget sheet stay empty on a college week. Tested on a scratch
+Postgres (top-N per spot, statless freshman and inactive excluded,
+case-insensitive codes) and in check:boxgame.
+
 ### v0.735.4 — No NFL players in a college game's box
 
 > - Before kickoff, a college game's box score no longer lists NFL players as projected starters (Miami's showed the Dolphins).

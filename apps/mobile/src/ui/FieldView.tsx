@@ -24,11 +24,11 @@ import { stoppageLabel, liveClockLabel, REPLAY_MS, replayModeLabel, parseReplayM
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { stripSlugTag, normTeam } from '@drip/core/data/slugMeta';
 import { collegeNameFor } from '@drip/core/data/college';
-import { loadCollegeNames } from '@drip/core/data/liveApi';
+import { loadCollegeNames, loadCollegeStarters } from '@drip/core/data/liveApi';
 import { Animated, Image, Pressable, ScrollView, Text, View, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Ellipse, G, Image as SvgImage, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 import { gameFeedFor, weekBoxGames, latestPlay, type GamePlay, type TeamGameFeed } from '@drip/core/data/gameFeed';
-import { kickoffLabel } from '@drip/core/data/nflSlate';
+import { kickoffLabel, isCollegeWeek } from '@drip/core/data/nflSlate';
 import { gameBoxScore, boxTabRows } from '@drip/core/engine/boxScore';
 import { projectedBox, type ProjectedRow } from '@drip/core/engine/projectedBox';
 import { teamLogo, headshot } from '@drip/core/data/media';
@@ -96,8 +96,23 @@ export function FieldView({ week, team, clock, side, carrierOf, pre, bleed = tru
   return <Field feed={feed} clock={clock} side={side ?? null} week={week} carrierOf={carrierOf} bleed={bleed} jump={jump} onShown={onShown} />;
 }
 
+/** COLLEGE PREGAME STARTERS (v0.736.0): on a college week, load the two
+ *  schools' projected starters (0526) for projectedBox; the number it returns
+ *  bumps a re-render once they land. A no-op on an NFL week. */
+function useCollegeStarters(week: number, a: string, b: string): number {
+  const [ver, setVer] = useState(0);
+  useEffect(() => {
+    if (!isCollegeWeek(week)) return;
+    let alive = true;
+    loadCollegeStarters([a, b]).then((n) => { if (alive && n) setVer((v) => v + 1); }).catch(() => {});
+    return () => { alive = false; };
+  }, [week, a, b]);
+  return ver;
+}
+
 function Field({ feed, clock, side, week, carrierOf, bleed, jump, onShown }: { feed: TeamGameFeed; clock: number; side: PlaySide | null; week: number; carrierOf?: (p: GamePlay) => Carrier; bleed: boolean; jump?: { key: string; n: number } | null; onShown?: (key: string | null) => void }) {
   const t = useTheme();
+  const collegeVer = useCollegeStarters(week, feed.home, feed.away);
   // BLEED: where this card sits in the window, so the drawing can be widened
   // to the screen plus BLEED_OVER each side and shifted back to the edge.
   const { width: winW } = useWindowDimensions();
@@ -169,7 +184,7 @@ function Field({ feed, clock, side, week, carrierOf, bleed, jump, onShown }: { f
   // projected leaders stand in for the box score until the first snap.
   const pre = plays.length === 0 && !over && feed.st !== 'post';
   const kickoffText = feed.kickoff ? kickoffLabel(Date.parse(feed.kickoff)).toUpperCase() : null;
-  const leaders = useMemo(() => (pre ? projectedBox(home, away, week) : null), [pre, home, away, week]);
+  const leaders = useMemo(() => (pre ? projectedBox(home, away, week) : null), [pre, home, away, week, collegeVer]);
   const leaderCol = (tm: string, rows: ProjectedRow[]) => {
     const top = rows.filter((r) => r.proj != null).sort((a, b) => (b.proj ?? 0) - (a.proj ?? 0)).slice(0, 3);
     return (
@@ -611,8 +626,9 @@ function BoxScoreSheet({ visible, week, home, away, clock, onClose }: {
   // a lineup. Founder: "the box score can contain projected starters and
   // fantasy projections until kick off."
   const notStarted = !cur.feed || cur.feed.plays.length === 0;
+  const collegeVer = useCollegeStarters(visible ? week : 0, cur.home, cur.away);
   const proj = useMemo(() => (visible && notStarted ? projectedBox(cur.home, cur.away, week) : null),
-    [visible, notStarted, cur.home, cur.away, week]);
+    [visible, notStarted, cur.home, cur.away, week, collegeVer]);
   // OFFENSE / DEFENSE tabs (v0.343.2, founder): the single list ran past the
   // sheet's cap and clipped — see the ScrollView note below — and even scrolled,
   // "how did the defense do" meant paging past every receiver. Membership is

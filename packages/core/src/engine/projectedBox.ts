@@ -29,6 +29,8 @@ import { projFor } from '../data/poolSort';
 import { injuryFor, injuryNow, hasLiveInjuries, type InjuryStatus } from '../data/injuries';
 import { depthFor, depthForTeam } from '../data/playerDepth';
 import { isCollegeWeek } from '../data/nflSlate';
+import { collegeLinePoints } from './projScoring';
+import type { ProjStatLine } from '../data/projStats2026';
 
 export interface ProjectedRow {
   slug: string;
@@ -160,6 +162,29 @@ function byDepthThenProjection(a: ProjectedRow, b: ProjectedRow): number {
   return (b.proj ?? -Infinity) - (a.proj ?? -Infinity);
 }
 
+// ── College projected starters (v0.736.0) ─────────────────────────────────
+// A school's top-projected QB, 2 RB, 3 WR and TE from 0526's
+// college_projected_starters, installed by the host (liveApi
+// loadCollegeStarters) and scored by the league's rules when read, so a
+// league switch rescores them without a refetch.
+const COLLEGE_STARTERS = new Map<string, { slug: string; pos: Pos; line: ProjStatLine }[]>();
+export function setCollegeStarters(schools: string[], rows: { slug: string; pos: string; school: string; line: ProjStatLine | null }[]): void {
+  for (const s of schools) COLLEGE_STARTERS.set(s.toUpperCase(), []);
+  for (const r of rows) {
+    if (!r.line) continue;
+    const k = r.school.toUpperCase();
+    const list = COLLEGE_STARTERS.get(k) ?? [];
+    list.push({ slug: r.slug, pos: r.pos as Pos, line: r.line });
+    COLLEGE_STARTERS.set(k, list);
+  }
+}
+/** Has this school been asked for already (with or without an answer)? */
+export const collegeStartersLoaded = (school: string): boolean => COLLEGE_STARTERS.has(school.toUpperCase());
+export function collegeStartersFor(school: string): ProjectedRow[] {
+  const T = school.toUpperCase();
+  return (COLLEGE_STARTERS.get(T) ?? []).map((r) => ({ slug: r.slug, pos: r.pos, team: T, proj: collegeLinePoints(r.line, r.pos), depth: null, injury: null }));
+}
+
 /** Both sides of a game that has not kicked off. Teams arrive in whichever
  *  vocabulary the caller has (the feed's LAR/WSH or the slate's LA/WAS), so
  *  both go through normTeam — the same fix gameBoxScore carries, for the same
@@ -169,7 +194,10 @@ export function projectedBox(home: string, away: string, week?: number | null): 
   // Every candidate here is an NFL player found by team code, and college
   // codes collide with NFL ones: Miami's MIA@UNC box listed the Dolphins'
   // Malik Willis and Jaylen Wright as projected starters. A college week
-  // (board week 201+) has no NFL players to project; both sides read empty.
-  if (week != null && isCollegeWeek(week)) return { home: [], away: [] };
+  // (board week 201+) has no NFL players to project. Its starters come from
+  // the college estimate instead (v0.736.0), once the host has loaded the two
+  // schools (loadCollegeStarters); until then, or for a school with no lines,
+  // the side reads empty.
+  if (week != null && isCollegeWeek(week)) return { home: collegeStartersFor(home), away: collegeStartersFor(away) };
   return { home: projectedStarters(home, week), away: projectedStarters(away, week) };
 }

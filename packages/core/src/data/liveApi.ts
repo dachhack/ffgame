@@ -27,6 +27,7 @@ import type { WaiverRunReport } from './txnChat';
 import { TeamMap, TeamSet } from './teamCodes';
 import { LIVE_SEASON } from './realPbp';
 import { liveTeamFor, setSlugMetaOverrides } from './slugMeta';
+import { setCollegeStarters, collegeStartersLoaded, collegeStartersFor } from '../engine/projectedBox';
 
 // ── Analytics at the chokepoint (0186) ───────────────────────────────────────
 // The write RPCs both hosts share fire their product event HERE, on the
@@ -5228,6 +5229,33 @@ export async function loadCollegeNames(slugs: (string | null | undefined)[]): Pr
     n += rows.length;
   }
   return n;
+}
+/** COLLEGE PROJECTED STARTERS (v0.736.0, 0526) for a college game's pregame
+ *  box: each school's top-projected QB, 2 RB, 3 WR and TE, with names and
+ *  positions installed for the board. One read per school per session; a
+ *  caller asking while that read is out waits on the same one. Resolves the
+ *  rows now installed for the schools asked, so the caller can re-render (0
+ *  when they were already installed before the call, or there are none). */
+const collegeStartersInflight = new Map<string, Promise<void>>();
+export async function loadCollegeStarters(schools: (string | null | undefined)[]): Promise<number> {
+  const asked = [...new Set(schools.filter((x): x is string => !!x).map((x) => x.toUpperCase()))];
+  const fresh = asked.filter((x) => !collegeStartersLoaded(x) && !collegeStartersInflight.has(x));
+  const waiting = asked.filter((x) => collegeStartersInflight.has(x));
+  if (!fresh.length && !waiting.length) return 0;
+  if (fresh.length) {
+    const p = rpc<{ slug: string; full: string | null; pos: string; school: string; line: ProjStatLine | null }[]>('college_projected_starters', { p_schools: fresh })
+      .then((rows) => {
+        if (!Array.isArray(rows)) return;
+        setCollegeNames(rows.map((r) => ({ slug: r.slug, full: r.full, school: r.school })));
+        setSlugMetaOverrides(rows.map((r) => ({ slug: r.slug, pos: r.pos })));
+        setCollegeStarters(fresh, rows);
+      })
+      .catch(() => {})
+      .finally(() => { for (const x of fresh) collegeStartersInflight.delete(x); });
+    for (const x of fresh) collegeStartersInflight.set(x, p);
+  }
+  await Promise.all(asked.map((x) => collegeStartersInflight.get(x)).filter(Boolean));
+  return asked.reduce((n, x) => n + collegeStartersFor(x).length, 0);
 }
 /** Tenure by slug from the league's pool (0172) — per-slot filter checks at
  *  lineup time read this. Null exp = unknown (pre-0172 seed, or Sleeper doesn't
