@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/bb-test-league.sql",
+  "why": "Founder: 'Can I change my BB Test league to this?' (ONE GAME, v0.737.0). Read only: the league's sport, format, how many weeks have started (set_sport_settings locks the format once any has), locks held, and its spots."
+}
