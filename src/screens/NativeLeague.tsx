@@ -688,7 +688,7 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
               {sportFormat === 'onegame'
-                ? 'One game: points scoring, but each roster spot counts ONE game a week — the one its manager picks before it tips off, or the auto pick (the opponent allowing the most points). Nobody wins on schedule alone.'
+                ? 'One game: points scoring, but each roster spot counts ONE game a week — the one its manager picks before it tips off, or the auto pick (the opponent allowing the most points). A 🎯 best-ball spot counts its best single game of the week. Nobody wins on schedule alone.'
                 : sportFormat === 'points'
                 ? `Points: every stat is worth a set number (${Object.entries(sportDef.scoringDefault).slice(0, 4).map(([k, v]) => `${sportDef.stats.find((st) => st.id === k)?.short ?? k} ${v}`).join(', ')}…), tunable on the SCORING tab.`
                 : sportFormat === 'cats'

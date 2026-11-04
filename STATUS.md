@@ -22,6 +22,27 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.737.1 — Best ball, best of the week
+
+> - In a ONE GAME league, a 🎯 best-ball spot now counts its best single game of the week from your whole roster (one player per spot), instead of filling every night.
+
+Founder, after v0.737.0: "Let's also build the best of week logic." The
+nightly fill (0436) seats each day's top scorers, so in a ONE GAME league an
+all-best-ball lineup still counted every night (BB Test's ten spots). Now
+`fillBestBall` branches on the format: `weekCandidates` values each
+rostered player at his single best posted game of the period (earliest on a
+tie; a man started by hand, or locked in a manual spot this week, is not a
+candidate), `bestBallFill` seats one player per 🎯 spot by that value under
+the spot's eligibility and scope, and 0528 `sport_bb_write_week_svc`
+replaces the seat's best-ball rows for the whole period with the fill, each
+row on its own game's date. Redone every pass while the week runs, so the
+spot moves as games land and settles when the period does; the week then
+scores as any points week. Points leagues keep the nightly fill. Copy on
+both panels, the commissioner's format sheet and both create forms says so.
+`check:sports` pins the candidates and the fill; the write was run on a
+scratch Postgres (last week's and manual rows kept, a stale nightly row
+gone, an out-of-week row refused).
+
 ### v0.737.0 — ONE GAME: pick the game each spot counts
 
 > - A new format for daily-sport leagues, ONE GAME, and the default for new NBA leagues: each roster spot counts one game a week, the one you pick before it tips off, or the auto pick (the opponent allowing the most points so far this season).
