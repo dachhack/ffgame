@@ -10,8 +10,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SPORTS, eligibleFor, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryValue, categoryById } from '@drip/core/sports/score';
-import { sportPeriod, sportNow, isSeasonFormat, SPORT_FORMAT_LABEL, type SportLeagueSettings } from '@drip/core/sports/league';
-import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
+import { sportPeriod, sportNow, isSeasonFormat, isOneGame, isPointsFormat, effectiveSpotGame, SPORT_FORMAT_LABEL, type SportLeagueSettings, type SpotGameOption } from '@drip/core/sports/league';
+import { sportMatchupLines, sportLeagueGames, sportRotoStandings, sportSpotGames, setSportGamePick, friendlyError, type SportMatchupLine, type SportGameRow, type SportRotoRow, type SportSpotGameRow } from '@drip/core/data/liveApi';
 import { PosPill } from '../app/ui';
 
 const MONO = 'var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)';
@@ -44,15 +44,21 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
   const [roto, setRoto] = useState<SportRotoRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  // ONE GAME (0527): my spots with every game each player has this period.
+  const oneGame = isOneGame(settings.format);
+  const [spotGames, setSpotGames] = useState<SportSpotGameRow[]>([]);
+  const [openSpot, setOpenSpot] = useState<string | null>(null);
+  const [busySpot, setBusySpot] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     sportMatchupLines(matchupId).then((r) => { if (alive) { setRows(r ?? []); setErr(null); } }).catch((e) => { if (alive) setErr(String(e?.message ?? e)); });
+    if (oneGame && myRosterId != null) sportSpotGames(matchupId).then((r) => { if (alive) setSpotGames(r ?? []); }).catch(() => {});
     if (period) sportLeagueGames(leagueId, period.from, period.to).then((g) => { if (alive) setGames(g ?? []); }).catch(() => {});
     if (isSeasonFormat(settings.format)) sportRotoStandings(leagueId).then((r) => { if (alive) setRoto(r ?? []); }).catch(() => {});
     const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
     return () => { alive = false; window.clearInterval(id); };
-  }, [matchupId, leagueId, period?.from, period?.to, tick, settings.format]);
+  }, [matchupId, leagueId, period?.from, period?.to, tick, settings.format, oneGame, myRosterId]);
 
   const scoring = useMemo(() => normalizeScoring(def, settings.scoring), [def, settings.scoring]);
   const side = (rid: number) => {
@@ -71,6 +77,31 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
   const slate = games.filter((g) => g.game_date === today);
   const lead = cats ? cats.winner : home.total === away.total ? 'tie' : home.total > away.total ? 'a' : 'b';
   const seatName = (rid: number) => names?.[rid] ?? `SEAT ${rid}`;
+  // Each of my spots: its games, the pick, the lock, and the game the rule
+  // counts right now (core effectiveSpotGame — what the worker locks by).
+  const nowMs = sportNow(settings).getTime();
+  const mySpots = useMemo(() => {
+    const by = new Map<string, { slot: string; slug: string; name: string; team: string; games: (SpotGameOption & { date: string; opp: string; home: boolean })[]; pick: string | null; locked: string | null }>();
+    for (const r of spotGames) {
+      const k = r.roster_slot;
+      if (!by.has(k)) by.set(k, { slot: k, slug: r.player_slug, name: r.full_name ?? r.player_slug, team: r.team ?? '', games: [], pick: null, locked: r.locked_game_id });
+      const sp = by.get(k)!;
+      if (r.game_id) {
+        sp.games.push({ gameId: r.game_id, startMs: r.start_utc ? Date.parse(r.start_utc) : Number.POSITIVE_INFINITY, opp: r.opp ?? '', allowed: r.allowed == null ? null : Number(r.allowed), status: r.status ?? 'pre', date: r.game_date ?? '', home: r.home === r.team });
+        if (r.picked) sp.pick = r.game_id;
+      }
+    }
+    return [...by.values()].sort((a, b) => a.slot.localeCompare(b.slot, undefined, { numeric: true })).map((sp) => ({ ...sp, eff: effectiveSpotGame(sp.games, sp.pick, sp.locked, nowMs) }));
+  }, [spotGames, nowMs]);
+  const pickGame = async (slot: string, gameId: string | null) => {
+    setBusySpot(slot); setErr(null);
+    try {
+      const r = await setSportGamePick(matchupId, slot, gameId);
+      if (!r?.ok) setErr(r?.error ?? 'Could not set that game.');
+      else { setOpenSpot(null); setSpotGames(await sportSpotGames(matchupId).catch(() => spotGames)); }
+    } catch (e) { setErr(friendlyError(e)); } finally { setBusySpot(null); }
+  };
+  const gameLabel = (g: { date: string; opp: string; home: boolean }) => `${fmtDay(g.date).split(' ')[0].toUpperCase()} ${g.home ? 'vs' : '@'} ${g.opp}`;
   const mineFirst = myRosterId === awayRosterId ? [away, home] : [home, away];
   const mineIds = myRosterId === awayRosterId ? [awayRosterId, homeRosterId] : [homeRosterId, awayRosterId];
 
@@ -136,6 +167,45 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
         </div>
       )}
 
+      {oneGame && myRosterId != null && mySpots.length > 0 && (
+        <div>
+          <div className="mono" style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: 5 }}>YOUR GAMES THIS WEEK · ONE PER SPOT</div>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {mySpots.map((sp) => {
+              const g = sp.eff ? sp.games.find((x) => x.gameId === sp.eff!.gameId) : null;
+              const settled = sp.eff?.via === 'locked';
+              const open = openSpot === sp.slot;
+              const choices = sp.games.filter((x) => x.status !== 'postponed' && x.status !== 'cancelled' && x.startMs > nowMs);
+              return (
+                <div key={sp.slot} className="mono" style={{ fontSize: 10.5 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) auto', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: 'var(--faint)' }}>{sp.slot}</span>
+                    <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name} <span style={{ color: 'var(--faint)' }}>{sp.team}</span></span>
+                    {g ? (
+                      <button disabled={settled || !choices.length || busySpot === sp.slot} onClick={() => setOpenSpot(open ? null : sp.slot)} title={settled ? 'this spot has counted its game' : 'change the game this spot counts'}
+                        style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', color: settled ? 'var(--dim)' : 'var(--you)', background: 'var(--bg)', border: `1px solid ${settled ? 'var(--bd)' : 'var(--you)'}`, borderRadius: 5, padding: '3px 7px', cursor: settled ? 'default' : 'pointer' }}>
+                        {gameLabel(g)}{sp.eff?.via === 'auto' ? ' · AUTO' : settled ? ' · LOCKED' : ''}{!settled && choices.length ? ' ▾' : ''}
+                      </button>
+                    ) : <span style={{ color: 'var(--faint)', fontSize: 9.5 }}>{sp.games.length ? 'no game left this week' : 'no game this week'}</span>}
+                  </div>
+                  {open && !settled && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '4px 0 2px 46px' }}>
+                      <button disabled={busySpot === sp.slot} onClick={() => void pickGame(sp.slot, null)} style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, color: 'var(--text)', background: sp.pick ? 'var(--bg)' : 'var(--sh)', border: '1px solid var(--bd)', borderRadius: 5, padding: '3px 7px', cursor: 'pointer' }}>AUTO · the game picks</button>
+                      {choices.map((x) => (
+                        <button key={x.gameId} disabled={busySpot === sp.slot} onClick={() => void pickGame(sp.slot, x.gameId)} title={x.allowed != null ? `${x.opp} allows ${x.allowed.toFixed(1)} a game` : 'no record yet'}
+                          style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, color: 'var(--text)', background: sp.pick === x.gameId ? 'var(--sh)' : 'var(--bg)', border: `1px solid ${sp.pick === x.gameId ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 5, padding: '3px 7px', cursor: 'pointer' }}>
+                          {gameLabel(x)}{x.allowed != null ? <span style={{ color: 'var(--faint)', fontWeight: 400 }}> · allows {x.allowed.toFixed(0)}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
         {mineFirst.map((s, i) => (
           <div key={mineIds[i]}>
@@ -176,8 +246,8 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
         </div>
       )}
       <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-        Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day's line; a slot with no game today scores nothing until it has one.{bb.size ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}
-        {settings.format === 'points' ? ` Points: ${Object.entries(scoring).filter(([, v]) => v).slice(0, 6).map(([k, v]) => `${def.stats.find((s) => s.id === k)?.short ?? k} ${v}`).join(', ')}.` : ''}
+        {oneGame ? 'Each spot counts ONE game this week: the one you pick above, or AUTO — the game against the opponent allowing the most points so far this season. Change it any time before that game tips off; once it tips, that is the spot\'s game.' : 'Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day\'s line; a slot with no game today scores nothing until it has one.'}{bb.size ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}
+        {isPointsFormat(settings.format) ? ` Points: ${Object.entries(scoring).filter(([, v]) => v).slice(0, 6).map(([k, v]) => `${def.stats.find((s) => s.id === k)?.short ?? k} ${v}`).join(', ')}.` : ''}
         {' '}Ratios: {def.categories.filter((c) => c.ratio && settings.categories.includes(c.id)).map((c) => `${c.short} ${categoryValue(c, home.totals) ?? '—'} · ${categoryValue(c, away.totals) ?? '—'}`).join('  ')}
       </div>
     </div>

@@ -72,7 +72,7 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
       const r = await setSportSettings(leagueId, { format: f, categories: [...c] });
       if (r.ok) {
         commit(); setSettings(sportSettingsOf({ sport: r.sport })); setFormat(f); setCats(c);
-        setNote(f === 'points' ? '✓ points — weekly totals head-to-head' : f === 'cats' ? `✓ categories — ${c.size} compared each week` : f === 'season' ? '✓ season points — one total all season, no weekly winner' : `✓ roto — ${c.size} categories ranked all season`);
+        setNote(f === 'points' ? '✓ points — weekly totals head-to-head' : f === 'onegame' ? '✓ one game — each spot counts one game a week' : f === 'cats' ? `✓ categories — ${c.size} compared each week` : f === 'season' ? '✓ season points — one total all season, no weekly winner' : `✓ roto — ${c.size} categories ranked all season`);
       } else { warn(); setNote(friendlyError(r.error ?? 'failed')); }
     } catch (e) { warn(); setNote(friendlyError(e)); }
     finally { setBusy(false); }
@@ -88,14 +88,14 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
     <View style={{ gap: 10 }}>
       <View style={box}>
         <LabelInfo label={`${def.league} FORMAT${locked ? ' · LOCKED' : ''}`}
-          info={'POINTS — each week is the sum of every locked starter\'s points, head-to-head.\n\nH2H CATEGORIES — each week is won category by category from both sides\' summed lines; ratios (FG%, ERA…) are made from the totals.\n\nROTO — no weekly winner: every game all season sums into one line per team, each category ranks the league, best of N takes N points.\n\nSEASON POINTS — no weekly winner: every locked slot-day all season adds to one points total per team; the standings are that total. Pairs with 🎯 best-ball spots on the LINEUP page.\n\nThe format and the categories lock once the season is under way; points per stat change any time.'} />
+          info={'POINTS — each week is the sum of every locked starter\'s points, head-to-head.\n\nONE GAME — points, but each roster spot counts ONE game a week: the one its manager picks before it tips off, or the auto pick (the opponent allowing the most points so far). Once the game tips, it is the spot\'s game.\n\nH2H CATEGORIES — each week is won category by category from both sides\' summed lines; ratios (FG%, ERA…) are made from the totals.\n\nROTO — no weekly winner: every game all season sums into one line per team, each category ranks the league, best of N takes N points.\n\nSEASON POINTS — no weekly winner: every locked slot-day all season adds to one points total per team; the standings are that total. Pairs with 🎯 best-ball spots on the LINEUP page.\n\nThe format and the categories lock once the season is under way; points per stat change any time.'} />
         <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
           {SPORT_FORMATS.map((f) => (
             <Chip key={f} label={SPORT_FORMAT_LABEL[f]} on={format === f} disabled={busy || locked}
               onPress={() => { tap(); void saveFormat(f, cats); }} />
           ))}
         </View>
-        {format !== 'points' && format !== 'season' && (
+        {format !== 'points' && format !== 'onegame' && format !== 'season' && (
           <View style={{ marginTop: 8 }}>
             <Mono size={8.5} tone="faint" weight="700" track={0.1}>CATEGORIES · {cats.size} ON</Mono>
             <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>

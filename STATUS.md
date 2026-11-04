@@ -22,6 +22,37 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.737.0 — ONE GAME: pick the game each spot counts
+
+> - A new format for daily-sport leagues, ONE GAME, and the default for new NBA leagues: each roster spot counts one game a week, the one you pick before it tips off, or the auto pick (the opponent allowing the most points so far this season).
+> - The matchup panel lists your spots with the game each counts (AUTO, or LOCKED once it tips) and lets you change it; on the web and the phone.
+
+Founder: "For NBA fantasy, players need to pick the game each week that
+will count for their player in each roster spot for the weekly matchup."
+Asked: a new format with the NBA defaulting to it (not a change to points
+leagues), the best-projected game as the auto pick, and a pick that commits
+at tip-off. Core: `SportFormat` gains `onegame` (label ONE GAME),
+`defaultSportFormat('nba')`, and `effectiveSpotGame`, the one rule the
+worker and both boards decide a spot's game by: a locked game settles the
+spot; else the pick while its game is still to come; else the auto pick,
+the open game whose opponent allows the most fantasy points, earliest on a
+tie, never a postponement. 0527: `set_sport_settings` admits the format;
+`sport_team_allowed` (what each team allows per game, the sport's default
+table, written hourly by the worker from the season's finals);
+`sport_game_pick` (keyed to the player it was made for, so a new man in the
+spot starts on auto); `sport_spot_games(matchup)` for the board;
+`set_sport_game_pick` (refused once the spot counted a game, for a game
+under way, off, not this week's, or not the player's). Worker: in a onegame
+league the lock step keeps only the rows whose game is the spot's effective
+game as of the instant before it tipped, once per spot and once per player
+a period (`oneGameLocks`); the week scores as every points week. Boards:
+YOUR GAMES THIS WEEK in both SportWeekPanels with a chooser (AUTO or a game
+still to tip, each with what the opponent allows); ONE GAME on both create
+forms and the commissioner's format sheet. Migration run on a scratch
+Postgres over every refusal; `check:sports` pins the rule, the lock filter
+and the allowed table. Points, categories, roto and season leagues are
+untouched.
+
 ### v0.736.0 — College projected starters
 
 > - Before kickoff, a college game's box score and field now show each school's projected starters (QB, 2 RB, 3 WR, TE) with projected points, from our college estimate.

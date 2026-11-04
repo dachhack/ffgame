@@ -29,7 +29,7 @@ import {
 import { scheduleWeeksFor } from '@drip/core/data/league';
 import { tenureFilter, copiesBlocked, SETUP_ROSTER_SIZES, defaultRosterSize, WIN_STYLES, SETUP_INFO, type PoolTenure, type WinStyle } from '@drip/core/data/setupChoices';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
-import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
+import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, defaultSportFormat, type SportFormat } from '@drip/core/sports/league';
 import { inviteMessage } from '@drip/core/data/invite';
 import { rosterLabel } from '@drip/core/engine/classic';
 import { buildDraftPool } from '@drip/core/data/nativeLeague';
@@ -208,6 +208,7 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
   const isSport = sport !== 'nfl';
   const pickSport = (sp: Sport) => {
     setSport(sp);
+    setSportFormat(defaultSportFormat(sp)); // ONE GAME for the NBA (v0.737.0)
     setPeriodStart((d) => periodStartOnOrBefore(sp, addDays(d, 6)));
     if (sp !== 'nfl') {
       setGame('classic'); setFormat('standard');
@@ -893,9 +894,10 @@ export function Recruit({ onBack, onJoined, onCreated, onCreatedContest, initial
                 {isSport ? (
                   <View style={{ marginTop: 10, gap: 6 }}>
                     <LabelInfo label="SCORING"
-                      info={'POINTS — every stat is worth a set number, tunable on the SCORING tab.\n\nCATEGORIES — each week is won category by category (9-cat, 5x5…).\n\nROTO — no weekly winner: the season is one ranking per category over every game played.\n\nSEASON POINTS — no weekly winner: one points total per team all season; the standings are that total. Flag spots 🎯 best ball under COMMISH → LINEUP and the lineup sets itself every night.'} />
+                      info={'POINTS — every stat is worth a set number, tunable on the SCORING tab.\n\nONE GAME — points scoring, but each roster spot counts ONE game a week: the one you pick before it tips off, or the auto pick (the opponent allowing the most points). Nobody wins on schedule alone.\n\nCATEGORIES — each week is won category by category (9-cat, 5x5…).\n\nROTO — no weekly winner: the season is one ranking per category over every game played.\n\nSEASON POINTS — no weekly winner: one points total per team all season; the standings are that total. Flag spots 🎯 best ball under COMMISH → LINEUP and the lineup sets itself every night.'} />
                     <View style={{ flexDirection: 'row', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                       <Chip label="POINTS" on={sportFormat === 'points'} onPress={() => { tap(); setSportFormat('points'); }} />
+                      <Chip label="ONE GAME" on={sportFormat === 'onegame'} onPress={() => { tap(); setSportFormat('onegame'); }} />
                       <Chip label="CATEGORIES" on={sportFormat === 'cats'} onPress={() => { tap(); setSportFormat('cats'); }} />
                       <Chip label="ROTO" on={sportFormat === 'roto'} onPress={() => { tap(); setSportFormat('roto'); }} />
                       <Chip label="SEASON POINTS" on={sportFormat === 'season'} onPress={() => { tap(); setSportFormat('season'); }} />

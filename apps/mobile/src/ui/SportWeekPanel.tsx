@@ -4,13 +4,16 @@
 // same core functions the worker uses, so the number here is the number in
 // matchup_state.
 import { useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SPORTS, eligibleFor, type Sport } from '@drip/core/sports/index';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, categoryById } from '@drip/core/sports/score';
-import { sportPeriod, sportNow, isSeasonFormat, SPORT_FORMAT_LABEL, type SportLeagueSettings } from '@drip/core/sports/league';
-import { sportMatchupLines, sportLeagueGames, sportRotoStandings, type SportMatchupLine, type SportGameRow, type SportRotoRow } from '@drip/core/data/liveApi';
+import { sportPeriod, sportNow, isSeasonFormat, isOneGame, effectiveSpotGame, SPORT_FORMAT_LABEL, type SportLeagueSettings, type SpotGameOption } from '@drip/core/sports/league';
+import { sportMatchupLines, sportLeagueGames, sportRotoStandings, sportSpotGames, setSportGamePick, friendlyError, type SportMatchupLine, type SportGameRow, type SportRotoRow, type SportSpotGameRow } from '@drip/core/data/liveApi';
 import { useTheme, MONO } from '../theme.native';
 import { Card, Mono, PosPill } from './prims';
+import { Overlay } from './Overlay';
+import { InfoChip } from './InfoChip';
+import { tap, commit } from './feedback';
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', timeZone: 'UTC' });
 const fmtTip = (iso: string | null) => {
@@ -33,15 +36,22 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
   const [games, setGames] = useState<SportGameRow[]>([]);
   const [roto, setRoto] = useState<SportRotoRow[]>([]);
   const [tick, setTick] = useState(0);
+  // ONE GAME (0527): my spots with every game each player has this period.
+  const oneGame = isOneGame(settings.format);
+  const [spotGames, setSpotGames] = useState<SportSpotGameRow[]>([]);
+  const [openSpot, setOpenSpot] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     sportMatchupLines(matchupId).then((r) => { if (alive) setRows(r ?? []); }).catch(() => {});
+    if (oneGame && myRosterId != null) sportSpotGames(matchupId).then((r) => { if (alive) setSpotGames(r ?? []); }).catch(() => {});
     if (period) sportLeagueGames(leagueId, period.from, period.to).then((g) => { if (alive) setGames(g ?? []); }).catch(() => {});
     if (isSeasonFormat(settings.format)) sportRotoStandings(leagueId).then((r) => { if (alive) setRoto(r ?? []); }).catch(() => {});
     const id = setInterval(() => setTick((x) => x + 1), 60_000);
     return () => { alive = false; clearInterval(id); };
-  }, [matchupId, leagueId, period?.from, period?.to, settings.format, tick]);
+  }, [matchupId, leagueId, period?.from, period?.to, settings.format, tick, oneGame, myRosterId]);
 
   const scoring = useMemo(() => normalizeScoring(def, settings.scoring), [def, settings.scoring]);
   const side = (rid: number) => {
@@ -56,6 +66,33 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
   const today = sportNow(settings).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const slate = games.filter((g) => g.game_date === today);
   const order = myRosterId === awayRosterId ? [[away, awayRosterId], [home, homeRosterId]] as const : [[home, homeRosterId], [away, awayRosterId]] as const;
+  // Each of my spots: its games, the pick, the lock, and the game the rule
+  // counts right now (core effectiveSpotGame — what the worker locks by).
+  const nowMs = sportNow(settings).getTime();
+  type SpotGame = SpotGameOption & { date: string; home: boolean };
+  const mySpots = useMemo(() => {
+    const by = new Map<string, { slot: string; name: string; team: string; games: SpotGame[]; pick: string | null; locked: string | null }>();
+    for (const r of spotGames) {
+      if (!by.has(r.roster_slot)) by.set(r.roster_slot, { slot: r.roster_slot, name: r.full_name ?? r.player_slug, team: r.team ?? '', games: [], pick: null, locked: r.locked_game_id });
+      const sp = by.get(r.roster_slot)!;
+      if (r.game_id) {
+        sp.games.push({ gameId: r.game_id, startMs: r.start_utc ? Date.parse(r.start_utc) : Number.POSITIVE_INFINITY, opp: r.opp ?? '', allowed: r.allowed == null ? null : Number(r.allowed), status: r.status ?? 'pre', date: r.game_date ?? '', home: r.home === r.team });
+        if (r.picked) sp.pick = r.game_id;
+      }
+    }
+    return [...by.values()].sort((a, b) => a.slot.localeCompare(b.slot, undefined, { numeric: true })).map((sp) => ({ ...sp, eff: effectiveSpotGame(sp.games, sp.pick, sp.locked, nowMs) }));
+  }, [spotGames, nowMs]);
+  const gameLabel = (g: SpotGame) => `${fmtDay(g.date).split(' ')[0].toUpperCase()} ${g.home ? 'vs' : '@'} ${g.opp}`;
+  const pickGame = async (slot: string, gameId: string | null) => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await setSportGamePick(matchupId, slot, gameId);
+      if (!r?.ok) setErr(r?.error ?? 'Could not set that game.');
+      else { commit(); setOpenSpot(null); setSpotGames(await sportSpotGames(matchupId).catch(() => spotGames)); }
+    } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
+  };
+  const openSp = mySpots.find((sp) => sp.slot === openSpot) ?? null;
+  const choicesOf = (sp: { games: SpotGame[] }) => sp.games.filter((x) => x.status !== 'postponed' && x.status !== 'cancelled' && x.startMs > nowMs);
 
   return (
     <Card style={{ gap: 8 }}>
@@ -98,6 +135,35 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
         </View>
       )}
 
+      {oneGame && myRosterId != null && mySpots.length > 0 && (
+        <View style={{ gap: 3 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Mono size={8.5} tone="dim" track={0.1}>YOUR GAMES THIS WEEK · ONE PER SPOT</Mono>
+            <InfoChip title="One game a week">{'Each spot counts ONE game this week: the one you pick, or AUTO — the game against the opponent allowing the most points so far this season (with no record yet, the first game).\n\nChange it any time before that game tips off. Once it tips, that is the spot\'s game for the week, good or bad. A player can count one game a week, whichever spot he is in.'}</InfoChip>
+          </View>
+          {mySpots.map((sp) => {
+            const g = sp.eff ? sp.games.find((x) => x.gameId === sp.eff!.gameId) : null;
+            const settled = sp.eff?.via === 'locked';
+            const can = !settled && choicesOf(sp).length > 0;
+            return (
+              <View key={sp.slot} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 9.5, color: t.faint, width: 40 }}>{sp.slot}</Text>
+                <Text style={{ fontFamily: MONO, fontSize: 10.5, color: t.text, flex: 1 }} numberOfLines={1}>{sp.name} <Text style={{ color: t.faint }}>{sp.team}</Text></Text>
+                {g ? (
+                  <Pressable disabled={!can || busy} hitSlop={6} onPress={() => { tap(); setOpenSpot(sp.slot); }}
+                    style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: settled ? t.bd : t.you, borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: '700', letterSpacing: 0.4, color: settled ? t.dim : t.you }}>
+                      {gameLabel(g)}{sp.eff?.via === 'auto' ? ' · AUTO' : settled ? ' · LOCKED' : ''}{can ? ' ›' : ''}
+                    </Text>
+                  </Pressable>
+                ) : <Mono size={9} tone="faint">{sp.games.length ? 'no game left' : 'no game this week'}</Mono>}
+              </View>
+            );
+          })}
+          {!!err && <Mono size={9} tone="opp">{err}</Mono>}
+        </View>
+      )}
+
       {order.map(([s, rid]) => (
         <View key={rid} style={{ gap: 2 }}>
           <Text style={{ fontFamily: MONO, fontSize: 9, fontWeight: '700', letterSpacing: 1, color: rid === myRosterId ? t.you : t.opp }}>SEAT {rid} · {s.total.toFixed(1)}</Text>
@@ -128,7 +194,26 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
           </View>
         </View>
       )}
-      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day's line.{bb.size ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}</Mono>
+      {/* The chooser (0527): AUTO, or one of the games still to tip. */}
+      <Overlay visible={!!openSp} title={openSp ? `${openSp.slot} · ${openSp.name}` : ''} subtitle="WHICH GAME COUNTS THIS WEEK" onClose={() => setOpenSpot(null)}>
+        <View style={{ padding: 12, gap: 8 }}>
+          {openSp && [{ id: null as string | null, label: 'AUTO · the game picks', sub: (() => { const a = effectiveSpotGame(openSp.games, null, null, nowMs); const g = a ? openSp.games.find((x) => x.gameId === a.gameId) : null; return g ? gameLabel(g) : '—'; })() },
+            ...choicesOf(openSp).map((x) => ({ id: x.gameId as string | null, label: gameLabel(x), sub: x.allowed != null ? `${x.opp} allows ${x.allowed.toFixed(1)} a game` : 'no record yet' }))].map((o) => {
+            const sel = (openSp.pick ?? null) === o.id;
+            return (
+              <Pressable key={o.id ?? 'auto'} disabled={busy} onPress={() => { tap(); void pickGame(openSp.slot, o.id); }}
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.bg, opacity: pressed ? 0.8 : 1, borderWidth: StyleSheet.hairlineWidth, borderColor: sel ? t.you : t.bd, borderRadius: 8, padding: 12 })}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '700', color: t.text }}>{o.label}</Text>
+                  <Mono size={9.5}>{o.sub}</Mono>
+                </View>
+                {sel && <Mono size={9} weight="700" tone="you">✓</Mono>}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Overlay>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>{oneGame ? 'Each spot counts one game this week — pick it above or let AUTO choose; it commits when that game tips off.' : 'Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day\'s line.'}{bb.size ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}</Mono>
     </Card>
   );
 }

@@ -27,12 +27,21 @@
 //   the board shows it as it stands; a day older than yesterday is settled
 //   and only filled where it was never filled (the worker was down).
 //
+//   ONE GAME (0527, v0.737.0). In a league on the `onegame` format a spot
+//   counts one game of the period: the manager's pick, else the auto pick
+//   (core effectiveSpotGame — the opponent allowing the most fantasy points,
+//   earliest on a tie). The lock step locks a spot only when the game
+//   starting IS that game, once per period, and never a player who already
+//   counted a game this period in another spot. The week then scores as
+//   every points week does. sport_team_allowed, the auto pick's ranking, is
+//   refreshed here hourly from the season's finals.
+//
 // Pure functions first (tested in test/sports-league.mjs); the I/O at the
 // bottom is thin.
 import { db, allRows } from './supabase.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
 import { linePoints, normalizeScoring, categoryTotals, compareCategories, rotoStandings, sumLines } from '../../packages/core/src/sports/score.ts';
-import { sportPeriod, sportWeekOf, sportSettingsOf, addDays } from '../../packages/core/src/sports/league.ts';
+import { sportPeriod, sportWeekOf, sportSettingsOf, addDays, isOneGame, effectiveSpotGame } from '../../packages/core/src/sports/league.ts';
 import { assignByValue } from '../../packages/core/src/engine/classic.ts';
 import { easternDate } from './poll/sportGames.js';
 
@@ -63,6 +72,56 @@ export function locksFor(game, picks, poolTeamOf, existing, allows = () => true)
     out.push({ matchup_id: p.matchup_id, app_user_id: p.app_user_id, game_date: game.gameDate, roster_slot: p.roster_slot, player_slug: p.player_slug, game_id: game.gameId });
   }
   return out;
+}
+
+/** ONE GAME (0527): which of a started game's candidate lock rows stand.
+ *  `ctx.pickOf(matchup, user, slot)` → { player_slug, game_id } | null;
+ *  `ctx.lockedGameOf(matchup, user, slot)` → a game id the spot already
+ *  counted this period, if any; `ctx.playerCounted(matchup, user, slug)` →
+ *  the player already counted this period in any spot; `ctx.gamesOf(team)` →
+ *  the team's SpotGameOption[] for the period; `nowMs` the league's clock. */
+export function oneGameLocks(game, rows, ctx, nowMs = Date.now()) {
+  // Judged as of the instant before THIS game tipped: the worker runs after
+  // the start, and a game that has started is not one the rule may choose.
+  const asOf = game.startUtc ? Math.min(nowMs, Date.parse(game.startUtc) - 1) : nowMs;
+  return rows.filter((r) => {
+    if (ctx.lockedGameOf(r.matchup_id, r.app_user_id, r.roster_slot)) return false;
+    if (ctx.playerCounted(r.matchup_id, r.app_user_id, r.player_slug)) return false;
+    const pick = ctx.pickOf(r.matchup_id, r.app_user_id, r.roster_slot);
+    const eff = effectiveSpotGame(ctx.gamesOf(ctx.teamOf(r.player_slug)) ?? [], pick?.player_slug === r.player_slug ? pick.game_id : null, null, asOf);
+    return eff?.gameId === game.gameId;
+  });
+}
+
+/** sport_game rows → SpotGameOption[] by team (home and away alike). */
+export function spotGamesByTeam(games, allowedOf = () => null) {
+  const by = new Map();
+  for (const g of games) {
+    const startMs = g.start_utc ? Date.parse(g.start_utc) : Number.POSITIVE_INFINITY;
+    for (const [team, opp] of [[g.home, g.away], [g.away, g.home]]) {
+      if (!by.has(team)) by.set(team, []);
+      by.get(team).push({ gameId: g.game_id, startMs, opp, allowed: allowedOf(opp), status: g.status });
+    }
+  }
+  return by;
+}
+
+/** What each team ALLOWED, from the season's final box scores: fantasy
+ *  points per game under the sport's default table, keyed by the opponent
+ *  of the line's team. `lines` are game_stat_line rows with the game's
+ *  home/away joined on. */
+export function teamAllowedTable(def, lines) {
+  const pts = new Map(), games = new Map();
+  for (const l of lines) {
+    if (!l.line || !l.home || !l.away) continue;
+    const opp = l.team === l.home ? l.away : l.team === l.away ? l.home : null;
+    if (!opp) continue;
+    pts.set(opp, (pts.get(opp) ?? 0) + linePoints(def, l.line));
+    if (!games.has(opp)) games.set(opp, new Set());
+    games.get(opp).add(l.game_id);
+  }
+  return [...pts.entries()].map(([team, p]) => ({ team, games: games.get(team).size, pts_pg: Math.round((p / games.get(team).size) * 100) / 100 }))
+    .sort((a, b) => a.team.localeCompare(b.team));
 }
 
 /** Score one side from its locked slot-days. `rows` are sport_matchup_lines
@@ -279,6 +338,9 @@ export async function lockStartedGames(sport, games, now = Date.now(), offsetDay
     // A best-ball spot has no pick to lock: the fill seats it (0436). A pick
     // left in one (the spot was flagged after it was set) is ignored.
     const bb = bbSlotsOf(lg.settings_json?.roster_slots);
+    // ONE GAME (0527): the period's picks, locks and games, so a spot locks
+    // only for its effective game and only once.
+    const one = isOneGame(lg.sportSettings.format) ? await oneGameContext(lg, matchups, weeks, teamOf, now - (lg.sportSettings.replay?.offset_days ?? 0) * 86400e3) : null;
     const rows = [];
     const toLive = new Set();
     for (const g of started) {
@@ -286,7 +348,12 @@ export async function lockStartedGames(sport, games, now = Date.now(), offsetDay
       const weekIds = new Set(matchups.filter((m) => m.week === week).map((m) => m.id));
       if (!weekIds.size) continue;
       const mine = (picks ?? []).filter((p) => weekIds.has(p.matchup_id) && !bb.has(p.roster_slot));
-      for (const r of locksFor(g, mine, (slug) => teamOf.get(slug), have, allows)) { rows.push(r); have.add(`${r.matchup_id}|${r.app_user_id}|${r.game_date}|${r.roster_slot}|${r.game_id}`); }
+      let cand = locksFor(g, mine, (slug) => teamOf.get(slug), have, allows);
+      if (one) cand = oneGameLocks(g, cand, one.ctx, one.nowMs);
+      for (const r of cand) {
+        rows.push(r); have.add(`${r.matchup_id}|${r.app_user_id}|${r.game_date}|${r.roster_slot}|${r.game_id}`);
+        if (one) one.note(r);
+      }
       // The period is live once any of its games has started.
       for (const m of matchups) if (m.week === week && m.status === 'scheduled') toLive.add(JSON.stringify([m.id, g.startUtc ?? new Date(now).toISOString()]));
     }
@@ -301,6 +368,63 @@ export async function lockStartedGames(sport, games, now = Date.now(), offsetDay
     }
   }
   return locked;
+}
+
+/** The ONE GAME lock context for a league's matchups this pass (0527): the
+ *  manager picks, every lock of the periods so far, the periods' games by
+ *  team with the opponents' allowed points, and the league's clock. */
+async function oneGameContext(lg, matchups, weeks, teamOf, nowMs) {
+  const ids = matchups.map((m) => m.id);
+  const periods = weeks.map((w) => sportPeriod(w, lg.sportSettings.period_start)).filter(Boolean);
+  const from = periods.map((p) => p.from).sort()[0], to = periods.map((p) => p.to).sort().slice(-1)[0];
+  const [{ data: picks }, { data: locks }, { data: games }, { data: allowed }] = await Promise.all([
+    db().from('sport_game_pick').select('matchup_id, app_user_id, roster_slot, player_slug, game_id').in('matchup_id', ids),
+    db().from('sport_slot_lock').select('matchup_id, app_user_id, roster_slot, player_slug, game_id').in('matchup_id', ids),
+    db().from('sport_game').select('game_id, game_date, start_utc, status, home, away').eq('sport', lg.sport).eq('season', lg.season).gte('game_date', from).lte('game_date', to),
+    db().from('sport_team_allowed').select('team, pts_pg').eq('sport', lg.sport).eq('season', lg.season),
+  ]);
+  const allowedOf = new Map((allowed ?? []).map((a) => [a.team, Number(a.pts_pg)]));
+  const byTeam = spotGamesByTeam(games ?? [], (t) => allowedOf.get(t) ?? null);
+  const pickOf = new Map((picks ?? []).map((p) => [`${p.matchup_id}|${p.app_user_id}|${p.roster_slot}`, p]));
+  const lockedSlot = new Map(), counted = new Set();
+  for (const k of locks ?? []) { lockedSlot.set(`${k.matchup_id}|${k.app_user_id}|${k.roster_slot}`, k.game_id); counted.add(`${k.matchup_id}|${k.app_user_id}|${k.player_slug}`); }
+  return {
+    nowMs,
+    ctx: {
+      teamOf: (slug) => teamOf.get(slug),
+      gamesOf: (team) => byTeam.get(team),
+      pickOf: (m, u, slot) => pickOf.get(`${m}|${u}|${slot}`) ?? null,
+      lockedGameOf: (m, u, slot) => lockedSlot.get(`${m}|${u}|${slot}`) ?? null,
+      playerCounted: (m, u, slug) => counted.has(`${m}|${u}|${slug}`),
+    },
+    // A lock taken this pass counts for the next candidate in the same pass
+    // (two of a seat's spots can hold the same man only through a bug, but
+    // a doubleheader's second game must not lock the spot twice).
+    note: (r) => { lockedSlot.set(`${r.matchup_id}|${r.app_user_id}|${r.roster_slot}`, r.game_id); counted.add(`${r.matchup_id}|${r.app_user_id}|${r.player_slug}`); },
+  };
+}
+
+/** WHAT EACH TEAM ALLOWS (0527), refreshed at most hourly per sport and
+ *  season from the season's final box scores, for the auto pick. */
+const allowedRefreshed = new Map();
+export async function refreshTeamAllowed(sport, seasons, now = Date.now()) {
+  const def = SPORTS[sport];
+  let n = 0;
+  for (const season of new Set(seasons)) {
+    const key = `${sport}|${season}`;
+    if ((allowedRefreshed.get(key) ?? 0) > now - 3600e3) continue;
+    allowedRefreshed.set(key, now);
+    const finals = await allRows((from, to) => db().from('sport_game').select('game_id, home, away').eq('sport', sport).eq('season', season).eq('status', 'final').order('game_id').range(from, to));
+    if (!finals.length) continue;
+    const gameOf = new Map(finals.map((g) => [g.game_id, g]));
+    const lines = await allRows((from, to) => db().from('game_stat_line').select('game_id, team, line').eq('sport', sport).eq('season', season).eq('played', true).order('game_id').order('player_key').range(from, to));
+    const table = teamAllowedTable(def, lines.map((l) => ({ ...l, home: gameOf.get(l.game_id)?.home, away: gameOf.get(l.game_id)?.away })));
+    if (!table.length) continue;
+    const { data, error } = await db().rpc('sport_team_allowed_upsert', { p_sport: sport, p_season: season, p_rows: table });
+    if (error) { log(`${sport} allowed: ${error.message}`); allowedRefreshed.delete(key); continue; }
+    n += Number(data) || 0;
+  }
+  return n;
 }
 
 /** Which days of the live periods the fill (re)computes: yesterday and
