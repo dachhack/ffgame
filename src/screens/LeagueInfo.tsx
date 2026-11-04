@@ -103,9 +103,9 @@ export function ScoringPanel({ leagueId, bare }: { leagueId: string; bare?: bool
     return (
       <div style={box(bare)}>
         <Row k="GAME MODE" v={`${def.league} · CLASSIC`} accent />
-        <Row k="FORMAT" v={fmt === 'cats' ? 'head-to-head categories' : fmt === 'roto' ? 'rotisserie' : 'head-to-head points'} />
-        {fmt !== 'points' && ss?.categories?.length ? <Row k="CATEGORIES" v={ss.categories.map((c) => def.categories.find((x) => x.id === c)?.label ?? c.toUpperCase()).join(' · ')} /> : null}
-        {fmt === 'points' && (<>
+        <Row k="FORMAT" v={fmt === 'cats' ? 'head-to-head categories' : fmt === 'roto' ? 'rotisserie' : fmt === 'onegame' ? 'head-to-head points · one game per spot a week' : fmt === 'season' ? 'season points' : 'head-to-head points'} />
+        {fmt !== 'points' && fmt !== 'onegame' && fmt !== 'season' && ss?.categories?.length ? <Row k="CATEGORIES" v={ss.categories.map((c) => def.categories.find((x) => x.id === c)?.label ?? c.toUpperCase()).join(' · ')} /> : null}
+        {(fmt === 'points' || fmt === 'onegame' || fmt === 'season') && (<>
           <Head>POINTS PER STAT</Head>
           {def.stats.filter((st) => Number(table[st.id] ?? 0) !== 0).map((st) => (
             <Row key={st.id} k={st.label} v={`${Number(table[st.id]) > 0 ? '+' : ''}${Number(table[st.id])}`} />

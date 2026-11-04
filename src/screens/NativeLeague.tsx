@@ -30,7 +30,7 @@ import { scheduleWeeksFor } from '@drip/core/data/league';
 import { tenureFilter, copiesBlocked, SETUP_ROSTER_SIZES, defaultRosterSize, WIN_STYLES, SETUP_INFO, type PoolTenure, type WinStyle } from '@drip/core/data/setupChoices';
 import { SPORTS, SPORT_IDS, type Sport } from '@drip/core/sports/index';
 import { installSportMarketFor } from '@drip/core/sports/market';
-import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, type SportFormat } from '@drip/core/sports/league';
+import { sportLeagueSettings, currentSeason, priorSeason, periodStartOnOrBefore, sportWeekStartDow, SPORT_WEEK_START_LABEL, addDays, defaultSportFormat, type SportFormat } from '@drip/core/sports/league';
 import { myFeatures as readMyFeatures, isAdmin as readIsAdmin } from '@drip/core/data/liveApi';
 import { holdersBySlug, copyOpen, holderFor, copyWireTag } from '@drip/core/data/copies';
 import { ShotgunWeddingCard } from './ShotgunWeddingCard';
@@ -291,6 +291,7 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
   const isSport = sport !== 'nfl';
   const pickSport = (sp: Sport) => {
     setSport(sp);
+    setSportFormat(defaultSportFormat(sp)); // ONE GAME for the NBA (v0.737.0)
     // Re-anchor the first week to the sport's weekday (soccer weeks open on Tuesday).
     setPeriodStart((d) => periodStartOnOrBefore(sp, addDays(d, 6)));
     if (sp !== 'nfl') {
@@ -680,12 +681,15 @@ export function NativeCreate({ onDone, onLeague, onContest, onBack }: {
             <div className="mono" style={label}>SCORING</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
               <Chip on={sportFormat === 'points'} onClick={() => setSportFormat('points')}>POINTS</Chip>
+              <Chip on={sportFormat === 'onegame'} onClick={() => setSportFormat('onegame')}>ONE GAME</Chip>
               <Chip on={sportFormat === 'cats'} onClick={() => setSportFormat('cats')}>CATEGORIES</Chip>
               <Chip on={sportFormat === 'roto'} onClick={() => setSportFormat('roto')}>ROTO</Chip>
               <Chip on={sportFormat === 'season'} onClick={() => setSportFormat('season')}>SEASON POINTS</Chip>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--dim)', marginTop: 8, lineHeight: 1.5 }}>
-              {sportFormat === 'points'
+              {sportFormat === 'onegame'
+                ? 'One game: points scoring, but each roster spot counts ONE game a week — the one its manager picks before it tips off, or the auto pick (the opponent allowing the most points). Nobody wins on schedule alone.'
+                : sportFormat === 'points'
                 ? `Points: every stat is worth a set number (${Object.entries(sportDef.scoringDefault).slice(0, 4).map(([k, v]) => `${sportDef.stats.find((st) => st.id === k)?.short ?? k} ${v}`).join(', ')}…), tunable on the SCORING tab.`
                 : sportFormat === 'cats'
                   ? `Head-to-head categories: each week is won category by category — ${sportDef.categoriesDefault.map((c) => sportDef.categories.find((x) => x.id === c)?.short ?? c).join(', ')}.`

@@ -128,9 +128,29 @@ ok(SPORT_WEEK_BASE_LOCAL === SPORT_WEEK_BASE && weekTitle(301) === 'WEEK 1' && w
 
 // ── v0.629.0: best ball and scoped spots for a daily sport ───────────────────
 {
-  const { SPORT_FORMATS, SPORT_FORMAT_LABEL, isSeasonFormat, sportSettingsOf, sportRosterSlots, sportRelabelSlots, sportAddSlot, sportRemoveSlot, sportSlotTypeOf, sportSpotScopeLabel, sportHasTenure } = await import('../packages/core/src/sports/league.ts');
+  const { SPORT_FORMATS, SPORT_FORMAT_LABEL, isSeasonFormat, isOneGame, isPointsFormat, defaultSportFormat, effectiveSpotGame, sportLeagueSettings: sls, sportSettingsOf, sportRosterSlots, sportRelabelSlots, sportAddSlot, sportRemoveSlot, sportSlotTypeOf, sportSpotScopeLabel, sportHasTenure } = await import('../packages/core/src/sports/league.ts');
   const { leagueBestball, classicSlotsFromSpec, slotAllows, assignByValue } = await import('../packages/core/src/engine/classic.ts');
-  ok(SPORT_FORMATS.join() === 'points,cats,roto,season' && SPORT_FORMAT_LABEL.season === 'SEASON POINTS' && isSeasonFormat('roto') && isSeasonFormat('season') && !isSeasonFormat('points'), 'four formats; roto and season are the schedule-less ones');
+  ok(SPORT_FORMATS.join() === 'points,onegame,cats,roto,season' && SPORT_FORMAT_LABEL.season === 'SEASON POINTS' && SPORT_FORMAT_LABEL.onegame === 'ONE GAME' && isSeasonFormat('roto') && isSeasonFormat('season') && !isSeasonFormat('points') && !isSeasonFormat('onegame'), 'five formats; roto and season are the schedule-less ones');
+  // ONE GAME (v0.737.0): a points week where each spot counts one game.
+  ok(isOneGame('onegame') && isPointsFormat('onegame') && isPointsFormat('points') && !isPointsFormat('cats'), 'one game is a points format');
+  ok(defaultSportFormat('nba') === 'onegame' && defaultSportFormat('nhl') === 'points' && sls('nba', { periodStart: '2026-10-20' }).sport.format === 'onegame' && sls('nhl', { periodStart: '2026-10-07' }).sport.format === 'points', 'a new NBA league starts on ONE GAME; other sports on points');
+  ok(sportSettingsOf({ sport: { period_start: '2026-10-19', format: 'onegame' } })?.format === 'onegame', 'the stored format reads back');
+  {
+    const T = (d) => Date.parse(d);
+    const games = [
+      { gameId: 'mon', startMs: T('2026-10-19T23:00:00Z'), opp: 'BOS', allowed: 100, status: 'pre' },
+      { gameId: 'wed', startMs: T('2026-10-21T23:00:00Z'), opp: 'WAS', allowed: 118, status: 'pre' },
+      { gameId: 'fri', startMs: T('2026-10-23T23:00:00Z'), opp: 'UTA', allowed: 118, status: 'pre' },
+      { gameId: 'sat', startMs: T('2026-10-24T23:00:00Z'), opp: 'DEN', allowed: 125, status: 'postponed' },
+    ];
+    const sun = T('2026-10-18T12:00:00Z');
+    ok(effectiveSpotGame(games, null, null, sun)?.gameId === 'wed' && effectiveSpotGame(games, null, null, sun)?.via === 'auto', 'auto: the opponent allowing the most, earliest on a tie, never a postponement');
+    ok(effectiveSpotGame(games, 'fri', null, sun)?.via === 'pick' && effectiveSpotGame(games, 'fri', null, sun)?.gameId === 'fri', 'a manual pick wins while its game is still to come');
+    ok(effectiveSpotGame(games, 'mon', null, T('2026-10-20T12:00:00Z'))?.gameId === 'wed', 'a pick on a game that already tipped without locking falls back to auto');
+    ok(effectiveSpotGame(games, 'fri', 'mon', sun)?.via === 'locked' && effectiveSpotGame(games, 'fri', 'mon', sun)?.gameId === 'mon', 'a locked game settles the spot whatever the pick says');
+    ok(effectiveSpotGame(games.map((g) => ({ ...g, allowed: null })), null, null, sun)?.gameId === 'mon', 'with no record at all the auto pick is the first game');
+    ok(effectiveSpotGame(games, null, null, T('2026-10-25T12:00:00Z')) === null, 'nothing left to count after the last tip');
+  }
   ok(sportSettingsOf({ sport: { period_start: '2026-10-19', format: 'season' } }).format === 'season' && sportSettingsOf({ sport: { period_start: '2026-10-19', format: 'bogus' } }).format === 'points', 'the season format reads back; an unknown one is points');
   // the spot spec is the NFL SlotSpec's keys, so the board's own helpers read it
   const spec = [{ pos: ['PG', 'SG'], label: 'G', bb: true }, { pos: ['C'], label: 'C', teams: ['BOS', 'LAL'] }, { pos: ['PG', 'SG', 'SF', 'PF', 'C'], label: 'UTIL', max_exp: 0 }];

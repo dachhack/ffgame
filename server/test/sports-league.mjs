@@ -2,7 +2,7 @@
 // side scores from its locked slot-days, the points and categories verdicts,
 // and when a period is done. Pure parts only. Run from server/:
 // `npx tsx test/sports-league.mjs`.
-import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable, bbSlotsOf, dayCandidates, bestBallFill, seasonTable, bbDaysFor } from '../src/sportLeague.js';
+import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable, bbSlotsOf, dayCandidates, bestBallFill, seasonTable, bbDaysFor, oneGameLocks, spotGamesByTeam, teamAllowedTable } from '../src/sportLeague.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
 import { normalizeScoring } from '../../packages/core/src/sports/score.ts';
 import { sportPeriod, sportWeekOf, sportRosterSlots, sportLeagueSettings, mondayOnOrBefore, currentSeason, sportSettingsOf, slotCountsOf, SPORT_WEEK_BASE } from '../../packages/core/src/sports/league.ts';
@@ -145,6 +145,50 @@ ok(periodDone(per, '2026-10-26', ['2026-10-01']) && periodDone(per, '2026-11-09'
     { roster_id: 1, line: { pts: 30 } }, { roster_id: 1, line: { pts: 10 } }, { roster_id: 2, line: { pts: 25 } }, { roster_id: 3, line: null },
   ], [1, 2, 3]);
   ok(tbl.length === 3 && tbl[0].roster_id === 1 && tbl[0].points === 40 && tbl[1].points === 25 && tbl[2].points === 0 && tbl[0].totals.pts === 40 && Object.keys(tbl[0].cats).length === 0, `season points: ${tbl.map((t) => `${t.roster_id} ${t.points}`).join(', ')}`);
+}
+
+// ── ONE GAME (0527, v0.737.0) ─────────────────────────────────────────────────
+{
+  const nba = SPORTS.nba;
+  // What a team allows: BOS gave up 50 to LAL's men over one game, 20 over another to NYK; the line's own team is never charged.
+  const tbl = teamAllowedTable(nba, [
+    { game_id: 'g1', team: 'LAL', home: 'BOS', away: 'LAL', line: { pts: 30 } }, { game_id: 'g1', team: 'LAL', home: 'BOS', away: 'LAL', line: { pts: 20 } },
+    { game_id: 'g1', team: 'BOS', home: 'BOS', away: 'LAL', line: { pts: 40 } },
+    { game_id: 'g2', team: 'NYK', home: 'NYK', away: 'BOS', line: { pts: 20 } }, { game_id: 'g2', team: 'BOS', home: 'NYK', away: 'BOS', line: null },
+    { game_id: 'g3', team: 'XXX', home: 'AAA', away: 'BBB', line: { pts: 9 } },
+  ]);
+  const at = (t) => tbl.find((r) => r.team === t);
+  ok(at('BOS')?.games === 2 && at('BOS')?.pts_pg === 35 && at('LAL')?.pts_pg === 40 && at('NYK') == null && !at('AAA'), `allowed per game: ${tbl.map((r) => `${r.team} ${r.pts_pg}/${r.games}`).join(', ')}`);
+  // The period's games by team, with the opponent's allowed points.
+  const games = [
+    { game_id: 'mon', game_date: '2026-10-19', start_utc: '2026-10-19T23:00:00Z', status: 'final', home: 'NYK', away: 'BOS' },
+    { game_id: 'wed', game_date: '2026-10-21', start_utc: '2026-10-21T23:00:00Z', status: 'pre', home: 'BOS', away: 'WAS' },
+    { game_id: 'fri', game_date: '2026-10-23', start_utc: '2026-10-23T23:00:00Z', status: 'pre', home: 'UTA', away: 'BOS' },
+  ];
+  const by = spotGamesByTeam(games, (t) => ({ WAS: 118, NYK: 101 })[t] ?? null);
+  ok(by.get('BOS')?.length === 3 && by.get('BOS')[1].opp === 'WAS' && by.get('BOS')[1].allowed === 118 && by.get('WAS')?.length === 1 && by.get('UTA')[0].opp === 'BOS', 'each team sees its games with the opponent and what he allows');
+  // The lock filter. Seat 1: S1 Tatum (BOS) picked nothing (auto → WAS on Wed), S2 Brown (BOS) picked Fri, S3 Tatum again (a bug of a lineup).
+  const picks = new Map([['m|u|S2', { player_slug: 'nba-2', game_id: 'fri' }], ['m|u|S4', { player_slug: 'nba-9', game_id: 'mon' }]]);
+  const locked = new Map(), counted = new Set();
+  const ctx = {
+    teamOf: () => 'BOS', gamesOf: (t) => by.get(t),
+    pickOf: (m, u, slot) => picks.get(`${m}|${u}|${slot}`) ?? null,
+    lockedGameOf: (m, u, slot) => locked.get(`${m}|${u}|${slot}`) ?? null,
+    playerCounted: (m, u, slug) => counted.has(`${m}|${u}|${slug}`),
+  };
+  const row = (slot, slug, game) => ({ matchup_id: 'm', app_user_id: 'u', roster_slot: slot, player_slug: slug, game_id: game.game_id, game_date: game.game_date });
+  const sun = Date.parse('2026-10-18T12:00:00Z');
+  const mon = games[0], wed = games[1], fri = games[2];
+  const g = (x) => ({ gameId: x.game_id, gameDate: x.game_date, startUtc: x.start_utc });
+  ok(oneGameLocks(g(mon), [row('S1', 'nba-1', mon), row('S2', 'nba-2', mon)], ctx, sun).length === 0, 'Monday tips: neither spot counts it (auto says Wed, the pick says Fri)');
+  const wedLocks = oneGameLocks(g(wed), [row('S1', 'nba-1', wed), row('S2', 'nba-2', wed)], ctx, Date.parse('2026-10-21T23:00:00Z'));
+  ok(wedLocks.length === 1 && wedLocks[0].roster_slot === 'S1', 'Wednesday tips: the auto spot locks, the Friday pick waits');
+  locked.set('m|u|S1', 'wed'); counted.add('m|u|nba-1');
+  const friLocks = oneGameLocks(g(fri), [row('S1', 'nba-1', fri), row('S2', 'nba-2', fri), row('S3', 'nba-1', fri)], ctx, Date.parse('2026-10-23T23:00:00Z'));
+  ok(friLocks.length === 1 && friLocks[0].roster_slot === 'S2', 'Friday tips: the pick locks; a spot already counted, and a player already counted elsewhere, do not');
+  // A pick made for another player (the spot changed hands) is void: auto applies to the new man.
+  const swapped = oneGameLocks(g(wed), [row('S4', 'nba-3', wed)], ctx, Date.parse('2026-10-21T23:00:00Z'));
+  ok(swapped.length === 1, 'a pick keyed to a former occupant is ignored and the new player takes the auto game');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport league checks passed');

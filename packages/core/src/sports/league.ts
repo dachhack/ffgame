@@ -22,9 +22,19 @@ export const SPORT_WEEK_BASE = 300;
  *  over every locked slot-day (sport_roto, computed by the worker) ·
  *  season (v0.629.0): no weekly result counts — the season is one total of
  *  points over every locked slot-day (the same table, points only). */
-export type SportFormat = 'points' | 'cats' | 'roto' | 'season';
-export const SPORT_FORMATS: SportFormat[] = ['points', 'cats', 'roto', 'season'];
-export const SPORT_FORMAT_LABEL: Record<SportFormat, string> = { points: 'POINTS', cats: 'H2H CATEGORIES', roto: 'ROTO', season: 'SEASON POINTS' };
+export type SportFormat = 'points' | 'onegame' | 'cats' | 'roto' | 'season';
+export const SPORT_FORMATS: SportFormat[] = ['points', 'onegame', 'cats', 'roto', 'season'];
+export const SPORT_FORMAT_LABEL: Record<SportFormat, string> = { points: 'POINTS', onegame: 'ONE GAME', cats: 'H2H CATEGORIES', roto: 'ROTO', season: 'SEASON POINTS' };
+/** ONE GAME (v0.737.0, founder: "players need to pick the game each week
+ *  that will count for their player in each roster spot"): a points week
+ *  where each starting spot counts ONE game of the period, the one its
+ *  manager picked (or the auto pick), not every game the starter played.
+ *  Scored as points; the difference is which slot-days get locked. */
+export const isOneGame = (f: SportFormat | null | undefined): boolean => f === 'onegame';
+/** A format whose weekly score is a points total (the sum of locked slot-days). */
+export const isPointsFormat = (f: SportFormat | null | undefined): boolean => f === 'points' || f === 'onegame';
+/** The format a new league starts on: ONE GAME for the NBA, points elsewhere. */
+export const defaultSportFormat = (sport: Sport): SportFormat => (sport === 'nba' ? 'onegame' : 'points');
 /** A format with no weekly winner: the standings are the season table. */
 export const isSeasonFormat = (f: SportFormat | null | undefined): boolean => f === 'roto' || f === 'season';
 
@@ -194,7 +204,7 @@ export function sportLeagueSettings(sport: Sport, opts: { periodStart: string; w
     ? { season: opts.replay.season, offset_days: daysBetween(start, periodStartOnOrBefore(sport, opts.replay.anchor ?? new Date().toISOString().slice(0, 10))) }
     : null;
   const sportBlock: SportLeagueSettings = {
-    format: opts.format ?? 'points',
+    format: opts.format ?? defaultSportFormat(sport),
     categories: opts.categories ?? def.categoriesDefault,
     scoring: opts.scoring ?? {},
     period_start: start,
@@ -227,7 +237,7 @@ export function sportSettingsOf(settings: Record<string, unknown> | null | undef
   const s = settings?.sport as Partial<SportLeagueSettings> | undefined;
   if (!s || typeof s !== 'object' || typeof s.period_start !== 'string') return null;
   return {
-    format: s.format === 'cats' ? 'cats' : s.format === 'roto' ? 'roto' : s.format === 'season' ? 'season' : 'points',
+    format: s.format === 'cats' ? 'cats' : s.format === 'roto' ? 'roto' : s.format === 'season' ? 'season' : s.format === 'onegame' ? 'onegame' : 'points',
     categories: Array.isArray(s.categories) ? s.categories.filter((c): c is string => typeof c === 'string') : [],
     scoring: s.scoring && typeof s.scoring === 'object' ? (s.scoring as Record<string, number>) : {},
     period_start: s.period_start,
@@ -252,3 +262,26 @@ export function currentSeason(sport: Sport, now: Date = new Date()): string {
 
 /** A locked slot-day with the line the player posted (or none). */
 export interface LockedSlotLine { slot: string; date: string; playerKey: string; line: StatLine | null }
+
+// ── ONE GAME: which game a spot counts (v0.737.0) ────────────────────────────
+/** A game of the period as the rule sees it: when it starts, who the
+ *  opponent is, and how many fantasy points that opponent allows per game
+ *  (sport_team_allowed; null before any final). */
+export interface SpotGameOption { gameId: string; startMs: number; opp: string; allowed: number | null; status: string }
+
+/** THE EFFECTIVE GAME of one starting spot, decided the same way on the
+ *  worker (at tip-off, to lock) and on the boards (to show):
+ *    1. a game already locked for the spot this period — the spot is settled;
+ *    2. the manager's pick, while that game has not started;
+ *    3. the auto pick: among the games not yet started, the one whose
+ *       opponent allows the most fantasy points (ties, and no data at all,
+ *       go to the earliest tip), so with no record it is the first game.
+ *  Null when nothing is left to count. A postponed or cancelled game is
+ *  never chosen. `nowMs` is the league's clock. */
+export function effectiveSpotGame(games: readonly SpotGameOption[], pick: string | null | undefined, lockedGameId: string | null | undefined, nowMs: number): { gameId: string; via: 'locked' | 'pick' | 'auto' } | null {
+  if (lockedGameId) return { gameId: lockedGameId, via: 'locked' };
+  const open = games.filter((g) => g.status !== 'postponed' && g.status !== 'cancelled' && g.startMs > nowMs);
+  if (pick && open.some((g) => g.gameId === pick)) return { gameId: pick, via: 'pick' };
+  const best = [...open].sort((a, b) => (b.allowed ?? -1) - (a.allowed ?? -1) || a.startMs - b.startMs)[0];
+  return best ? { gameId: best.gameId, via: 'auto' } : null;
+}

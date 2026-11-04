@@ -4721,6 +4721,17 @@ export const collegeDirectory = (positions: string[] = ['QB', 'RB', 'WR', 'TE'],
 export interface SportMatchupLine { app_user_id: string; roster_id: number; game_date: string; roster_slot: string; player_slug: string; game_id: string; status: string | null; line: Record<string, number> | null; full_name: string | null; team: string | null; pos: string | null }
 export const sportMatchupLines = (matchupId: string) =>
   rpc<SportMatchupLine[]>('sport_matchup_lines', { p_matchup: matchupId });
+/** ONE GAME (0527, v0.737.0): the caller's spots in a matchup, one row per
+ *  game of the period the spot's player has (a spot with no game gives one
+ *  row with a null game), with the opponent's allowed points, the pick and
+ *  the lock. The board decides the effective game with core
+ *  effectiveSpotGame, the worker's own rule. */
+export interface SportSpotGameRow { roster_slot: string; player_slug: string; full_name: string | null; team: string | null; game_id: string | null; game_date: string | null; start_utc: string | null; status: string | null; home: string | null; away: string | null; opp: string | null; allowed: number | null; picked: boolean; locked_game_id: string | null }
+export const sportSpotGames = (matchupId: string) => rpc<SportSpotGameRow[]>('sport_spot_games', { p_matchup: matchupId });
+/** Record (or clear, with null) the game a spot counts this week. Refused
+ *  once the spot has counted a game or for a game under way. */
+export const setSportGamePick = (matchupId: string, slot: string, gameId: string | null) =>
+  rpc<{ ok: boolean; error?: string; game_id?: string | null }>('set_sport_game_pick', { p_matchup: matchupId, p_slot: slot, p_game_id: gameId });
 export interface SportGameRow { game_id: string; game_date: string; start_utc: string | null; status: string; away: string; home: string; away_score: number | null; home_score: number | null; clock: string | null }
 export const sportLeagueGames = (leagueId: string, from: string, to: string) =>
   rpc<SportGameRow[]>('sport_league_games', { p_league_id: leagueId, p_from: from, p_to: to });
@@ -4745,7 +4756,7 @@ export const sportRotoStandings = (leagueId: string) =>
   rpc<SportRotoRow[]>('sport_roto_standings', { p_league_id: leagueId });
 /** The commissioner's sport settings (0428): scoring any time; format,
  *  categories and the calendar until the season is under way. */
-export const setSportSettings = (leagueId: string, patch: { scoring?: Record<string, number>; format?: 'points' | 'cats' | 'roto' | 'season'; categories?: string[]; period_start?: string; weeks?: number }) =>
+export const setSportSettings = (leagueId: string, patch: { scoring?: Record<string, number>; format?: 'points' | 'onegame' | 'cats' | 'roto' | 'season'; categories?: string[]; period_start?: string; weeks?: number }) =>
   tracked(rpc<{ ok: boolean; error?: string; sport?: Record<string, unknown> }>('set_sport_settings',
     { p_league_id: leagueId, p_patch: patch }),
     Ev.commishAction, { tool: 'sport_settings', count: Object.keys(patch).length });

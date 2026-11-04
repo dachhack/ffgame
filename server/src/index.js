@@ -61,7 +61,7 @@ import { tickSports } from './poll/sportGames.js';
 import { loadAdapters, providerOf } from './sports/index.js';
 import { syncSportDirectory } from './poll/sportDirectory.js';
 import { sweepSportMarket } from './poll/sportMarket.js';
-import { lockStartedGames, resolveSportLeagues, sportReplayClocks } from './sportLeague.js';
+import { lockStartedGames, resolveSportLeagues, sportReplayClocks, refreshTeamAllowed, sportLeagues } from './sportLeague.js';
 import { currentSeason } from '../../packages/core/src/sports/league.ts';
 import { weekReportRelease } from '../../packages/core/src/data/weekReport.ts';
 import { db } from './supabase.js';
@@ -1212,6 +1212,9 @@ async function main() {
         // Then the leagues (0426): lock what just started, score what is live.
         for (const sport of config.sports) {
           try {
+            // ONE GAME (0527): the auto pick ranks opponents by what they
+            // allow; refreshed hourly from the finals, before the locks.
+            try { await refreshTeamAllowed(sport, (await sportLeagues(sport)).map((l) => l.season)); } catch (e) { log(`sport allowed ${sport}:`, e.message); }
             let locked = await lockStartedGames(sport, r.games[sport] ?? []);
             for (const b of r.replays?.[sport] ?? []) locked += await lockStartedGames(sport, b.games, b.nowMs, b.offsetDays);
             const c = await resolveSportLeagues(sport);
