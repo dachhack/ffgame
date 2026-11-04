@@ -2,7 +2,7 @@
 // side scores from its locked slot-days, the points and categories verdicts,
 // and when a period is done. Pure parts only. Run from server/:
 // `npx tsx test/sports-league.mjs`.
-import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable, bbSlotsOf, dayCandidates, bestBallFill, seasonTable, bbDaysFor, oneGameLocks, spotGamesByTeam, teamAllowedTable } from '../src/sportLeague.js';
+import { startedGames, locksFor, sideScore, scoreMatchup, periodDone, slotAllowsFor, rotoTable, bbSlotsOf, dayCandidates, bestBallFill, seasonTable, bbDaysFor, oneGameLocks, spotGamesByTeam, teamAllowedTable, weekCandidates } from '../src/sportLeague.js';
 import { SPORTS } from '../../packages/core/src/sports/index.ts';
 import { normalizeScoring } from '../../packages/core/src/sports/score.ts';
 import { sportPeriod, sportWeekOf, sportRosterSlots, sportLeagueSettings, mondayOnOrBefore, currentSeason, sportSettingsOf, slotCountsOf, SPORT_WEEK_BASE } from '../../packages/core/src/sports/league.ts';
@@ -189,6 +189,28 @@ ok(periodDone(per, '2026-10-26', ['2026-10-01']) && periodDone(per, '2026-11-09'
   // A pick made for another player (the spot changed hands) is void: auto applies to the new man.
   const swapped = oneGameLocks(g(wed), [row('S4', 'nba-3', wed)], ctx, Date.parse('2026-10-21T23:00:00Z'));
   ok(swapped.length === 1, 'a pick keyed to a former occupant is ignored and the new player takes the auto game');
+}
+
+// ── best of the week (0528) ──────────────────────────────────────────────────
+{
+  const nba = SPORTS.nba;
+  const week = [
+    { player_slug: 'nba-1', game_id: 'g1', game_date: '2026-11-09', played: true, line: { pts: 30 } },   // C: 30 Mon, 44 Wed
+    { player_slug: 'nba-1', game_id: 'g3', game_date: '2026-11-11', played: true, line: { pts: 44 } },
+    { player_slug: 'nba-2', game_id: 'g1', game_date: '2026-11-09', played: true, line: { pts: 20 } },   // PG: 20 Mon, 20 Fri (earliest tie wins)
+    { player_slug: 'nba-2', game_id: 'g5', game_date: '2026-11-13', played: true, line: { pts: 20 } },
+    { player_slug: 'nba-3', game_id: 'g2', game_date: '2026-11-10', played: true, line: { pts: 25 } },   // SG: 25
+    { player_slug: 'nba-4', game_id: 'g2', game_date: '2026-11-10', played: false, line: { pts: 0 } },   // DNP
+    { player_slug: 'nba-5', game_id: 'g6', game_date: '2026-11-14', played: true, line: null },          // not posted yet
+  ];
+  const cands = weekCandidates(nba, normalizeScoring(nba, {}), week);
+  ok(cands.map((c) => `${c.slug}:${c.value}@${c.date}`).join() === 'nba-1:44@2026-11-11,nba-3:25@2026-11-10,nba-2:20@2026-11-09', `each man at his best single game (${cands.map((c) => `${c.slug} ${c.value} ${c.date}`).join(', ')}); the DNP and the unposted game are out`);
+  ok(weekCandidates(nba, normalizeScoring(nba, {}), week, new Set(['nba-1'])).length === 2, 'a man started by hand is not a candidate');
+  const specs = [{ pos: ['PG'], bb: true }, { pos: ['C'], bb: true }, { pos: ['PG', 'SG', 'SF', 'PF', 'C'], bb: true }];
+  const elig = { 'nba-1': ['C'], 'nba-2': ['PG'], 'nba-3': ['SG'] };
+  const rows = bestBallFill(bbSlotsOf(specs), cands, slotAllowsFor(specs, (s) => elig[s]));
+  const at = (slot) => rows.filter((r) => r.roster_slot === slot).map((r) => `${r.player_slug}/${r.game_id}/${r.game_date}`).join();
+  ok(rows.length === 3 && at('S1') === 'nba-2/g1/2026-11-09' && at('S2') === 'nba-1/g3/2026-11-11' && at('S3') === 'nba-3/g2/2026-11-10', `one row per spot, each on its own game's date (${rows.map((r) => `${r.roster_slot} ${at(r.roster_slot)}`).join('; ')})`);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall sport league checks passed');

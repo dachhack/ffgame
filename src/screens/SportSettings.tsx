@@ -100,7 +100,7 @@ export function SportSettings({ leagueId, sport, initial, locked }: {
           {format === 'points'
             ? 'Each week is the sum of every locked starter\'s points, head-to-head.'
             : format === 'onegame'
-            ? 'Points, but each roster spot counts ONE game a week: the one its manager picks before it tips off, or the auto pick (the opponent allowing the most points so far). Once the game tips, it is the spot\'s game.'
+            ? 'Points, but each roster spot counts ONE game a week: the one its manager picks before it tips off, or the auto pick (the opponent allowing the most points so far). Once the game tips, it is the spot\'s game. A 🎯 best-ball spot counts its best single game of the week.'
             : format === 'cats'
               ? 'Each week is won category by category from both sides\' summed lines; ratios (FG%, ERA…) are made from the totals.'
               : format === 'season'

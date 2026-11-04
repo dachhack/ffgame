@@ -139,7 +139,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
         <View style={{ gap: 3 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Mono size={8.5} tone="dim" track={0.1}>YOUR GAMES THIS WEEK · ONE PER SPOT</Mono>
-            <InfoChip title="One game a week">{'Each spot counts ONE game this week: the one you pick, or AUTO — the game against the opponent allowing the most points so far this season (with no record yet, the first game).\n\nChange it any time before that game tips off. Once it tips, that is the spot\'s game for the week, good or bad. A player can count one game a week, whichever spot he is in.'}</InfoChip>
+            <InfoChip title="One game a week">{'Each spot counts ONE game this week: the one you pick, or AUTO — the game against the opponent allowing the most points so far this season (with no record yet, the first game).\n\nChange it any time before that game tips off. Once it tips, that is the spot\'s game for the week, good or bad. A player can count one game a week, whichever spot he is in.' + (bb.size ? '\n\nA 🎯 best-ball spot counts its best single game of the week from your whole roster, settled as games land.' : '')}</InfoChip>
           </View>
           {mySpots.map((sp) => {
             const g = sp.eff ? sp.games.find((x) => x.gameId === sp.eff!.gameId) : null;
@@ -213,7 +213,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
           })}
         </View>
       </Overlay>
-      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>{oneGame ? 'Each spot counts one game this week — pick it above or let AUTO choose; it commits when that game tips off.' : 'Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day\'s line.'}{bb.size ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}</Mono>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>{oneGame ? 'Each spot counts one game this week — pick it above or let AUTO choose; it commits when that game tips off.' + (bb.size ? ' A 🎯 spot counts its best single game of the week.' : '') : 'Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day\'s line.'}{bb.size && !oneGame ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}</Mono>
     </Card>
   );
 }

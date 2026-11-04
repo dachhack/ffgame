@@ -271,6 +271,20 @@ export function dayCandidates(def, scoring, rows, taken = new Set()) {
  *  arrangement that fills every spot it can (assignByValue, the NFL fill's
  *  own matching), one player one spot. `bbSlots` are the slot names; `allows`
  *  is slotAllowsFor's. Returns lock rows, one per game the player had. */
+/** BEST OF THE WEEK (0528, ONE GAME leagues): a player's value is his single
+ *  best posted game of the period, not the sum — the one game the spot will
+ *  count. Same shape as dayCandidates, with the game's date carried. */
+export function weekCandidates(def, scoring, rows, taken = new Set()) {
+  const by = new Map();
+  for (const r of rows) {
+    if (!r.player_slug || taken.has(r.player_slug) || !r.line || r.played === false) continue;
+    const v = Math.round(linePoints(def, r.line, scoring) * 100) / 100;
+    const c = by.get(r.player_slug);
+    if (!c || v > c.value || (v === c.value && r.game_date < c.date)) by.set(r.player_slug, { slug: r.player_slug, value: v, games: [r.game_id], date: r.game_date });
+  }
+  return [...by.values()].sort((a, b) => b.value - a.value || a.slug.localeCompare(b.slug));
+}
+
 export function bestBallFill(bbSlots, cands, allows) {
   const order = [...bbSlots];
   if (!order.length || !cands.length) return [];
@@ -280,7 +294,7 @@ export function bestBallFill(bbSlots, cands, allows) {
   held.forEach((ci, si) => {
     if (ci < 0) return;
     const c = cands[ci];
-    for (const g of c.games) out.push({ roster_slot: order[si], player_slug: c.slug, game_id: g });
+    for (const g of c.games) out.push({ roster_slot: order[si], player_slug: c.slug, game_id: g, ...(c.date ? { game_date: c.date } : {}) });
   });
   return out;
 }
@@ -476,6 +490,22 @@ export async function fillBestBall(lg, def, matchups, today) {
       const held = (locks ?? []).filter((k) => k.matchup_id === m.id && k.app_user_id === user);
       const filled = new Set(held.filter((k) => bb.has(k.roster_slot)).map((k) => k.game_date));
       const manualPicked = new Set((picks ?? []).filter((p) => p.matchup_id === m.id && p.app_user_id === user && !bb.has(p.roster_slot) && p.player_slug).map((p) => p.player_slug));
+      // BEST OF THE WEEK (0528): in a ONE GAME league a 🎯 spot counts one
+      // game — the roster's best single posted game of the period, one
+      // player per spot, redone every pass while the week runs. A man who
+      // locked in a manual spot this week is not the fill's to take.
+      if (isOneGame(lg.sportSettings.format)) {
+        const taken = new Set([...manualPicked, ...held.filter((k) => !bb.has(k.roster_slot)).map((k) => k.player_slug)]);
+        const cands = weekCandidates(def, scoring, seatRows.filter((r) => r.game_date >= period.from && r.game_date <= period.to), taken);
+        const rows = bestBallFill(bb, cands, allows);
+        const want = rows.map((r) => `${r.roster_slot}|${r.player_slug}|${r.game_id}|${r.game_date}`).sort().join(';');
+        const have = held.filter((k) => bb.has(k.roster_slot)).map((k) => `${k.roster_slot}|${k.player_slug}|${k.game_id}|${k.game_date}`).sort().join(';');
+        if (want === have) continue;
+        const { error: wErr } = await db().rpc('sport_bb_write_week_svc', { p_matchup: m.id, p_user: user, p_from: period.from, p_to: period.to, p_slots: [...bb], p_rows: rows });
+        if (wErr) { log(`${lg.sport} ${m.id}: best-of-week write: ${wErr.message}`); continue; }
+        written++;
+        continue;
+      }
       for (const date of bbDaysFor([period], today, filled)) {
         // One player, one spot a day: a man a manager started (or who locked
         // in a manual spot today) is not the fill's to take.
