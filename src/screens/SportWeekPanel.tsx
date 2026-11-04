@@ -87,7 +87,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
       if (!by.has(k)) by.set(k, { slot: k, slug: r.player_slug, name: r.full_name ?? r.player_slug, team: r.team ?? '', games: [], pick: null, locked: r.locked_game_id });
       const sp = by.get(k)!;
       if (r.game_id) {
-        sp.games.push({ gameId: r.game_id, startMs: r.start_utc ? Date.parse(r.start_utc) : Number.POSITIVE_INFINITY, opp: r.opp ?? '', allowed: r.allowed == null ? null : Number(r.allowed), status: r.status ?? 'pre', date: r.game_date ?? '', home: r.home === r.team });
+        sp.games.push({ gameId: r.game_id, startMs: r.start_utc ? Date.parse(r.start_utc) : Number.POSITIVE_INFINITY, opp: r.opp ?? '', allowed: r.allowed == null ? null : Number(r.allowed), status: r.status ?? 'pre', date: r.game_date ?? '', home: r.home === r.team }); // team-code: same source — sport_game and league_pool both carry the sport feed's tricode (0424)
         if (r.picked) sp.pick = r.game_id;
       }
     }

@@ -114,7 +114,7 @@ export function teamAllowedTable(def, lines) {
   const pts = new Map(), games = new Map();
   for (const l of lines) {
     if (!l.line || !l.home || !l.away) continue;
-    const opp = l.team === l.home ? l.away : l.team === l.away ? l.home : null;
+    const opp = l.team === l.home ? l.away : l.team === l.away ? l.home : null; // team-code: same source — game_stat_line.team and sport_game home/away are one feed's tricodes (0424)
     if (!opp) continue;
     pts.set(opp, (pts.get(opp) ?? 0) + linePoints(def, l.line));
     if (!games.has(opp)) games.set(opp, new Set());
