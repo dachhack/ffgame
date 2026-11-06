@@ -133,6 +133,34 @@ export async function repollStaleLive(sport, now = new Date()) {
   return moved;
 }
 
+/** THE SCHEDULE AHEAD (v0.737.2). The tick polls only yesterday and today,
+ *  so a ONE GAME league (0527) had nothing to pick from: a spot's later
+ *  games did not exist until their own day. This writes the schedule rows
+ *  (status 'pre', no box fetch) for the next AHEAD_DAYS days — the rest of
+ *  this period and all of the next — at most every AHEAD_EVERY_MS per sport
+ *  and clock, so tip times and postponements stay fresh. */
+export const AHEAD_DAYS = 14;
+export const AHEAD_EVERY_MS = 3 * 3600e3;
+const aheadAt = new Map();   // `${sport}|${season ?? 'live'}|${offsetDays}` → last pass ms
+export function aheadDue(key, nowMs, at = aheadAt) {
+  const last = at.get(key);
+  return last == null || nowMs - last >= AHEAD_EVERY_MS;
+}
+export async function scheduleAhead(sport, now = new Date(), replay = null, { wallMs = Date.now(), at = aheadAt, poll = pollSportDay } = {}) {
+  const key = `${sport}|${replay?.season ?? 'live'}|${replay?.offsetDays ?? 0}`;
+  if (!aheadDue(key, wallMs, at)) return null;
+  at.set(key, wallMs);
+  let games = 0, errors = 0;
+  for (let off = 1; off <= AHEAD_DAYS; off++) {
+    const date = easternDate(now, off);
+    try { games += (await poll(sport, date, replay ? { replay: { season: replay.season, nowMs: now.getTime() } } : {})).games; }
+    catch (e) { errors++; log(`${sport} ahead ${date}: ${e.message}`); }
+  }
+  // A pass that failed outright tries again next tick, not in three hours.
+  if (errors === AHEAD_DAYS) at.delete(key);
+  return { games, errors };
+}
+
 /** Every configured sport, today and yesterday (a late West-coast final
  *  lands after ET midnight). Returns whether any game is live (the caller
  *  tightens its cadence), the next start still ahead (so it can wake for
@@ -184,7 +212,15 @@ export async function tickSports(sports, now = new Date(), clocks = {}) {
         }
       }
       replays[sport].push(batch);
+      try {
+        const a = await scheduleAhead(sport, vnow, { season: clock.season, offsetDays: clock.offsetDays });
+        if (a) log(`${sport} replay ${clock.season} ahead: ${a.games} games${a.errors ? `, ${a.errors} errors` : ''}`);
+      } catch (e) { log(`${sport} replay ${clock.season} ahead: ${e.message}`); }
     }
+    try {
+      const a = await scheduleAhead(sport, now);
+      if (a) log(`${sport} ahead ${AHEAD_DAYS}d: ${a.games} games${a.errors ? `, ${a.errors} errors` : ''}`);
+    } catch (e) { log(`${sport} ahead: ${e.message}`); }
     try { const moved = await repollStaleLive(sport, now); if (moved) log(`${sport}: ${moved} stale live game(s) closed`); }
     catch (e) { log(`${sport} stale: ${e.message}`); }
   }

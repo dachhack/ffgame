@@ -213,7 +213,7 @@ export function SportWeekPanel({ leagueId, matchupId, week, sport, settings, hom
           })}
         </View>
       </Overlay>
-      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>{oneGame ? 'Each spot counts one game this week — pick it above or let AUTO choose; it commits when that game tips off.' + (bb.size ? ' A 🎯 spot counts its best single game of the week.' : '') : 'Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day\'s line.'}{bb.size && !oneGame ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}</Mono>
+      <Mono size={8.5} tone="faint" style={{ lineHeight: 13 }}>{oneGame ? (mySpots.some((sp) => sp.games.length > 0) ? 'Each spot counts one game this week — pick it above or let AUTO choose; it commits when that game tips off.' : 'Each spot counts one game this week — the game picker shows here once the week\'s games load. Pick nothing and AUTO chooses.') + (bb.size ? ' A 🎯 spot counts its best single game of the week.' : '') : 'Set the lineup below any time. A player locks in the slot he is in when his game starts and scores that day\'s line.'}{bb.size && !oneGame ? ' A 🎯 spot fills itself each night with your top eligible scorer, and moves as box scores land until the day is done.' : ''}{settings.format === 'season' ? ' No weekly winner here: the standings are the season total.' : ''}</Mono>
     </Card>
   );
 }
