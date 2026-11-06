@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.737.2 — ONE GAME: the week's games are there to pick
+
+> - In a ONE GAME league, every game of the week now shows in the game picker ahead of time, not just today's, so you can choose which one counts before the week starts.
+
+A member, on BB Time's Week 1 (Mon 11/9 – Sun 11/15) on Fri 11/6: "How do I
+pick the one game?" The picker lists a spot's games from `sport_game`, and
+the tick (`tickSports`) only polled yesterday and today, so a week's later
+games did not exist until their own day — before the week, no picker at all
+(the board's NO SLATE), and mid-week only the games through today. New
+`scheduleAhead` writes the schedule rows (pre, no box fetch) for the next 14
+days — the rest of this period and all of the next — at most every three
+hours per sport and clock (replay clocks too, read as pre); a pass that fails
+outright retries next tick. The lock pass still sees only today's games.
+The panels' footer no longer says "pick it above" when there is no picker yet.
+`test/sports-poller.mjs` pins the days asked, the throttle and the retry.
+
 ### v0.737.1 — Best ball, best of the week
 
 > - In a ONE GAME league, a 🎯 best-ball spot now counts its best single game of the week from your whole roster (one player per spot), instead of filling every night.
