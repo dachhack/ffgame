@@ -148,6 +148,14 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
   // THE SHOP AND THE HAND (v0.688.0): what the seat has bought and not yet played, and the shop sheet
   const [inventory, setInventory] = useState<Record<string, number>>({});
   const [shop, setShop] = useState(false);
+  // THE PICK, ASKED IN THE SHEET (v0.737.3, founder: "There's a huge delay from
+  // picking your player to the confirm screen"). A card tapped in the pick
+  // sheet asked through the phone's own alert, raised over the sheet's Modal —
+  // a second native window, and it came up late. The same choice (add or swap,
+  // or his game log) is now a bar in the sheet's own footer: plain views, drawn
+  // on the tap.
+  type SheetAsk = { p: { slug: string; name: string; pos: string; team: string | null }; sub?: string; act: { label: string; run: () => void } | null };
+  const [sheetAsk, setSheetAsk] = useState<SheetAsk | null>(null);
 
   const load = useCallback(async () => {
     const s = await contestState(leagueId, weekProp, '2026', rosterId);
@@ -321,7 +329,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
     setPicks(keep);
   };
   const openSheet = (slot: string | 'any') => {
-    setActive(slot); setSearch(''); setTeam('');
+    setActive(slot); setSearch(''); setTeam(''); setSheetAsk(null);
     const d = slot === 'any' ? null : slots.find((x) => x.slot === slot);
     setTab(d && d.pos.length === 1 ? d.pos[0] : 'ALL');
   };
@@ -346,7 +354,7 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
     for (const [s, v] of Object.entries(next)) if (v === slug) next[s] = null;
     next[slot] = slug;
     setPicks(next);
-    setActive(null);
+    setActive(null); setSheetAsk(null);
   };
   // DRAG A CARD (v0.700.0, founder: "Long press on a card and you can drag it to a trash can or any eligible
   // swappable spot. If you move it to a spot that can't swap back trash that card with a info note about what will
@@ -615,7 +623,20 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
       </ScrollView>
 
       {/* THE PICK SHEET */}
-      <Overlay visible={!!active} onClose={() => setActive(null)}
+      <Overlay visible={!!active} onClose={() => { setActive(null); setSheetAsk(null); }}
+        footer={sheetAsk ? (
+          <View style={{ gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+              <Text numberOfLines={1} style={{ fontSize: fs(15), fontWeight: '700', color: t.text, flexShrink: 1 }}>{sheetAsk.p.name}</Text>
+              {!!sheetAsk.sub && <Mono size={9} tone="dim" style={{ flex: 1 }} numberOfLines={2}>{sheetAsk.sub}</Mono>}
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {sheetAsk.act && <Chip on label={sheetAsk.act.label} onPress={() => { tap(); sheetAsk.act!.run(); }} />}
+              <Chip label="GAME LOG" onPress={() => { tap(); logOf(sheetAsk.p); }} />
+              <Chip dim label="CANCEL" onPress={() => setSheetAsk(null)} />
+            </View>
+          </View>
+        ) : undefined}
         title={activeDef ? `${labels[activeDef.slot]}${bull && !isTotal && theCard ? ` · aim at ${theCard.targets[activeDef.slot]}` : ''}` : 'ANY SPOT'}
         subtitle={activeDef ? `ROOM ${fmt$(Math.max(0, roomFor(ctx, activeDef.slot, salaryOf)))} · ${fmt$(bl.left)} LEFT` : `${fmt$(bl.left)} LEFT · LANDS IN THE TIGHTEST OPEN SPOT`}>
         {active && (
@@ -661,8 +682,8 @@ export function ContestSquad({ leagueId, week: weekProp, onBack, after, onMatchu
                           const reason = lock ? 'His game has locked' : taken ? `Already in ${labels[taken]}` : why ?? (fits && !afford ? `Over budget by ${fmt$(over)}` : undefined);
                           const mg = opponentMatchupGrade(slate.get(p.team)?.opp, p.pos, dvp);
                           const vs = [gameLine(p.team, slate), mg ? `${MATCHUP_BAND_WORD[mg.band]} matchup ${matchupGradeLabel(mg)}` : ''].filter(Boolean).join(' · ');
-                          askCard(p, [ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason, vs].filter(Boolean).join('\n') || undefined,
-                            ok ? { label: holder ? `Swap in for ${holder.name}` : `Add${land ? ` to ${land}` : ''}`, run: () => put(p.slug, slot) } : null);
+                          setSheetAsk({ p, sub: [ok ? `${fmt$(p.salary)} · proj ${projWord(p)}` : reason, vs].filter(Boolean).join(' · ') || undefined,
+                            act: ok ? { label: holder ? `SWAP IN FOR ${holder.name.toUpperCase()}` : `ADD${land ? ` TO ${land}` : ''}`, run: () => put(p.slug, slot) } : null });
                         }} style={{ width: tableCardSize().w, alignItems: 'center', gap: 2, opacity: ok ? 1 : 0.45 }}>
                           <CardFace slug={p.slug} name={p.name} pos={p.pos} team={p.team} slot={active === 'any' && land && ok ? `→ ${land}` : undefined} mine locked={lock} foot={fmt$(p.salary)} />
                           <MatchupLine team={p.team} pos={p.pos} slate={slate} dvp={dvp} />

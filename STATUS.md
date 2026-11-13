@@ -22,6 +22,20 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.737.3 — The pick asks in the sheet
+
+> - In a weekly contest, tapping a player in the pick list now shows Add (or Swap) and Game log right at the bottom of the list, straight away, instead of a pop-up that was slow to appear.
+
+Founder, from the Weekly Cointest WR3 sheet: "There's a huge delay from
+picking your player to the confirm screen." A card tapped in the app's pick
+sheet asked through `Alert.alert` (v0.713.10) — a native alert raised over
+the sheet's own Modal. The same choice is now a bar in the `Overlay` footer
+(`sheetAsk`): the player, price · proj · matchup on one line, then ADD TO
+<spot> / SWAP IN FOR <name>, GAME LOG, CANCEL. It clears when the sheet
+closes or another spot opens. A card on the table itself (no sheet open)
+still asks with the alert. Unconfirmed on a device: the alert-over-Modal
+path is the suspected lag, not a measured one.
+
 ### v0.737.2 — ONE GAME: the week's games are there to pick
 
 > - In a ONE GAME league, every game of the week now shows in the game picker ahead of time, not just today's, so you can choose which one counts before the week starts.
