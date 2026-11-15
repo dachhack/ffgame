@@ -6,7 +6,10 @@ import type { Phase, LiveCtx, Route } from '../app/store';
 import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, InjuryNow, useIsMobile, ModalBackdrop, NoGameScreen } from '../app/ui';
 import { LeagueStrip } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
-import { leagueGameMode, myEnrollments, type Enrollment } from '@drip/core/data/liveApi';
+import { leagueGameMode, myEnrollments, injurySwap, myInjurySwaps, type Enrollment } from '@drip/core/data/liveApi';
+import { injurySwapOffered, injurySwapCandidates, injurySwapRefusal } from '@drip/core/data/injurySwap';
+import { injuryFor } from '@drip/core/data/injuries';
+import { InfoChip } from './adminUi';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
@@ -280,6 +283,22 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     return () => { dead = true; };
   }, [liveCtx?.userId, demo]); // eslint-disable-line react-hooks/exhaustive-deps -- the seat list is per signed-in user
   const [leagueMenu, setLeagueMenu] = useState(false);
+  // THE INJURY SWAP (v0.738.0, 0531; core data/injurySwap has the rules).
+  // Founder: "We need to focus on the last minute Injury outs. What's a fair
+  // way for a swap that won't break the game?" In the locked hour a starter
+  // the report rules out can be replaced — free, once per spot, same
+  // position, same window, the metric kept. `injSwaps` is this seat's used
+  // swaps ('win|slot'); `injAt` is the spot ('win#slot') whose sheet is open.
+  const [injSwaps, setInjSwaps] = useState<Record<string, { out: string; in: string }>>({});
+  const [injAt, setInjAt] = useState<string | null>(null);
+  const [injBusy, setInjBusy] = useState(false);
+  const [injErr, setInjErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!liveCtx || demo) return;
+    let dead = false;
+    myInjurySwaps(liveCtx.matchupId, liveCtx.userId).then((sw) => { if (!dead) setInjSwaps(sw); }).catch(() => {});
+    return () => { dead = true; };
+  }, [liveCtx?.matchupId, liveCtx?.userId, demo]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed on the matchup and the seat
   const [switchingLeague, setSwitchingLeague] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>(initialPhase);
   // Seed from any persisted lineup edits so the FINAL screen replays the exact
@@ -1597,6 +1616,74 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       </div>
     </ModalBackdrop>
   ) : null;
+  // THE INJURY SWAP, on the live drip board: one row per locked spot whose
+  // player is listed Out or on IR, above the windows; the sheet lists who can
+  // go in. Plain values, no hooks (the state is declared at the top).
+  const injOffers = liveCtx && !demo && classicMode === false
+    ? Object.entries(picks).filter(([k, p]) => !!p?.playerId
+        && injurySwapOffered({ phase: winRt(k.split('#')[0]) ?? 'setup', status: injuryFor(liveCtx.week, p.playerId), swapped: !!injSwaps[k.replace('#', '|')] }))
+    : [];
+  const injCandidates = (key: string) => {
+    const cur = getPlayer(picks[key]?.playerId ?? '');
+    const win = key.split('#')[0] as WindowId;
+    if (!cur) return [];
+    const inWin = new Set((youPools[win] || []).map((p) => p.id));
+    return injurySwapCandidates((youPools[win] || []).map((p) => ({ slug: p.id, pos: p.pos, name: p.name })), {
+      outPos: cur.pos, win, windowOf: (id) => (inWin.has(id) ? win : null), groupOf: () => 'start',
+      fielded: new Set(Object.values(picks).map((x) => x?.playerId).filter(Boolean) as string[]),
+    });
+  };
+  const runInjurySwap = async (key: string, toId: string) => {
+    if (!liveCtx || injBusy) return;
+    setInjBusy(true); setInjErr(null);
+    try {
+      const { win, slot } = keyParts(key);
+      const r = await injurySwap(liveCtx.matchupId, win, slot, toId);
+      if (!r?.ok) { setInjErr(injurySwapRefusal(r?.error)); return; }
+      setPicks((cur) => ({ ...cur, [key]: { ...cur[key], playerId: toId } }));
+      setInjSwaps((cur) => ({ ...cur, [`${win}|${slot}`]: { out: r.out ?? '', in: toId } }));
+      setInjAt(null);
+    } catch (e) { setInjErr(friendlyError(e)); }
+    finally { setInjBusy(false); }
+  };
+  const injuryRowsEl = injOffers.length || injErr ? (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+      {injOffers.map(([k, p]) => (
+        <div key={k} className="mono" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--warn)', borderRadius: 6, padding: '8px 12px', color: 'var(--warn)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em' }}>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🚑 INJURY SWAP · {getPlayer(p.playerId)?.name ?? p.playerId} is out · {windowsForWeek(week).find((w) => w.id === k.split('#')[0])?.label ?? k.split('#')[0].toUpperCase()}</span>
+          <InfoChip title="Injury swap" info="A starter listed Out or on IR can be swapped after the window locks, until it kicks off. Free, once per spot. The replacement comes from your bench, plays the same position, and his team plays in this window. The metric stays the same." />
+          <button onClick={() => { setInjErr(null); setInjAt(k); }} disabled={injBusy} className="mono"
+            style={{ marginLeft: 'auto', flexShrink: 0, background: 'none', border: '1px solid var(--warn)', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', color: 'var(--warn)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em' }}>SWAP →</button>
+        </div>
+      ))}
+      {injErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)' }}>Injury swap: {injErr}</div>}
+    </div>
+  ) : null;
+  const injurySheetEl = injAt ? (
+    <ModalBackdrop onClick={() => setInjAt(null)} padTop={60}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
+          <div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Injury swap</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>FOR {(getPlayer(picks[injAt]?.playerId ?? '')?.name ?? '').toUpperCase()} · SAME POSITION · THIS WINDOW</div>
+          </div>
+          <button onClick={() => setInjAt(null)} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+        </div>
+        <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
+          {injCandidates(injAt).map((c) => (
+            <button key={c.slug} onClick={() => void runInjurySwap(injAt, c.slug)} disabled={injBusy} className="mono"
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
+              <span className="grotesk" style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+              <span style={{ fontSize: 9, color: 'var(--dim)' }}>{c.pos}</span>
+              <span style={{ fontSize: 9, color: 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>{injBusy ? '…' : 'PUT IN →'}</span>
+            </button>
+          ))}
+          {!injCandidates(injAt).length && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>Nobody on your bench plays that position in this window.</div>}
+          {injErr && <div className="mono" style={{ fontSize: 10, color: 'var(--opp)', padding: '0 8px' }}>{injErr}</div>}
+        </div>
+      </div>
+    </ModalBackdrop>
+  ) : null;
   if (!demo && liveCtx && classicMode === null) {
     return <div className="mono" style={{ padding: 24, fontSize: 11, color: 'var(--faint)' }}>Loading your matchup…</div>;
   }
@@ -2200,6 +2287,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
             <TargetPanel aw={aw} oppPicks={oppPicks} oppPools={oppPools} preKick={preKickPhase && !liveCtx} onClearSpy={() => clearSpy(week)} />
           </div>
 
+          {injuryRowsEl}
+          {injurySheetEl}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {resolved.windows.map((rw) => (
               <WindowSection
@@ -2297,29 +2386,25 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           }).filter(Boolean) as string[],
         );
         const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
-        // THE LOCKED HOUR (v0.737.4, 0529): before kickoff only the Player Swap
-        // plays, from the first snap — clock 0, no real-time stamp (the server
-        // records it so whatever is sent).
-        const preKick = winRt(swapTarget.win) === 'locked' || winRt(swapTarget.win) === 'setup';
-        const atClock = preKick ? 0 : effWinClock(swapTarget.win); // live board: the window's current real position
+        const atClock = effWinClock(swapTarget.win); // live board: the window's current real position
         // Stamp activation with the REAL time at the feed's current position, so
         // the swap can't retroactively grab a play already final in real time.
-        const atRt = preKick ? undefined : realTimeAt(curPlayer, week, atClock, effMetric ?? undefined);
+        const atRt = realTimeAt(curPlayer, week, atClock, effMetric ?? undefined);
         return (
           <SwapMenu
             player={curPlayer}
             metricId={effMetric}
             atClock={atClock}
             bench={bench}
-            metricQty={preKick ? 0 : inventory['metric-swap'] ?? 0}
+            metricQty={inventory['metric-swap'] ?? 0}
             playerQty={inventory['player-swap'] ?? 0}
-            onMetric={(m) => { if (atRt != null && applyMetricSwap(week, swapTarget.key, atClock, atRt, m)) liveTargeted('metric-swap', { ...keyParts(swapTarget.key), toMetric: m, atClock, atRt }); setSwapTarget(null); }}
+            onMetric={(m) => { if (applyMetricSwap(week, swapTarget.key, atClock, atRt, m)) liveTargeted('metric-swap', { ...keyParts(swapTarget.key), toMetric: m, atClock, atRt }); setSwapTarget(null); }}
             onPlayer={(pid) => {
               // A cross-position swap lands on the new position's default
               // metric; a same-position swap keeps the current one.
               const np = getPlayer(pid);
               const toMetric = np ? swapMetricFor(np, effMetric) : undefined;
-              if (applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid, toMetric)) liveTargeted('player-swap', { ...keyParts(swapTarget.key), toPlayer: pid, toMetric, atClock, ...(atRt != null ? { atRt } : {}) });
+              if (applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid, toMetric)) liveTargeted('player-swap', { ...keyParts(swapTarget.key), toPlayer: pid, toMetric, atClock, atRt });
               setSwapTarget(null);
             }}
             onClose={() => setSwapTarget(null)}
@@ -2733,7 +2818,7 @@ const POSITION_REFUND_BUFFS = new Set(['unlock-carries-wipe', 'hail-mary', 'pick
 // Short "how to use" hints for the non-armable powerups in the inventory card.
 const POWERUP_HINT: Record<string, string> = {
   'metric-swap': 'Tap ✦ APPLY, then a live spot.',
-  'player-swap': 'Tap ✦ APPLY, then a locked or live spot.',
+  'player-swap': 'Tap ✦ APPLY, then a live spot.',
   'unlock-return': 'Pick the ◈ metric on a spot.',
   'unlock-combo-drip': 'Pick the ◈ metric on a spot.',
   'unlock-pass-td10': 'Pick the ◈ metric on a spot.',
@@ -3074,9 +3159,7 @@ function WindowSectionInner(props: {
     // and does the peek server-side. The sim keeps its own rule.
     if (applyMode === 'spy') return realtime ? realtime === 'setup' || realtime === 'locked' : !!s.their;
     if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
-    if (applyMode === 'metric-swap') return liveNow && !!s.you && !done; // swap this live spot
-    // PLAYER SWAP FROM THE LOCK ON (v0.737.4, 0529): the locked hour too — a late scratch goes out before kickoff.
-    if (applyMode === 'player-swap') return (liveNow || realtime === 'locked') && !!s.you && !done;
+    if (applyMode === 'metric-swap' || applyMode === 'player-swap') return liveNow && !!s.you && !done; // swap this live spot
     if (applyMode === 'surge' || applyMode === 'bunker') return liveNow && !!s.you && !done; // live: boost/protect your slot
     if (applyMode === 'cold-snap' || applyMode === 'napalm') return liveNow && !!s.their && !done; // live: freeze / napalm an opponent slot
     return false;

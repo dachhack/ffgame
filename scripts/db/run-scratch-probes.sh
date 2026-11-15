@@ -281,3 +281,4 @@ $RUN -f scripts/db/season-rules-probes.sql | grep -E "PROBE FAIL|ALL SEASON-RULE
 $RUN -f scripts/db/copies-probes.sql | grep -E "PROBE FAIL|ALL COPIES PROBES" || { echo "COPIES PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/relegation-probes.sql | grep -E "PROBE FAIL|ALL RELEGATION PROBES" || { echo "RELEGATION PROBES FAILED"; exit 1; }
 $RUN -f scripts/db/claim-tag-lapse-probes.sql | grep -E "PROBE FAIL|ALL CLAIM-TAG-LAPSE PROBES" || { echo "CLAIM-TAG-LAPSE PROBES FAILED"; exit 1; }
+$RUN -f scripts/db/injury-swap-probes.sql | grep -E "PROBE FAIL|ALL INJURY-SWAP PROBES" || { echo "INJURY-SWAP PROBES FAILED"; exit 1; }

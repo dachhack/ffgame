@@ -22,6 +22,36 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.738.0 — The injury swap
+
+> - If a starter is listed Out or on IR after his window locks, you can now swap him out for free until kickoff: tap 🚑 INJURY SWAP on his spot. The replacement comes from your bench, plays the same position in the same window, and keeps the same metric. Once per spot.
+> - The Player Swap power-up is back to working after kickoff only.
+
+Founder: "We need to focus on the last minute Injury outs. What's a fair
+way for a swap that won't break the game? We don't want to have users put in
+a player and swap them last minute as way to trick their opponents." Then,
+on the rules offered: "Drop rule 2 and build the injury swap" (rule 2 was
+"only if he was ruled out after you set the spot"). v0.737.4 had opened the
+Player Swap card at the lock for any player — the bluff. 0531:
+`injury_swap(matchup, win, slot, to)` runs only between `window_locks_at`
+and the window's kickoff, only when the spot's player is O or IR in
+`injury_status`, and only like for like: the man going in is on the caller's
+roster (not IR/taxi), not already in his lineup, the same position, and his
+team plays in this window (`drip_player_window` — so a player who already
+scored on Thursday cannot be walked in). The pick itself changes (0356's
+lock switch for the one write), the metric is kept, and `injury_swap_log`
+(read-own, no write policy) is what makes it once per spot. Free.
+`apply_targeted` is 0261's body again: the card waits for kickoff. A Spy on
+the spot reads the pick as it stands: the app re-reads its spies every three
+minutes before kickoff, the web on load. Core `data/injurySwap` decides what
+both boards offer; the app shows the 🚑 strip under the spot (ⓘ carries the
+rule) and a bench sheet, the web a row above the windows and a sheet. Aim
+rule `locked+` is gone. `check:injuryswap` pins the offer, the bench and the
+migration's rules; `injury-swap-probes.sql` (19 cases) passes on a scratch
+Postgres. Co-managers cannot use it yet (it swaps the caller's own picks).
+Not yet seen on a phone in a real locked hour, and it depends on the injury
+feed listing the player Out in time.
+
 ### v0.737.4 — Player Swap in the locked hour
 
 > - Player Swap now works as soon as a window locks, an hour before kickoff, not only once the game has started. A player swapped in before kickoff counts for the whole game.

@@ -24,7 +24,7 @@ import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } fr
 import {
   myRoster, myMatchup, myPool, myPicks, savePicksBestEffort, myMembership, setTeamController,
   myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs, leagueGameMode,
-  myUnlocks, armUnlock, myComboQty, myTargeted, type TargetedState,
+  myUnlocks, armUnlock, myComboQty, myTargeted, type TargetedState, injurySwap, myInjurySwaps,
   ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
   getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays, leagueWeeks,
@@ -35,7 +35,8 @@ import {
   myEnrollments, type Enrollment, applyExtraSlotCard,
   applyTargeted, applyUnderdog, useSpy as spyPeek, opponentEmptyWindows, setBackupAssign,
 } from '@drip/core/data/liveApi';
-import { clearLiveInjuries } from '@drip/core/data/injuries';
+import { clearLiveInjuries, injuryFor } from '@drip/core/data/injuries';
+import { injurySwapOffered, injurySwapCandidates, injurySwapRefusal } from '@drip/core/data/injurySwap';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames, windowFeedClock } from '@drip/core/data/gameFeed';
 import { AIM_RULES, AIM_SELF_CONSUMING, CLUTCH_TRIGGER, aimIsRealTime, aimPrompt, aimSpotOk, aimWindowOk, isAimed, isClutch, type AimPhase } from '@drip/core/data/aimRules';
 import { METRICS } from '@drip/core/data/metrics';
@@ -177,6 +178,15 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [byeAt, setByeAt] = useState<{ win: string; slot: string } | null>(null);
   const [metricAt, setMetricAt] = useState<{ win: string; slot: string; id: string } | null>(null);
   const [benchAt, setBenchAt] = useState<{ win: string; slot: string } | null>(null);
+  // THE INJURY SWAP (v0.738.0, 0531; core data/injurySwap has the rules).
+  // Founder: "We need to focus on the last minute Injury outs. What's a fair
+  // way for a swap that won't break the game?" In the locked hour a starter
+  // the report rules out can be replaced — free, once per spot, same
+  // position, same window, the metric kept. `injSwaps` is this seat's used
+  // swaps ('win|slot'); `injAt` is the spot whose bench sheet is open.
+  const [injSwaps, setInjSwaps] = useState<Record<string, { out: string; in: string }>>({});
+  const [injAt, setInjAt] = useState<{ win: string; slot: string } | null>(null);
+  const [injBusy, setInjBusy] = useState(false);
   /** What each Spy uncovered, "win|slot" → the words ("J. Allen", "Rush Yards"). */
   const [spyIntel, setSpyIntel] = useState<Record<string, string>>({});
   // THE MATCHUP SWITCHER (v0.431.0): your other seats, read when the sheet
@@ -353,6 +363,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // assigned to Keenum on his card"). Display-only until targeted
         // applies port to the app; the web is the apply surface meanwhile.
         myTargeted(m.id, userId).then((tg) => { if (alive) { setTargeted(tg ?? {}); setExtraSlots(tg?.extraSlots ?? {}); } }).catch(() => {});
+        myInjurySwaps(m.id, userId).then((sw) => { if (alive) setInjSwaps(sw); }).catch(() => {});
         // The week's NFL injury report. Cleared first so a league or week switch
         // can never show the previous board's designations against this pool.
         // Off the critical path on purpose — it swallows its own failures and
@@ -964,20 +975,26 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     } finally { if (!opts.quiet) { setAimBusy(false); endAim(); } }
   };
 
+  const spyTickRef = useRef(emptyTick);
   // A Spy you already played re-reads for free (use_spy only charges a new
   // spot/reveal), so the intel comes back after a reload — until kickoff,
   // when the card itself turns over and the peek has nothing left to say.
   const spyEntries = (targeted.spy ?? []).map((e) => `${e.win}|${e.slot}|${e.reveal}`).join(',');
   useEffect(() => {
     if (!matchup || !spyEntries) return;
+    // RE-READ EVERY FEW MINUTES (v0.738.0): an injury swap can change the
+    // pick a Spy uncovered, and a Spy that kept showing the man who went out
+    // would be the one thing the swap is not allowed to do — mislead.
+    const fresh = spyTickRef.current !== emptyTick;
+    spyTickRef.current = emptyTick;
     for (const e of targeted.spy ?? []) {
-      if (spyIntel[`${e.win}|${e.slot}`]) continue;
+      if (!fresh && spyIntel[`${e.win}|${e.slot}`]) continue;
       const ph = windowPhase(matchup.week, e.win as never, Date.now());
       if (ph === 'live' || ph === 'final') continue;
       void runSpy(e.win, e.slot, e.reveal, { quiet: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchup?.id, spyEntries]);
+  }, [matchup?.id, spyEntries, emptyTick]);
 
   /** A target was tapped: play it, or open the one question it still needs. */
   const onAimSlot = (win: string, slot: string) => {
@@ -1422,6 +1439,38 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     const rank = (w: string) => winsX.findIndex((x) => x.id === w);
     return backupRows.filter((r) => r.slug && r.opposed && r.key !== key && rank(r.win) >= rank(b.win) && !winKickedNow(r.win));
   };
+  /** THE INJURY SWAP on one of my spots (v0.738.0): offered in the locked
+   *  hour while its player is listed Out or on IR; once used, it says so. */
+  const injuryStrip = (win: string, slot: string) => {
+    const k = `${win}|${slot}`;
+    const used = injSwaps[k];
+    if (used) {
+      if (aimPhase(win) !== 'locked') return null;
+      return <Mono size={9.5} tone="faint" style={{ textAlign: 'center' }}>{`🚑 injury swap used · ${playersBySlug[used.in]?.name ?? used.in} in for ${playersBySlug[used.out]?.name ?? used.out}`}</Mono>;
+    }
+    const mine = mineAt(win, slot);
+    if (!mine || !injurySwapOffered({ phase: aimPhase(win), status: injuryFor(week, mine.slug), swapped: false })) return null;
+    return (
+      <Pressable disabled={injBusy} onPress={() => { tap(); setErr(null); setInjAt({ win, slot }); }} accessibilityRole="button"
+        style={({ pressed }) => ({ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: t.warn, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, opacity: pressed || injBusy ? 0.6 : 1 })}>
+        <Mono size={10} weight="700" tone="warn" track={0.06}>{`🚑 INJURY SWAP · ${playersBySlug[mine.slug]?.name ?? 'he'} is out`}</Mono>
+        <InfoChip title="Injury swap"><Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{'A starter listed Out or on IR can be swapped after the window locks, until it kicks off.\n\nFree, once per spot. The replacement comes from your bench, plays the same position, and his team plays in this window. The metric stays the same.'}</Text></InfoChip>
+      </Pressable>
+    );
+  };
+  const runInjurySwap = async (at: { win: string; slot: string }, toSlug: string) => {
+    if (!matchup || injBusy) return;
+    setInjBusy(true); setErr(null);
+    try {
+      const r = await injurySwap(matchup.id, at.win, at.slot, toSlug);
+      if (!r?.ok) { setErr(`Injury swap: ${injurySwapRefusal(r?.error)}`); return; }
+      commit();
+      setPicks((cur) => ({ ...cur, [`${at.win}-${at.slot}`]: { player_slug: toSlug, metric_id: cur[`${at.win}-${at.slot}`]?.metric_id ?? r.metric ?? null } }));
+      setInjSwaps((cur) => ({ ...cur, [`${at.win}|${at.slot}`]: { out: r.out ?? '', in: toSlug } }));
+      await refreshLiveRef.current?.();
+    } catch (e) { setErr(`Injury swap: ${friendlyError(e)}`); }
+    finally { setInjBusy(false); }
+  };
   const backupStrip = (win: string, slot: string) => {
     const key = `${win}#${slot}`;
     if (!backupPlan.backups.includes(key)) return null;
@@ -1787,6 +1836,28 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           />
         );
       })()}
+      {/* THE INJURY SWAP's bench (v0.738.0): same position, this window, not already fielded. */}
+      {injAt && (() => {
+        const mine = mineAt(injAt.win, injAt.slot);
+        const cur = mine ? playersBySlug[mine.slug] ?? null : null;
+        const fielded = new Set(Object.values(picks).map((x) => x.player_slug).filter(Boolean) as string[]);
+        const bench = cur ? injurySwapCandidates(pool, {
+          outPos: cur.pos, win: injAt.win, windowOf: (id) => winBySlug[id] ?? null, groupOf: (id) => grpBySlug[id] ?? 'start', fielded,
+        }).map(poolToPlayer) : [];
+        return (
+          <PlayerPicker
+            visible
+            players={bench}
+            week={week}
+            userId={userId}
+            windowLabel={`${winLabelFor(injAt.win)} · Injury swap${cur ? ` for ${cur.name}` : ''}`}
+            groupOf={(id) => grpBySlug[id] ?? 'start'}
+            onPick={(slug) => { const at = injAt; setInjAt(null); void runInjurySwap(at, slug); }}
+            onRemove={() => setInjAt(null)}
+            onClose={() => setInjAt(null)}
+          />
+        );
+      })()}
       {/* "Your matchups" — the switcher's sheet (v0.431.0). */}
       <Overlay visible={switchOpen} title="Your matchups" subtitle={`NOW · ${(myTeam?.team_name ?? 'YOU').toUpperCase()}`} onClose={() => setSwitchOpen(false)}>
         <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
@@ -1866,8 +1937,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               appliedFor={(win, slot, pos, mid) => appliedFor(win, slot, pos, mid, false, buffsForWindow(buffs, targeted.buffsAt, week, win))}
               // Aimed cards on a locked or live window (v0.515.0).
               slotExtra={(win, slot) => {
-                const a = aimStrips(win, slot); const sp = spyLine(win, slot); const bk = backupStrip(win, slot);
-                return a || sp || bk ? <View style={{ gap: 6 }}>{a}{sp}{bk}</View> : null;
+                const a = aimStrips(win, slot); const sp = spyLine(win, slot); const bk = backupStrip(win, slot); const inj = injuryStrip(win, slot);
+                return a || sp || bk || inj ? <View style={{ gap: 6 }}>{inj}{a}{sp}{bk}</View> : null;
               }}
               winExtra={aimWinStrip}
               myPhantom={myPhantoms}
@@ -1963,6 +2034,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                   {aimStrips(s.win, s.slot)}
                   {spyLine(s.win, s.slot)}
                   {backupStrip(s.win, s.slot)}
+                  {injuryStrip(s.win, s.slot)}
                   </View>
                 );
               })}
