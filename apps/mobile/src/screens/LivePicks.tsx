@@ -37,7 +37,7 @@ import {
 } from '@drip/core/data/liveApi';
 import { clearLiveInjuries } from '@drip/core/data/injuries';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames, windowFeedClock } from '@drip/core/data/gameFeed';
-import { AIM_RULES, AIM_SELF_CONSUMING, CLUTCH_TRIGGER, aimPrompt, aimSpotOk, aimWindowOk, isAimed, isClutch, type AimPhase } from '@drip/core/data/aimRules';
+import { AIM_RULES, AIM_SELF_CONSUMING, CLUTCH_TRIGGER, aimIsRealTime, aimPrompt, aimSpotOk, aimWindowOk, isAimed, isClutch, type AimPhase } from '@drip/core/data/aimRules';
 import { METRICS } from '@drip/core/data/metrics';
 import { projectedPoints } from '@drip/core/engine/projScoring';
 import { backupPlanForBoard } from '@drip/core/engine/orchestrate';
@@ -894,7 +894,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
 
   const startAim = (id: string) => {
     if (!matchup || aimBusy) return;
-    if (AIM_RULES[id]?.when === 'live' && !liveBuffsOn) { setErr("Real-time power-ups are turned off in this league (commissioner's setting)."); return; }
+    if (aimIsRealTime(id) && !liveBuffsOn) { setErr("Real-time power-ups are turned off in this league (commissioner's setting)."); return; }
     if ((inventory[id] ?? 0) <= 0) { setErr('You don’t own that card — buy it in the shop.'); return; }
     setErr(null);
     setAiming(id);
@@ -1168,7 +1168,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
       // tap-a-target step. Usable whenever the board has somewhere for it.
       if (isAimed(p.id)) {
         const any = aimAny(p.id);
-        const liveOff = AIM_RULES[p.id].when === 'live' && !liveBuffsOn;
+        const liveOff = aimIsRealTime(p.id) && !liveBuffsOn;
         // A CLUTCH card (v0.624.1) says what EARNS it while no spot has — the
         // old line here was "The week has started — arms are closed".
         const clutch = isClutch(p.id);

@@ -9,7 +9,7 @@
 // server's apply_targeted actually knows.
 // Run: tsx scripts/check-aim.mjs
 import { readFileSync, readdirSync } from 'node:fs';
-import { AIM_RULES, AIM_SELF_CONSUMING, aimSpotOk, aimWindowOk, aimPrompt, isAimed } from '../packages/core/src/data/aimRules';
+import { AIM_RULES, AIM_SELF_CONSUMING, aimIsRealTime, aimSpotOk, aimWindowOk, aimPrompt, isAimed } from '../packages/core/src/data/aimRules';
 import { POWERUPS } from '../packages/core/src/data/powerups';
 
 let fails = 0;
@@ -31,7 +31,12 @@ ok('each rule points where its card does (their spot / your spot / an empty spot
   aimedCards.every((p) => AIM_RULES[p.id].target === want[p.target]),
   aimedCards.filter((p) => AIM_RULES[p.id].target !== want[p.target]).map((p) => [p.id, p.target, AIM_RULES[p.id].target]));
 ok('each rule plays in its card\'s moment (pre-match before kickoff, real-time while live)',
-  Object.entries(AIM_RULES).every(([id, r]) => (POWERUPS.find((p) => p.id === id).timing === 'live') === (r.when === 'live')));
+  Object.entries(AIM_RULES).every(([id]) => (POWERUPS.find((p) => p.id === id).timing === 'live') === aimIsRealTime(id)));
+// THE LOCKED HOUR (v0.737.4, 0529): "I need to swap out an injured player but it says theyre locked."
+ok('Player Swap plays in the locked hour and while live, not before the lock or after the final',
+  aimSpotOk('player-swap', 'locked', 'you', { mine: true, theirs: false }) && aimSpotOk('player-swap', 'live', 'you', { mine: true, theirs: true })
+  && !aimSpotOk('player-swap', 'setup', 'you', { mine: true, theirs: false }) && !aimSpotOk('player-swap', 'final', 'you', { mine: true, theirs: true }));
+ok('Metric Swap and Mulligan still wait for kickoff', !aimSpotOk('metric-swap', 'locked', 'you', { mine: true, theirs: false }) && !aimSpotOk('mulligan', 'locked', 'you', { mine: true, theirs: false }));
 
 // ── Spy: the founder's card ──
 const blind = { mine: false, theirs: false };
