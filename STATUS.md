@@ -22,6 +22,65 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.739.0 — Watch the league's other matchups
+
+> - On the Matchup tab, tap the "you vs opponent ▾" line to see every matchup in your league this week, with live scores. Tap one to watch it: each window's battle, both teams' players, their metrics and points.
+> - A window shows once it kicks off. Lineups before kickoff, and power-ups nobody has played, stay hidden.
+
+Founder, on the Drip board: "I think we need a way for players to browse to
+other matchups happening in the league this week." Asked how much a member
+sees of a matchup he is not in: "Full board after kickoff." Classic has
+walked the week's pairs since v0.424.0; a drip league could not, because
+`matchup_state` (the worker's published window rows) was readable by the
+matchup's two seats only. 0532 opens it to the matchup's league
+(`matchup_state_open_to_league`: a member, and never a sealed league, 0462).
+It is the only widening: the worker publishes a window's rows only once it
+has kicked, so nothing sealed is in them, and `sealed_pick` / `applied_state`
+are untouched. Core `matchupWatch` (`watchBoard`, `watchSealedWindows`)
+shapes both sides from those rows, paired by roster slot, Ghost and Bye
+Steal as scores, not players. The app: the pairing line's sheet is now
+"Matchups" — THIS WEEK IN THE LEAGUE (the league page's scoreboard call,
+re-read on each open), then YOUR OTHER LEAGUES — and a pair opens
+`MatchupWatch`, full screen, on the board's own `Duel` (new `sides` prop:
+the window bar names the teams instead of YOU/THEY), fields under each pair,
+un-kicked windows listed as sealed, realtime while open. The web: the same
+two sections in the league chip's menu (the chip now shows with one league
+too), and `LeagueMatchupWatch`, a read-only modal of the same rows (no
+fields or play log there). No picker, hand or shop on either. `check:watch`
+pins the shaping and the migration's scope; on a scratch Postgres a
+league-mate read the state row and 0 picks / 0 applied rows, an outsider
+read nothing, and a sealed league stayed shut. Not yet seen on a phone or
+the site against a live league.
+### v0.738.0 — The injury swap
+
+> - If a starter is listed Out or on IR after his window locks, you can now swap him out for free until kickoff: tap 🚑 INJURY SWAP on his spot. The replacement comes from your bench, plays the same position in the same window, and keeps the same metric. Once per spot.
+> - The Player Swap power-up is back to working after kickoff only.
+
+Founder: "We need to focus on the last minute Injury outs. What's a fair
+way for a swap that won't break the game? We don't want to have users put in
+a player and swap them last minute as way to trick their opponents." Then,
+on the rules offered: "Drop rule 2 and build the injury swap" (rule 2 was
+"only if he was ruled out after you set the spot"). v0.737.4 had opened the
+Player Swap card at the lock for any player — the bluff. 0531:
+`injury_swap(matchup, win, slot, to)` runs only between `window_locks_at`
+and the window's kickoff, only when the spot's player is O or IR in
+`injury_status`, and only like for like: the man going in is on the caller's
+roster (not IR/taxi), not already in his lineup, the same position, and his
+team plays in this window (`drip_player_window` — so a player who already
+scored on Thursday cannot be walked in). The pick itself changes (0356's
+lock switch for the one write), the metric is kept, and `injury_swap_log`
+(read-own, no write policy) is what makes it once per spot. Free.
+`apply_targeted` is 0261's body again: the card waits for kickoff. A Spy on
+the spot reads the pick as it stands: the app re-reads its spies every three
+minutes before kickoff, the web on load. Core `data/injurySwap` decides what
+both boards offer; the app shows the 🚑 strip under the spot (ⓘ carries the
+rule) and a bench sheet, the web a row above the windows and a sheet. Aim
+rule `locked+` is gone. `check:injuryswap` pins the offer, the bench and the
+migration's rules; `injury-swap-probes.sql` (19 cases) passes on a scratch
+Postgres. Co-managers cannot use it yet (it swaps the caller's own picks).
+Not yet seen on a phone in a real locked hour, and it depends on the injury
+feed listing the player Out in time.
+
 ### v0.737.4 — Player Swap in the locked hour
 
 > - Player Swap now works as soon as a window locks, an hour before kickoff, not only once the game has started. A player swapped in before kickoff counts for the whole game.

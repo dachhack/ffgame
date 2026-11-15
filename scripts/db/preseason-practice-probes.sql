@@ -670,27 +670,14 @@ begin
   r := apply_targeted(mid, 'player-swap', jsonb_build_object('win', 'w3', 'slot', '0', 'toPlayer', 'probe-back', 'toMetric', 'recyd', 'atClock', 600));
   perform assert_ok(r, '16b the live player swap lands');
   perform assert_eq((r -> 'targeted' -> 'swaps' -> 'w3|0' ->> 'toMetric' = 'recyd')::int::numeric, 1, '16c the landing metric rides the entry');
-  -- THE LOCKED HOUR (0529): "I need to swap out an injured player but it says
-  -- theyre locked". A Player Swap opens at the window's lock, an hour before
-  -- kickoff, and lands at clock 0 (no real-time stamp) whatever the client
-  -- sent; before the lock it is refused, and so is a Metric Swap before kickoff.
+  -- THE LOCKED HOUR (0531). 0529 opened the Player Swap card at the lock, for
+  -- any player — a bluff ("put in a player and swap them last minute"). The
+  -- card waits for kickoff again; a ruled-out starter has the free injury
+  -- swap (injury-swap-probes.sql).
   update applied_state set payload_json = payload_json #- '{targeted,swaps}' where matchup_id = mid;
-  update nfl_slate set kickoff = now() + interval '2 hours' where season = '2026' and week = wk and home = 'ZZT';
-  r := apply_targeted(mid, 'player-swap', jsonb_build_object('win', 'w3', 'slot', '0', 'toPlayer', 'probe-back'));
-  perform assert_err(r, 'window not locked', '16e before the lock a player swap is refused');
   update nfl_slate set kickoff = now() + interval '40 minutes' where season = '2026' and week = wk and home = 'ZZT';
-  r := apply_targeted(mid, 'metric-swap', jsonb_build_object('win', 'w3', 'slot', '0', 'toMetric', 'recyd', 'atClock', 0));
-  perform assert_err(r, 'window not live', '16f a metric swap still waits for kickoff');
-  update matchup set status = 'scheduled' where id = mid;
-  r := apply_targeted(mid, 'player-swap', jsonb_build_object('win', 'w3', 'slot', '0', 'toPlayer', 'probe-back', 'toMetric', 'recyd', 'atClock', 600, 'atRt', 123456));
-  perform assert_ok(r, '16g in the locked hour the player swap lands, the week not yet live');
-  perform assert_eq((r -> 'targeted' -> 'swaps' -> 'w3|0' ->> 'atClock')::numeric, 0, '16h a pre-kick swap is from the first snap');
-  perform assert_true(not ((r -> 'targeted' -> 'swaps' -> 'w3|0') ? 'atRt'), '16i and carries no real-time stamp');
-  update matchup set status = 'final' where id = mid;
-  update applied_state set payload_json = payload_json #- '{targeted,swaps}' where matchup_id = mid;
   r := apply_targeted(mid, 'player-swap', jsonb_build_object('win', 'w3', 'slot', '0', 'toPlayer', 'probe-back'));
-  perform assert_err(r, 'not live', '16j a final matchup takes no swap');
-  update matchup set status = 'live' where id = mid;
+  perform assert_err(r, 'window not live', '16e in the locked hour the player swap card is refused');
   -- Unlock w3 before cleanup: the practice teardown cascades a DELETE through
   -- the w3 pick, and 0178's window-lock trigger (rightly) refuses an authed
   -- delete on a locked window.

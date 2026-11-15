@@ -2828,6 +2828,20 @@ export async function opponentEmptyWindows(matchupId: string): Promise<string[]>
 export const setBackupAssign = (matchupId: string, backupKey: string, targetKey: string | null) =>
   rpc<{ ok: boolean; error?: string; backups?: Record<string, string> }>(
     'set_backup_assign', { p_matchup_id: matchupId, p_backup_key: backupKey, p_target_key: targetKey });
+/** THE INJURY SWAP (v0.738.0, 0531): replace a ruled-out starter in the
+ *  locked hour — free, once per spot, like for like. The server checks every
+ *  rule; `error` is its refusal code (core injurySwapRefusal words it). */
+export const injurySwap = (matchupId: string, win: string, slot: string, toSlug: string) =>
+  rpc<{ ok: boolean; error?: string; out?: string; in?: string; metric?: string | null; status?: string | null; window?: string | null }>(
+    'injury_swap', { p_matchup_id: matchupId, p_win: win, p_slot: slot, p_to: toSlug });
+/** The caller's injury swaps in a matchup, keyed 'win|slot' (own rows only, RLS). */
+export async function myInjurySwaps(matchupId: string, userId: string): Promise<Record<string, { out: string; in: string }>> {
+  const { data } = await (await client()).from('injury_swap_log').select('game_window, roster_slot, out_slug, in_slug')
+    .eq('matchup_id', matchupId).eq('app_user_id', userId);
+  const out: Record<string, { out: string; in: string }> = {};
+  for (const r of (data ?? []) as { game_window: string; roster_slot: string; out_slug: string; in_slug: string }[]) out[`${r.game_window}|${r.roster_slot}`] = { out: r.out_slug, in: r.in_slug };
+  return out;
+}
 /** The caller's recorded targeted power-ups (own applied_state row, readable under RLS). */
 export async function myTargeted(matchupId: string, userId: string): Promise<TargetedState> {
   const { data } = await (await client()).from('applied_state').select('payload_json')

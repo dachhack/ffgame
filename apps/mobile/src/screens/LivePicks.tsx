@@ -24,10 +24,11 @@ import { ensurePremiumTier, isFreePowerup, isFreePosition, markGatedAttempt } fr
 import {
   myRoster, myMatchup, myPool, myPicks, savePicksBestEffort, myMembership, setTeamController,
   myBuffs, heroSetBuffs, myInventory, consumeInventory, refundInventory, leagueLiveBuffs, leagueGameMode,
-  myUnlocks, armUnlock, myComboQty, myTargeted, type TargetedState,
+  myUnlocks, armUnlock, myComboQty, myTargeted, type TargetedState, injurySwap, myInjurySwaps,
   ensureWallet,
   liveSlate, matchupTeams, matchupPremium, startCheckout, friendlyError,
   getMatchup, getMatchupState, getRevealedPicks, revealedOppBuffs, subscribeMatchup, weekGameFeeds, weekLivePlays, leagueWeeks,
+  leagueWeekScoreboard, type ScoreboardGame,
   defaultOpenWeek,
   type LiveMatchup, type PoolPlayer, type PickRow, type Controller, type TeamInfo,
   type WindowScore, type RevealedPick, type GameFeedRow,
@@ -35,7 +36,8 @@ import {
   myEnrollments, type Enrollment, applyExtraSlotCard,
   applyTargeted, applyUnderdog, useSpy as spyPeek, opponentEmptyWindows, setBackupAssign,
 } from '@drip/core/data/liveApi';
-import { clearLiveInjuries } from '@drip/core/data/injuries';
+import { clearLiveInjuries, injuryFor } from '@drip/core/data/injuries';
+import { injurySwapOffered, injurySwapCandidates, injurySwapRefusal } from '@drip/core/data/injurySwap';
 import { setLiveGameFeed, feedRowsToWeek, gameFeedFor, groupFieldGames, windowFeedClock } from '@drip/core/data/gameFeed';
 import { AIM_RULES, AIM_SELF_CONSUMING, CLUTCH_TRIGGER, aimIsRealTime, aimPrompt, aimSpotOk, aimWindowOk, isAimed, isClutch, type AimPhase } from '@drip/core/data/aimRules';
 import { METRICS } from '@drip/core/data/metrics';
@@ -64,6 +66,7 @@ import { FieldsList } from '../ui/FieldsList';
 import { PlayLog } from '../ui/PlayLog';
 import { liveDuelEvents } from '@drip/core/data/duelLog';
 import { Overlay } from '../ui/Overlay';
+import { MatchupWatch } from '../ui/MatchupWatch';
 import { InfoChip } from '../ui/InfoChip';
 import { CommishKit } from '../ui/CommishKit';
 import { ClassicBoard } from '../ui/ClassicBoard';
@@ -177,6 +180,15 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   const [byeAt, setByeAt] = useState<{ win: string; slot: string } | null>(null);
   const [metricAt, setMetricAt] = useState<{ win: string; slot: string; id: string } | null>(null);
   const [benchAt, setBenchAt] = useState<{ win: string; slot: string } | null>(null);
+  // THE INJURY SWAP (v0.738.0, 0531; core data/injurySwap has the rules).
+  // Founder: "We need to focus on the last minute Injury outs. What's a fair
+  // way for a swap that won't break the game?" In the locked hour a starter
+  // the report rules out can be replaced — free, once per spot, same
+  // position, same window, the metric kept. `injSwaps` is this seat's used
+  // swaps ('win|slot'); `injAt` is the spot whose bench sheet is open.
+  const [injSwaps, setInjSwaps] = useState<Record<string, { out: string; in: string }>>({});
+  const [injAt, setInjAt] = useState<{ win: string; slot: string } | null>(null);
+  const [injBusy, setInjBusy] = useState(false);
   /** What each Spy uncovered, "win|slot" → the words ("J. Allen", "Rush Yards"). */
   const [spyIntel, setSpyIntel] = useState<Record<string, string>>({});
   // THE MATCHUP SWITCHER (v0.431.0): your other seats, read when the sheet
@@ -184,12 +196,28 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
   // hot path. Null until the first open.
   const [switchOpen, setSwitchOpen] = useState(false);
   const [seats, setSeats] = useState<Enrollment[] | null>(null);
+  // THE LEAGUE'S OTHER MATCHUPS (v0.739.0, founder: "I think we need a way for
+  // players to browse to other matchups happening in the league this week" …
+  // "Full board after kickoff"). The same sheet lists this week's pairs, read
+  // when it opens (the league page's own scoreboard call); tapping one opens
+  // it read-only (MatchupWatch). `watching` is that pair.
+  const [weekGames, setWeekGames] = useState<ScoreboardGame[] | null>(null);
+  const [watching, setWatching] = useState<ScoreboardGame | null>(null);
   useEffect(() => {
     if (!switchOpen || seats) return;
     let dead = false;
     myEnrollments(userId).then((rows) => { if (!dead) setSeats(rows.filter((r) => !r.archived && r.league)); }).catch(() => { if (!dead) setSeats([]); });
     return () => { dead = true; };
   }, [switchOpen, seats, userId]);
+  // Re-read on every open: these are live scores, and a sheet that showed
+  // the last open's numbers would be a scoreboard that lies.
+  const sbLeague = roster?.leagueId, sbWeek = matchup?.week;
+  useEffect(() => {
+    if (!switchOpen || !sbLeague || sbWeek == null) return;
+    let dead = false;
+    leagueWeekScoreboard(sbLeague, sbWeek).then((r) => { if (!dead) setWeekGames(r?.games ?? []); }).catch(() => { if (!dead) setWeekGames([]); });
+    return () => { dead = true; };
+  }, [switchOpen, sbLeague, sbWeek]);
   // The ARMED strip's sheet (v0.431.0): one armed buff and its blurb.
   const [armedOpen, setArmedOpen] = useState<string | null>(null);
   // A COUNT ONCE THEY WRAP (v0.713.6, founder: "Let's have armed just say how
@@ -353,6 +381,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         // assigned to Keenum on his card"). Display-only until targeted
         // applies port to the app; the web is the apply surface meanwhile.
         myTargeted(m.id, userId).then((tg) => { if (alive) { setTargeted(tg ?? {}); setExtraSlots(tg?.extraSlots ?? {}); } }).catch(() => {});
+        myInjurySwaps(m.id, userId).then((sw) => { if (alive) setInjSwaps(sw); }).catch(() => {});
         // The week's NFL injury report. Cleared first so a league or week switch
         // can never show the previous board's designations against this pool.
         // Off the critical path on purpose — it swallows its own failures and
@@ -964,20 +993,26 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     } finally { if (!opts.quiet) { setAimBusy(false); endAim(); } }
   };
 
+  const spyTickRef = useRef(emptyTick);
   // A Spy you already played re-reads for free (use_spy only charges a new
   // spot/reveal), so the intel comes back after a reload — until kickoff,
   // when the card itself turns over and the peek has nothing left to say.
   const spyEntries = (targeted.spy ?? []).map((e) => `${e.win}|${e.slot}|${e.reveal}`).join(',');
   useEffect(() => {
     if (!matchup || !spyEntries) return;
+    // RE-READ EVERY FEW MINUTES (v0.738.0): an injury swap can change the
+    // pick a Spy uncovered, and a Spy that kept showing the man who went out
+    // would be the one thing the swap is not allowed to do — mislead.
+    const fresh = spyTickRef.current !== emptyTick;
+    spyTickRef.current = emptyTick;
     for (const e of targeted.spy ?? []) {
-      if (spyIntel[`${e.win}|${e.slot}`]) continue;
+      if (!fresh && spyIntel[`${e.win}|${e.slot}`]) continue;
       const ph = windowPhase(matchup.week, e.win as never, Date.now());
       if (ph === 'live' || ph === 'final') continue;
       void runSpy(e.win, e.slot, e.reveal, { quiet: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchup?.id, spyEntries]);
+  }, [matchup?.id, spyEntries, emptyTick]);
 
   /** A target was tapped: play it, or open the one question it still needs. */
   const onAimSlot = (win: string, slot: string) => {
@@ -1422,6 +1457,38 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
     const rank = (w: string) => winsX.findIndex((x) => x.id === w);
     return backupRows.filter((r) => r.slug && r.opposed && r.key !== key && rank(r.win) >= rank(b.win) && !winKickedNow(r.win));
   };
+  /** THE INJURY SWAP on one of my spots (v0.738.0): offered in the locked
+   *  hour while its player is listed Out or on IR; once used, it says so. */
+  const injuryStrip = (win: string, slot: string) => {
+    const k = `${win}|${slot}`;
+    const used = injSwaps[k];
+    if (used) {
+      if (aimPhase(win) !== 'locked') return null;
+      return <Mono size={9.5} tone="faint" style={{ textAlign: 'center' }}>{`🚑 injury swap used · ${playersBySlug[used.in]?.name ?? used.in} in for ${playersBySlug[used.out]?.name ?? used.out}`}</Mono>;
+    }
+    const mine = mineAt(win, slot);
+    if (!mine || !injurySwapOffered({ phase: aimPhase(win), status: injuryFor(week, mine.slug), swapped: false })) return null;
+    return (
+      <Pressable disabled={injBusy} onPress={() => { tap(); setErr(null); setInjAt({ win, slot }); }} accessibilityRole="button"
+        style={({ pressed }) => ({ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: t.warn, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, opacity: pressed || injBusy ? 0.6 : 1 })}>
+        <Mono size={10} weight="700" tone="warn" track={0.06}>{`🚑 INJURY SWAP · ${playersBySlug[mine.slug]?.name ?? 'he'} is out`}</Mono>
+        <InfoChip title="Injury swap"><Text style={{ fontSize: 13, lineHeight: 18, color: t.text }}>{'A starter listed Out or on IR can be swapped after the window locks, until it kicks off.\n\nFree, once per spot. The replacement comes from your bench, plays the same position, and his team plays in this window. The metric stays the same.'}</Text></InfoChip>
+      </Pressable>
+    );
+  };
+  const runInjurySwap = async (at: { win: string; slot: string }, toSlug: string) => {
+    if (!matchup || injBusy) return;
+    setInjBusy(true); setErr(null);
+    try {
+      const r = await injurySwap(matchup.id, at.win, at.slot, toSlug);
+      if (!r?.ok) { setErr(`Injury swap: ${injurySwapRefusal(r?.error)}`); return; }
+      commit();
+      setPicks((cur) => ({ ...cur, [`${at.win}-${at.slot}`]: { player_slug: toSlug, metric_id: cur[`${at.win}-${at.slot}`]?.metric_id ?? r.metric ?? null } }));
+      setInjSwaps((cur) => ({ ...cur, [`${at.win}|${at.slot}`]: { out: r.out ?? '', in: toSlug } }));
+      await refreshLiveRef.current?.();
+    } catch (e) { setErr(`Injury swap: ${friendlyError(e)}`); }
+    finally { setInjBusy(false); }
+  };
   const backupStrip = (win: string, slot: string) => {
     const key = `${win}#${slot}`;
     if (!backupPlan.backups.includes(key)) return null;
@@ -1479,13 +1546,13 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
         {/* THE MATCHUP SWITCHER (v0.431.0): the pairing is the door to your
             other matchups — tap it (or the ▾) for "Your matchups". Only
             offered when the shell can open another league. */}
-        <Pressable onPress={onSwitchLeague ? () => { tap(); setSwitchOpen(true); } : undefined} hitSlop={6}
-          accessibilityRole={onSwitchLeague ? 'button' : undefined} accessibilityLabel="Switch to another of your matchups"
+        <Pressable onPress={() => { tap(); setSwitchOpen(true); }} hitSlop={6}
+          accessibilityRole="button" accessibilityLabel="The league's other matchups this week, and your other leagues"
           style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, fontWeight: '700', color: t.text }}>
             {myTeam?.team_name ?? 'You'} vs {oppTeam?.team_name ?? 'Opponent'}
           </Text>
-          {onSwitchLeague && <Mono size={10} tone="faint">▾</Mono>}
+          <Mono size={10} tone="faint">▾</Mono>
         </Pressable>
         {/* SCHEDULED is the default and says nothing a 0–0 score doesn't; it
             cost ~70px on the one line that now has to hold a team name too.
@@ -1787,10 +1854,59 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
           />
         );
       })()}
+      {/* THE INJURY SWAP's bench (v0.738.0): same position, this window, not already fielded. */}
+      {injAt && (() => {
+        const mine = mineAt(injAt.win, injAt.slot);
+        const cur = mine ? playersBySlug[mine.slug] ?? null : null;
+        const fielded = new Set(Object.values(picks).map((x) => x.player_slug).filter(Boolean) as string[]);
+        const bench = cur ? injurySwapCandidates(pool, {
+          outPos: cur.pos, win: injAt.win, windowOf: (id) => winBySlug[id] ?? null, groupOf: (id) => grpBySlug[id] ?? 'start', fielded,
+        }).map(poolToPlayer) : [];
+        return (
+          <PlayerPicker
+            visible
+            players={bench}
+            week={week}
+            userId={userId}
+            windowLabel={`${winLabelFor(injAt.win)} · Injury swap${cur ? ` for ${cur.name}` : ''}`}
+            groupOf={(id) => grpBySlug[id] ?? 'start'}
+            onPick={(slug) => { const at = injAt; setInjAt(null); void runInjurySwap(at, slug); }}
+            onRemove={() => setInjAt(null)}
+            onClose={() => setInjAt(null)}
+          />
+        );
+      })()}
       {/* "Your matchups" — the switcher's sheet (v0.431.0). */}
-      <Overlay visible={switchOpen} title="Your matchups" subtitle={`NOW · ${(myTeam?.team_name ?? 'YOU').toUpperCase()}`} onClose={() => setSwitchOpen(false)}>
+      <Overlay visible={switchOpen} title="Matchups" subtitle={`NOW · ${(myTeam?.team_name ?? 'YOU').toUpperCase()}`} onClose={() => setSwitchOpen(false)}>
         <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
-          {seats === null && <Mono size={10.5} style={{ padding: 8 }}>Loading your leagues…</Mono>}
+          {/* THIS WEEK IN THE LEAGUE (v0.739.0): every pair, with its score;
+              a tap opens that matchup read-only. Mine is marked, not a door —
+              it is the board under this sheet. */}
+          <Mono size={8.5} tone="faint" weight="700" track={0.12}>{`THIS WEEK IN THE LEAGUE · ${weekLabel(week)}`}</Mono>
+          {weekGames === null && <Mono size={10.5} style={{ padding: 8 }}>Loading the week…</Mono>}
+          {weekGames?.map((g) => {
+            const mine = g.matchup_id === matchup?.id;
+            const pts = (n: number | null) => (n == null ? '–' : Number(n).toFixed(1));
+            return (
+              <Pressable key={g.matchup_id} disabled={mine}
+                onPress={() => { tap(); setSwitchOpen(false); setWatching(g); }}
+                android_ripple={{ color: alpha(t.you, 16) }} accessibilityRole="button"
+                style={({ pressed }) => ({ backgroundColor: mine ? alpha(t.you, 8) : t.bg, opacity: pressed ? 0.8 : 1, borderWidth: StyleSheet.hairlineWidth, borderColor: mine ? t.you : t.bd, borderRadius: 8, padding: 12, gap: 4 })}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Mono size={8.5} tone={g.status === 'live' ? 'you' : 'faint'} track={0.1}>{g.status === 'final' ? 'FINAL' : g.status === 'live' ? '● LIVE' : 'NOT STARTED'}{g.label ? ` · ${g.label.toUpperCase()}` : ''}</Mono>
+                  <Mono size={9} weight="700" tone={mine ? 'faint' : 'you'} track={0.08}>{mine ? 'ON SCREEN' : 'WATCH →'}</Mono>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13.5, fontWeight: '700', color: t.text }}>{g.home.team ?? `Seat ${g.home.roster_id}`}</Text>
+                  <Mono size={11} weight="700" tone="text">{`${pts(g.home.points)} – ${pts(g.away.points)}`}</Mono>
+                  <Text numberOfLines={1} style={{ flex: 1, fontSize: 13.5, fontWeight: '700', color: t.text, textAlign: 'right' }}>{g.away.team ?? `Seat ${g.away.roster_id}`}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+          {weekGames && weekGames.length <= 1 && <Mono size={10.5} style={{ padding: 8 }}>No other matchups in the league this week.</Mono>}
+          {onSwitchLeague && <Mono size={8.5} tone="faint" weight="700" track={0.12} style={{ marginTop: 8 }}>YOUR OTHER LEAGUES</Mono>}
+          {onSwitchLeague && seats === null && <Mono size={10.5} style={{ padding: 8 }}>Loading your leagues…</Mono>}
           {seats?.filter((e) => e.league_id !== leagueId).map((e) => (
             <Pressable key={`${e.league_id}-${e.sleeper_roster_id}`}
               onPress={() => { tap(); setSwitchOpen(false); onSwitchLeague?.(e); }}
@@ -1803,8 +1919,16 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               <Mono size={9} weight="700" tone="you" track={0.08}>OPEN →</Mono>
             </Pressable>
           ))}
-          {seats && !seats.some((e) => e.league_id !== leagueId) && <Mono size={10.5} style={{ padding: 8 }}>No other leagues — join or build one from My Leagues.</Mono>}
+          {onSwitchLeague && seats && !seats.some((e) => e.league_id !== leagueId) && <Mono size={10.5} style={{ padding: 8 }}>No other leagues — join or build one from My Leagues.</Mono>}
         </ScrollView>
+      </Overlay>
+      {/* A league-mate's matchup, read only (v0.739.0). Full screen: it is a
+          whole board. Mounted only while open, so its realtime channel closes
+          with the sheet. */}
+      <Overlay full visible={!!watching} onClose={() => setWatching(null)}
+        title={watching ? `${watching.home.team ?? `Seat ${watching.home.roster_id}`} vs ${watching.away.team ?? `Seat ${watching.away.roster_id}`}` : ''}
+        subtitle={`${weekLabel(week)} · another matchup in your league`}>
+        {watching && roster && <MatchupWatch leagueId={roster.leagueId} matchupId={watching.matchup_id} userId={userId} />}
       </Overlay>
 
       {/* Windows. Each one phases on its OWN kickoff, which is the whole reason
@@ -1866,8 +1990,8 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
               appliedFor={(win, slot, pos, mid) => appliedFor(win, slot, pos, mid, false, buffsForWindow(buffs, targeted.buffsAt, week, win))}
               // Aimed cards on a locked or live window (v0.515.0).
               slotExtra={(win, slot) => {
-                const a = aimStrips(win, slot); const sp = spyLine(win, slot); const bk = backupStrip(win, slot);
-                return a || sp || bk ? <View style={{ gap: 6 }}>{a}{sp}{bk}</View> : null;
+                const a = aimStrips(win, slot); const sp = spyLine(win, slot); const bk = backupStrip(win, slot); const inj = injuryStrip(win, slot);
+                return a || sp || bk || inj ? <View style={{ gap: 6 }}>{inj}{a}{sp}{bk}</View> : null;
               }}
               winExtra={aimWinStrip}
               myPhantom={myPhantoms}
@@ -1963,6 +2087,7 @@ export function LivePicks({ userId, leagueId, rosterId, native, onBack, openShop
                   {aimStrips(s.win, s.slot)}
                   {spyLine(s.win, s.slot)}
                   {backupStrip(s.win, s.slot)}
+                  {injuryStrip(s.win, s.slot)}
                   </View>
                 );
               })}

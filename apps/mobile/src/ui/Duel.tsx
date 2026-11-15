@@ -53,7 +53,10 @@ export function Big({ label, value, color, team }: { label: string; value: numbe
  *  The sealed-back count MIRRORS YOUR OWN card count, never the opponent's real
  *  one. Showing their true count before reveal would leak how many slots they
  *  filled in a window, which is information the game deliberately withholds. */
-export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, slotExtra, winExtra, myPhantom, liveExtras, userId, onOpenSlate, appliedFor }: {
+export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, winLabel, winStatus, slotDetail, slotExtra, winExtra, myPhantom, liveExtras, userId, onOpenSlate, appliedFor, sides }: {
+  /** WATCHING SOMEONE ELSE'S MATCHUP (v0.739.0): neither side is "you", so
+   *  the window bar names the teams — "ACES LEAD", "★ ACES WON". */
+  sides?: { you: string; them: string };
   mine: RevealedPick[];
   theirs: RevealedPick[];
   /** The power-ups on one of MY cards (v0.587.0): chips on locked/live cards. */
@@ -379,7 +382,10 @@ export function Duel({ mine, theirs, pool, scores, youAreHome, status, week, win
               const leadYou = yTot > tTot;
               const done = st === 'FINAL';
               const leadColor = even ? t.dim : leadYou ? t.you : t.opp;
-              const label = done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST')
+              const who = sides ? (leadYou ? sides.you : sides.them).toUpperCase() : null;
+              const label = who
+                ? (even ? (done ? 'EVEN' : 'DEAD EVEN') : done ? `★ ${who} WON` : `${who} LEAD`)
+                : done ? (even ? 'EVEN' : leadYou ? '★ WON' : 'LOST')
                 : (even ? 'DEAD EVEN' : leadYou ? 'YOU LEAD' : 'THEY LEAD');
               return (
                 <View style={{ backgroundColor: t.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: t.bd, borderRadius: 5, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 9 }}>
