@@ -2297,25 +2297,29 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
           }).filter(Boolean) as string[],
         );
         const bench = (youPools[swapTarget.win] || []).filter((p) => !slottedIds.has(p.id));
-        const atClock = effWinClock(swapTarget.win); // live board: the window's current real position
+        // THE LOCKED HOUR (v0.737.4, 0529): before kickoff only the Player Swap
+        // plays, from the first snap — clock 0, no real-time stamp (the server
+        // records it so whatever is sent).
+        const preKick = winRt(swapTarget.win) === 'locked' || winRt(swapTarget.win) === 'setup';
+        const atClock = preKick ? 0 : effWinClock(swapTarget.win); // live board: the window's current real position
         // Stamp activation with the REAL time at the feed's current position, so
         // the swap can't retroactively grab a play already final in real time.
-        const atRt = realTimeAt(curPlayer, week, atClock, effMetric ?? undefined);
+        const atRt = preKick ? undefined : realTimeAt(curPlayer, week, atClock, effMetric ?? undefined);
         return (
           <SwapMenu
             player={curPlayer}
             metricId={effMetric}
             atClock={atClock}
             bench={bench}
-            metricQty={inventory['metric-swap'] ?? 0}
+            metricQty={preKick ? 0 : inventory['metric-swap'] ?? 0}
             playerQty={inventory['player-swap'] ?? 0}
-            onMetric={(m) => { if (applyMetricSwap(week, swapTarget.key, atClock, atRt, m)) liveTargeted('metric-swap', { ...keyParts(swapTarget.key), toMetric: m, atClock, atRt }); setSwapTarget(null); }}
+            onMetric={(m) => { if (atRt != null && applyMetricSwap(week, swapTarget.key, atClock, atRt, m)) liveTargeted('metric-swap', { ...keyParts(swapTarget.key), toMetric: m, atClock, atRt }); setSwapTarget(null); }}
             onPlayer={(pid) => {
               // A cross-position swap lands on the new position's default
               // metric; a same-position swap keeps the current one.
               const np = getPlayer(pid);
               const toMetric = np ? swapMetricFor(np, effMetric) : undefined;
-              if (applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid, toMetric)) liveTargeted('player-swap', { ...keyParts(swapTarget.key), toPlayer: pid, toMetric, atClock, atRt });
+              if (applyPlayerSwap(week, swapTarget.key, atClock, atRt, pid, toMetric)) liveTargeted('player-swap', { ...keyParts(swapTarget.key), toPlayer: pid, toMetric, atClock, ...(atRt != null ? { atRt } : {}) });
               setSwapTarget(null);
             }}
             onClose={() => setSwapTarget(null)}
@@ -2729,7 +2733,7 @@ const POSITION_REFUND_BUFFS = new Set(['unlock-carries-wipe', 'hail-mary', 'pick
 // Short "how to use" hints for the non-armable powerups in the inventory card.
 const POWERUP_HINT: Record<string, string> = {
   'metric-swap': 'Tap ✦ APPLY, then a live spot.',
-  'player-swap': 'Tap ✦ APPLY, then a live spot.',
+  'player-swap': 'Tap ✦ APPLY, then a locked or live spot.',
   'unlock-return': 'Pick the ◈ metric on a spot.',
   'unlock-combo-drip': 'Pick the ◈ metric on a spot.',
   'unlock-pass-td10': 'Pick the ◈ metric on a spot.',
@@ -3070,7 +3074,9 @@ function WindowSectionInner(props: {
     // and does the peek server-side. The sim keeps its own rule.
     if (applyMode === 'spy') return realtime ? realtime === 'setup' || realtime === 'locked' : !!s.their;
     if (applyMode === 'mulligan') return liveNow && !!s.you && !done;   // re-roll your metric
-    if (applyMode === 'metric-swap' || applyMode === 'player-swap') return liveNow && !!s.you && !done; // swap this live spot
+    if (applyMode === 'metric-swap') return liveNow && !!s.you && !done; // swap this live spot
+    // PLAYER SWAP FROM THE LOCK ON (v0.737.4, 0529): the locked hour too — a late scratch goes out before kickoff.
+    if (applyMode === 'player-swap') return (liveNow || realtime === 'locked') && !!s.you && !done;
     if (applyMode === 'surge' || applyMode === 'bunker') return liveNow && !!s.you && !done; // live: boost/protect your slot
     if (applyMode === 'cold-snap' || applyMode === 'napalm') return liveNow && !!s.their && !done; // live: freeze / napalm an opponent slot
     return false;

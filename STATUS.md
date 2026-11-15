@@ -22,6 +22,44 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.737.4 — Player Swap in the locked hour
+
+> - Player Swap now works as soon as a window locks, an hour before kickoff, not only once the game has started. A player swapped in before kickoff counts for the whole game.
+
+A Turf Warriors member, Sunday of week 10, 44 minutes before the 1 PM
+kickoffs: "why are the players locked an hour before kickoff? I need to swap
+out an injured player but it says theyre locked." Founder: "There should be
+a player swap power up that would allow you to swap in the locked period ...
+Let's make sure the power up works and give one to [him] for free." It did
+not work there: `apply_targeted` took a Player Swap only once the window had
+kicked off and the matchup was live ('window not live'), and both boards
+offered it on a live spot only. 0529: the swap opens at `window_locks_at`
+(kickoff − 1h) on any matchup that is not final; played before kickoff it is
+recorded at clock 0 with no real-time stamp, so the engines' split gives the
+new man the whole game. Metric Swap and Mulligan still wait for kickoff.
+Core's aim rule is `when: 'locked+'` (`aimIsRealTime` keeps the
+commissioner's real-time switch over it); the web's swap menu shows no
+metric swap before kickoff. 0529 also gives that member's seat one Player
+Swap free (a ◈0 `spend:player-swap` ledger row, which is what the
+entitlement gate counts, and the card in the hand; the seat is found by the
+md5 of his handle, once only). Preseason probes 16e–16j pin the gate on a
+scratch Postgres, where the grant was run twice (one card). `check:aim`
+pins the rule. Not yet seen played on a phone in a real locked hour.
+
+### v0.737.3 — The pick asks in the sheet
+
+> - In a weekly contest, tapping a player in the pick list now shows Add (or Swap) and Game log right at the bottom of the list, straight away, instead of a pop-up that was slow to appear.
+
+Founder, from the Weekly Cointest WR3 sheet: "There's a huge delay from
+picking your player to the confirm screen." A card tapped in the app's pick
+sheet asked through `Alert.alert` (v0.713.10) — a native alert raised over
+the sheet's own Modal. The same choice is now a bar in the `Overlay` footer
+(`sheetAsk`): the player, price · proj · matchup on one line, then ADD TO
+<spot> / SWAP IN FOR <name>, GAME LOG, CANCEL. It clears when the sheet
+closes or another spot opens. A card on the table itself (no sheet open)
+still asks with the alert. Unconfirmed on a device: the alert-over-Modal
+path is the suspected lag, not a measured one.
+
 ### v0.737.2 — ONE GAME: the week's games are there to pick
 
 > - In a ONE GAME league, every game of the week now shows in the game picker ahead of time, not just today's, so you can choose which one counts before the week starts.

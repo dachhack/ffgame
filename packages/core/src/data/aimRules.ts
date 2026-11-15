@@ -16,9 +16,11 @@
 //   pre-lock  the window has not locked (window_locks_at > now)
 //   pre-kick  the window has not kicked off (use_spy's own rule)
 //   live      the window is playing (window_kickoff <= now, matchup live)
+//   locked+   from the window's lock on: the locked hour AND the game (0529,
+//             Player Swap — a late scratch is swapped out before kickoff)
 
 export type AimTarget = 'mine-filled' | 'mine-empty' | 'theirs' | 'window';
-export type AimWhen = 'pre-lock' | 'pre-kick' | 'live';
+export type AimWhen = 'pre-lock' | 'pre-kick' | 'live' | 'locked+';
 /** What the card asks for after its target is tapped. */
 export type AimFollow = 'spy-reveal' | 'bye-player' | 'metric' | 'bench-player' | 'confirm';
 
@@ -49,7 +51,11 @@ export const AIM_RULES: Record<string, AimRule> = {
   // While the window is playing
   mulligan: { target: 'mine-filled', when: 'live', verb: 'MULLIGAN', follow: 'metric' },
   'metric-swap': { target: 'mine-filled', when: 'live', verb: 'SWAP METRIC', follow: 'metric' },
-  'player-swap': { target: 'mine-filled', when: 'live', verb: 'SWAP PLAYER', follow: 'bench-player' },
+  // FROM THE LOCK ON (v0.737.4, 0529). A member, 44 minutes before kickoff:
+  // "I need to swap out an injured player but it says theyre locked." Founder:
+  // "There should be a player swap power up that would allow you to swap in
+  // the locked period." It only opened at kickoff. Now the locked hour too.
+  'player-swap': { target: 'mine-filled', when: 'locked+', verb: 'SWAP PLAYER', follow: 'bench-player' },
   surge: { target: 'mine-filled', when: 'live', verb: 'SURGE' },
   bunker: { target: 'mine-filled', when: 'live', verb: 'BUNKER' },
   'cold-snap': { target: 'theirs', when: 'live', verb: 'FREEZE' },
@@ -78,6 +84,10 @@ export const CLUTCH_TRIGGER: Record<string, string> = {
 
 export const isAimed = (id: string): boolean => id in AIM_RULES;
 
+/** A REAL-TIME card: played once the window has locked or is playing — the
+ *  ones the commissioner's "real-time power-ups" switch turns off. */
+export const aimIsRealTime = (id: string): boolean => { const w = AIM_RULES[id]?.when; return w === 'live' || w === 'locked+'; };
+
 /** A window's phase, as core's windowPhase names it. */
 export type AimPhase = 'setup' | 'locked' | 'live' | 'final';
 
@@ -87,6 +97,7 @@ export function aimWindowOpen(id: string, phase: AimPhase): boolean {
   if (!r) return false;
   if (r.when === 'pre-lock') return phase === 'setup';
   if (r.when === 'pre-kick') return phase === 'setup' || phase === 'locked';
+  if (r.when === 'locked+') return phase === 'locked' || phase === 'live';
   return phase === 'live';
 }
 
@@ -123,6 +134,6 @@ export function aimPrompt(id: string): string {
     : r.target === 'theirs' ? 'one of their spots'
     : r.target === 'mine-empty' ? 'one of your EMPTY spots'
     : 'one of your filled spots';
-  const when = r.when === 'live' ? 'in a live window' : r.when === 'pre-kick' ? 'before its window kicks off' : 'before its window locks';
+  const when = r.when === 'live' ? 'in a live window' : r.when === 'locked+' ? 'in a locked or live window' : r.when === 'pre-kick' ? 'before its window kicks off' : 'before its window locks';
   return `Tap ${where} ${when}.`;
 }
