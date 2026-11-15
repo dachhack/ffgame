@@ -22,6 +22,35 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.739.0 — Watch the league's other matchups
+
+> - On the Matchup tab, tap the "you vs opponent ▾" line to see every matchup in your league this week, with live scores. Tap one to watch it: each window's battle, both teams' players, their metrics and points.
+> - A window shows once it kicks off. Lineups before kickoff, and power-ups nobody has played, stay hidden.
+
+Founder, on the Drip board: "I think we need a way for players to browse to
+other matchups happening in the league this week." Asked how much a member
+sees of a matchup he is not in: "Full board after kickoff." Classic has
+walked the week's pairs since v0.424.0; a drip league could not, because
+`matchup_state` (the worker's published window rows) was readable by the
+matchup's two seats only. 0532 opens it to the matchup's league
+(`matchup_state_open_to_league`: a member, and never a sealed league, 0462).
+It is the only widening: the worker publishes a window's rows only once it
+has kicked, so nothing sealed is in them, and `sealed_pick` / `applied_state`
+are untouched. Core `matchupWatch` (`watchBoard`, `watchSealedWindows`)
+shapes both sides from those rows, paired by roster slot, Ghost and Bye
+Steal as scores, not players. The app: the pairing line's sheet is now
+"Matchups" — THIS WEEK IN THE LEAGUE (the league page's scoreboard call,
+re-read on each open), then YOUR OTHER LEAGUES — and a pair opens
+`MatchupWatch`, full screen, on the board's own `Duel` (new `sides` prop:
+the window bar names the teams instead of YOU/THEY), fields under each pair,
+un-kicked windows listed as sealed, realtime while open. The web: the same
+two sections in the league chip's menu (the chip now shows with one league
+too), and `LeagueMatchupWatch`, a read-only modal of the same rows (no
+fields or play log there). No picker, hand or shop on either. `check:watch`
+pins the shaping and the migration's scope; on a scratch Postgres a
+league-mate read the state row and 0 picks / 0 applied rows, an outsider
+read nothing, and a sealed league stayed shut. Not yet seen on a phone or
+the site against a live league.
 ### v0.738.0 — The injury swap
 
 > - If a starter is listed Out or on IR after his window locks, you can now swap him out for free until kickoff: tap 🚑 INJURY SWAP on his spot. The replacement comes from your bench, plays the same position in the same window, and keeps the same metric. Once per spot.

@@ -6,10 +6,11 @@ import type { Phase, LiveCtx, Route } from '../app/store';
 import { Brand, SiteSettings, VersionTag, PlayerImg, Avatar, Img, InjuryBadge, InjuryNow, useIsMobile, ModalBackdrop, NoGameScreen } from '../app/ui';
 import { LeagueStrip } from '../app/LeagueStrip';
 import { useWide } from './adminUi';
-import { leagueGameMode, myEnrollments, injurySwap, myInjurySwaps, type Enrollment } from '@drip/core/data/liveApi';
+import { leagueGameMode, myEnrollments, injurySwap, myInjurySwaps, leagueWeekScoreboard, type Enrollment, type ScoreboardGame } from '@drip/core/data/liveApi';
 import { injurySwapOffered, injurySwapCandidates, injurySwapRefusal } from '@drip/core/data/injurySwap';
 import { injuryFor } from '@drip/core/data/injuries';
 import { InfoChip } from './adminUi';
+import { LeagueMatchupWatch } from './LeagueMatchupWatch';
 import { FieldView, SlotFieldViews, FieldBoard, type FieldBoardEntry } from '../app/FieldView';
 import { setLiveGameFeed, feedRowsToWeek, hasGameFeed, gameFeedFor, type TeamGameFeed } from '@drip/core/data/gameFeed';
 import { TURNOVER_COIN, TURNOVER_COIN_BOOSTED } from '@drip/core/engine/scoringRules';
@@ -299,6 +300,19 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     myInjurySwaps(liveCtx.matchupId, liveCtx.userId).then((sw) => { if (!dead) setInjSwaps(sw); }).catch(() => {});
     return () => { dead = true; };
   }, [liveCtx?.matchupId, liveCtx?.userId, demo]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed on the matchup and the seat
+  // THE LEAGUE'S OTHER MATCHUPS (v0.739.0, founder: "I think we need a way for
+  // players to browse to other matchups happening in the league this week" …
+  // "Full board after kickoff"). The menu lists this week's pairs, read each
+  // time it opens (the league page's scoreboard call); one opens read-only
+  // (LeagueMatchupWatch). Drip only: the classic board walks its own ring.
+  const [weekGames, setWeekGames] = useState<ScoreboardGame[] | null>(null);
+  const [watching, setWatching] = useState<ScoreboardGame | null>(null);
+  useEffect(() => {
+    if (!leagueMenu || !liveCtx || demo || classicMode !== false) return;
+    let dead = false;
+    leagueWeekScoreboard(liveCtx.leagueId, liveCtx.week).then((r) => { if (!dead) setWeekGames(r?.games ?? []); }).catch(() => { if (!dead) setWeekGames([]); });
+    return () => { dead = true; };
+  }, [leagueMenu, liveCtx?.leagueId, liveCtx?.week, demo, classicMode]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed on the league and week
   const [switchingLeague, setSwitchingLeague] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>(initialPhase);
   // Seed from any persisted lineup edits so the FINAL screen replays the exact
@@ -1581,9 +1595,9 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
     if (!ok) setSwitchingLeague(null); // stay put; the board you were on is still here
   };
   const otherSeats = (seats ?? []).filter((e) => e.league_id !== liveCtx?.leagueId);
-  const liveSwitchChip = liveCtx && !demo && seats && seats.length > 1 ? (
+  const liveSwitchChip = liveCtx && !demo && seats && (seats.length > 1 || classicMode === false) ? (
     <button onClick={() => setLeagueMenu(true)} disabled={switchingLeague != null} className="mono"
-      title="Switch to another of your leagues"
+      title="This week's matchups in the league, and your other leagues"
       style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--bd)', borderRadius: 4, padding: '4px 8px', cursor: switchingLeague ? 'default' : 'pointer', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180, flexShrink: 1 }}>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{switchingLeague ? 'opening…' : leagueName}</span>
       <span style={{ color: 'var(--dim)', flexShrink: 0 }}>▾</span>
@@ -1594,12 +1608,33 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: 'var(--surface)', border: '1px solid var(--bdh)', borderRadius: 8, boxShadow: '0 24px 70px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderBottom: '1px solid var(--bd)' }}>
           <div>
-            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Your matchups</div>
+            <div className="grotesk" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Matchups</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--dim)', marginTop: 3, letterSpacing: '0.06em' }}>NOW · {leagueName.toUpperCase()}</div>
           </div>
           <button onClick={() => setLeagueMenu(false)} style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18 }}>✕</button>
         </div>
         <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflow: 'auto' }}>
+          {classicMode === false && (
+            <>
+              <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', padding: '2px 2px 0' }}>THIS WEEK IN THE LEAGUE</div>
+              {weekGames === null && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>Loading the week…</div>}
+              {weekGames?.map((g) => {
+                const mine = g.matchup_id === liveCtx?.matchupId;
+                const pts = (n: number | null) => (n == null ? '–' : Number(n).toFixed(1));
+                return (
+                  <button key={g.matchup_id} disabled={mine} onClick={() => { setLeagueMenu(false); setWatching(g); }} className="mono"
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'var(--bg)', border: `1px solid ${mine ? 'var(--you)' : 'var(--bd)'}`, borderRadius: 6, padding: '10px 12px', cursor: mine ? 'default' : 'pointer' }}>
+                    <span className="grotesk" style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.home.team ?? `Seat ${g.home.roster_id}`}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: g.status === 'live' ? 'var(--you)' : 'var(--text)', flexShrink: 0 }}>{pts(g.home.points)} – {pts(g.away.points)}</span>
+                    <span className="grotesk" style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--text)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.away.team ?? `Seat ${g.away.roster_id}`}</span>
+                    <span style={{ fontSize: 9, color: mine ? 'var(--faint)' : 'var(--you)', fontWeight: 700, letterSpacing: '0.08em', flexShrink: 0 }}>{mine ? 'ON SCREEN' : 'WATCH →'}</span>
+                  </button>
+                );
+              })}
+              {weekGames && weekGames.length <= 1 && <div className="mono" style={{ fontSize: 10, color: 'var(--dim)', padding: 8 }}>No other matchups in the league this week.</div>}
+              <div className="mono" style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--faint)', padding: '8px 2px 0' }}>YOUR OTHER LEAGUES</div>
+            </>
+          )}
           {otherSeats.map((e) => (
             <button key={e.league_id} onClick={() => void goToLeague(e)} className="mono"
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' }}>
@@ -1615,6 +1650,8 @@ export function Matchup({ week, initialPhase, demo = false }: { week: number; in
         </div>
       </div>
     </ModalBackdrop>
+  ) : watching && liveCtx ? (
+    <LeagueMatchupWatch leagueId={liveCtx.leagueId} matchupId={watching.matchup_id} onClose={() => setWatching(null)} />
   ) : null;
   // THE INJURY SWAP, on the live drip board: one row per locked spot whose
   // player is listed Out or on IR, above the windows; the sheet lists who can
