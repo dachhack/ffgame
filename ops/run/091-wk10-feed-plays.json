@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/wk10-feed-plays.sql",
+  "why": "Follows ops 090 (founder: 'Let's reconcile the scoring and play by play to see if we are missing anything'). Week 10's totals differ from an outside play-by-play for about a dozen players: a missing Josh Allen rushing TD, a missing Chase Brown receiving TD, catches on the wrong teammate. Read only: the week's offensive feed rows by play id, to match each difference to its play. NFL players only."
+}
