@@ -413,24 +413,31 @@ async function main() {
       if (!slateN) break;
       const idx = await buildPlayerIndex();
       let moved = [];
-      const n = await stampFinals(week, idx, { restamp: true, leagueId, skipLeagues: skip, report: (m) => { moved = m; } });
+      // --dry (v0.740.3): re-resolve and LIST what would move, write nothing — the look before a
+      // re-stamp that follows a feed correction, when results people have read are about to change.
+      const dryRun = args.includes('--dry');
+      const n = await stampFinals(week, idx, { restamp: true, leagueId, skipLeagues: skip, report: (m) => { moved = m; }, ...(dryRun ? { dryRun: true } : {}) });
       // Seats, not team names: this runs in a PUBLIC workflow log.
       const shift = (a, b) => (a == null || b == null ? '  (was unstamped)' : `  ${(b - a) >= 0 ? '+' : ''}${(b - a).toFixed(2)}`);
       console.log(`restamp: week ${week} (${season})${leagueId ? ` · league ${leagueId.slice(0, 8)}` : ' · every league'} — re-resolved ${n} matchup(s)`);
       if (skip.size) console.log(contestOnly
         ? `restamp: contest leagues only — skipped ${skip.size} other league(s)`
         : `restamp: skipped ${skip.size} non-classic league(s) — a drip week cannot be re-resolved faithfully (--include-drip to override)`);
-      let changed = 0;
+      let changed = 0, flips = 0;
+      const side = (h, a) => (h == null || a == null ? null : Math.abs(h - a) < 0.005 ? 'tie' : h > a ? 'home' : 'away');
       for (const m of moved.sort((x, y) => String(x.league_id).localeCompare(String(y.league_id)) || x.home_roster_id - y.home_roster_id)) {
         const same = m.was.home != null && m.was.away != null
           && Math.abs(m.was.home - m.now.home) < 0.005 && Math.abs(m.was.away - m.now.away) < 0.005;
         if (same) continue;
         changed++;
-        console.log(`  ${m.league_id.slice(0, 8)} wk${m.week} seat ${m.home_roster_id} vs seat ${m.away_roster_id}`);
+        const flip = side(m.was.home, m.was.away) != null && side(m.was.home, m.was.away) !== side(m.now.home, m.now.away);
+        if (flip) flips++;
+        console.log(`  ${m.league_id.slice(0, 8)} wk${m.week} seat ${m.home_roster_id} vs seat ${m.away_roster_id}${flip ? '   ◀ THE HIGHER SCORE CHANGES SIDES' : ''}`);
         console.log(`      home ${String(m.was.home ?? '—').padStart(7)} → ${String(m.now.home).padStart(7)}${shift(m.was.home, m.now.home)}`);
         console.log(`      away ${String(m.was.away ?? '—').padStart(7)} → ${String(m.now.away).padStart(7)}${shift(m.was.away, m.now.away)}`);
       }
-      console.log(`restamp: ${changed} matchup(s) moved, ${n - changed} unchanged`);
+      console.log(`restamp${dryRun ? ' (DRY — nothing written)' : ''}: ${changed} matchup(s) ${dryRun ? 'would move' : 'moved'}, ${n - changed} unchanged, ${flips} where the higher score changes sides`);
+      if (dryRun) break;
       if (args.includes('--no-report')) { console.log('restamp: reports left alone (--no-report)'); break; }
       // Only leagues whose numbers actually MOVED get their write-up replaced:
       // deleting and re-posting an identical report would ping a league's chat
@@ -799,8 +806,9 @@ async function main() {
         if (req.legacy_teamunits === true) argv.push('--legacy-teamunits');
         if (req.flips === true) argv.push('--flips');
       } else if (req.mode === 'restamp') {
-        if (req.confirm !== 'RESTAMP') throw new Error('restamp needs "confirm": "RESTAMP" — this rewrites stored results');
+        if (req.dry !== true && req.confirm !== 'RESTAMP') throw new Error('restamp needs "confirm": "RESTAMP" — this rewrites stored results');
         argv.push('restamp', need('week'));
+        if (req.dry === true) argv.push('--dry');
         if (req.season) argv.push(String(req.season));
         if (req.league) argv.push(`--league=${req.league}`);
         if (req.report === false) argv.push('--no-report');

@@ -22,6 +22,19 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.740.3 — A re-stamp can be previewed
+
+> - Nothing changes for players: a behind-the-scenes preview of what a re-score would move.
+
+Ops 094 wrote week 10's play corrections (24 written, 11 corrected, 17
+removed; one player unresolved and left). Before the week is re-stamped —
+results people have read — `restamp --dry` (ops `"dry": true`, no confirm
+needed) re-resolves through `resolveMatchup`'s own dry run, lists each
+matchup that would move with before and after, marks the ones where the
+higher score changes sides, and writes nothing and posts no report. Ops 095
+is that preview for week 10. Drip leagues stay out of a re-stamp as before
+(v0.475.0: a drip week cannot be re-resolved faithfully).
+
 ### v0.740.2 — Week 10's plays corrected; the daily check is on
 
 > - Week 10's missing touchdowns and misplaced plays are corrected in the play-by-play (Josh Allen's and Chase Brown's touchdowns among them).
