@@ -250,6 +250,24 @@ async function main() {
       if (failed) process.exitCode = 1;
       break;
     }
+    case 'trueup-week': {
+      // ✓ A WEEK'S OFFENSE AGAINST THE BOOKS (v0.740.0): every pass, rush and
+      // catch the live feed holds, checked against nflverse's play-by-play
+      // and corrected in place — the worker's 6-hourly pass, for one week,
+      // now, with each change listed. `--dry` lists and writes nothing.
+      // Scores are NOT rewritten here: re-stamp the week if its finals
+      // should move.
+      //   node src/cli.js trueup-week <week> [season] [--dry]
+      const week = Number(args[0]);
+      if (!Number.isFinite(week) || week < 1) { console.error('usage: trueup-week <week> [season] [--dry]'); process.exitCode = 1; break; }
+      const season = args[1] && !args[1].startsWith('--') ? Number(args[1]) : Number(config.season);
+      const { trueupOffenseWeek } = await import('./poll/trueup.js');
+      const idx = await buildPlayerIndex();
+      const dry = args.includes('--dry');
+      const r = await trueupOffenseWeek(season, week, idx, { dry });
+      console.log(`true-up week ${week} (${season})${dry ? ' — DRY, nothing written' : ''}: ${r.games} games, ${r.inserted} written, ${r.updated} corrected, ${r.removed} removed, ${r.unresolved} unresolved`);
+      break;
+    }
     case 'leagues': {
       // Read-only: list leagues (internal id + sleeper id) with a per-week matchup
       // status summary — so you can pick a (league-id, week) to simulate/rehearse.
@@ -792,6 +810,12 @@ async function main() {
         // Paths in a request are repo-relative, like everywhere else in the
         // repo; the CLI runs from server/, so they are resolved one level up.
         argv.push('restore-week', `../${need('file')}`);
+      } else if (req.mode === 'trueup') {
+        // v0.740.0: one week's passes, rushes and catches against nflverse's
+        // play-by-play, corrected in place. `"dry": true` lists and writes nothing.
+        argv.push('trueup-week', need('week'));
+        if (req.season) argv.push(String(req.season));
+        if (req.dry === true) argv.push('--dry');
       } else if (req.mode === 'repoll') {
         argv.push('repoll-week', need('week'));
         if (req.season) argv.push(String(req.season));

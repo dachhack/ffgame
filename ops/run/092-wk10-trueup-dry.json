@@ -1,0 +1,6 @@
+{
+  "mode": "trueup",
+  "week": 10,
+  "dry": true,
+  "why": "Founder, after week 10's feed was reconciled against the play-by-play (ops 090/091: a missing Josh Allen rushing TD, a missing Burrow-to-Chase Brown TD, twelve plays on the wrong player, two completions the books do not have): 'Both please' — correct week 10 and add a daily check. This is the DRY run of the new offense true-up against production's player directory: it lists every row it would write, correct or remove, and writes nothing."
+}
