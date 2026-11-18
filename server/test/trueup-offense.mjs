@@ -9,7 +9,7 @@
 // play the books call "No Play" is removed, nothing is written twice, and a
 // man the directory cannot resolve is left as the live feed had him.
 // Run: `npx tsx test/trueup-offense.mjs` from server/.
-import { extractOffense, planOffense } from '../src/poll/trueup.js';
+import { extractOffense, planOffense, offenseResolver } from '../src/poll/trueup.js';
 
 let fails = 0;
 const ok = (c, msg, got) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${msg}${!c && got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); if (!c) fails++; };
@@ -90,6 +90,36 @@ ok(!aliased.insert.some((r) => r.pid === 737) && aliased.update.some((u) => u.y 
 const blind = planOffense(plays, feed, (g) => (g === 'WR2' ? null : slug[g] ?? null));
 ok(blind.unresolved === 1 && !blind.remove.some((i) => byId.get(i).player_slug === 'tyler-bass') && !blind.insert.some((r) => r.pid === 2886 && r.k === 'rec'),
   'an unresolved man: his play is left exactly as the live feed had it', { unresolved: blind.unresolved });
+
+// ── who the books mean (v0.740.1) ──
+{
+  const dir = [
+    { slug: 'josh-allen', full: 'Josh Allen', pos: 'QB', team: 'BUF', gsis: 'QB1' },
+    { slug: 'alec-ogletree', full: 'Alec Ogletree', pos: 'LB', team: null },
+    { slug: 'drew-ogletree', full: 'Drew Ogletree', pos: 'TE', team: 'IND' },
+    { slug: 'j-michael-sturdivant', full: 'J. Michael Sturdivant', pos: 'WR', team: 'GB' },
+    { slug: 'zonovan-knight', full: 'Zonovan Knight', pos: 'RB', team: 'ARI' },
+    { slug: 'qadir-knight', full: 'Qadir Knight', pos: 'LB', team: 'ARI' },
+    { slug: 'trey-smith', full: 'Trey Smith', pos: 'WR', team: 'KC' }, { slug: 'tre-smith', full: 'Tre Smith', pos: 'RB', team: 'KC' },
+    { slug: 'marvin-harrison', full: 'Marvin Harrison Jr.', pos: 'WR', team: 'ARI' },
+  ];
+  const abbr = new Map();
+  for (const e of dir) { const k = `${e.full[0]} ${e.full.split(/\s+/).slice(1).join(' ')}`.toLowerCase().replace(/[.']/g, ''); if (!abbr.has(k)) abbr.set(k, []); abbr.get(k).push(e); }
+  const index = {
+    slugForGsis: (g) => dir.find((e) => e.gsis === g)?.slug ?? null,
+    slugForNflAbbr: (name, team) => { const a = abbr.get(String(name).replace('.', ' ').toLowerCase()) ?? []; return (a.find((e) => e.team === team) ?? a[0])?.slug ?? null; },
+    metaForSlug: (slug) => dir.find((e) => e.slug === slug) ?? null,
+    allSlugs: () => dir,
+  };
+  const who = offenseResolver(index);
+  ok(who('QB1', 'X.Nobody', 'NYJ') === 'josh-allen', 'the gsis id answers first');
+  ok(who('', 'A.Ogletree', 'IND') === 'drew-ogletree', 'a namesake on no club is never the answer; the club\'s own man by last name', who('', 'A.Ogletree', 'IND'));
+  ok(who('', 'J.Sturdivant', 'GB') === 'j-michael-sturdivant', 'a name the short key cannot spell is found by last name on the team', who('', 'J.Sturdivant', 'GB'));
+  ok(who('', 'Z.Knight', 'ARI') === 'zonovan-knight', 'a skill-position man before a defender of the same last name');
+  ok(who('', 'T.Smith', 'KC') === null, 'two it could be is nobody', who('', 'T.Smith', 'KC'));
+  ok(who('', 'M.Harrison', 'ARI') === 'marvin-harrison', 'a "Jr." is not his last name');
+  ok(who('', 'A.Ogletree', 'DAL') === null && who('', 'A.Ogletree', '') === null, 'nobody on that club, or no club: nobody');
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nall offense true-up checks passed');
 process.exit(fails ? 1 : 0);

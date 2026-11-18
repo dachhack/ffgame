@@ -316,6 +316,46 @@ export async function trueupOffense(csvText, weeks, resolve, { dry = false, deta
   return tot;
 }
 
+/** WHO THE BOOKS MEAN (v0.740.1). The books name a man by gsis id; the
+ *  directory carries one for most players and for almost no rookie, so the
+ *  rest are found by name — and the first dry run of week 10 showed what a
+ *  loose name match does: "A.Ogletree" of the Colts resolved to Alec
+ *  Ogletree, a linebacker five years retired (the only "A. Ogletree" the
+ *  directory holds; the Colts' tight end is listed as Drew), and
+ *  "J.Sturdivant" resolved to nobody (the directory says "J. Michael").
+ *  So, in order:
+ *    1. the gsis id;
+ *    2. the one man ON THE PLAY'S TEAM with that last name — a skill-position
+ *       player first, anybody if there is no such; the first initial settles
+ *       two;
+ *    3. nobody. An unresolved play is left as the live feed had it. */
+const SKILL = new Set(['QB', 'RB', 'WR', 'TE', 'FB', 'K', 'P']);
+const NAME_SUFFIX = /\s+(jr|sr|ii|iii|iv|v)\.?$/i;
+const lastOf = (name) => String(name ?? '').replace(NAME_SUFFIX, '').trim().split(/[\s.]+/).filter(Boolean).pop()?.toLowerCase() ?? '';
+export function offenseResolver(playerIndex) {
+  const byTeamLast = new Map();
+  for (const e of playerIndex.allSlugs?.() ?? []) {
+    if (!e.team || !e.full) continue;
+    const key = `${e.team}|${lastOf(e.full)}`;
+    if (!byTeamLast.has(key)) byTeamLast.set(key, []);
+    byTeamLast.get(key).push(e);
+  }
+  return (gsis, name, team) => {
+    const byId = playerIndex.slugForGsis(gsis);
+    if (byId) return byId;
+    if (!name || !team) return null;
+    let pool = byTeamLast.get(`${team}|${lastOf(name)}`) ?? [];
+    const skill = pool.filter((e) => SKILL.has(String(e.pos ?? '').toUpperCase()));
+    if (skill.length) pool = skill;
+    if (pool.length > 1) {
+      const ini = String(name).trim()[0]?.toLowerCase();
+      const same = pool.filter((e) => e.full.trim()[0]?.toLowerCase() === ini);
+      if (same.length) pool = same;
+    }
+    return pool.length === 1 ? pool[0].slug : null;
+  };
+}
+
 /** THE OPERATOR'S RUN (v0.740.0): one week's offense against the books, now,
  *  with every change listed. `dry` writes nothing.
  *    node src/cli.js trueup-week <week> [season] [--dry] */
@@ -323,9 +363,7 @@ export async function trueupOffenseWeek(season, week, playerIndex, { dry = false
   const res = await fetch(RELEASE(season), { redirect: 'follow' });
   if (!res.ok) throw new Error(`nflverse pbp fetch ${res.status}`);
   const text = gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8');
-  const resolve = (gsis, name, team) =>
-    playerIndex.slugForGsis(gsis) ?? (name ? playerIndex.slugForNflAbbr(name, team) : null);
-  return trueupOffense(text, new Set([week]), resolve, { dry, detail: true });
+  return trueupOffense(text, new Set([week]), offenseResolver(playerIndex), { dry, detail: true });
 }
 
 /** Run one true-up pass for `season`, limited to `weeks` (the weeks the worker
@@ -395,7 +433,7 @@ export async function trueupTick(season, weeks, playerIndex) {
   // own try — a failure here must not cost the defensive credits above.
   let offense = null;
   try {
-    offense = OFFENSE_AUTO ? await trueupOffense(text, wanted, resolve) : { games: 0, inserted: 0, updated: 0, removed: 0, unresolved: 0 };
+    offense = OFFENSE_AUTO ? await trueupOffense(text, wanted, offenseResolver(playerIndex)) : { games: 0, inserted: 0, updated: 0, removed: 0, unresolved: 0 };
     if (offense.inserted || offense.updated || offense.removed) {
       log(`true-up ${season}: offense — ${offense.inserted} written, ${offense.updated} corrected, ${offense.removed} removed across ${offense.games} games`);
     }
