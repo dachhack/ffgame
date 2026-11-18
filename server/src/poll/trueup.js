@@ -193,10 +193,11 @@ export function extractOffense(csvText, weeks) {
   return out;
 }
 
-/** The worker's own 6-hourly pass. OFF until the operator's dry run of a real
- *  week (ops "trueup", "dry": true) has been read against production's
- *  directory — the plan is proven on real plays, the gsis → slug join is not. */
-export const OFFENSE_AUTO = false;
+/** The worker's own 6-hourly pass, over the week being played and the three
+ *  before it. ON since v0.740.2: ops 092 and 093 dry-ran week 10 against
+ *  production's directory (24 to write, 11 to correct, 17 to remove, each one
+ *  a play the reconciliation had already found) before anything was written. */
+export const OFFENSE_AUTO = true;
 const OFF_KINDS = ['pass', 'rush', 'rec'];
 /** What one game's feed rows need to agree with the books. Pure.
  *    plays     extractOffense's rows for this game

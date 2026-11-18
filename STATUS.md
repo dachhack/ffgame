@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.740.2 — Week 10's plays corrected; the daily check is on
+
+> - Week 10's missing touchdowns and misplaced plays are corrected in the play-by-play (Josh Allen's and Chase Brown's touchdowns among them).
+> - The daily check against the official play-by-play is now running.
+
+Ops 093 (second dry run, production directory): 24 rows to write, 11 to
+correct, 17 to remove across the fourteen games, every one a play the
+reconciliation found — Allen's rushing TD, Burrow to Chase Brown, J. Michael
+Sturdivant's touchdown off the kicker, Bam Knight's carries off the Rams'
+defenders, four catches back on the right teammate, the two completions the
+books do not have. One player (20 plays in KC@ATL) is unresolved and left as
+the live feed had him. Ops 094 writes them. `OFFENSE_AUTO` is on: the
+worker's 6-hourly true-up now checks the offense of the week being played
+and the three before it. Scores already stamped do not move until a week is
+re-stamped.
+
 ### v0.740.1 — The true-up knows who the books mean
 
 > - The daily play-by-play check now finds a player by his team and last name when it has no id for him, so a correction can never land on a namesake.

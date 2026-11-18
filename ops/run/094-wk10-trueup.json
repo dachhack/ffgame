@@ -1,0 +1,5 @@
+{
+  "mode": "trueup",
+  "week": 10,
+  "why": "Founder: 'Both please' — correct week 10 and add a daily check. Ops 092 and 093 dry-ran this against production's directory; 093 listed 24 rows to write, 11 to correct and 17 to remove, each a play the reconciliation (ops 090/091) had found. This writes them: week 10's passes, rushes and catches are made to agree with nflverse's play-by-play. Scores are not rewritten here."
+}
