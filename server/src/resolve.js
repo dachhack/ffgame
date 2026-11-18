@@ -1052,7 +1052,7 @@ export async function stampFinals(week, playerIndex, opts = {}) {
   const moved = [];
   for (let i = 0; i < rows.length; i += 20) {
     await Promise.all(rows.slice(i, i + 20).map((m) =>
-      resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx })
+      resolveMatchup(m, playerIndex, undefined, { playsInjected: true, ctx, ...(opts.dryRun ? { dryRun: true } : {}) })
         .then((r) => {
           done++;
           moved.push({ id: m.id, league_id: m.league_id, week: m.week,

@@ -1,0 +1,6 @@
+{
+  "mode": "restamp",
+  "week": 10,
+  "dry": true,
+  "why": "Founder: correct week 10 and re-score it. Ops 094 corrected week 10's plays (24 written, 11 corrected, 17 removed). This is the DRY re-stamp: it re-resolves every classic and contest matchup of week 10 against the corrected plays and lists which would move and where the higher score would change sides. Nothing is written and no report is posted. Seats, not names."
+}
