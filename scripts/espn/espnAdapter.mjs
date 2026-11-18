@@ -149,7 +149,39 @@ export function buildRoster(summary, resolveSlug = slugOf) {
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const abbrs = [...byAbbrev.keys()].sort((a, b) => b.length - a.length).map(esc);
   byAbbrev._re = abbrs.length ? new RegExp(`(?:${abbrs.join('|')})`, 'g') : /$^/g;
+  // EVERY MAN ONCE (v0.740.0), for the two lookups the abbreviation table
+  // cannot answer: by LAST NAME (the gamebook writes "Z.Knight" for the man
+  // the boxscore calls Bam Knight, and "J.Sturdivant" for J. Michael
+  // Sturdivant) and by FULL NAME (ESPN's scoring-summary text, "Josh Allen 1
+  // Yd Run"). One entry per athlete and team.
+  const people = new Map();
+  for (const cands of byAbbrev.values()) for (const x of cands) people.set(`${x.slug}|${x.team}`, x);
+  byAbbrev._people = [...people.values()];
   return byAbbrev;
+}
+
+const lastNameOf = (displayName) => String(displayName ?? '').replace(SUFFIX, '').trim().split(/\s+/).pop()?.toLowerCase() ?? '';
+/** The one man on `team` (and, when given, that side of the ball) whose last
+ *  name this is — or nobody: two candidates is a guess, and a guess is how a
+ *  tackler came to hold a running back's carries. */
+export function rosterByLastName(roster, last, team, side) {
+  const want = String(last ?? '').toLowerCase();
+  if (!want) return undefined;
+  let pool = (roster._people ?? []).filter((x) => lastNameOf(x.name) === want && (!team || x.team === team));
+  if (pool.length > 1 && side) { const s = pool.filter((x) => x.cats && x.cats.has(side)); if (s.length) pool = s; }
+  return pool.length === 1 ? pool[0] : undefined;
+}
+/** A man by his full display name (scoring-summary text), his team preferred. */
+export function rosterByFullName(roster, name, team) {
+  const want = normName(name);
+  const pool = (roster._people ?? []).filter((x) => normName(x.name) === want);
+  return pool.find((x) => !team || x.team === team) ?? pool[0];
+}
+/** The gamebook name that starts at `pos` ("Z.Knight", "A.St. Brown"), or ''. */
+const NAME_AT = /[A-Z][A-Za-z'\-]*\.\s?(?:[A-Z][a-z]+\.\s)?[A-Z][A-Za-z'\-]+/y;
+function nameTokenAt(text, pos) {
+  NAME_AT.lastIndex = pos;
+  return NAME_AT.exec(text)?.[0] ?? '';
 }
 
 /** Ordered roster-name hits in `text`: [{ abbr, idx }] by position. */
@@ -236,6 +268,48 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     let h = null; for (const n of names) { if (n.idx < i) h = n; else break; }
     return h ? resolve(h.abbr, wantTeam, side) : null;
   };
+  // THE MAN THE PLAY NAMES, WHERE IT NAMES HIM (v0.740.0). Week 10 of 2026:
+  // five of Bam Knight's carries went to the Rams who tackled him, a
+  // touchdown catch to the kicker of its extra point, and four catches to
+  // the man a "Direct snap to" clause named. Each time the ball carrier's own
+  // name was one this roster could not read (or not the first in the text),
+  // and "the first name" / "the first name after ' to '" took whoever came
+  // next. Now the runner must stand at the head of the play, the passer right
+  // before " pass" and the receiver right after its " to " — and a name that
+  // is there but unknown is looked up by last name on the offense, or
+  // credited to nobody. Nobody is right more often than the tackler.
+  const bodyStart = (() => {
+    let i = /^\s*(?:\([^)]*\)\s*)*/.exec(text)[0].length;
+    const ds = /^Direct snap to .*?\.\s+(?=[A-Z])/.exec(text.slice(i));
+    if (ds) i += ds[0].length;
+    return i;
+  })();
+  const strictAt = (pos, wantTeam, side) => {
+    if (pos < 0) return null;
+    const h = names.find((n) => n.idx === pos);
+    if (h) return resolve(h.abbr, wantTeam, side) ?? null;
+    const tok = nameTokenAt(text, pos);
+    if (!tok) return null;
+    return rosterByLastName(roster, tok.split(/[.\s]+/).pop(), wantTeam, side) ?? null;
+  };
+  /** The ball carrier: the name at the head of the play (after the formation
+   *  and any direct-snap clause). */
+  const carrier = (limit = text.length) => (bodyStart < limit ? strictAt(bodyStart, offTeam, 'off') : null);
+  /** The passer: the name that ends where " pass" begins. */
+  const passerOf = () => {
+    const i = text.indexOf(' pass'); if (i < 0) return null;
+    const h = names.find((n) => n.idx + n.abbr.length === i);
+    if (h) return resolve(h.abbr, offTeam, 'off') ?? null;
+    const m = /([A-Z][A-Za-z'\-]*\.\s?(?:[A-Z][a-z]+\.\s)?[A-Z][A-Za-z'\-]+)$/.exec(text.slice(0, i));
+    return m ? rosterByLastName(roster, m[1].split(/[.\s]+/).pop(), offTeam, 'off') ?? null : null;
+  };
+  /** The receiver: the name right after the pass's own " to " (or `marker`). */
+  const targetOf = (marker = ' to ') => {
+    const from = Math.max(0, text.indexOf(' pass'));
+    const i = text.indexOf(marker, from); if (i < 0) return null;
+    let pos = i + marker.length; while (text[pos] === ' ') pos++;
+    return strictAt(pos, offTeam, 'off');
+  };
   // Whoever fumbled: the roster name immediately before "FUMBLES". No team
   // preference — the fumbler is the ball CARRIER, who is the offense on a
   // scrimmage play but the returner (defense side) on a kick.
@@ -264,7 +338,28 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // Trust the play TYPE, not the text, for interceptions: reversed-on-replay picks
   // and 2-point-conversion picks still say "INTERCEPTED" in the text but are typed
   // "Pass Incompletion" / "… Touchdown" and are NOT defensive turnovers.
-  const isInt = typeText.includes('Interception');
+  // …and an interception the DEFENDER then fumbles is typed "Fumble Recovery"
+  // (v0.740.0): "C.Klubnik pass deep right intended for G.Wilson INTERCEPTED
+  // by D.Igbinosun at 50. D.Igbinosun to NYJ 33 for 17 yards (J.Ruckert).
+  // FUMBLES (J.Ruckert), RECOVERED by NYJ-J.Myers". The fumble branch read it
+  // as a 17-yard completion to the man who made the tackle.
+  const isInt = typeText.includes('Interception')
+    || ((typeText.startsWith('Fumble Recovery') || typeText === 'Fumble Return Touchdown') && /\bINTERCEPTED by\b/.test(text.split('FUMBLES')[0]));
+  // A SNAP THE BOOKS DO NOT HAVE (v0.740.0): a penalty that ends "- No Play"
+  // wipes the down out — no attempt, no catch, no carry. ESPN still types
+  // some of them "Pass Reception" (offsetting fouls: G.Smith to I.Williams
+  // for 45, 2026 wk 10), and the catch, its yards and its reception point
+  // were all being paid.
+  const penAt = text.search(/penalty on/i);
+  const noPlay = penAt >= 0 && /\bNo Play\b/.test(text.slice(penAt));
+  // ESPN'S SCORING-SUMMARY TEXT (v0.740.0). Some touchdowns arrive as "Josh
+  // Allen 1 Yd Run (Tyler Bass Kick)" or "Chase Brown 4 Yd pass from Joe
+  // Burrow (Evan McPherson Kick)" — full names, no "TOUCHDOWN", no gamebook
+  // abbreviation — and every branch below found nobody: the touchdown, its
+  // yards and the extra point all vanished (two of them in 2026 wk 10).
+  const sumRun = /^(.+?) (-?\d+) Yds? Run\b/.exec(text);
+  const sumPass = /^(.+?) (-?\d+) Yds? pass from (.+?) \(/.exec(text);
+  const sumKick = /\(([^()]+?) Kick\)\s*$/.exec(text);
   // A SACK IS A SACK WHATEVER ESPN FILES IT UNDER (v0.533.0): a sack the
   // offense fumbles and keeps is typed "Fumble Recovery (Own)", one in the end
   // zone "Safety" — ~40 across fourteen weeks lost the team and the sacker.
@@ -289,7 +384,19 @@ export function playToRows(p, roster, eventId, gameStartMs) {
   // a spot on the RECOVERING team's side is yards-to-goal N, else 100 − N.
   const fumPreYds = (() => {
     if (!isFumbleTyped || fumAt < 0) return fumGain;
-    if (!p?.isTurnover) return Number(p?.statYardage) ? Number(p.statYardage) : fumGain;
+    if (!p?.isTurnover) {
+      // KEPT BY A TEAMMATE (v0.740.0): the books stop the runner where he
+      // lost it — "R.Gilliam to NE 19 for 6 yards. FUMBLES, recovered by
+      // NE-A.Brown at NE 25" is a 6-yard catch, and ESPN's 12 is the play's.
+      // Recovered BEHIND the gain, ESPN's smaller number is the credit; kept
+      // by the man himself, the whole play is his.
+      const sy = Number(p?.statYardage);
+      if (!Number.isFinite(sy) || !sy) return fumGain;
+      const recBy = /recovered by [A-Z]{2,4}-([A-Za-z.'\-]+)/i.exec(text.slice(fumAt))?.[1];
+      const self = /\band recovers\b/i.test(text.slice(fumAt))
+        || (!!recBy && !!fumblerR && (roster.get(recBy) ?? []).some((x) => x.slug === fumblerR.slug));
+      return self ? sy : Math.min(fumGain, sy);
+    }
     const rec = /RECOVERED by ([A-Z]{2,3})-/.exec(text)?.[1];
     const gainSpot = [...fumPre.matchAll(/\bto ([A-Z]{2,3}) (-?\d+)/g)].pop();
     const after = text.slice(fumAt);
@@ -304,17 +411,28 @@ export function playToRows(p, roster, eventId, gameStartMs) {
 
   // Truth flags (0166) ride on the QB row — the adapter is branch-aware here,
   // so cp/ic/sk are exact: exactly one of them on every flag-aware dropback.
-  if (typeText === 'Rush' || typeText === 'Rushing Touchdown') {
-    const r = names[0] && resolve(names[0].abbr, offTeam, 'off'); // ball-carrier is the first name
+  if (noPlay) {
+    // nothing ran
+  } else if (typeText === 'Rushing Touchdown' && p?.scoringPlay && sumRun) {
+    const r = rosterByFullName(roster, sumRun[1], offTeam);
+    if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', Number(sumRun[2]) || 0, 1, 0, 0, 0, fd) });
+  } else if (typeText === 'Passing Touchdown' && p?.scoringPlay && sumPass) {
+    const recv = rosterByFullName(roster, sumPass[1], offTeam);
+    const passer = rosterByFullName(roster, sumPass[3], offTeam);
+    const y = Number(sumPass[2]) || 0;
+    if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', y, 1, 0, 0, 0, { cp: 1, ...fd }) });
+    if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', y, 1, 1, 1, 0, fd) });
+  } else if (typeText === 'Rush' || typeText === 'Rushing Touchdown') {
+    const r = carrier(); // the ball carrier heads the play
     if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', gain, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === r.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Reception' || typeText === 'Passing Touchdown') {
-    const passer = nameBefore(' pass', offTeam, 'off');
-    const recv = nameAfter(' to ', offTeam, 'off');
+    const passer = passerOf();
+    const recv = targetOf();
     if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', gain, isTD ? 1 : 0, 0, 0, p?.isTurnover && fumbler === passer.slug ? 1 : 0, { cp: 1, ...fd }) });
     if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'rec', gain, isTD ? 1 : 0, 1, 1, p?.isTurnover && fumbler === recv.slug ? 1 : 0, fd) });
   } else if (typeText === 'Pass Incompletion') {
-    const passer = nameBefore(' pass', offTeam, 'off');
-    const recv = nameAfter(' to ', offTeam, 'off'); // absent on a throwaway
+    const passer = passerOf();
+    const recv = targetOf(); // absent on a throwaway
     if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 0, { ic: 1 }) });
     if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'incomplete', 0, 0, 0, 1, 0) });
   } else if (isInt) {
@@ -323,8 +441,8 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     // An INT is a pass ATTEMPT and an incompletion in the books — ic rides along;
     // a pick returned for a TD marks the passer's row p6 (0170) — never `td`, so
     // no TD points can ever fire on a pick thrown.
-    const passer = nameBefore(' pass', offTeam, 'off');
-    const recv = nameAfter('intended for', offTeam, 'off');
+    const passer = passerOf();
+    const recv = targetOf('intended for');
     const p6 = /Return Touchdown$/.test(typeText) ? { ic: 1, p6: 1 } : { ic: 1 };
     if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', 0, 0, 0, 0, 1, p6) });
     if (recv) out.push({ slug: recv.slug, play: row(c, ride, 'incomplete', 0, 0, 0, 1, 0) });
@@ -342,13 +460,12 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     const fdPre = !lost && dn > 0 && dist > 0 && fumPreYds >= dist ? { fd: 1 } : undefined;
     const passI = pre.indexOf(' pass');
     if (passI >= 0) {
-      const passer = nameBefore(' pass', offTeam, 'off');
-      const recv = nameAfter(' to ', offTeam, 'off');
+      const passer = passerOf();
+      const recv = targetOf();
       if (passer) out.push({ slug: passer.slug, play: row(c, ride, 'pass', fumPreYds, 0, 0, 0, lost && fumbler === passer.slug ? 1 : 0, { cp: 1, ...fdPre }) });
       if (recv && recv.slug !== passer?.slug) out.push({ slug: recv.slug, play: row(c, ride, 'rec', fumPreYds, 0, 1, 1, lost && fumbler === recv.slug ? 1 : 0, fdPre) });
     } else {
-      const firstIn = names.find((n) => n.idx < pre.length);
-      const r = firstIn && resolve(firstIn.abbr, offTeam, 'off');
+      const r = carrier(pre.length);
       if (r) out.push({ slug: r.slug, play: row(c, ride, 'rush', fumPreYds, 0, 0, 0, lost && fumbler === r.slug ? 1 : 0, fdPre) });
     }
   } else if (isSackPlay) {
@@ -413,8 +530,24 @@ export function playToRows(p, roster, eventId, gameStartMs) {
       if (kk) out.push({ slug: kk.slug, play: { ...kp } });
     }
   }
+  if (sumKick && (sumRun || sumPass) && p?.scoringPlay) {
+    // The scoring-summary text's extra point: "(Tyler Bass Kick)" is a made one.
+    const kk = rosterByFullName(roster, sumKick[1], offTeam);
+    const team = kTeam(kk);
+    if (team) {
+      const kp = row(c, ride, 'xp', 0, 0, 0, 0, 0);
+      out.push({ slug: `${team.toLowerCase()}-k`, play: kp });
+      if (kk) out.push({ slug: kk.slug, play: { ...kp } });
+    }
+  }
   if (/extra point/i.test(text)) {
-    const kk = nameBefore(' extra point', offTeam);
+    // The kicker is the name that ENDS where " extra point" begins (v0.740.0):
+    // "the last name before it" paid the extra point to the quarterback when
+    // the kicker's own name was one the roster could not read.
+    const xpAt = text.search(/ extra point/i);
+    const kh = names.find((n) => n.idx + n.abbr.length === xpAt);
+    const kk = kh ? resolve(kh.abbr, offTeam)
+      : rosterByLastName(roster, (/([A-Za-z'\-]+)$/.exec(text.slice(0, xpAt)) ?? [])[1], offTeam) ?? null;
     const team = kTeam(kk);
     if (team) {
       const kp = row(c, ride, /extra point is GOOD/i.test(text) ? 'xp' : 'xpmiss', 0, 0, 0, 0, 0);
@@ -467,7 +600,12 @@ export function playToRows(p, roster, eventId, gameStartMs) {
     // Return yards ride the TEAM rows too (v0.533.0) — dstIntRetYd and
     // dstFumRetYd read them and they were always written as 0.
     if (isInt) out.push({ slug: d, play: row(c, ride, 'int', retYdsAfter('INTERCEPTED by'), 0, 0, 0, 0) });
-    if (p?.isTurnover && /FUMBLE/i.test(text) && /RECOVERED by/i.test(text)) out.push({ slug: d, play: row(c, ride, 'fumrec', retYdsAfter('RECOVERED by'), 0, 0, 0, 0) });
+    // …and only when the DEFENSE recovered it (v0.740.0): an interception the
+    // defender fumbles back to the offense is a turnover play too, and the
+    // offense's own recovery was being paid to the defense.
+    const recTeam = /RECOVERED by ([A-Z]{2,4})-/i.exec(text)?.[1];
+    const defRecovered = !recTeam || fixTeam(BOOK_TEAM[recTeam] ?? recTeam) === defTeam;
+    if (p?.isTurnover && /FUMBLE/i.test(text) && /RECOVERED by/i.test(text) && defRecovered) out.push({ slug: d, play: row(c, ride, 'fumrec', retYdsAfter('RECOVERED by'), 0, 0, 0, 0) });
     // A muffed punt the kicking team recovers is its fumble recovery
     // (v0.533.0): the text says MUFFS, not FUMBLE. On a punt the "defense"
     // participant is the RECEIVING side, so the recovering team is offTeam.
@@ -654,7 +792,7 @@ export function playToRows(p, roster, eventId, gameStartMs) {
  *  ESPN's box score before this. */
 const BOOK_TEAM = { ARZ: 'ARI', BLT: 'BAL', CLV: 'CLE', HST: 'HOU' };
 export function creditedYards(p, text, yds, offTeam) {
-  const at = text.indexOf('PENALTY on');
+  const at = text.search(/penalty on/i);   // "Penalty on …, offsetting" too (v0.740.0)
   if (at < 0) return yds;
   // "… enforced at BLT 38 - No Play": the snap never happened in the books.
   if (/\bNo Play\b/.test(text.slice(at))) return 0;

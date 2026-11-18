@@ -86,6 +86,11 @@ export async function pollGame(eventId, week, playerIndex, sport = 'nfl', opts =
   for (const [slug, plays] of Object.entries(pbp)) {
     for (const p of plays) {
       if (confirmed && (p.k === 'qbhit' || p.k === 'pd')) continue;
+      // …and the OFFENSE stands as the true-up left it (v0.740.0). Once the
+      // books cover a game its passes, rushes and catches are corrected in
+      // place (trueup.js trueupOffense); a later re-poll must neither put the
+      // live reading back nor sweep the corrected rows away as stale.
+      if (confirmed && TRUED_OFFENSE.has(p.k)) continue;
       rows.push({
         week, game_id: eventId, player_slug: slug,
         c: p.c, t: p.t ?? null, pid: p.pid ?? null,
@@ -106,7 +111,7 @@ export async function pollGame(eventId, week, playerIndex, sport = 'nfl', opts =
   const byKey = new Map();
   for (const r of rows) byKey.set(`${r.pid}|${r.player_slug}|${r.k}`, r);
   const uniq = [...byKey.values()];
-  await writeGamePlays(week, eventId, uniq);
+  await writeGamePlays(week, eventId, uniq, confirmed ? TRUED_OFFENSE : null);
   // MIXED LEAGUES (0372): a college game's college-player rows also land in
   // the NFL week that holds its kickoff, so a mixed league's week N scores
   // them by slug and week like everyone else. c- slugs only: the adapter's
@@ -143,7 +148,10 @@ export async function pollGame(eventId, week, playerIndex, sport = 'nfl', opts =
 
 /** Upsert one game's rows at one week and delete that game's rows the current
  *  set no longer holds. Shared by the poll and the mixed-league mirror. */
-async function writeGamePlays(week, eventId, uniq) {
+/** The kinds the nflverse true-up owns once it has covered a game (v0.740.0). */
+const TRUED_OFFENSE = new Set(['pass', 'rush', 'rec']);
+
+async function writeGamePlays(week, eventId, uniq, keepKinds = null) {
   if (!uniq.length) return;
   // RECONCILE — each poll carries the game's FULL current play set, and ESPN
   // revises plays mid-game (yardage corrections, a TD overturned on review, a
@@ -160,7 +168,7 @@ async function writeGamePlays(week, eventId, uniq) {
   const present = new Set(uniq.map((r) => `${r.pid}|${r.player_slug}|${r.k}`));
   const { data: existing, error: exErr } = await db().from('live_play').select('id,pid,player_slug,k').eq('week', week).eq('game_id', eventId);
   if (exErr) throw new Error(`live_play stale scan: ${exErr.message}`);
-  const staleIds = (existing ?? []).filter((e) => !present.has(`${e.pid}|${e.player_slug}|${e.k}`)).map((e) => e.id);
+  const staleIds = (existing ?? []).filter((e) => !present.has(`${e.pid}|${e.player_slug}|${e.k}`) && !(keepKinds && keepKinds.has(e.k))).map((e) => e.id);
   if (staleIds.length) {
     const { error: delErr } = await db().from('live_play').delete().in('id', staleIds);
     if (delErr) throw new Error(`live_play stale delete (${staleIds.length}): ${delErr.message}`);

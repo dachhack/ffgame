@@ -22,6 +22,49 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.740.0 — The play-by-play, checked against the books
+
+> - Fixed touchdowns that could go missing from live scoring, and plays that were credited to the wrong player (a tackler, or a kicker) or counted after a penalty wiped them out.
+> - A day after each game, every pass, rush and catch is now checked against the official play-by-play and corrected.
+
+Founder, on a Josh Allen touchdown the app never had (Weekly Cointest, wk
+10, 16.2 for a 22.3 game): "Let's reconcile the scoring and play by play to
+see if we are missing anything", then "Both please" (correct week 10; add a
+daily check). Ops 090/091 read the feed; every offensive row of week 10 was
+matched by play id to an outside play-by-play. Found: two touchdowns ESPN
+sent as scoring-summary text ("Josh Allen 1 Yd Run (Tyler Bass Kick)"),
+twelve plays on the wrong man, two completions the books do not have, a
+handful of yardage differences. Each has a cause in `espnAdapter`, fixed and
+pinned in `check:feedingest`:
+- **scoring-summary text** is parsed (run, pass, its extra point);
+- **the man the play names, where it names him**: the runner heads the play,
+  the passer ends at " pass", the receiver follows the pass's own " to "
+  (not a "Direct snap to"), the kicker ends at " extra point" — a name the
+  roster cannot read is looked up by last name on the offense, or credited
+  to nobody (it was going to the tackler, or the kicker);
+- **"No Play"** after any-case "Penalty on" writes no attempt, catch or
+  carry (was a row, and a reception point);
+- **an interception the defender fumbles** (typed "Fumble Recovery") is an
+  interception, not a completion to the tackler; the offense's own recovery
+  is no longer the defense's fumble recovery;
+- **a fumble a teammate keeps** credits the pre-fumble gain, not the play's.
+Replayed locally over week 10's fourteen ESPN summaries, the feed then
+differs from the books on one botched snap, one multi-lateral play and two
+scorer corrections; `validate.mjs` on 2025 wk 1 and 5 still passes (points
+within 1.0: 91.3% → 91.9%).
+The net under it, `trueup.js`: `extractOffense` / `planOffense` /
+`trueupOffense` check each finished game's pass/rush/rec rows against
+nflverse by play id and write, move, correct or remove them in place (ESPN
+namespace, so nothing counts twice; a play under an id the books do not use
+is matched by man, kind and clock; an unresolved man is left alone; a plan
+touching more than 15% of a game is refused). `pollGame` leaves a trued
+game's offense alone on a re-poll. CLI `trueup-week <week> [--dry]`, ops
+mode `trueup`. The worker's own 6-hourly pass is OFF (`OFFENSE_AUTO`) until
+the dry run of week 10 (ops 092, in this change) has been read against
+production's directory. `server/test/trueup-offense.mjs` pins the plan.
+Scores are not rewritten by any of this: a week already final needs a
+re-stamp.
+
 ### v0.739.0 — Watch the league's other matchups
 
 > - On the Matchup tab, tap the "you vs opponent ▾" line to see every matchup in your league this week, with live scores. Tap one to watch it: each window's battle, both teams' players, their metrics and points.

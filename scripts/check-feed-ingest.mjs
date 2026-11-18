@@ -154,7 +154,9 @@ const rowOf = (pbp, slug, k) => (pbp[slug] ?? []).find((r) => r.k === k);
   const noPlay = game({ type: 'Rush', off: 'CHI', def: 'NE', spot: 'CHI 18', yds: -10,
     text: 'R.Johnson right end to CHI 21 for 3 yards (A.Thomas).PENALTY on CHI-J.Monk, Offensive Holding, 10 yards, enforced at CHI 18 - No Play.',
     people: rj });
-  ok('a carry wiped out ("No Play") is worth nothing, not the penalty', rowOf(noPlay, 'roschon-johnson', 'rush')?.y === 0, noPlay['roschon-johnson']);
+  // v0.740.0: not even a carry. The books have no snap there, so the row is
+  // not written at all (it was a 0-yard carry — and, on a catch, a reception).
+  ok('a carry wiped out ("No Play") is not a carry at all', !rowOf(noPlay, 'roschon-johnson', 'rush'), noPlay['roschon-johnson']);
   const blt = game({ type: 'Rush', off: 'BAL', def: 'NE', spot: 'BAL 36', yds: -18,
     text: '(Shotgun) D.Henry left tackle to BLT 44 for 8 yards (C.Bynum).PENALTY on BLT-O.Ioane, Offensive Holding, 10 yards, enforced at BLT 38.',
     people: [{ name: 'Derrick Henry', team: 'BAL', cat: 'rushing' }] });
@@ -175,6 +177,76 @@ const idx = readFileSync(new URL('../server/src/index.js', import.meta.url), 'ut
 ok('a closing week gives its finals a last poll', /final pass:/.test(idx));
 const cli = readFileSync(new URL('../server/src/cli.js', import.meta.url), 'utf8');
 ok('a played week can be re-polled (repoll-week, ops mode "repoll")', /case 'repoll-week'/.test(cli) && /req\.mode === 'repoll'/.test(cli));
+
+// ── the man the play names, where it names him (v0.740.0) ─────────────────
+// 2026 wk 10, reconciled play by play against the books: two touchdowns ESPN
+// sent as scoring-summary text, catches credited to the man a "Direct snap
+// to" named, a back's carries on the men who tackled him, a touchdown catch
+// on the kicker of its extra point, a completion the books call "No Play",
+// an interception read as a completion to the tackler.
+{
+  const QB = { name: 'Josh Allen', team: 'NE', cat: 'passing' };
+  const sumRun = game({ type: 'Rushing Touchdown', off: 'NE', def: 'PIT', scoring: true, yds: 1, down: 1, dist: 1,
+    text: 'Josh Allen 1 Yd Run (Tyler Bass Kick)',
+    people: [QB, { name: 'Josh Allen', team: 'NE', cat: 'rushing' }, { name: 'Tyler Bass', team: 'NE', cat: 'kicking' }] });
+  ok('a touchdown in scoring-summary text is the runner\'s: 1 yard, a TD', rowOf(sumRun, 'josh-allen', 'rush')?.y === 1 && rowOf(sumRun, 'josh-allen', 'rush')?.td === 1, sumRun['josh-allen']);
+  ok('…and its extra point is the kicker\'s', kinds(sumRun, 'ne-k').includes('xp'), sumRun['ne-k']);
+  const sumPass = game({ type: 'Passing Touchdown', off: 'CIN', def: 'PIT', scoring: true, yds: 4,
+    text: 'Chase Brown 4 Yd pass from Joe Burrow (Evan McPherson Kick)',
+    people: [{ name: 'Joe Burrow', team: 'CIN', cat: 'passing' }, { name: 'Chase Brown', team: 'CIN', cat: 'receiving' }] });
+  ok('a touchdown pass in scoring-summary text pays the passer and the receiver',
+    rowOf(sumPass, 'joe-burrow', 'pass')?.td === 1 && rowOf(sumPass, 'joe-burrow', 'pass')?.y === 4 && rowOf(sumPass, 'chase-brown', 'rec')?.td === 1 && rowOf(sumPass, 'chase-brown', 'rec')?.ca === 1, sumPass);
+
+  const snap = game({ type: 'Pass Reception', off: 'MIN', def: 'KC', yds: 15,
+    text: '(Shotgun) Direct snap to T.Kraft.  J.Love pass short right to C.Watson to MIN 29 for 15 yards (J.Metellus).',
+    people: [{ name: 'Jordan Love', team: 'MIN', cat: 'passing' }, { name: 'Tucker Kraft', team: 'MIN', cat: 'receiving' }, { name: 'Christian Watson', team: 'MIN', cat: 'receiving' }, { name: 'Josh Metellus', team: 'KC', cat: 'defensive' }] });
+  ok('the receiver is the man after the PASS\'s "to", not a "Direct snap to"', rowOf(snap, 'christian-watson', 'rec')?.y === 15 && !rowOf(snap, 'tucker-kraft', 'rec'), snap);
+  const snapRun = game({ type: 'Rush', off: 'MIN', def: 'KC', yds: 3,
+    text: '(Shotgun) Direct snap to T.Kraft.  T.Kraft up the middle to MIN 32 for 3 yards (J.Metellus).',
+    people: [{ name: 'Tucker Kraft', team: 'MIN', cat: 'receiving' }, { name: 'Josh Metellus', team: 'KC', cat: 'defensive' }] });
+  ok('a direct-snap run is still the runner\'s', rowOf(snapRun, 'tucker-kraft', 'rush')?.y === 3, snapRun);
+
+  const knight = game({ type: 'Rush', off: 'ATL', def: 'LAC', yds: 4,
+    text: '(Shotgun) Z.Knight up the middle to ARZ 39 for 4 yards (B.Fiske; S.Dolac).',
+    people: [{ name: 'Bam Knight', team: 'ATL', cat: 'rushing' }, { name: 'Braden Fiske', team: 'LAC', cat: 'defensive' }] });
+  ok('a runner the gamebook names differently is found by last name, never the tackler', rowOf(knight, 'bam-knight', 'rush')?.y === 4 && !rowOf(knight, 'braden-fiske', 'rush'), knight);
+  const nobody = game({ type: 'Rush', off: 'ATL', def: 'LAC', yds: 4,
+    text: 'Z.Knight up the middle to ARZ 39 for 4 yards (B.Fiske).',
+    people: [{ name: 'Braden Fiske', team: 'LAC', cat: 'defensive' }] });
+  ok('a runner nobody can place is credited to nobody', !rowOf(nobody, 'braden-fiske', 'rush') && Object.values(nobody).flat().every((r) => r.k !== 'rush'), nobody);
+  const two = game({ type: 'Rush', off: 'ATL', def: 'LAC', yds: 4,
+    text: 'Z.Knight up the middle to ARZ 39 for 4 yards (B.Fiske).',
+    people: [{ name: 'Bam Knight', team: 'ATL', cat: 'rushing' }, { name: 'Qadir Knight', team: 'ATL', cat: 'rushing' }] });
+  ok('two men with that last name is a guess: nobody', Object.values(two).flat().every((r) => r.k !== 'rush'), two);
+  const kicker = game({ type: 'Passing Touchdown', off: 'MIN', def: 'KC', scoring: true, yds: 32,
+    text: '(No Huddle) J.Love pass deep right to J.Sturdivant for 32 yards, TOUCHDOWN. T.Smack extra point is GOOD, Center-M.Orzech, Holder-D.Whelan.',
+    people: [{ name: 'Jordan Love', team: 'MIN', cat: 'passing' }, { name: 'J. Michael Sturdivant', team: 'MIN', cat: 'receiving' }, { name: 'Trey Smack', team: 'MIN', cat: 'kicking' }] });
+  ok('a touchdown catch is the receiver\'s, not the kicker\'s of its extra point',
+    rowOf(kicker, 'j-michael-sturdivant', 'rec')?.td === 1 && !rowOf(kicker, 'trey-smack', 'rec'), kicker);
+  ok('…and the extra point is the team kicker\'s, never the quarterback\'s', kinds(kicker, 'min-k').includes('xp') && !kinds(kicker, 'jordan-love').includes('xp'), kicker);
+
+  const offset = game({ type: 'Pass Reception', off: 'NE', def: 'PIT', yds: 45,
+    text: '(No Huddle, Shotgun) G.Smith pass short right to I.Williams to BUF 24 for 45 yards (A.Hooker).Penalty on NYJ-M.Taylor, Offensive Pass Interference, offsetting, enforced at NYJ 31 - No Play.Penalty on BUF-D.Igbinosun, Illegal Use of Hands, offsetting.',
+    people: [{ name: 'Geno Smith', team: 'NE', cat: 'passing' }, { name: 'Isaiah Williams', team: 'NE', cat: 'receiving' }] });
+  ok('a catch wiped out by offsetting fouls ("No Play") is no attempt and no catch', !rowOf(offset, 'isaiah-williams', 'rec') && !rowOf(offset, 'geno-smith', 'pass'), offset);
+
+  const pickFum = game({ type: 'Fumble Recovery (Opponent)', off: 'NE', def: 'PIT', turnover: true, yds: 0,
+    text: '(Shotgun) C.Klubnik pass deep right intended for G.Wilson INTERCEPTED by D.Igbinosun at 50. D.Igbinosun to NYJ 33 for 17 yards (J.Ruckert; B.Hall). FUMBLES (J.Ruckert), RECOVERED by NE-J.Myers at NYJ 23.',
+    people: [{ name: 'Cade Klubnik', team: 'NE', cat: 'passing' }, { name: 'Garrett Wilson', team: 'NE', cat: 'receiving' }, { name: 'Jeremy Ruckert', team: 'NE', cat: 'receiving' }, { name: 'Davison Igbinosun', team: 'PIT', cat: 'defensive' }] });
+  const kp = rowOf(pickFum, 'cade-klubnik', 'pass');
+  ok('an interception the defender fumbles is still an interception: no yards, a turnover', kp && kp.y === 0 && kp.to === 1, kp);
+  ok('…and no catch for the man who made the tackle', !rowOf(pickFum, 'jeremy-ruckert', 'rec'), pickFum['jeremy-ruckert']);
+  ok('…the defense has its interception, not a fumble recovery the offense made', kinds(pickFum, 'pit-dst').includes('int') && !kinds(pickFum, 'pit-dst').includes('fumrec'), pickFum['pit-dst']);
+
+  const kept = game({ type: 'Fumble Recovery (Own)', off: 'NE', def: 'PIT', yds: 12,
+    text: 'T.DeVito pass short right to R.Gilliam to NE 19 for 6 yards (C.Clark). FUMBLES (C.Clark), recovered by NE-A.Brown at NE 25.',
+    people: [{ name: 'Tommy DeVito', team: 'NE', cat: 'passing' }, { name: 'Reggie Gilliam', team: 'NE', cat: 'receiving' }, { name: 'A.J. Brown', team: 'NE', cat: 'receiving' }] });
+  ok('a fumble a TEAMMATE keeps: the catch is its own 6, not the play\'s 12', rowOf(kept, 'reggie-gilliam', 'rec')?.y === 6 && rowOf(kept, 'tommy-devito', 'pass')?.y === 6, kept);
+  const self = game({ type: 'Fumble Recovery (Own)', off: 'NE', def: 'PIT', yds: 1,
+    text: 'K.Black left end to DAL 47 for no gain (Q.Williams). FUMBLES (Q.Williams), and recovers at DAL 46.',
+    people: [{ name: 'Kaelon Black', team: 'NE', cat: 'rushing' }] });
+  ok('a fumble the runner keeps himself: the whole play is his', rowOf(self, 'kaelon-black', 'rush')?.y === 1, self['kaelon-black']);
+}
 
 if (fails) { console.log(`\n${fails} FEED-INGEST ASSERTION(S) FAILED`); process.exit(1); }
 console.log('\nALL FEED-INGEST ASSERTIONS PASSED');
