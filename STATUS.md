@@ -22,6 +22,22 @@ Near-daily (git shows daily bursts; season launch Sep 9 is the forcing function)
 
 ## Last worked (superseded entries below)
 
+### v0.740.1 — The true-up knows who the books mean
+
+> - The daily play-by-play check now finds a player by his team and last name when it has no id for him, so a correction can never land on a namesake.
+
+Ops 092, the first dry run of the week-10 offense true-up against
+production's directory: 22 rows to write, 11 to correct, 16 to remove — the
+expected ones (Allen's rushing TD, Burrow to Chase Brown, the catches on the
+wrong teammate) — and two things wrong with the name fallback for men the
+directory holds no gsis for. "A.Ogletree" of the Colts resolved to Alec
+Ogletree, a linebacker long retired (the directory's only "A. Ogletree"; the
+tight end is listed as Drew), and "J.Sturdivant" resolved to nobody, leaving
+his touchdown on the kicker. `offenseResolver`: the gsis id, else the one
+man on the play's team with that last name (skill positions first, the
+first initial settling two), else nobody. Ops 093 is the second dry run.
+The worker's own pass stays off.
+
 ### v0.740.0 — The play-by-play, checked against the books
 
 > - Fixed touchdowns that could go missing from live scoring, and plays that were credited to the wrong player (a tackler, or a kicker) or counted after a penalty wiped them out.

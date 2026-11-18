@@ -1,0 +1,6 @@
+{
+  "mode": "trueup",
+  "week": 10,
+  "dry": true,
+  "why": "Second DRY run of the week-10 offense true-up (follows ops 092). The first showed the name fallback crediting 'A.Ogletree' of the Colts to a retired namesake and leaving J. Michael Sturdivant's two catches (one a touchdown) unresolved. v0.740.1 resolves by gsis, else the one man on the play's team with that last name. Lists what it would change; writes nothing."
+}
