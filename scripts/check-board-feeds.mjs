@@ -53,9 +53,11 @@ ok(Math.abs(ourTop[49] - bakedTop[49]) / bakedTop[49] < 0.35,
   `and the 50th: ${ourTop[49]} against ${bakedTop[49]}`);
 ok(ourTop.every((v, i) => i === 0 || v <= ourTop[i - 1]), 'our board is monotone, as a board must be');
 
-// THE PICK BOARD keeps raw KTC values, so it should match the bake closely.
-const firstPick = picks.find((p) => /Pick 1\.01/.test(p.label));
-ok(firstPick && firstPick.v1qb > 5000, `1.01 values at ${firstPick?.v1qb}`);
+// THE PICK BOARD is on StatHead's rule (mean positional ratio, in tens),
+// so it should sit on the bake's scale.
+const firstPick = picks.find((p) => /Early 1st/.test(p.label));
+ok(firstPick && firstPick.v1qb > 1000 && firstPick.v1qb < 5000 && firstPick.v1qb % 10 === 0,
+  `${firstPick?.label} values at ${firstPick?.v1qb} — StatHead's scale, in tens`);
 ok(picks.some((p) => p.vsf !== p.v1qb), 'and the superflex pick column is its own market');
 
 // ── the season board, out of the weekly feed ─────────────────────────────

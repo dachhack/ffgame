@@ -90,10 +90,10 @@ ok(pickMarketValue('2027', PICK_MAX_ROUND + 1) === null,
   'past the board it prices nothing, rather than guessing');
 ok(pickMarketValue('2027', 1, 'sf') !== pickMarketValue('2027', 1, '1qb'),
   'a superflex market is a different market');
-ok(pickMarketValue('2031', 1) === pickMarketValue('2028', 1),
+ok(pickMarketValue('2031', 1) === pickMarketValue('2029', 1),
   'a pick further out than the board is priced as its furthest year');
-ok(pickMarketValue('2026', 1, '1qb', { slot: 1 }) > pickMarketValue('2026', 1, '1qb', { slot: 12 }),
-  'and where the slot is known, 1.01 beats 1.12');
+ok(pickMarketValue('2027', 1, '1qb', { slot: 1 }) > pickMarketValue('2027', 1, '1qb', { slot: 12 }),
+  'and where the slot is known, 1.01 beats 1.12 (early tier over late)');
 
 // The curve the market value is read off has to actually exist in this pool,
 // or every assertion above is quietly testing the fallback.
