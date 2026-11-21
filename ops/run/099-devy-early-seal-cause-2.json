@@ -1,0 +1,5 @@
+{
+  "mode": "query",
+  "file": "scripts/db/devy-early-seal-cause-2.sql",
+  "why": "Founder: 'Let's find the cause.' Ops 098 showed the worker sealed 27 Devy Test 1 picks on Tuesday, in batches minutes apart, with nothing else changed — and the one per-player seal rule in the migrations cannot fire before the week's first game. Read only: the seal functions as production has them, every early seal with its school and game, the picks that were NOT sealed early, the matchup rows' changes that afternoon, the players' school rows and the week's game feeds. Seats as numbers."
+}
