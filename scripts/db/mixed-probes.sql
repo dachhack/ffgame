@@ -121,6 +121,31 @@ begin
               and not (select locked from sealed_pick where matchup_id = mid and roster_slot = 'S1'),
     'mx4e the Alabama back sealed; the later college game and the NFL player did not');
 
+  -- ══ mx4f. THE SEAL LEAVES WHAT IT READ, AND TAKES ITS OWN EARLY SEALS BACK (0534)
+  perform mx_true((select count(*) = 1 and bool_and(t.own_kickoff = sat and t.school_abbr = 'MXALA'
+                          and t.slate @> '[{"game_id":"mxc1"}]'::jsonb and t.reopened_at is null)
+                     from college_seal_trace t where t.matchup_id = mid),
+    'mx4f the seal recorded the kickoff and the slate row it used');
+  perform set_config('app.uid', '', false);
+  -- The kickoff it read turns out to be ahead after all (a slate that was wrong for a tick).
+  update nfl_slate set kickoff = now() + interval '2 hours' where game_id = 'mxc1';
+  perform mx_true((select count(*) = 1 from slate_kickoff_log where game_id = 'mxc1' and was = sat), 'mx4g the slate kept the kickoff change');
+  -- A lock the rule did not make (a commissioner, a simulation) is not its to undo.
+  update sealed_pick set locked = true, revealed_at = now() where matchup_id = mid and roster_slot = 'S3';
+  perform mx_true(seal_due_college_picks(5) = 0, 'mx4h nothing new seals');
+  perform mx_true(not (select locked from sealed_pick where matchup_id = mid and roster_slot = 'S2')
+              and (select reopened_at is not null and reopen_kickoff > now() from college_seal_trace where matchup_id = mid),
+    'mx4i THE POINT: its own early seal is open again, and the trace says so');
+  perform mx_true((select locked from sealed_pick where matchup_id = mid and roster_slot = 'S3'), 'mx4j a lock it did not make stays');
+  update sealed_pick set locked = false, revealed_at = null where matchup_id = mid and roster_slot = 'S3';
+  update nfl_slate set kickoff = sat where game_id = 'mxc1';
+  perform mx_true(seal_due_college_picks(5) = 1, 'mx4k at the real kickoff it seals again');
+  perform mx_true((select locked from sealed_pick where matchup_id = mid and roster_slot = 'S2')
+              and (select count(*) = 2 from college_seal_trace where matchup_id = mid), 'mx4k2 …sealed, with a second trace row');
+  perform mx_true(seal_due_college_picks(5) = 0, 'mx4l and nothing moves on a later tick');
+  perform mx_true((select locked from sealed_pick where matchup_id = mid and roster_slot = 'S2'), 'mx4l2 …it stays sealed');
+  perform mx_as('01');
+
   -- ══ mx5. THE WORKER'S READERS ════════════════════════════════════════════
   insert into native_roster (league_id, roster_id, slug) values (lid, 1, 'c-94001');
   perform mx_true(mixed_leagues_exist() and college_calendar_in_use(), 'mx5 the worker sees a mixed league');

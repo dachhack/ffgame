@@ -50,7 +50,13 @@ declare known text[] := array[
   -- 0478: a contest squad's swap history — NFL players, and history keeps its slug
   'contest_swap.in_slug', 'contest_swap.out_slug',
   -- 0426: other sports' leagues — never a college football player
-  'sport_slot_lock.player_slug'];
+  'sport_slot_lock.player_slug', 'sport_game_pick.player_slug',
+  -- 0506: the injury report's changes, an NFL feed like injury_status
+  'injury_change.player_slug',
+  -- 0531: an injury swap's record — history keeps its slug
+  'injury_swap_log.out_slug', 'injury_swap_log.in_slug',
+  -- 0534: what the college seal read — history, matched to sealed_pick's slug
+  'college_seal_trace.player_slug'];
   -- (These four were added in v0.707.6: the runner had stopped at its first
   -- suite since 0422, so gr0 never saw them arrive.)
   c text;
